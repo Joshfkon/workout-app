@@ -88,21 +88,21 @@ export default function QuickWorkoutPage() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-4">
       <Card variant="elevated" className="p-6 w-full max-w-sm text-center">
-        <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-primary-500/15 flex items-center justify-center">
-          <IconBarbell size={28} className="text-primary-400" />
+        <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-action/15 flex items-center justify-center">
+          <IconBarbell size={28} className="text-action" />
         </div>
-        <h1 className="text-xl font-bold text-surface-100">
+        <h1 className="text-xl font-bold text-ink">
           {continuing ? 'Continue today’s workout?' : 'Start a quick workout?'}
         </h1>
-        <p className="text-sm text-surface-400 mt-2">
+        <p className="text-sm text-ink-2 mt-2">
           {continuing
             ? 'You already have a workout in progress today — pick up where you left off.'
             : 'Opens an empty session. Add exercises as you go.'}
         </p>
 
         {error && (
-          <div className="mt-4 p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-            <p className="text-sm text-danger-400">{error}</p>
+          <div className="mt-4 p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+            <p className="text-sm text-status-bad">{error}</p>
           </div>
         )}
 
@@ -119,7 +119,7 @@ export default function QuickWorkoutPage() {
         </Button>
         <Button
           variant="ghost"
-          className="w-full mt-2 min-h-[44px] text-surface-400"
+          className="w-full mt-2 min-h-[44px] text-ink-2"
           onClick={() => router.push('/dashboard/log')}
           disabled={isStarting}
         >

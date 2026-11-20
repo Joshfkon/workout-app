@@ -28,18 +28,18 @@ export function EmptyState({ icon, title, description, action, className }: Empt
     <Card className={className}>
       <CardContent className="py-12 text-center">
         {icon && (
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">
             {isEmoji ? (
               <span className="text-4xl" role="img" aria-hidden="true">{icon}</span>
             ) : (
-              <div className="w-8 h-8 text-surface-500">
+              <div className="w-8 h-8 text-ink-3">
                 {icon}
               </div>
             )}
           </div>
         )}
-        <h2 className="text-lg font-semibold text-surface-200">{title}</h2>
-        <p className="text-surface-500 mt-2 max-w-md mx-auto">
+        <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        <p className="text-ink-3 mt-2 max-w-md mx-auto">
           {description}
         </p>
         {action && (

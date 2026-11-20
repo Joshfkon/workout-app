@@ -115,28 +115,28 @@ export default function VerifyCodePage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-3 group">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-action flex items-center justify-center group-hover:scale-105 transition-transform">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-surface-100 tracking-tight">HyperTrack</span>
+          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-surface-100">
+          <h1 className="text-2xl font-bold text-ink">
             {kind === 'recovery' ? 'Enter your reset code' : 'Enter your confirmation code'}
           </h1>
-          <p className="text-surface-400 mt-1">
+          <p className="text-ink-2 mt-1">
             The email we sent contains a code under the button.
           </p>
         </div>
 
         {banner && (
-          <div role="status" className="p-3 rounded-lg mb-4 bg-warning-500/10 border border-warning-500/20">
-            <p className="text-sm text-warning-400">{banner}</p>
+          <div role="status" className="p-3 rounded-lg mb-4 bg-status-warn/10 border border-status-warn/20">
+            <p className="text-sm text-status-warn">{banner}</p>
           </div>
         )}
 
@@ -163,8 +163,8 @@ export default function VerifyCodePage() {
           />
 
           {error && (
-            <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-              <p className="text-sm text-danger-400">{error}</p>
+            <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+              <p className="text-sm text-status-bad">{error}</p>
             </div>
           )}
 
@@ -174,15 +174,15 @@ export default function VerifyCodePage() {
         </form>
 
         <div className="mt-6 text-center space-y-2">
-          <p className="text-sm text-surface-400">
+          <p className="text-sm text-ink-2">
             Don&apos;t have a code?{' '}
-            <Link href={resendHref} className="text-primary-400 hover:text-primary-300 font-medium">
+            <Link href={resendHref} className="text-action font-medium">
               {resendLabel}
             </Link>
           </p>
           <Link
             href="/login"
-            className="inline-flex items-center text-sm text-primary-400 hover:text-primary-300 font-medium"
+            className="inline-flex items-center text-sm text-action font-medium"
           >
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

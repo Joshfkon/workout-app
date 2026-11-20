@@ -745,8 +745,8 @@ describe('form display helpers', () => {
   });
 
   it('maps form ratings to color classes', () => {
-    expect(getFormColorClass('clean')).toBe('text-success-400');
-    expect(getFormColorClass('some_breakdown')).toBe('text-warning-400');
-    expect(getFormColorClass('ugly')).toBe('text-danger-400');
+    expect(getFormColorClass('clean')).toBe('text-status-ok');
+    expect(getFormColorClass('some_breakdown')).toBe('text-status-warn');
+    expect(getFormColorClass('ugly')).toBe('text-status-bad');
   });
 });

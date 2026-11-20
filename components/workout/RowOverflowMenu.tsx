@@ -222,13 +222,13 @@ export function RowOverflowMenu({
       role="menu"
       aria-label={ariaLabel}
       data-testid="row-menu"
-      className="fixed z-[60] rounded-xl border border-surface-700 bg-surface-800 py-1 shadow-2xl animate-fade-in"
+      className="fixed z-[60] rounded-xl border border-sep bg-fill py-1 shadow-2xl animate-fade-in"
       style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
       onKeyDown={onMenuKeyDown}
     >
       {items.map((item, i) => (
         <React.Fragment key={item.key}>
-          {item.separatorBefore && <div className="my-1 border-t border-surface-700/60" />}
+          {item.separatorBefore && <div className="my-1 border-t border-sep/60" />}
           <button
             ref={(el) => {
               itemRefs.current[i] = el;
@@ -240,8 +240,8 @@ export function RowOverflowMenu({
             onMouseEnter={() => setActiveIndex(i)}
             className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
               item.destructive
-                ? 'text-danger-400 hover:bg-danger-500/10 focus:bg-danger-500/10'
-                : 'text-surface-200 hover:bg-surface-700 focus:bg-surface-700'
+                ? 'text-status-bad hover:bg-status-bad/10 focus:bg-status-bad/10'
+                : 'text-ink hover:bg-sep focus:bg-sep'
             } focus:outline-none`}
           >
             {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
@@ -258,7 +258,7 @@ export function RowOverflowMenu({
         ref={buttonRef}
         type="button"
         onClick={() => (isOpen ? close() : open())}
-        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 text-ink-2 transition-colors hover:bg-fill hover:text-ink"
         aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={isOpen}

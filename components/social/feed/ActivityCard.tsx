@@ -96,13 +96,13 @@ function ActivityCardComponent({
             <div className="flex items-center gap-2">
               <Link
                 href={getProfileUrl(user_profile.username)}
-                className="font-medium text-surface-100 hover:underline truncate"
+                className="font-medium text-ink hover:underline truncate"
               >
                 {displayName}
               </Link>
               <span className="text-lg">{getActivityIcon()}</span>
             </div>
-            <p className="text-sm text-surface-400">
+            <p className="text-sm text-ink-2">
               {formatRelativeTime(activity.created_at)}
             </p>
           </div>
@@ -122,7 +122,7 @@ function ActivityCardComponent({
       </div>
 
       {/* Reactions */}
-      <div className="px-4 pb-3 border-t border-surface-800 pt-3">
+      <div className="px-4 pb-3 border-t border-sep pt-3">
         <ReactionBar
           activityId={activity.id}
           reactionCount={activity.reaction_count}
@@ -150,7 +150,7 @@ function ActivityCardComponent({
 function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'kg' | 'lb' }) {
   return (
     <div className="space-y-3">
-      <p className="text-surface-100">
+      <p className="text-ink">
         Completed <span className="font-semibold">{data.workout_name}</span>
       </p>
 
@@ -158,27 +158,27 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
       <div className="flex gap-4 text-sm">
         {formatWorkoutDuration(data.duration_minutes) && (
           <div>
-            <span className="text-surface-400">Duration:</span>{' '}
-            <span className="text-surface-200">{formatWorkoutDuration(data.duration_minutes)}</span>
+            <span className="text-ink-2">Duration:</span>{' '}
+            <span className="text-ink">{formatWorkoutDuration(data.duration_minutes)}</span>
           </div>
         )}
         <div>
-          <span className="text-surface-400">Sets:</span>{' '}
-          <span className="text-surface-200">{data.total_sets}</span>
+          <span className="text-ink-2">Sets:</span>{' '}
+          <span className="text-ink">{data.total_sets}</span>
         </div>
         <div>
-          <span className="text-surface-400">Volume:</span>{' '}
-          <span className="text-surface-200">{formatWeight(data.total_volume_kg, units, 0)}</span>
+          <span className="text-ink-2">Volume:</span>{' '}
+          <span className="text-ink">{formatWeight(data.total_volume_kg, units, 0)}</span>
         </div>
       </div>
 
       {/* Exercise list */}
       {data.exercises && data.exercises.length > 0 && (
-        <div className="bg-surface-800 rounded-lg p-3 space-y-2">
+        <div className="bg-fill rounded-lg p-3 space-y-2">
           {data.exercises.map((exercise, idx) => (
             <div key={idx} className="flex items-center justify-between text-sm">
-              <span className="text-surface-200">{exercise.name}</span>
-              <span className="text-surface-400">
+              <span className="text-ink">{exercise.name}</span>
+              <span className="text-ink-2">
                 {exercise.is_duration
                   ? `${exercise.sets} sets • ${exercise.top_set.reps}s @ ${formatWeight(exercise.top_set.weight_kg, units, 0)}`
                   : `${exercise.sets} sets • ${formatWeight(exercise.top_set.weight_kg, units, 0)} × ${exercise.top_set.reps}`}
@@ -190,8 +190,8 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
 
       {/* RPE if available */}
       {data.session_rpe && (
-        <p className="text-sm text-surface-400">
-          Session RPE: <span className="text-surface-200">{data.session_rpe}/10</span>
+        <p className="text-sm text-ink-2">
+          Session RPE: <span className="text-ink">{data.session_rpe}/10</span>
         </p>
       )}
     </div>
@@ -216,15 +216,15 @@ function PRContent({ data, units }: { data: PersonalRecordData; units: 'kg' | 'l
 
   return (
     <div className="space-y-2">
-      <p className="text-surface-100">
-        New <span className="font-semibold text-primary-400">{data.pr_type.toUpperCase()}</span> PR on{' '}
+      <p className="text-ink">
+        New <span className="font-semibold text-action">{data.pr_type.toUpperCase()}</span> PR on{' '}
         <span className="font-semibold">{data.exercise_name}</span>!
       </p>
 
       <div className="flex items-center gap-3">
-        <span className="text-3xl font-bold text-primary-400">{formatValue()}</span>
+        <span className="text-3xl font-bold text-action">{formatValue()}</span>
         {formatImprovement() && (
-          <span className="text-success-400 text-sm font-medium">
+          <span className="text-status-ok text-sm font-medium">
             {formatImprovement()}
           </span>
         )}
@@ -250,8 +250,8 @@ function StreakContent({ data }: { data: StreakMilestoneData }) {
 
   return (
     <div className="text-center py-2">
-      <p className="text-2xl font-bold text-surface-100">{getMilestoneText()}</p>
-      <p className="text-sm text-surface-400 mt-1">Consistency is key!</p>
+      <p className="text-2xl font-bold text-ink">{getMilestoneText()}</p>
+      <p className="text-sm text-ink-2 mt-1">Consistency is key!</p>
     </div>
   );
 }
@@ -266,7 +266,7 @@ function DefaultContent({ type }: { type: string }) {
   };
 
   return (
-    <p className="text-surface-200">{messages[type] || 'Activity'}</p>
+    <p className="text-ink">{messages[type] || 'Activity'}</p>
   );
 }
 

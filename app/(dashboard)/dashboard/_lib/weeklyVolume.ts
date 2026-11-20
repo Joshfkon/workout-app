@@ -815,34 +815,33 @@ export function zoneColorToken(zone: VolumeZone, sets: number, band?: VolumeBand
 }
 
 const ZONE_BAR_CLASSES: Record<ZoneColorToken, string> = {
-  danger: 'bg-danger-500',
-  success_low: 'bg-success-300',
-  success: 'bg-success-500',
-  success_high: 'bg-success-600',
-  warning: 'bg-warning-500',
-  untrained: 'bg-danger-300',
+  danger: 'bg-status-bad',
+  success_low: 'bg-status-ok/50',
+  success: 'bg-status-ok/75',
+  success_high: 'bg-status-ok',
+  warning: 'bg-status-warn',
+  untrained: 'bg-status-bad/50',
 };
 
-// Text sits on a card, so the untrained row uses the 400 weight the other
-// tokens use for text — danger-300 is a fill tone and too pale to read. The
-// green shades keep the light→dark ramp: 300 / 400 / 600 all clear the
-// contrast bar on the dark surface.
+// Text sits on a card, so every zone uses the full-strength status colour
+// (the faded fills are too pale to read as text); the status tokens clear the
+// contrast bar in both themes (lib/design/tokens.ts).
 const ZONE_TEXT_CLASSES: Record<ZoneColorToken, string> = {
-  danger: 'text-danger-400',
-  success_low: 'text-success-300',
-  success: 'text-success-400',
-  success_high: 'text-success-600',
-  warning: 'text-warning-400',
-  untrained: 'text-danger-400',
+  danger: 'text-status-bad',
+  success_low: 'text-status-ok',
+  success: 'text-status-ok',
+  success_high: 'text-status-ok',
+  warning: 'text-status-warn',
+  untrained: 'text-status-bad',
 };
 
 const ZONE_FILL_CLASSES: Record<ZoneColorToken, string> = {
-  danger: 'fill-danger-500',
-  success_low: 'fill-success-300',
-  success: 'fill-success-500',
-  success_high: 'fill-success-600',
-  warning: 'fill-warning-500',
-  untrained: 'fill-danger-300',
+  danger: 'fill-status-bad',
+  success_low: 'fill-status-ok/50',
+  success: 'fill-status-ok/75',
+  success_high: 'fill-status-ok',
+  warning: 'fill-status-warn',
+  untrained: 'fill-status-bad/50',
 };
 
 /** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads light red.

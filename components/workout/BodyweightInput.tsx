@@ -104,12 +104,12 @@ export function BodyweightInput({
   if (isPureBodyweight) {
     return (
       <div className="space-y-2">
-        <label className="block text-xs text-surface-500 mb-1">Weight</label>
-        <div className="bg-surface-800/50 rounded-lg p-3">
+        <label className="block text-xs text-ink-3 mb-1">Weight</label>
+        <div className="bg-fill/50 rounded-lg p-3">
           <div className="text-center">
-            <div className="text-lg font-semibold text-surface-100">Bodyweight</div>
-            <div className="text-2xl font-bold text-primary-400">{displayBw} {unit}</div>
-            <div className="text-xs text-surface-500 mt-1">
+            <div className="text-lg font-semibold text-ink">Bodyweight</div>
+            <div className="text-2xl font-bold text-action">{displayBw} {unit}</div>
+            <div className="text-xs text-ink-3 mt-1">
               (based on your latest weigh-in)
             </div>
           </div>
@@ -127,17 +127,17 @@ export function BodyweightInput({
 
   return (
     <div className="space-y-2">
-      <label className="block text-xs text-surface-500">Weight</label>
+      <label className="block text-xs text-ink-3">Weight</label>
 
       {/* Modification selector - more compact */}
-      <div className="bg-surface-800/50 rounded p-1.5 space-y-0.5">
+      <div className="bg-fill/50 rounded p-1.5 space-y-0.5">
         {options.filter(o => o.available).map((option) => (
           <label
             key={option.value}
             className={`flex items-center gap-1.5 p-1.5 rounded cursor-pointer transition-colors ${
               modification === option.value
-                ? 'bg-primary-500/20 border border-primary-500/50'
-                : 'hover:bg-surface-700/50'
+                ? 'bg-action/20 border border-action/50'
+                : 'hover:bg-sep/50'
             } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <input
@@ -147,9 +147,9 @@ export function BodyweightInput({
               checked={modification === option.value}
               onChange={(e) => setModification(e.target.value as BodyweightModification)}
               disabled={disabled}
-              className="w-3.5 h-3.5 text-primary-500 bg-surface-700 border-surface-600 focus:ring-primary-500"
+              className="w-3.5 h-3.5 text-action bg-sep border-sep focus:ring-action"
             />
-            <span className="text-xs text-surface-200">{option.label}</span>
+            <span className="text-xs text-ink">{option.label}</span>
           </label>
         ))}
       </div>
@@ -157,9 +157,9 @@ export function BodyweightInput({
       {/* Added weight input - more compact */}
       {modification === 'weighted' && (
         <div>
-          <label className="block text-xs text-surface-500 mb-0.5">Added Weight ({unit})</label>
+          <label className="block text-xs text-ink-3 mb-0.5">Added Weight ({unit})</label>
           <div className="relative">
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-surface-500 text-xs">+</span>
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-3 text-xs">+</span>
             <input
               type="number"
               inputMode="decimal"
@@ -169,7 +169,7 @@ export function BodyweightInput({
               step="0.5"
               min="0"
               placeholder="0"
-              className="w-full pl-6 pr-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-surface-100 text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+              className="w-full pl-6 pr-2 py-1.5 bg-card rounded text-ink text-center font-mono text-sm focus:ring-2 focus:ring-action focus:border-transparent disabled:opacity-50 shadow-card"
             />
           </div>
         </div>
@@ -180,12 +180,12 @@ export function BodyweightInput({
         <div className="space-y-2">
           {/* Assistance type */}
           <div>
-            <label className="block text-xs text-surface-500 mb-0.5">Assistance Type</label>
+            <label className="block text-xs text-ink-3 mb-0.5">Assistance Type</label>
             <select
               value={assistanceType}
               onChange={(e) => setAssistanceType(e.target.value as 'machine' | 'band' | 'partner')}
               disabled={disabled}
-              className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+              className="w-full px-2 py-1.5 bg-card rounded text-ink text-sm focus:ring-2 focus:ring-action focus:border-transparent disabled:opacity-50 shadow-card"
             >
               <option value="machine">Machine (counterweight)</option>
               <option value="band">Resistance Band</option>
@@ -196,9 +196,9 @@ export function BodyweightInput({
           {/* Machine/partner assistance weight */}
           {assistanceType !== 'band' && (
             <div>
-              <label className="block text-xs text-surface-500 mb-0.5">
+              <label className="block text-xs text-ink-3 mb-0.5">
                 Assistance ({unit})
-                <span className="ml-1 text-surface-600 text-xs">(amount helping you)</span>
+                <span className="ml-1 text-ink-3 text-xs">(amount helping you)</span>
               </label>
               <input
                 type="number"
@@ -209,7 +209,7 @@ export function BodyweightInput({
                 step="5"
                 min="0"
                 placeholder="0"
-                className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-surface-100 text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+                className="w-full px-2 py-1.5 bg-card rounded text-ink text-center font-mono text-sm focus:ring-2 focus:ring-action focus:border-transparent disabled:opacity-50 shadow-card"
               />
             </div>
           )}
@@ -217,12 +217,12 @@ export function BodyweightInput({
           {/* Band color selector */}
           {assistanceType === 'band' && (
             <div>
-              <label className="block text-xs text-surface-500 mb-0.5">Band Color/Strength</label>
+              <label className="block text-xs text-ink-3 mb-0.5">Band Color/Strength</label>
               <select
                 value={bandColor}
                 onChange={(e) => setBandColor(e.target.value as BandAssistance['color'])}
                 disabled={disabled}
-                className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+                className="w-full px-2 py-1.5 bg-card rounded text-ink text-sm focus:ring-2 focus:ring-action focus:border-transparent disabled:opacity-50 shadow-card"
               >
                 {BAND_ASSISTANCE_PRESETS.map((band) => (
                   <option key={band.color} value={band.color}>
@@ -236,11 +236,11 @@ export function BodyweightInput({
       )}
 
       {/* Weight summary - more compact */}
-      <div className="bg-surface-800 rounded p-2">
+      <div className="bg-fill rounded p-2">
         <div className="space-y-0.5 text-xs">
           <div className="flex justify-between">
-            <span className="text-surface-400">BW:</span>
-            <span className="text-surface-200 font-mono">{displayBw} {unit}</span>
+            <span className="text-ink-2">BW:</span>
+            <span className="text-ink font-mono">{displayBw} {unit}</span>
           </div>
 
           {modification === 'weighted' && parseFloat(addedWeight) > 0 && (
@@ -260,17 +260,17 @@ export function BodyweightInput({
             </div>
           )}
 
-          <div className="border-t border-surface-700 pt-0.5 mt-0.5">
+          <div className="border-t border-sep pt-0.5 mt-0.5">
             <div className="flex justify-between font-semibold">
-              <span className="text-surface-300">
+              <span className="text-ink-2">
                 {modification === 'assisted' ? 'Effective:' : 'Total:'}
               </span>
-              <span className="text-primary-400 font-mono">{displayEffective} {unit}</span>
+              <span className="text-action font-mono">{displayEffective} {unit}</span>
             </div>
           </div>
 
           {modification === 'assisted' && (
-            <div className="text-xs text-surface-500 text-center mt-1">
+            <div className="text-xs text-ink-3 text-center mt-1">
               (You&apos;re lifting {percentBw}% of your BW)
             </div>
           )}

@@ -45,8 +45,8 @@ export function FormCuesEditor({
       {/* Existing Cues */}
       {cues.map((cue, index) => (
         <div key={index} className="flex items-start gap-2">
-          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-700
-            flex items-center justify-center text-xs text-surface-400 mt-2">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-sep
+            flex items-center justify-center text-xs text-ink-2 mt-2">
             {index + 1}
           </span>
           <div className="flex-1">
@@ -59,7 +59,7 @@ export function FormCuesEditor({
           <button
             type="button"
             onClick={() => removeCue(index)}
-            className="flex-shrink-0 mt-2 p-1 text-surface-500 hover:text-danger-400
+            className="flex-shrink-0 mt-2 p-1 text-ink-3 hover:text-status-bad
               transition-colors"
             aria-label="Remove cue"
           >
@@ -83,8 +83,8 @@ export function FormCuesEditor({
       {/* Add New Cue */}
       {cues.length < maxCues && (
         <div className="flex items-start gap-2">
-          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-surface-700/50
-            flex items-center justify-center text-xs text-surface-500 mt-2">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-sep/50
+            flex items-center justify-center text-xs text-ink-3 mt-2">
             +
           </span>
           <div className="flex-1">
@@ -114,7 +114,7 @@ export function FormCuesEditor({
       )}
 
       {cues.length >= maxCues && (
-        <p className="text-xs text-surface-500 text-center">
+        <p className="text-xs text-ink-3 text-center">
           Maximum {maxCues} form cues
         </p>
       )}

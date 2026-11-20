@@ -72,8 +72,8 @@ function ReactionBarComponent({
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all',
               userReaction
-                ? 'bg-surface-800 text-surface-100'
-                : 'hover:bg-surface-800 text-surface-400 hover:text-surface-200',
+                ? 'bg-fill text-ink'
+                : 'hover:bg-fill text-ink-2 hover:text-ink',
               isAnimating && 'scale-110'
             )}
           >
@@ -87,15 +87,15 @@ function ReactionBarComponent({
 
           {/* Reaction picker */}
           {showPicker && (
-            <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-surface-900 border border-surface-700 rounded-full p-1 shadow-lg">
+            <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-card rounded-full p-1 shadow-lg">
               {REACTION_TYPES.map((type) => (
                 <button
                   key={type}
                   onClick={() => handleSelectReaction(type)}
                   className={cn(
                     'w-10 h-10 flex items-center justify-center rounded-full',
-                    'hover:bg-surface-700 transition-transform hover:scale-125',
-                    userReaction?.reaction_type === type && 'bg-surface-700'
+                    'hover:bg-sep transition-transform hover:scale-125',
+                    userReaction?.reaction_type === type && 'bg-sep'
                   )}
                 >
                   <span className="text-xl">{getReactionEmoji(type)}</span>
@@ -108,7 +108,7 @@ function ReactionBarComponent({
         {/* Comment button */}
         <button
           onClick={() => onComment?.(activityId)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-surface-800 text-surface-400 hover:text-surface-200 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-fill text-ink-2 hover:text-ink transition-colors"
         >
           <svg
             className="w-5 h-5"
@@ -131,7 +131,7 @@ function ReactionBarComponent({
 
       {/* Right side - Share (optional) */}
       <button
-        className="p-2 rounded-full hover:bg-surface-800 text-surface-400 hover:text-surface-200 transition-colors"
+        className="p-2 rounded-full hover:bg-fill text-ink-2 hover:text-ink transition-colors"
         title="Share"
       >
         <svg

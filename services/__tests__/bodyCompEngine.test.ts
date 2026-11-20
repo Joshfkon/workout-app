@@ -822,12 +822,12 @@ describe('formatFFMI', () => {
 
 describe('getFFMIColor', () => {
   it('returns appropriate color classes', () => {
-    expect(getFFMIColor('below_average')).toContain('surface');
-    expect(getFFMIColor('average')).toContain('primary');
-    expect(getFFMIColor('above_average')).toContain('primary');
-    expect(getFFMIColor('excellent')).toContain('success');
-    expect(getFFMIColor('superior')).toContain('accent');
-    expect(getFFMIColor('suspicious')).toContain('warning');
+    expect(getFFMIColor('below_average')).toContain('ink');
+    expect(getFFMIColor('average')).toContain('action');
+    expect(getFFMIColor('above_average')).toContain('action');
+    expect(getFFMIColor('excellent')).toContain('status-ok');
+    expect(getFFMIColor('superior')).toContain('action');
+    expect(getFFMIColor('suspicious')).toContain('status-warn');
   });
 });
 
@@ -835,18 +835,18 @@ describe('getTrendIndicator', () => {
   it('returns up arrow for positive rate', () => {
     const result = getTrendIndicator(0.5);
     expect(result.icon).toBe('↑');
-    expect(result.color).toContain('success');
+    expect(result.color).toContain('status-ok');
   });
 
   it('returns down arrow for negative rate', () => {
     const result = getTrendIndicator(-0.5);
     expect(result.icon).toBe('↓');
-    expect(result.color).toContain('danger');
+    expect(result.color).toContain('status-bad');
   });
 
   it('returns right arrow for stable rate', () => {
     const result = getTrendIndicator(0.05);
     expect(result.icon).toBe('→');
-    expect(result.color).toContain('surface');
+    expect(result.color).toContain('ink');
   });
 });

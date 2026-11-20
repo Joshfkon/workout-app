@@ -12,7 +12,7 @@ export default function WearableIntegrationArticle() {
       {/* Back Navigation */}
       <Link
         href="/dashboard/learn"
-        className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-8 transition-colors"
+        className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-8 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -28,38 +28,38 @@ export default function WearableIntegrationArticle() {
             Wearable Integration
           </span>
         </div>
-        <h1 className="text-3xl font-bold text-surface-100 mb-3">
+        <h1 className="text-3xl font-bold text-ink mb-3">
           Activity-Adjusted TDEE
         </h1>
-        <p className="text-lg text-surface-400">
+        <p className="text-lg text-ink-2">
           How we use your Apple Watch, Fitbit, or other wearable data for day-by-day accuracy.
         </p>
       </div>
 
       {/* Article Content */}
-      <article className="space-y-8 text-surface-300">
+      <article className="space-y-8 text-ink-2">
         {/* The Problem */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             The Problem with &quot;Average&quot; TDEE
           </h2>
           <p className="mb-4">
             Your basic TDEE model gives you an average daily burn. But you don&apos;t live an
             average day every day.
           </p>
-          <Card className="p-4 bg-surface-800/50 mb-4">
+          <Card className="p-4 bg-fill/50 mb-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-surface-400">Monday: Leg day + 15,000 steps</span>
-                <span className="font-mono text-success-400">~2,800 cal</span>
+                <span className="text-ink-2">Monday: Leg day + 15,000 steps</span>
+                <span className="font-mono text-status-ok">~2,800 cal</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-surface-400">Tuesday: Rest day + 4,000 steps</span>
-                <span className="font-mono text-warning-400">~2,100 cal</span>
+                <span className="text-ink-2">Tuesday: Rest day + 4,000 steps</span>
+                <span className="font-mono text-status-warn">~2,100 cal</span>
               </div>
-              <div className="pt-2 border-t border-surface-700">
-                <span className="text-surface-500 text-sm">
-                  That&apos;s a <strong className="text-surface-200">700 calorie swing</strong> between days.
+              <div className="pt-2 border-t border-sep">
+                <span className="text-ink-3 text-sm">
+                  That&apos;s a <strong className="text-ink">700 calorie swing</strong> between days.
                 </span>
               </div>
             </div>
@@ -73,7 +73,7 @@ export default function WearableIntegrationArticle() {
 
         {/* How We Incorporate Activity */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             How We Incorporate Activity Data
           </h2>
           <p className="mb-4">
@@ -81,14 +81,14 @@ export default function WearableIntegrationArticle() {
             step count. Combined with your logged workouts from the app, we can estimate your
             actual burn for each specific day.
           </p>
-          <Card className="p-5 bg-primary-500/10 border-primary-500/20 mb-6">
-            <p className="font-semibold text-primary-300 mb-3">The enhanced model:</p>
+          <Card className="p-5 bg-action/10 border-action/20 mb-6">
+            <p className="font-semibold text-action mb-3">The enhanced model:</p>
             <div className="font-mono text-sm space-y-2">
-              <p className="text-surface-200">Daily TDEE = Base Metabolism + Step Burn + Workout Burn</p>
-              <div className="text-xs text-surface-400 space-y-1 pl-4 mt-3">
-                <p><strong className="text-surface-300">Base Metabolism</strong> = Your resting burn (what we already calculate)</p>
-                <p><strong className="text-surface-300">Step Burn</strong> = Calories from walking/daily movement</p>
-                <p><strong className="text-surface-300">Workout Burn</strong> = Calories from your logged resistance training</p>
+              <p className="text-ink">Daily TDEE = Base Metabolism + Step Burn + Workout Burn</p>
+              <div className="text-xs text-ink-2 space-y-1 pl-4 mt-3">
+                <p><strong className="text-ink-2">Base Metabolism</strong> = Your resting burn (what we already calculate)</p>
+                <p><strong className="text-ink-2">Step Burn</strong> = Calories from walking/daily movement</p>
+                <p><strong className="text-ink-2">Workout Burn</strong> = Calories from your logged resistance training</p>
               </div>
             </div>
           </Card>
@@ -96,35 +96,35 @@ export default function WearableIntegrationArticle() {
 
         {/* Why We Use Our Workout Estimates */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             Why We Use OUR Workout Estimates
           </h2>
-          <Card className="p-4 bg-warning-500/10 border-warning-500/20 mb-4">
-            <p className="text-warning-300 font-medium mb-2">Watch out!</p>
-            <p className="text-sm text-surface-400">
+          <Card className="p-4 bg-status-warn/10 border-status-warn/20 mb-4">
+            <p className="text-status-warn font-medium mb-2">Watch out!</p>
+            <p className="text-sm text-ink-2">
               Your Apple Watch might say you burned 600 calories during your 45-minute lifting
               session. It&apos;s probably wrong—heart rate-based estimates for resistance training
-              are notoriously inaccurate, often <strong className="text-surface-200">2-3x too high</strong>.
+              are notoriously inaccurate, often <strong className="text-ink">2-3x too high</strong>.
             </p>
           </Card>
           <p className="mb-4">
             We use conservative estimates based on research:
           </p>
-          <ul className="list-disc list-inside space-y-2 text-surface-400 ml-4">
+          <ul className="list-disc list-inside space-y-2 text-ink-2 ml-4">
             <li>
-              <strong className="text-surface-300">Workout duration</strong> - longer = more burn
+              <strong className="text-ink-2">Workout duration</strong> - longer = more burn
             </li>
             <li>
-              <strong className="text-surface-300">Rest periods</strong> - shorter rest = higher intensity
+              <strong className="text-ink-2">Rest periods</strong> - shorter rest = higher intensity
             </li>
             <li>
-              <strong className="text-surface-300">Muscle groups</strong> - legs burn more than arms
+              <strong className="text-ink-2">Muscle groups</strong> - legs burn more than arms
             </li>
             <li>
-              <strong className="text-surface-300">Your body weight</strong> - heavier = more calories
+              <strong className="text-ink-2">Your body weight</strong> - heavier = more calories
             </li>
           </ul>
-          <p className="mt-4 text-sm text-surface-500">
+          <p className="mt-4 text-sm text-ink-3">
             This gives a more realistic 150-250 calories for a typical 45-60 minute lifting session,
             rather than the inflated 500+ your watch might report.
           </p>
@@ -132,59 +132,59 @@ export default function WearableIntegrationArticle() {
 
         {/* Avoiding Double-Counting */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             Avoiding Double-Counting
           </h2>
           <p className="mb-4">
             If you walked to the gym and your watch counted 2,000 steps during your workout, we
             shouldn&apos;t count those steps AND the workout calories.
           </p>
-          <Card className="p-5 bg-surface-800/50 mb-4">
-            <p className="text-sm text-surface-400 mb-3">How we handle it:</p>
+          <Card className="p-5 bg-fill/50 mb-4">
+            <p className="text-sm text-ink-2 mb-3">How we handle it:</p>
             <div className="space-y-2 text-sm">
               <div className="flex items-start gap-2">
-                <span className="text-primary-400">1.</span>
+                <span className="text-action">1.</span>
                 <span>Track hourly step breakdowns from your wearable</span>
               </div>
               <div className="flex items-start gap-2">
-                <span className="text-primary-400">2.</span>
+                <span className="text-action">2.</span>
                 <span>Identify steps that occurred during your logged workout time</span>
               </div>
               <div className="flex items-start gap-2">
-                <span className="text-primary-400">3.</span>
+                <span className="text-action">3.</span>
                 <span>Deduct those steps from your step calorie total</span>
               </div>
             </div>
           </Card>
-          <p className="text-sm text-surface-500">
+          <p className="text-sm text-ink-3">
             You get credit for the workout OR the steps during that time, not both.
           </p>
         </section>
 
         {/* Dynamic Calorie Targets */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             Dynamic Calorie Targets (Optional)
           </h2>
           <p className="mb-4">You can choose how to handle activity variations:</p>
           <div className="space-y-4">
-            <Card className="p-4 bg-surface-800/30">
-              <p className="font-medium text-surface-200 mb-1">Fixed Target</p>
-              <p className="text-sm text-surface-500">
+            <Card className="p-4 bg-fill/30">
+              <p className="font-medium text-ink mb-1">Fixed Target</p>
+              <p className="text-sm text-ink-3">
                 Eat the same every day. Simple, but some days you&apos;ll be in a bigger deficit
                 than others.
               </p>
             </Card>
-            <Card className="p-4 bg-success-500/10 border-success-500/20">
-              <p className="font-medium text-success-300 mb-1">Activity-Adjusted</p>
-              <p className="text-sm text-surface-400">
+            <Card className="p-4 bg-status-ok/10 border-status-ok/20">
+              <p className="font-medium text-status-ok mb-1">Activity-Adjusted</p>
+              <p className="text-sm text-ink-2">
                 Eat more on active days, less on rest days. Keeps your deficit more consistent
                 and may help with energy levels.
               </p>
             </Card>
-            <Card className="p-4 bg-surface-800/30">
-              <p className="font-medium text-surface-200 mb-1">Deficit-Locked</p>
-              <p className="text-sm text-surface-500">
+            <Card className="p-4 bg-fill/30">
+              <p className="font-medium text-ink mb-1">Deficit-Locked</p>
+              <p className="text-sm text-ink-3">
                 Automatically adjust to maintain your exact target deficit (e.g., always 500 cal
                 below burn).
               </p>
@@ -194,16 +194,16 @@ export default function WearableIntegrationArticle() {
 
         {/* Calibration Over Time */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             Calibration Over Time
           </h2>
           <p className="mb-4">
             Different devices count steps differently. A Fitbit might count 10% more steps than
             an Apple Watch for the same walk.
           </p>
-          <Card className="p-5 bg-purple-500/10 border-purple-500/20 mb-4">
-            <p className="font-medium text-purple-300 mb-3">We learn YOUR device&apos;s calibration:</p>
-            <div className="space-y-2 text-sm text-surface-400">
+          <Card className="p-5 bg-action/10 border-action/20 mb-4">
+            <p className="font-medium text-action mb-3">We learn YOUR device&apos;s calibration:</p>
+            <div className="space-y-2 text-sm text-ink-2">
               <p>
                 By comparing predicted weight changes to actual, we can detect if your steps burn
                 more or fewer calories than expected.
@@ -214,7 +214,7 @@ export default function WearableIntegrationArticle() {
               </p>
             </div>
           </Card>
-          <p className="text-sm text-surface-500">
+          <p className="text-sm text-ink-3">
             After 2-3 weeks with a connected device, your step-calorie estimates become
             personalized to you and your specific wearable.
           </p>
@@ -222,50 +222,50 @@ export default function WearableIntegrationArticle() {
 
         {/* Supported Devices */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             Supported Devices
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <Card className="p-4 text-center">
               <span className="text-3xl">⌚</span>
-              <p className="font-medium text-surface-200 mt-2">Apple Watch</p>
-              <p className="text-xs text-surface-500">via HealthKit</p>
+              <p className="font-medium text-ink mt-2">Apple Watch</p>
+              <p className="text-xs text-ink-3">via HealthKit</p>
             </Card>
             <Card className="p-4 text-center">
               <span className="text-3xl">💪</span>
-              <p className="font-medium text-surface-200 mt-2">Fitbit</p>
-              <p className="text-xs text-surface-500">via OAuth</p>
+              <p className="font-medium text-ink mt-2">Fitbit</p>
+              <p className="text-xs text-ink-3">via OAuth</p>
             </Card>
             <Card className="p-4 text-center">
               <span className="text-3xl">📊</span>
-              <p className="font-medium text-surface-200 mt-2">Google Fit</p>
-              <p className="text-xs text-surface-500">Android devices</p>
+              <p className="font-medium text-ink mt-2">Google Fit</p>
+              <p className="text-xs text-ink-3">Android devices</p>
             </Card>
             <Card className="p-4 text-center">
               <span className="text-3xl">🏃</span>
-              <p className="font-medium text-surface-200 mt-2">Garmin</p>
-              <p className="text-xs text-surface-500">Coming soon</p>
+              <p className="font-medium text-ink mt-2">Garmin</p>
+              <p className="text-xs text-ink-3">Coming soon</p>
             </Card>
           </div>
         </section>
 
         {/* The Math */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             The Math (For Nerds)
           </h2>
-          <Card className="p-5 bg-surface-800/50">
-            <p className="text-sm text-surface-400 mb-4">
+          <Card className="p-5 bg-fill/50">
+            <p className="text-sm text-ink-2 mb-4">
               We use gradient descent to learn optimal parameters:
             </p>
-            <div className="font-mono text-sm space-y-2 p-4 bg-surface-900 rounded-lg mb-4">
-              <p className="text-surface-300">Daily TDEE = α × weight + β × netSteps + γ × workoutCals</p>
-              <p className="text-surface-500 text-xs mt-2">Where:</p>
-              <p className="text-surface-500 text-xs">α ≈ 13-16 cal/lb (base metabolism)</p>
-              <p className="text-surface-500 text-xs">β ≈ 0.03-0.05 cal/step</p>
-              <p className="text-surface-500 text-xs">γ ≈ 0.8-1.2 (workout multiplier)</p>
+            <div className="font-mono text-sm space-y-2 p-4 bg-card rounded-lg mb-4">
+              <p className="text-ink-2">Daily TDEE = α × weight + β × netSteps + γ × workoutCals</p>
+              <p className="text-ink-3 text-xs mt-2">Where:</p>
+              <p className="text-ink-3 text-xs">α ≈ 13-16 cal/lb (base metabolism)</p>
+              <p className="text-ink-3 text-xs">β ≈ 0.03-0.05 cal/step</p>
+              <p className="text-ink-3 text-xs">γ ≈ 0.8-1.2 (workout multiplier)</p>
             </div>
-            <p className="text-sm text-surface-500">
+            <p className="text-sm text-ink-3">
               These parameters are learned from your actual weight and calorie data, personalized
               to your metabolism and activity patterns.
             </p>
@@ -274,15 +274,15 @@ export default function WearableIntegrationArticle() {
 
         {/* CTA */}
         <section className="pt-4">
-          <Card className="p-6 text-center bg-gradient-to-r from-blue-500/10 to-primary-500/10 border-blue-500/20">
-            <h3 className="text-lg font-bold text-surface-100 mb-2">
+          <Card className="bg-blue-500/10 p-6 text-center border-blue-500/20">
+            <h3 className="text-lg font-bold text-ink mb-2">
               Ready to Connect Your Wearable?
             </h3>
-            <p className="text-sm text-surface-400 mb-4">
+            <p className="text-sm text-ink-2 mb-4">
               Start getting day-by-day calorie targets based on your actual activity level.
             </p>
             <Link href="/dashboard/settings/wearables">
-              <button className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors">
+              <button className="px-6 py-2 bg-action hover:bg-action text-on-action font-semibold rounded-lg transition-colors">
                 Connect Device
               </button>
             </Link>
@@ -291,27 +291,27 @@ export default function WearableIntegrationArticle() {
       </article>
 
       {/* Related Articles */}
-      <div className="mt-12 pt-8 border-t border-surface-800">
-        <h3 className="text-lg font-semibold text-surface-100 mb-4">Related Articles</h3>
+      <div className="mt-12 pt-8 border-t border-sep">
+        <h3 className="text-lg font-semibold text-ink mb-4">Related Articles</h3>
         <div className="grid md:grid-cols-2 gap-4">
           <Link href="/dashboard/learn/adaptive-tdee">
-            <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
+            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">🔥</span>
                 <div>
-                  <p className="font-medium text-surface-200">Adaptive TDEE</p>
-                  <p className="text-xs text-surface-500">How we calculate your base metabolism</p>
+                  <p className="font-medium text-ink">Adaptive TDEE</p>
+                  <p className="text-xs text-ink-3">How we calculate your base metabolism</p>
                 </div>
               </div>
             </Card>
           </Link>
           <Link href="/dashboard/science">
-            <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
+            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">📊</span>
                 <div>
-                  <p className="font-medium text-surface-200">All Science Principles</p>
-                  <p className="text-xs text-surface-500">12+ research-backed algorithms</p>
+                  <p className="font-medium text-ink">All Science Principles</p>
+                  <p className="text-xs text-ink-3">12+ research-backed algorithms</p>
                 </div>
               </div>
             </Card>

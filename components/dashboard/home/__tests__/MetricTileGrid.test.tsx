@@ -51,14 +51,14 @@ describe('MetricTileGrid — Body comp tile', () => {
     expect(screen.getByText('18.2')).toBeInTheDocument();
     expect(screen.getByText(/FFMI 21.4/)).toBeInTheDocument();
     // Falling BF and rising FFMI: honest directions, graded colors.
-    expect(screen.getByText('↓')).toHaveClass('text-success-400');
-    expect(screen.getByText('↑')).toHaveClass('text-success-400');
+    expect(screen.getByText('↓')).toHaveClass('text-status-ok');
+    expect(screen.getByText('↑')).toHaveClass('text-status-ok');
     expect(screen.getByText(/3 scans/)).toBeInTheDocument();
   });
 
   it('flags rising body fat without hiding the direction', () => {
     renderGrid({ ...glance, bodyFatRatePerMonth: 0.6 });
-    expect(screen.getByText('↑', { selector: '.text-warning-400' })).toBeInTheDocument();
+    expect(screen.getByText('↑', { selector: '.text-status-warn' })).toBeInTheDocument();
   });
 
   it('renders nothing without a glance payload (<2 scans or no height)', () => {

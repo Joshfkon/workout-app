@@ -16,70 +16,6 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Custom color palette for the workout app
-        primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-          950: '#082f49',
-        },
-        accent: {
-          50: '#fdf4ff',
-          100: '#fae8ff',
-          200: '#f5d0fe',
-          300: '#f0abfc',
-          400: '#e879f9',
-          500: '#d946ef',
-          600: '#c026d3',
-          700: '#a21caf',
-          800: '#86198f',
-          900: '#701a75',
-          950: '#4a044e',
-        },
-        surface: {
-          50: 'rgb(var(--surface-50) / <alpha-value>)',
-          100: 'rgb(var(--surface-100) / <alpha-value>)',
-          200: 'rgb(var(--surface-200) / <alpha-value>)',
-          300: 'rgb(var(--surface-300) / <alpha-value>)',
-          400: 'rgb(var(--surface-400) / <alpha-value>)',
-          500: 'rgb(var(--surface-500) / <alpha-value>)',
-          600: 'rgb(var(--surface-600) / <alpha-value>)',
-          700: 'rgb(var(--surface-700) / <alpha-value>)',
-          800: 'rgb(var(--surface-800) / <alpha-value>)',
-          900: 'rgb(var(--surface-900) / <alpha-value>)',
-          950: 'rgb(var(--surface-950) / <alpha-value>)',
-        },
-        success: {
-          // 300/700 bracket the volume-heatmap green ramp (light "just over
-          // MEV" through darkest "above MRV" — see HEAT_FILL_CLASSES in
-          // app/(dashboard)/dashboard/_lib/volumeHeatmap.ts).
-          300: '#86efac',
-          400: '#4ade80',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-        },
-        warning: {
-          400: '#facc15',
-          500: '#eab308',
-          600: '#ca8a04',
-        },
-        danger: {
-          // 300 is the soft "untrained" red — a warning that must stay clearly
-          // lighter than the solid 500 used for over-MRV (see weeklyVolume's
-          // ZoneColorToken), so the two never read as the same signal.
-          300: '#fca5a5',
-          400: '#f87171',
-          500: '#ef4444',
-          600: '#dc2626',
-        },
         orange: {
           400: '#fb923c',
           500: '#f97316',
@@ -87,9 +23,8 @@ const config: Config = {
         },
         // ── Design system (2026 redesign) ──────────────────────────────
         // Theme-aware via the --ht-* variables in app/globals.css; values
-        // and contrast checks live in lib/design/tokens.ts. New UI uses
-        // ONLY these. The primary/accent/surface ramps stay until every
-        // screen has moved over (accent-* is the old purple — don't use).
+        // and contrast checks live in lib/design/tokens.ts. Use ONLY these
+        // for UI colour (orange and meal-* are categorical identities).
         canvas: 'rgb(var(--ht-bg) / <alpha-value>)',
         card: 'rgb(var(--ht-card) / <alpha-value>)',
         fill: 'rgb(var(--ht-fill) / <alpha-value>)',

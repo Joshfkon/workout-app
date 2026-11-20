@@ -34,11 +34,11 @@ describe('RollingVolumeForecast', () => {
     // shaded zone rule).
     expect(
       screen.getByTestId('volume-forecast-bar-biceps-0').firstChild
-    ).toHaveClass('bg-success-300');
+    ).toHaveClass('bg-status-ok/50');
     // Day +5: only today's 4 sets remain -> below MEV, yellow.
     expect(
       screen.getByTestId('volume-forecast-bar-biceps-5').firstChild
-    ).toHaveClass('bg-warning-500');
+    ).toHaveClass('bg-status-warn');
     // Day +7: everything aged out -> empty track, not a zone color.
     expect(
       screen.getByTestId(`volume-forecast-bar-biceps-${FORECAST_HORIZON_DAYS}`).firstChild
@@ -78,7 +78,7 @@ describe('RollingVolumeForecast', () => {
     // First bar is yellow (4 sets, below MEV) — matching the row bar's color.
     expect(
       screen.getByTestId('volume-forecast-bar-biceps-0').firstChild
-    ).toHaveClass('bg-warning-500');
+    ).toHaveClass('bg-status-warn');
   });
 
   it('colors an over-MRV total red, same as the row bar', () => {
@@ -93,7 +93,7 @@ describe('RollingVolumeForecast', () => {
     );
     expect(
       screen.getByTestId('volume-forecast-bar-chest-0').firstChild
-    ).toHaveClass('bg-danger-500');
+    ).toHaveClass('bg-status-bad');
   });
 
   it('renders nothing when the window holds no sets', () => {

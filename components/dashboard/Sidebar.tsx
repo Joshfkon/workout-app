@@ -79,8 +79,8 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
         className={cn(
           'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
           isActive
-            ? 'bg-primary-500/10 text-primary-400'
-            : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
+            ? 'bg-action/10 text-action'
+            : 'text-ink-2 hover:bg-fill hover:text-ink'
         )}
       >
         <Icon size={20} stroke={2} aria-hidden="true" />
@@ -110,7 +110,7 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
       {!isActiveWorkoutRoute(pathname) && (
         <button
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-30 p-2 lg:hidden text-surface-400 hover:text-surface-200 bg-surface-900/80 backdrop-blur-lg rounded-lg"
+          className="fixed top-4 left-4 z-30 p-2 lg:hidden text-ink-2 hover:text-ink bg-card/80 backdrop-blur-lg rounded-lg"
         >
           <IconMenu2 size={24} stroke={2} aria-hidden="true" />
         </button>
@@ -119,21 +119,21 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full w-64 bg-surface-900 border-r border-surface-800 transform transition-transform duration-200 lg:translate-x-0',
+          'fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-sep transform transition-transform duration-200 lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         {/* Logo */}
-        <div className="flex items-center h-16 border-b border-surface-800 px-4">
+        <div className="flex items-center h-16 border-b border-sep px-4">
           <Link
             href="/dashboard"
             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
             onClick={() => setSidebarOpen(false)}
           >
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-action flex items-center justify-center">
               <IconBolt size={20} stroke={2} className="text-white" aria-hidden="true" />
             </div>
-            <span className="text-lg font-bold text-surface-100">HyperTrack</span>
+            <span className="text-lg font-bold text-ink">HyperTrack</span>
           </Link>
         </div>
 
@@ -142,17 +142,17 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
           {primaryNavigation.map(renderNavItem)}
 
           {/* More section */}
-          <p className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-wider text-surface-500">
+          <p className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-wider text-ink-3">
             More
           </p>
           {moreNavigation.map(renderNavItem)}
         </nav>
 
         {/* Bottom section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-surface-800">
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-sep">
           <button
             onClick={onSignOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-ink-2 hover:bg-fill hover:text-ink transition-colors"
           >
             <IconLogout size={20} stroke={2} aria-hidden="true" />
             Sign Out

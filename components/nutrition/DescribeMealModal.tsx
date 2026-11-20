@@ -106,13 +106,13 @@ export function DescribeMealModal({
     key: 'calories' | 'protein' | 'carbs' | 'fat'
   ) => (
     <div className="flex-1 min-w-0">
-      <label className="block text-[11px] text-surface-500 mb-0.5">{label}</label>
+      <label className="block text-[11px] text-ink-3 mb-0.5">{label}</label>
       <input
         type="number"
         min={0}
         value={value}
         onChange={(e) => updateItem(index, { [key]: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-        className="w-full px-2 py-1 bg-surface-900 border border-surface-700 rounded-lg text-[13px] text-surface-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
+        className="w-full px-2 py-1 bg-card rounded-lg text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-action shadow-card"
       />
     </div>
   );
@@ -129,8 +129,8 @@ export function DescribeMealModal({
               onClick={() => setMealType(option.type)}
               className={`rounded-full px-2.5 py-1 text-[11px] transition-colors ${
                 mealType === option.type
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                  ? 'bg-action text-on-action'
+                  : 'bg-fill text-ink-2 hover:bg-sep'
               }`}
             >
               {option.label}
@@ -146,11 +146,11 @@ export function DescribeMealModal({
               rows={4}
               maxLength={600}
               placeholder="2 eggs, toast with butter, and a glass of orange juice"
-              className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-[13px] text-surface-100 placeholder-surface-500 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 bg-card rounded-lg text-[13px] text-ink placeholder-ink-3 resize-none focus:outline-none focus:ring-2 focus:ring-action shadow-card"
             />
 
             {parseError && (
-              <p className="text-[13px] text-danger-400">{parseError}</p>
+              <p className="text-[13px] text-status-bad">{parseError}</p>
             )}
 
             <Button
@@ -167,7 +167,7 @@ export function DescribeMealModal({
             {/* Editable review list */}
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {items.map((item, index) => (
-                <div key={index} className="rounded-lg bg-surface-800/50 p-3 space-y-2">
+                <div key={index} className="rounded-lg bg-fill/50 p-3 space-y-2">
                   <div className="flex items-center gap-2">
                     <Input
                       value={item.name}
@@ -184,7 +184,7 @@ export function DescribeMealModal({
                     <button
                       type="button"
                       onClick={() => removeItem(index)}
-                      className="p-1.5 text-surface-500 hover:text-danger-400 transition-colors flex-shrink-0"
+                      className="p-1.5 text-ink-3 hover:text-status-bad transition-colors flex-shrink-0"
                       aria-label={`Remove ${item.name}`}
                     >
                       <IconTrash size={16} aria-hidden="true" />
@@ -199,13 +199,13 @@ export function DescribeMealModal({
                 </div>
               ))}
               {items.length === 0 && (
-                <p className="text-center text-[13px] text-surface-500 py-4">
+                <p className="text-center text-[13px] text-ink-3 py-4">
                   All items removed — start over to try again.
                 </p>
               )}
             </div>
 
-            {logError && <p className="text-[13px] text-danger-400">{logError}</p>}
+            {logError && <p className="text-[13px] text-status-bad">{logError}</p>}
 
             <div className="flex gap-2">
               <Button

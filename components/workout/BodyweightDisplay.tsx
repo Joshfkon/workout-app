@@ -49,15 +49,15 @@ export const BodyweightDisplay = memo(function BodyweightDisplay({
     switch (modification) {
       case 'none':
         display = (
-          <span className="text-surface-200">
-            BW <span className="text-surface-400">({bw})</span>
+          <span className="text-ink">
+            BW <span className="text-ink-2">({bw})</span>
           </span>
         );
         break;
       case 'weighted':
         display = (
           <span>
-            <span className="text-surface-200">BW</span>
+            <span className="text-ink">BW</span>
             <span className="text-green-400">+{displayWeight(addedWeightKg || 0)}</span>
           </span>
         );
@@ -65,10 +65,10 @@ export const BodyweightDisplay = memo(function BodyweightDisplay({
       case 'assisted':
         display = (
           <span>
-            <span className="text-surface-200">BW</span>
+            <span className="text-ink">BW</span>
             <span className="text-blue-400">-{displayWeight(assistanceWeightKg || 0)}</span>
             {data.assistanceType === 'band' && (
-              <span className="text-surface-500 text-xs ml-0.5">~</span>
+              <span className="text-ink-3 text-xs ml-0.5">~</span>
             )}
           </span>
         );
@@ -80,12 +80,12 @@ export const BodyweightDisplay = memo(function BodyweightDisplay({
 
   // Full mode - detailed breakdown
   return (
-    <div className={`bg-surface-800 rounded-lg p-3 ${className}`}>
+    <div className={`bg-fill rounded-lg p-3 ${className}`}>
       <div className="space-y-2 text-sm">
         {/* Bodyweight row */}
         <div className="flex justify-between items-center">
-          <span className="text-surface-400">BW:</span>
-          <span className="text-surface-200 font-mono">{bw} {unit}</span>
+          <span className="text-ink-2">BW:</span>
+          <span className="text-ink font-mono">{bw} {unit}</span>
         </div>
 
         {/* Added weight row */}
@@ -102,7 +102,7 @@ export const BodyweightDisplay = memo(function BodyweightDisplay({
             <span>
               Assistance
               {data.assistanceType === 'band' && data.bandColor && (
-                <span className="text-surface-500 ml-1">
+                <span className="text-ink-3 ml-1">
                   ({data.bandColor} band)
                 </span>
               )}
@@ -116,21 +116,21 @@ export const BodyweightDisplay = memo(function BodyweightDisplay({
         )}
 
         {/* Divider */}
-        <div className="border-t border-surface-700"></div>
+        <div className="border-t border-sep"></div>
 
         {/* Total/Effective row */}
         <div className="flex justify-between items-center font-semibold">
-          <span className="text-surface-300">
+          <span className="text-ink-2">
             {modification === 'assisted' ? 'Effective:' : 'Total:'}
           </span>
-          <span className="text-primary-400 font-mono">{effective} {unit}</span>
+          <span className="text-action font-mono">{effective} {unit}</span>
         </div>
 
         {/* Percentage indicator for assisted */}
         {modification === 'assisted' && (
           <div className="flex items-center justify-between text-xs">
-            <span className="text-surface-500">% of Bodyweight:</span>
-            <span className="text-surface-400">{percentBw}%</span>
+            <span className="text-ink-3">% of Bodyweight:</span>
+            <span className="text-ink-2">{percentBw}%</span>
           </div>
         )}
       </div>
@@ -169,9 +169,9 @@ export const BodyweightDisplayInline = memo(function BodyweightDisplayInline({
     case 'none':
       content = (
         <>
-          <span className="text-surface-300">BW</span>
+          <span className="text-ink-2">BW</span>
           {showTotal && (
-            <span className="text-surface-500"> ({displayWeight(userBodyweightKg)})</span>
+            <span className="text-ink-3"> ({displayWeight(userBodyweightKg)})</span>
           )}
         </>
       );
@@ -180,10 +180,10 @@ export const BodyweightDisplayInline = memo(function BodyweightDisplayInline({
     case 'weighted':
       content = (
         <>
-          <span className="text-surface-300">BW</span>
+          <span className="text-ink-2">BW</span>
           <span className="text-green-400">+{displayWeight(addedWeightKg || 0)}</span>
           {showTotal && (
-            <span className="text-surface-500"> = {displayWeight(effectiveLoadKg)}</span>
+            <span className="text-ink-3"> = {displayWeight(effectiveLoadKg)}</span>
           )}
         </>
       );
@@ -192,11 +192,11 @@ export const BodyweightDisplayInline = memo(function BodyweightDisplayInline({
     case 'assisted':
       content = (
         <>
-          <span className="text-surface-300">BW</span>
+          <span className="text-ink-2">BW</span>
           <span className="text-blue-400">-{displayWeight(assistanceWeightKg || 0)}</span>
-          {data.assistanceType === 'band' && <span className="text-surface-500">~</span>}
+          {data.assistanceType === 'band' && <span className="text-ink-3">~</span>}
           {showTotal && (
-            <span className="text-surface-500"> = {displayWeight(effectiveLoadKg)}</span>
+            <span className="text-ink-3"> = {displayWeight(effectiveLoadKg)}</span>
           )}
         </>
       );
@@ -251,7 +251,7 @@ export const BodyweightPRBadge = memo(function BodyweightPRBadge({
           <span className="text-xs opacity-75">PR</span>
         </>
       );
-      bgColor = 'bg-primary-500/20 text-primary-400 border-primary-500/40';
+      bgColor = 'bg-action/20 text-action border-action/40';
       break;
   }
 

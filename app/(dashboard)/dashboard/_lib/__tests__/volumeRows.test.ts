@@ -187,7 +187,7 @@ describe('parent color is gated on child states (rowColorToken)', () => {
     expect(shoulders.zone).toBe('in_zone'); // the band alone would say green…
     expect(shoulders.laggingChildren).toBe(true); // …but children are lagging
     expect(rowColorToken(shoulders)).toBe('warning'); // so the row demotes
-    expect(rowBarClass(shoulders)).toBe('bg-warning-500');
+    expect(rowBarClass(shoulders)).toBe('bg-status-warn');
     // The zone itself is untouched — bands/markers still render correctly.
     expect(volumeZone(shoulders.sets, shoulders.band)).toBe('in_zone');
   });
@@ -243,9 +243,9 @@ describe('in-zone green shades by band position (zoneColorToken thirds)', () => 
     expect(rowColorToken({ zone: 'in_zone', sets: 8, band, laggingChildren: true })).toBe('warning');
   });
   it('shades map to the light→dark bar classes', () => {
-    expect(rowBarClass({ zone: 'in_zone', sets: 9, band })).toBe('bg-success-300');
-    expect(rowBarClass({ zone: 'in_zone', sets: 14, band })).toBe('bg-success-500');
-    expect(rowBarClass({ zone: 'in_zone', sets: 19, band })).toBe('bg-success-600');
+    expect(rowBarClass({ zone: 'in_zone', sets: 9, band })).toBe('bg-status-ok/50');
+    expect(rowBarClass({ zone: 'in_zone', sets: 14, band })).toBe('bg-status-ok/75');
+    expect(rowBarClass({ zone: 'in_zone', sets: 19, band })).toBe('bg-status-ok');
   });
 });
 

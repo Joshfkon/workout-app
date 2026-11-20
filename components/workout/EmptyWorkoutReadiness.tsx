@@ -191,7 +191,7 @@ export function EmptyWorkoutReadiness({
           onClick={() => setShowReadiness(!showReadiness)}
           aria-expanded={showReadiness}
           data-testid="readiness-inline-toggle"
-          className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-surface-500 hover:text-surface-400 transition-colors mb-3"
+          className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-ink-3 hover:text-ink-2 transition-colors mb-3"
         >
           <svg
             className={`w-3.5 h-3.5 transition-transform ${showReadiness ? 'rotate-90' : ''}`}
@@ -221,7 +221,7 @@ export function EmptyWorkoutReadiness({
       {/* Quick add: the user's frequent exercises, re-ordered by readiness. */}
       {sortedChips.length > 0 && (
         <div className="mt-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-surface-500 mb-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-ink-3 mb-3">
             Quick add · Ranked by readiness
           </p>
           <div className="flex flex-wrap gap-2.5">
@@ -230,7 +230,7 @@ export function EmptyWorkoutReadiness({
                 key={exercise.id}
                 onClick={() => onAddExercise(exercise)}
                 disabled={disabled}
-                className="px-4 py-2.5 rounded-full border border-surface-700 bg-surface-900 text-surface-200 font-medium hover:border-surface-500 hover:text-surface-100 disabled:opacity-50 transition-colors"
+                className="px-4 py-2.5 rounded-full bg-card text-ink font-medium hover:border-ink-3 hover:text-ink disabled:opacity-50 transition-colors shadow-card"
               >
                 + {exercise.name}
               </button>

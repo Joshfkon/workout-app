@@ -105,14 +105,14 @@ export default function MotionPage() {
   if (!enabled) {
     return (
       <div className="max-w-lg mx-auto space-y-4">
-        <h1 className="text-2xl font-bold text-surface-100">Motion Capture</h1>
+        <h1 className="text-2xl font-bold text-ink">Motion Capture</h1>
         <Card>
           <CardContent className="py-6 space-y-3">
-            <p className="text-sm text-surface-300">
+            <p className="text-sm text-ink-2">
               Motion capture is an experimental feature and is turned off. Enable it in Settings to
             record per-rep tempo, ROM, and handle speed on calibrated machines.
             </p>
-            <Link href="/dashboard/settings" className="inline-block text-sm text-primary-400 hover:text-primary-300">
+            <Link href="/dashboard/settings" className="inline-block text-sm text-action">
               Go to Settings →
             </Link>
           </CardContent>
@@ -124,13 +124,13 @@ export default function MotionPage() {
   return (
     <div className="max-w-lg mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-surface-100">
+        <h1 className="text-2xl font-bold text-ink">
           Motion Capture{' '}
-          <span className="ml-1 align-middle text-xs font-normal uppercase tracking-wide text-warning-400">
+          <span className="ml-1 align-middle text-xs font-normal uppercase tracking-wide text-status-warn">
             Experimental
           </span>
         </h1>
-        <p className="text-sm text-surface-400 mt-1">
+        <p className="text-sm text-ink-2 mt-1">
           Single-DOF movement telemetry — display-only, never feeds your progression. Quick
           captures need no calibration.
         </p>
@@ -151,7 +151,7 @@ export default function MotionPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {calibrations.length === 0 && (
-            <p className="text-sm text-surface-400">
+            <p className="text-sm text-ink-2">
               None yet. A calibration ties captures to one machine, seat setting, and phone-mount
               position.
             </p>
@@ -159,11 +159,11 @@ export default function MotionPage() {
           {calibrations.map((c) => (
             <div
               key={c.id}
-              className="flex items-center justify-between gap-3 p-3 rounded-lg bg-surface-900/60"
+              className="flex items-center justify-between gap-3 p-3 rounded-lg bg-card/60"
             >
               <div className="min-w-0">
-                <p className="text-sm text-surface-200 truncate">{c.label}</p>
-                <p className="text-xs text-surface-500">
+                <p className="text-sm text-ink truncate">{c.label}</p>
+                <p className="text-xs text-ink-3">
                   {exerciseNames[c.exerciseId] ?? 'Unknown exercise'}
                   {c.seatSetting ? ` · seat ${c.seatSetting}` : ''} · r={c.mountRadius_mm} mm
                   {c.derivedRomDegrees != null ? ` · ${Math.round(c.derivedRomDegrees)}° ROM` : ''}
@@ -175,7 +175,7 @@ export default function MotionPage() {
             </div>
           ))}
 
-          {notice && <p className="text-xs text-warning-400">{notice}</p>}
+          {notice && <p className="text-xs text-status-warn">{notice}</p>}
 
           {showWizard && userId ? (
             <CalibrationWizard
@@ -203,15 +203,15 @@ export default function MotionPage() {
         </CardHeader>
         <CardContent>
           {rawStorage === null ? (
-            <p className="text-sm text-surface-400">Unavailable.</p>
+            <p className="text-sm text-ink-2">Unavailable.</p>
           ) : (
-            <p className="text-sm text-surface-300" data-testid="motion-raw-storage">
+            <p className="text-sm text-ink-2" data-testid="motion-raw-storage">
               {rawStorage.buffers} buffer{rawStorage.buffers === 1 ? '' : 's'} ·{' '}
               {rawStorage.samples.toLocaleString()} samples · ~
               {(rawStorage.samples * 75 / 1_000_000).toFixed(1)} MB
             </p>
           )}
-          <p className="mt-1 text-xs text-surface-500">
+          <p className="mt-1 text-xs text-ink-3">
             Raw buffers are kept for debugging ({'≤'}3 per workout) while raw retention is on —
             toggle it in Settings → Motion Capture.
           </p>

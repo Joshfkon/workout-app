@@ -94,7 +94,7 @@ export function StickyMacroBar({ summary, watchRef }: StickyMacroBarProps) {
   return (
     <div
       aria-hidden={!visible}
-      className={`fixed inset-x-0 top-0 !mt-0 z-20 lg:left-64 border-b border-sep bg-surface-950 supports-[backdrop-filter]:bg-surface-950/85 supports-[backdrop-filter]:backdrop-blur-lg transition-transform duration-[250ms] ease-out motion-reduce:transition-none ${
+      className={`fixed inset-x-0 top-0 !mt-0 z-20 lg:left-64 border-b border-sep bg-canvas supports-[backdrop-filter]:bg-canvas/85 supports-[backdrop-filter]:backdrop-blur-lg transition-transform duration-[250ms] ease-out motion-reduce:transition-none ${
         visible ? 'translate-y-0' : '-translate-y-full pointer-events-none'
       }`}
     >

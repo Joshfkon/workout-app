@@ -170,13 +170,13 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md animate-fade-in">
         <Card variant="elevated" className="p-6 text-center">
           <div className="space-y-4">
-            <div className="w-12 h-12 mx-auto rounded-full bg-primary-500/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
+            <div className="w-12 h-12 mx-auto rounded-full bg-action/20 flex items-center justify-center">
+              <svg className="w-6 h-6 text-action animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </div>
-            <p className="text-surface-400">Verifying reset link...</p>
+            <p className="text-ink-2">Verifying reset link...</p>
           </div>
         </Card>
       </div>
@@ -188,20 +188,20 @@ export default function ResetPasswordPage() {
     return (
       <div className="w-full max-w-md animate-fade-in">
         <Card variant="elevated" className="p-6 text-center space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-full bg-warning-500/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-warning-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-16 h-16 mx-auto rounded-full bg-status-warn/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-status-warn" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-surface-100">Link expired or already used</h2>
-          <p className="text-surface-400">
+          <h2 className="text-xl font-bold text-ink">Link expired or already used</h2>
+          <p className="text-ink-2">
             This password reset link has expired or has already been used. Reset links are valid for 1 hour and can only be used once.
           </p>
           <div className="space-y-3 pt-2">
             <Link href="/forgot-password">
               <Button className="w-full">Request New Link</Button>
             </Link>
-            <p className="text-xs text-surface-500">
+            <p className="text-xs text-ink-3">
               Tip: Click the link in your email within 1 hour of requesting it
             </p>
           </div>
@@ -215,33 +215,33 @@ export default function ResetPasswordPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-3 group">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-action flex items-center justify-center group-hover:scale-105 transition-transform">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-surface-100 tracking-tight">HyperTrack</span>
+          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
       <Card variant="elevated" className="p-6">
         {success ? (
           <div className="text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-success-500/20 flex items-center justify-center">
-              <svg className="w-8 h-8 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-16 h-16 mx-auto rounded-full bg-status-ok/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-surface-100">Password updated!</h2>
-            <p className="text-surface-400">
+            <h2 className="text-xl font-bold text-ink">Password updated!</h2>
+            <p className="text-ink-2">
               Your password has been successfully reset. Redirecting you to the dashboard...
             </p>
           </div>
         ) : (
           <>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-surface-100">Set new password</h1>
-              <p className="text-surface-400 mt-1">
+              <h1 className="text-2xl font-bold text-ink">Set new password</h1>
+              <p className="text-ink-2 mt-1">
                 Enter your new password below
               </p>
             </div>
@@ -269,8 +269,8 @@ export default function ResetPasswordPage() {
               />
 
               {error && (
-                <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-                  <p className="text-sm text-danger-400">{error}</p>
+                <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+                  <p className="text-sm text-status-bad">{error}</p>
                 </div>
               )}
 

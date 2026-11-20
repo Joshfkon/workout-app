@@ -92,7 +92,7 @@ export default function MyProfilePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-action" />
       </div>
     );
   }
@@ -105,7 +105,7 @@ export default function MyProfilePage() {
             <CardTitle>Create Your Profile</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-surface-400 mb-6">
+            <p className="text-ink-2 mb-6">
               Set up your profile to connect with other lifters, share your workouts, and appear on leaderboards.
             </p>
             <Link href="/dashboard/profile/setup">
@@ -137,16 +137,16 @@ export default function MyProfilePage() {
           />
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold text-surface-100 truncate">
+            <h1 className="text-2xl font-bold text-ink truncate">
               {displayName}
             </h1>
-            <p className="text-surface-400">@{profile.username}</p>
+            <p className="text-ink-2">@{profile.username}</p>
 
             {profile.bio && (
-              <p className="mt-3 text-surface-300">{profile.bio}</p>
+              <p className="mt-3 text-ink-2">{profile.bio}</p>
             )}
 
-            <div className="flex flex-wrap gap-2 mt-3 text-sm text-surface-400">
+            <div className="flex flex-wrap gap-2 mt-3 text-sm text-ink-2">
               {profile.training_experience && (
                 <span className="capitalize">{profile.training_experience}</span>
               )}
@@ -167,36 +167,36 @@ export default function MyProfilePage() {
         </div>
 
         {/* Stats */}
-        <div className="flex items-center justify-around mt-6 pt-6 border-t border-surface-800">
+        <div className="flex items-center justify-around mt-6 pt-6 border-t border-sep">
           <div className="text-center">
-            <p className="text-2xl font-bold text-surface-100">
+            <p className="text-2xl font-bold text-ink">
               {formatSocialCount(profile.workout_count)}
             </p>
-            <p className="text-sm text-surface-400">Workouts</p>
+            <p className="text-sm text-ink-2">Workouts</p>
           </div>
 
-          <div className="w-px h-10 bg-surface-800" />
+          <div className="w-px h-10 bg-fill" />
 
           <Link
             href={`${getProfileUrl(profile.username)}/followers`}
             className="text-center hover:opacity-80 transition-opacity"
           >
-            <p className="text-2xl font-bold text-surface-100">
+            <p className="text-2xl font-bold text-ink">
               {formatSocialCount(profile.follower_count)}
             </p>
-            <p className="text-sm text-surface-400">Followers</p>
+            <p className="text-sm text-ink-2">Followers</p>
           </Link>
 
-          <div className="w-px h-10 bg-surface-800" />
+          <div className="w-px h-10 bg-fill" />
 
           <Link
             href={`${getProfileUrl(profile.username)}/following`}
             className="text-center hover:opacity-80 transition-opacity"
           >
-            <p className="text-2xl font-bold text-surface-100">
+            <p className="text-2xl font-bold text-ink">
               {formatSocialCount(profile.following_count)}
             </p>
-            <p className="text-sm text-surface-400">Following</p>
+            <p className="text-sm text-ink-2">Following</p>
           </Link>
         </div>
       </Card>
@@ -212,15 +212,15 @@ export default function MyProfilePage() {
               {profile.badges.map((badge) => (
                 <div
                   key={badge.id}
-                  className="flex items-center gap-2 px-3 py-2 bg-surface-800 rounded-lg"
+                  className="flex items-center gap-2 px-3 py-2 bg-fill rounded-lg"
                   title={badge.description}
                 >
                   <span className="text-xl">{badge.icon}</span>
                   <div>
-                    <p className="text-sm font-medium text-surface-100">
+                    <p className="text-sm font-medium text-ink">
                       {badge.name}
                     </p>
-                    <p className="text-xs text-surface-400">
+                    <p className="text-xs text-ink-2">
                       {badge.description}
                     </p>
                   </div>
@@ -239,32 +239,32 @@ export default function MyProfilePage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-surface-800 rounded-lg">
-                <p className="text-2xl font-bold text-surface-100">
+              <div className="p-4 bg-fill rounded-lg">
+                <p className="text-2xl font-bold text-ink">
                   {stats.total_workouts}
                 </p>
-                <p className="text-sm text-surface-400">Total Workouts</p>
+                <p className="text-sm text-ink-2">Total Workouts</p>
               </div>
 
-              <div className="p-4 bg-surface-800 rounded-lg">
-                <p className="text-2xl font-bold text-surface-100">
+              <div className="p-4 bg-fill rounded-lg">
+                <p className="text-2xl font-bold text-ink">
                   {stats.total_sets.toLocaleString()}
                 </p>
-                <p className="text-sm text-surface-400">Total Sets</p>
+                <p className="text-sm text-ink-2">Total Sets</p>
               </div>
 
-              <div className="p-4 bg-surface-800 rounded-lg">
-                <p className="text-2xl font-bold text-surface-100">
+              <div className="p-4 bg-fill rounded-lg">
+                <p className="text-2xl font-bold text-ink">
                   {formatWeight(stats.total_volume_kg, units, 0)}
                 </p>
-                <p className="text-sm text-surface-400">Total Volume</p>
+                <p className="text-sm text-ink-2">Total Volume</p>
               </div>
 
-              <div className="p-4 bg-surface-800 rounded-lg">
-                <p className="text-2xl font-bold text-surface-100">
+              <div className="p-4 bg-fill rounded-lg">
+                <p className="text-2xl font-bold text-ink">
                   {stats.current_streak}
                 </p>
-                <p className="text-sm text-surface-400">Day Streak</p>
+                <p className="text-sm text-ink-2">Day Streak</p>
               </div>
             </div>
           </CardContent>
@@ -278,8 +278,8 @@ export default function MyProfilePage() {
       <Card>
         <CardContent className="flex items-center justify-between py-4">
           <div>
-            <p className="font-medium text-surface-100">Privacy Settings</p>
-            <p className="text-sm text-surface-400">
+            <p className="font-medium text-ink">Privacy Settings</p>
+            <p className="text-sm text-ink-2">
               Profile is {profile.profile_visibility}
             </p>
           </div>
@@ -295,8 +295,8 @@ export default function MyProfilePage() {
       <Card>
         <CardContent className="flex items-center justify-between py-4">
           <div>
-            <p className="font-medium text-surface-100">Share Profile</p>
-            <p className="text-sm text-surface-400">
+            <p className="font-medium text-ink">Share Profile</p>
+            <p className="text-sm text-ink-2">
               hypertrack.app{getProfileUrl(profile.username)}
             </p>
           </div>

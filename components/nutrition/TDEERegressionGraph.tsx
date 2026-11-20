@@ -88,10 +88,10 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
 
   // Model fit quality
   const fitQuality = useMemo(() => {
-    if (rSquared >= 0.5) return { label: 'Excellent', color: 'text-success-400' };
-    if (rSquared >= 0.3) return { label: 'Good', color: 'text-primary-400' };
-    if (rSquared >= 0.1) return { label: 'Fair', color: 'text-warning-400' };
-    return { label: 'Limited', color: 'text-surface-400' };
+    if (rSquared >= 0.5) return { label: 'Excellent', color: 'text-status-ok' };
+    if (rSquared >= 0.3) return { label: 'Good', color: 'text-action' };
+    if (rSquared >= 0.1) return { label: 'Fair', color: 'text-status-warn' };
+    return { label: 'Limited', color: 'text-ink-2' };
   }, [rSquared]);
 
   return (
@@ -101,16 +101,16 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
           <div>
             <CardTitle className="text-base flex items-center gap-2">
               TDEE Regression Analysis
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-500/20 text-primary-400">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-action/20 text-action">
                 {estimatedTDEE.toLocaleString()} cal/day
               </span>
             </CardTitle>
-            <p className="text-xs text-surface-500 mt-1">
+            <p className="text-xs text-ink-3 mt-1">
               Actual weight changes vs. calories consumed
             </p>
           </div>
           <div className="text-right">
-            <div className="text-xs text-surface-500">Model Fit (R²)</div>
+            <div className="text-xs text-ink-3">Model Fit (R²)</div>
             <div className={`text-sm font-semibold ${fitQuality.color}`}>
               {(rSquared * 100).toFixed(0)}% {fitQuality.label}
             </div>
@@ -226,37 +226,37 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
 
         {/* Stats row */}
         <div className="mt-4 grid grid-cols-4 gap-4">
-          <div className="text-center p-2 bg-surface-800/50 rounded-lg">
-            <div className="text-xs text-surface-500">Burn Rate</div>
-            <div className="text-sm font-semibold text-surface-100">
+          <div className="text-center p-2 bg-fill/50 rounded-lg">
+            <div className="text-xs text-ink-3">Burn Rate</div>
+            <div className="text-sm font-semibold text-ink">
               {burnRatePerLb.toFixed(1)} cal/lb
             </div>
           </div>
-          <div className="text-center p-2 bg-surface-800/50 rounded-lg">
-            <div className="text-xs text-surface-500">Current Weight</div>
-            <div className="text-sm font-semibold text-surface-100">
+          <div className="text-center p-2 bg-fill/50 rounded-lg">
+            <div className="text-xs text-ink-3">Current Weight</div>
+            <div className="text-sm font-semibold text-ink">
               {currentWeight.toFixed(1)} lbs
             </div>
           </div>
-          <div className="text-center p-2 bg-surface-800/50 rounded-lg">
-            <div className="text-xs text-surface-500">Std Error</div>
-            <div className="text-sm font-semibold text-surface-100">
+          <div className="text-center p-2 bg-fill/50 rounded-lg">
+            <div className="text-xs text-ink-3">Std Error</div>
+            <div className="text-sm font-semibold text-ink">
               ±{(standardError * 7).toFixed(1)} lbs/wk
             </div>
           </div>
-          <div className="text-center p-2 bg-surface-800/50 rounded-lg">
-            <div className="text-xs text-surface-500">Data Points</div>
-            <div className="text-sm font-semibold text-surface-100">{dataPoints.length}</div>
+          <div className="text-center p-2 bg-fill/50 rounded-lg">
+            <div className="text-xs text-ink-3">Data Points</div>
+            <div className="text-sm font-semibold text-ink">{dataPoints.length}</div>
           </div>
         </div>
 
         {/* Interpretation */}
-        <div className="mt-4 p-3 bg-surface-800/30 rounded-lg">
-          <p className="text-xs text-surface-400">
-            <span className="text-primary-400 font-medium">How to read this chart:</span> Each blue
+        <div className="mt-4 p-3 bg-fill/30 rounded-lg">
+          <p className="text-xs text-ink-2">
+            <span className="text-action font-medium">How to read this chart:</span> Each blue
             dot shows a day&apos;s calorie intake vs. the resulting weight change. The orange line
             is your personal model. Where it crosses zero (green dashed line) is your estimated
-            TDEE of <span className="text-success-400 font-semibold">{estimatedTDEE}</span> cal/day.
+            TDEE of <span className="text-status-ok font-semibold">{estimatedTDEE}</span> cal/day.
           </p>
         </div>
       </CardContent>

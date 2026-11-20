@@ -58,22 +58,22 @@ export const SanityCheckToast = memo(function SanityCheckToast({
   // the light theme's white toast surface.
   const colorClasses = {
     blue: {
-      bg: 'bg-primary-500/10',
-      border: 'border-primary-500/30',
-      icon: 'text-primary-600 dark:text-primary-400',
-      title: 'text-primary-700 dark:text-primary-300',
+      bg: 'bg-action/10',
+      border: 'border-action/30',
+      icon: 'text-action dark:text-action',
+      title: 'text-action dark:text-action',
     },
     yellow: {
-      bg: 'bg-warning-500/10',
-      border: 'border-warning-500/30',
-      icon: 'text-warning-600 dark:text-warning-400',
-      title: 'text-warning-600 dark:text-warning-400',
+      bg: 'bg-status-warn/10',
+      border: 'border-status-warn/30',
+      icon: 'text-status-warn dark:text-status-warn',
+      title: 'text-status-warn dark:text-status-warn',
     },
     red: {
-      bg: 'bg-danger-500/10',
-      border: 'border-danger-500/30',
-      icon: 'text-danger-600 dark:text-danger-400',
-      title: 'text-danger-600 dark:text-danger-400',
+      bg: 'bg-status-bad/10',
+      border: 'border-status-bad/30',
+      icon: 'text-status-bad dark:text-status-bad',
+      title: 'text-status-bad dark:text-status-bad',
     },
   };
 
@@ -106,7 +106,7 @@ export const SanityCheckToast = memo(function SanityCheckToast({
         // Solid surface under the accent tint: the toast floats over page
         // content, so a bare /10 background lets whatever is behind it bleed
         // through the text.
-        'rounded-lg border shadow-lg bg-surface-900 overflow-hidden',
+        'rounded-lg border shadow-lg bg-card overflow-hidden',
         colors.border,
         'transform transition-all duration-200',
         isExiting
@@ -126,11 +126,11 @@ export const SanityCheckToast = memo(function SanityCheckToast({
             <h4 className={cn('font-medium text-sm mb-1', colors.title)}>
               {title}
             </h4>
-            <p className="text-sm text-surface-300 leading-snug">
+            <p className="text-sm text-ink-2 leading-snug">
               {check.message}
             </p>
             {check.suggestion && (
-              <p className="text-xs text-surface-500 mt-2">
+              <p className="text-xs text-ink-3 mt-2">
                 {check.suggestion}
               </p>
             )}
@@ -139,7 +139,7 @@ export const SanityCheckToast = memo(function SanityCheckToast({
           {/* Close button */}
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 text-surface-500 hover:text-surface-300 transition-colors"
+            className="flex-shrink-0 text-ink-3 hover:text-ink-2 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -149,9 +149,9 @@ export const SanityCheckToast = memo(function SanityCheckToast({
 
         {/* Progress bar for auto-dismiss */}
         {canAutoDismiss && (
-          <div className="mt-3 h-1 bg-surface-800 rounded-full overflow-hidden">
+          <div className="mt-3 h-1 bg-fill rounded-full overflow-hidden">
             <div
-              className={cn('h-full bg-surface-600 rounded-full', 'animate-shrink-width')}
+              className={cn('h-full bg-sep rounded-full', 'animate-shrink-width')}
               style={{
                 animationDuration: `${autoDismissMs}ms`,
                 animationTimingFunction: 'linear',
@@ -219,24 +219,24 @@ export const SanityCheckIndicator = memo(function SanityCheckIndicator({
       className={cn(
         'flex items-center gap-2 px-2 py-1 rounded-md',
         'text-xs',
-        'hover:bg-surface-800 transition-colors'
+        'hover:bg-fill transition-colors'
       )}
     >
       {alertCount > 0 && (
-        <span className="flex items-center gap-1 text-danger-400">
-          <span className="w-2 h-2 rounded-full bg-danger-500" />
+        <span className="flex items-center gap-1 text-status-bad">
+          <span className="w-2 h-2 rounded-full bg-status-bad" />
           {alertCount}
         </span>
       )}
       {warningCount > 0 && (
-        <span className="flex items-center gap-1 text-warning-400">
-          <span className="w-2 h-2 rounded-full bg-warning-500" />
+        <span className="flex items-center gap-1 text-status-warn">
+          <span className="w-2 h-2 rounded-full bg-status-warn" />
           {warningCount}
         </span>
       )}
       {infoCount > 0 && (
-        <span className="flex items-center gap-1 text-primary-400">
-          <span className="w-2 h-2 rounded-full bg-primary-500" />
+        <span className="flex items-center gap-1 text-action">
+          <span className="w-2 h-2 rounded-full bg-action" />
           {infoCount}
         </span>
       )}

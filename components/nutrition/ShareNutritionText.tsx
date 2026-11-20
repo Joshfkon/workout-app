@@ -114,7 +114,7 @@ export function ShareNutritionText({
     <>
       <button
         onClick={open}
-        className="p-2 text-surface-400 hover:text-surface-100 rounded-lg hover:bg-surface-800 transition-colors"
+        className="p-2 text-ink-2 hover:text-ink rounded-lg hover:bg-fill transition-colors"
         aria-label="Share nutrition as text"
       >
         <IconShare size={18} aria-hidden="true" />
@@ -135,8 +135,8 @@ export function ShareNutritionText({
                   onClick={() => handleSelectMode(m.value)}
                   className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                     active
-                      ? 'border-primary-500 bg-primary-500/10 text-primary-300'
-                      : 'border-surface-700 bg-surface-900 text-surface-300 hover:bg-surface-800'
+                      ? 'border-action bg-action/10 text-action'
+                      : 'border-sep bg-card text-ink-2 hover:bg-fill'
                   }`}
                 >
                   {m.label}
@@ -147,15 +147,15 @@ export function ShareNutritionText({
 
           <pre
             data-testid="nutrition-share-preview"
-            className="whitespace-pre-wrap break-words rounded-lg bg-surface-900 border border-surface-700 p-4 font-mono text-sm text-surface-100 select-all"
+            className="whitespace-pre-wrap break-words rounded-lg bg-card p-4 font-mono text-sm text-ink select-all shadow-card"
           >
             {shareText}
           </pre>
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-surface-200">No numbers</p>
-              <p className="text-xs text-surface-500">Share compliance without disclosing intake</p>
+              <p className="text-sm font-medium text-ink">No numbers</p>
+              <p className="text-xs text-ink-3">Share compliance without disclosing intake</p>
             </div>
             <Toggle checked={noNumbers} onChange={handleToggleNoNumbers} />
           </div>

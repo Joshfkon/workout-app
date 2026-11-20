@@ -50,28 +50,28 @@ export const Toast = memo(function Toast({
   // on the light theme's white toast surface.
   const typeStyles = {
     success: {
-      bg: 'bg-success-500/10',
-      border: 'border-success-500/30',
-      icon: 'text-success-600 dark:text-success-400',
-      text: 'text-success-600 dark:text-success-400',
+      bg: 'bg-status-ok/10',
+      border: 'border-status-ok/30',
+      icon: 'text-status-ok dark:text-status-ok',
+      text: 'text-status-ok dark:text-status-ok',
     },
     error: {
-      bg: 'bg-danger-500/10',
-      border: 'border-danger-500/30',
-      icon: 'text-danger-600 dark:text-danger-400',
-      text: 'text-danger-600 dark:text-danger-400',
+      bg: 'bg-status-bad/10',
+      border: 'border-status-bad/30',
+      icon: 'text-status-bad dark:text-status-bad',
+      text: 'text-status-bad dark:text-status-bad',
     },
     warning: {
-      bg: 'bg-warning-500/10',
-      border: 'border-warning-500/30',
-      icon: 'text-warning-600 dark:text-warning-400',
-      text: 'text-warning-600 dark:text-warning-400',
+      bg: 'bg-status-warn/10',
+      border: 'border-status-warn/30',
+      icon: 'text-status-warn dark:text-status-warn',
+      text: 'text-status-warn dark:text-status-warn',
     },
     info: {
-      bg: 'bg-primary-500/10',
-      border: 'border-primary-500/30',
-      icon: 'text-primary-600 dark:text-primary-400',
-      text: 'text-primary-700 dark:text-primary-300',
+      bg: 'bg-action/10',
+      border: 'border-action/30',
+      icon: 'text-action dark:text-action',
+      text: 'text-action dark:text-action',
     },
   };
 
@@ -106,7 +106,7 @@ export const Toast = memo(function Toast({
         // Solid surface under the accent tint: the toast floats over page
         // content, so a bare /10 background lets whatever is behind it bleed
         // through the text.
-        'rounded-lg border shadow-lg max-w-sm w-full bg-surface-900 overflow-hidden',
+        'rounded-lg border shadow-lg max-w-sm w-full bg-card overflow-hidden',
         styles.border,
         'transform transition-all duration-200',
         // Mobile toasts live at the bottom of the screen, so slide up/down
@@ -144,7 +144,7 @@ export const Toast = memo(function Toast({
           {/* Close button */}
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 text-surface-500 hover:text-surface-300 transition-colors"
+            className="flex-shrink-0 text-ink-3 hover:text-ink-2 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

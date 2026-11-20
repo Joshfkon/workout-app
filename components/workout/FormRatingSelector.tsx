@@ -13,7 +13,7 @@ interface FormOption {
   description: string;
   /**
    * Selected treatment: solid semantic tint at the same intensity the effort
-   * chips use for their selected primary-500. Unselected chips stay neutral.
+   * chips use for their selected accent (bg-action). Unselected chips stay neutral.
    */
   selectedBg: string;
 }
@@ -24,21 +24,21 @@ const FORM_OPTIONS: FormOption[] = [
     label: 'Clean',
     glyph: '✓',
     description: 'Textbook form throughout',
-    selectedBg: 'bg-success-500 text-white',
+    selectedBg: 'bg-status-ok text-white',
   },
   {
     value: 'some_breakdown',
     label: 'Some Breakdown',
     glyph: '~',
     description: 'Last 1-2 reps got sloppy',
-    selectedBg: 'bg-warning-500 text-white',
+    selectedBg: 'bg-status-warn text-white',
   },
   {
     value: 'ugly',
     label: 'Ugly',
     glyph: '✗',
     description: 'Significant form loss, grinder reps',
-    selectedBg: 'bg-danger-500 text-white',
+    selectedBg: 'bg-status-bad text-white',
   },
 ];
 
@@ -64,7 +64,7 @@ export const FormRatingSelector = memo(function FormRatingSelector({
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-1 text-sm font-medium text-surface-300">
+      <label className="flex items-center gap-1 text-sm font-medium text-ink-2">
         Form
         <InfoTooltip term="FORM_QUALITY" size="sm" />
       </label>
@@ -90,7 +90,7 @@ export const FormRatingSelector = memo(function FormRatingSelector({
         })}
       </div>
       {activeDescription && (
-        <p className="text-xs text-surface-500 text-center">{activeDescription}</p>
+        <p className="text-xs text-ink-3 text-center">{activeDescription}</p>
       )}
     </div>
   );

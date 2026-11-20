@@ -321,12 +321,12 @@ describe('buildWeeklyVolume', () => {
 describe('effortColorClass', () => {
   it('follows the RIR color convention', () => {
     expect(effortColorClass(10)).toBe('text-orange-400'); // 0 RIR maxed
-    expect(effortColorClass(9)).toBe('text-warning-400'); // 1 RIR hard
-    expect(effortColorClass(8)).toBe('text-success-400'); // 2 RIR good
-    expect(effortColorClass(7)).toBe('text-success-400'); // 3 RIR good
-    expect(effortColorClass(6)).toBe('text-danger-400');  // 4+ RIR too easy
-    expect(effortColorClass(null)).toBe('text-surface-500');
-    expect(effortColorClass(0)).toBe('text-surface-500');
+    expect(effortColorClass(9)).toBe('text-status-warn'); // 1 RIR hard
+    expect(effortColorClass(8)).toBe('text-status-ok'); // 2 RIR good
+    expect(effortColorClass(7)).toBe('text-status-ok'); // 3 RIR good
+    expect(effortColorClass(6)).toBe('text-status-bad');  // 4+ RIR too easy
+    expect(effortColorClass(null)).toBe('text-ink-3');
+    expect(effortColorClass(0)).toBe('text-ink-3');
   });
 });
 

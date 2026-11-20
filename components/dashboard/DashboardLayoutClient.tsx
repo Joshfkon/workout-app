@@ -115,12 +115,12 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
             href="/dashboard"
             className="flex lg:hidden items-center gap-2 hover:opacity-80 transition-opacity"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-action flex items-center justify-center">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <span className="text-base font-bold text-surface-100 hidden sm:block">HyperTrack</span>
+            <span className="text-base font-bold text-ink hidden sm:block">HyperTrack</span>
           </Link>
 
           {/* Spacer */}
@@ -132,7 +132,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
             <SubscriptionBadge />
             <Link
               href="/dashboard/science"
-              className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
+              className="text-xs text-ink-3 hover:text-ink-2 transition-colors"
             >
               About
             </Link>

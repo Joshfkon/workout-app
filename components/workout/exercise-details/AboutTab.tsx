@@ -26,16 +26,16 @@ interface AboutTabProps {
 function RatingBar({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <p className="text-xs text-surface-400 mb-1">{label}</p>
+      <p className="text-xs text-ink-2 mb-1">{label}</p>
       <div className="flex gap-1">
         {[1, 2, 3, 4, 5].map((level) => (
           <div
             key={level}
-            className={`flex-1 h-2 rounded ${level <= value ? 'bg-primary-500' : 'bg-surface-700'}`}
+            className={`flex-1 h-2 rounded ${level <= value ? 'bg-action' : 'bg-sep'}`}
           />
         ))}
       </div>
-      <p className="text-xs text-surface-500 mt-1">{value}/5</p>
+      <p className="text-xs text-ink-3 mt-1">{value}/5</p>
     </div>
   );
 }
@@ -43,14 +43,14 @@ function RatingBar({ label, value }: { label: string; value: number }) {
 function HypertrophyBlock({ score }: { score: any }) {
   if (!score) return null;
   return (
-    <div className="p-4 bg-surface-800/50 rounded-lg">
-      <p className="text-sm font-medium text-surface-200 mb-3">Hypertrophy Effectiveness</p>
+    <div className="p-4 bg-fill/50 rounded-lg">
+      <p className="text-sm font-medium text-ink mb-3">Hypertrophy Effectiveness</p>
       <div className="grid grid-cols-3 gap-4">
         <RatingBar label="Stretch" value={score.stretchUnderLoad ?? score.stretch_under_load ?? 0} />
         <RatingBar label="Resistance" value={score.resistanceProfile ?? score.resistance_profile ?? 0} />
         <RatingBar label="Progression" value={score.progressionEase ?? score.progression_ease ?? 0} />
       </div>
-      <p className="text-xs text-surface-600 mt-3">
+      <p className="text-xs text-ink-3 mt-3">
         Based on Jeff Nippard&apos;s evidence-based exercise rankings
       </p>
     </div>
@@ -78,8 +78,8 @@ function GuideSections({ exerciseId, formCues, commonMistakes, setupNote, notes,
       body: (
         <ul className="space-y-2">
           {formCues.map((cue, idx) => (
-            <li key={idx} className="flex items-start gap-2 text-sm text-surface-300">
-              <span className="text-primary-400 mt-0.5">•</span>
+            <li key={idx} className="flex items-start gap-2 text-sm text-ink-2">
+              <span className="text-action mt-0.5">•</span>
               <span>{cue}</span>
             </li>
           ))}
@@ -94,7 +94,7 @@ function GuideSections({ exerciseId, formCues, commonMistakes, setupNote, notes,
       body: (
         <ul className="space-y-2">
           {commonMistakes.map((mistake, idx) => (
-            <li key={idx} className="flex items-start gap-2 text-sm text-danger-400/80">
+            <li key={idx} className="flex items-start gap-2 text-sm text-status-bad/80">
               <span className="mt-0.5">✗</span>
               <span>{mistake}</span>
             </li>
@@ -107,14 +107,14 @@ function GuideSections({ exerciseId, formCues, commonMistakes, setupNote, notes,
     sections.push({
       id: 'setup',
       title: 'Setup Instructions',
-      body: <p className="text-sm text-surface-300">{setupNote}</p>,
+      body: <p className="text-sm text-ink-2">{setupNote}</p>,
     });
   }
   if (notes) {
     sections.push({
       id: 'notes',
       title: 'Notes',
-      body: <p className="text-sm text-surface-300">{notes}</p>,
+      body: <p className="text-sm text-ink-2">{notes}</p>,
     });
   }
 
@@ -168,8 +168,8 @@ function CompleteWithAIButton({ exerciseId }: { exerciseId: string }) {
 
   if (success) {
     return (
-      <div className="p-3 bg-success-900/30 border border-success-700 rounded-lg">
-        <p className="text-sm text-success-400 flex items-center gap-2">
+      <div className="p-3 bg-status-ok/15 border border-status-ok rounded-lg">
+        <p className="text-sm text-status-ok flex items-center gap-2">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
@@ -200,8 +200,8 @@ function CompleteWithAIButton({ exerciseId }: { exerciseId: string }) {
         )}
       </Button>
       {error && (
-        <div className="p-3 bg-danger-900/30 border border-danger-700 rounded-lg">
-          <p className="text-sm text-danger-400">{error}</p>
+        <div className="p-3 bg-status-bad/15 border border-status-bad rounded-lg">
+          <p className="text-sm text-status-bad">{error}</p>
         </div>
       )}
     </>
@@ -248,7 +248,7 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, stabilizers, repRange 
     <div>
       {(primaryMuscle || secondaryMuscles.length > 0 || visibleStabilizers.length > 0) && (
         <>
-          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+          <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
             Muscles Worked
           </p>
           <MuscleMap
@@ -275,15 +275,15 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, stabilizers, repRange 
         </div>
         {repRange.length >= 2 && (
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-surface-500 uppercase tracking-wider">Rep range</span>
-            <span className="text-sm text-surface-200">{repRange[0]}-{repRange[1]}</span>
+            <span className="text-xs text-ink-3 uppercase tracking-wider">Rep range</span>
+            <span className="text-sm text-ink">{repRange[0]}-{repRange[1]}</span>
           </div>
         )}
       </div>
 
       {visibleStabilizers.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2" data-testid="stabilizer-muscles">
-          <span className="text-xs text-surface-500 uppercase tracking-wider">Stabilizers</span>
+          <span className="text-xs text-ink-3 uppercase tracking-wider">Stabilizers</span>
           {visibleStabilizers.map((muscle, idx) => (
             <Badge key={idx} variant="outline" size="sm">
               {muscleDisplayName(String(muscle))}
@@ -293,15 +293,15 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, stabilizers, repRange 
       )}
 
       {sortedCredits.length > 0 && (
-        <div className="mt-3 p-3 bg-surface-800/50 rounded-lg" data-testid="muscle-credits-list">
-          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+        <div className="mt-3 p-3 bg-fill/50 rounded-lg" data-testid="muscle-credits-list">
+          <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
             Volume Credits Per Set
           </p>
           <div className="space-y-1.5">
             {sortedCredits.map(({ muscle, credit, isDirect }) => (
               <div key={muscle} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-surface-200">
+                  <span className="text-ink">
                     {STANDARD_MUSCLE_DISPLAY_NAMES[muscle] || muscle}
                   </span>
                   {isDirect && (
@@ -310,7 +310,7 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, stabilizers, repRange 
                     </Badge>
                   )}
                 </div>
-                <span className="text-surface-300 font-mono">
+                <span className="text-ink-2 font-mono">
                   {credit.toFixed(1)}
                 </span>
               </div>
@@ -392,7 +392,7 @@ export function AboutTab({ exercise, sessionCount }: AboutTabProps) {
       />
 
       {/* Reference-data actions live on About only */}
-      <div className="space-y-2 pt-2 border-t border-surface-800">
+      <div className="space-y-2 pt-2 border-t border-sep">
         {exerciseHasMissingFields(exercise, formCues.length > 0, !!hypertrophyScore?.tier) && (
           <CompleteWithAIButton exerciseId={exercise.id} />
         )}
@@ -400,7 +400,7 @@ export function AboutTab({ exercise, sessionCount }: AboutTabProps) {
           href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-surface-800 hover:bg-surface-700 rounded-lg text-sm text-surface-300 transition-colors"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-fill hover:bg-sep rounded-lg text-sm text-ink-2 transition-colors"
         >
           <svg className="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="currentColor">
             <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>

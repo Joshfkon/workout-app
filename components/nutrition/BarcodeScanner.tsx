@@ -161,7 +161,7 @@ function NativeScanOverlay({
             onClick={onToggleTorch}
             aria-label={torchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
             className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
-              torchOn ? 'bg-primary-500 text-white' : 'bg-black/50 text-white'
+              torchOn ? 'bg-action text-on-action' : 'bg-black/50 text-white'
             }`}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -204,20 +204,20 @@ function ScanErrorNotice({
   return (
     <div className={`p-3 rounded-lg ${
       type === 'error'
-        ? 'bg-danger-500/10 border border-danger-500/20'
-        : 'bg-surface-700/50'
+        ? 'bg-status-bad/10 border border-status-bad/20'
+        : 'bg-sep/50'
     }`}>
       <div className="flex items-center gap-2">
         {type === 'error' ? (
-          <svg className="w-4 h-4 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-4 h-4 text-status-bad flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         ) : (
-          <svg className="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-4 h-4 text-ink-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         )}
-        <p className={`text-sm ${type === 'error' ? 'text-danger-400' : 'text-surface-300'}`}>
+        <p className={`text-sm ${type === 'error' ? 'text-status-bad' : 'text-ink-2'}`}>
           {message}
         </p>
       </div>
@@ -903,13 +903,13 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   // Show custom food creation micro-form (barcode not found)
   if (showCustomForm && notFoundBarcode) {
     return (
-      <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden">
-        <div className="flex items-center justify-between p-3 border-b border-surface-700">
+      <div className="bg-fill rounded-lg border border-sep overflow-hidden">
+        <div className="flex items-center justify-between p-3 border-b border-sep">
           <div className="flex items-center gap-2">
             <span className="text-lg">📝</span>
-            <span className="font-medium text-surface-100">New Food</span>
+            <span className="font-medium text-ink">New Food</span>
           </div>
-          <button onClick={() => setShowCustomForm(false)} className="p-1 text-surface-400 hover:text-surface-200">
+          <button onClick={() => setShowCustomForm(false)} className="p-1 text-ink-2 hover:text-ink">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -917,8 +917,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         </div>
 
         <div className="p-4 space-y-3">
-          <p className="text-xs text-surface-400">
-            Barcode: <span className="font-mono text-surface-300">{notFoundBarcode}</span>
+          <p className="text-xs text-ink-2">
+            Barcode: <span className="font-mono text-ink-2">{notFoundBarcode}</span>
           </p>
 
           <input
@@ -927,7 +927,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             value={customFood.name}
             onChange={(e) => setCustomFood(prev => ({ ...prev, name: e.target.value }))}
             placeholder="Food name *"
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+            className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 shadow-card"
           />
 
           <input
@@ -937,13 +937,13 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             value={customFood.calories}
             onChange={(e) => setCustomFood(prev => ({ ...prev, calories: e.target.value }))}
             placeholder="Calories (per serving) *"
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+            className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 shadow-card"
           />
 
           {/* Optional macros - default to 0 when left blank */}
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Protein (g)</label>
+              <label className="block text-xs text-ink-3 mb-1">Protein (g)</label>
               <input
                 type="number"
                 step="0.1"
@@ -951,11 +951,11 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                 value={customFood.protein}
                 onChange={(e) => setCustomFood(prev => ({ ...prev, protein: e.target.value }))}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 shadow-card"
               />
             </div>
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Carbs (g)</label>
+              <label className="block text-xs text-ink-3 mb-1">Carbs (g)</label>
               <input
                 type="number"
                 step="0.1"
@@ -963,11 +963,11 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                 value={customFood.carbs}
                 onChange={(e) => setCustomFood(prev => ({ ...prev, carbs: e.target.value }))}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 shadow-card"
               />
             </div>
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Fat (g)</label>
+              <label className="block text-xs text-ink-3 mb-1">Fat (g)</label>
               <input
                 type="number"
                 step="0.1"
@@ -975,7 +975,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                 value={customFood.fat}
                 onChange={(e) => setCustomFood(prev => ({ ...prev, fat: e.target.value }))}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 shadow-card"
               />
             </div>
           </div>
@@ -989,7 +989,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             Save &amp; log
           </Button>
 
-          <p className="text-[10px] text-surface-500 text-center">
+          <p className="text-[10px] text-ink-3 text-center">
             Logged as {DEFAULT_SERVING_SIZE}. Saved to your foods — scanning this barcode again logs it instantly.
           </p>
         </div>
@@ -998,7 +998,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   }
 
   return (
-    <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden">
+    <div className="bg-fill rounded-lg border border-sep overflow-hidden">
       {isNativeScanning && (
         <NativeScanOverlay
           torchAvailable={nativeTorchAvailable}
@@ -1009,14 +1009,14 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-surface-700">
+      <div className="flex items-center justify-between p-3 border-b border-sep">
         <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
           </svg>
-          <span className="font-medium text-surface-100">Scan Barcode</span>
+          <span className="font-medium text-ink">Scan Barcode</span>
         </div>
-        <button onClick={onClose} className="p-1 text-surface-400 hover:text-surface-200">
+        <button onClick={onClose} className="p-1 text-ink-2 hover:text-ink">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -1040,7 +1040,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         {(isLookingUp || isDecodingPhoto) && !isScanning ? (
           <div className="flex flex-col items-center justify-center py-8">
             <LoadingAnimation type="dots" size="md" />
-            <p className="mt-3 text-surface-400">
+            <p className="mt-3 text-ink-2">
               {isDecodingPhoto ? 'Reading photo...' : 'Looking up product...'}
             </p>
           </div>
@@ -1049,15 +1049,15 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             {/* Camera scanner */}
             <div
               ref={containerRef}
-              className="relative bg-surface-900 rounded-lg overflow-hidden"
+              className="relative bg-card rounded-lg overflow-hidden"
               style={{ minHeight: isScanning ? '200px' : 'auto' }}
             >
               <div id="barcode-reader" className={isScanning ? 'block' : 'hidden'} />
 
               {!isScanning && (
                 <div className="flex flex-col items-center justify-center py-8 px-4">
-                  <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center mb-4">
-                    <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-16 h-16 rounded-full bg-action/20 flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
@@ -1082,7 +1082,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                       Take Photo Instead
                     </Button>
                   )}
-                  <p className="text-xs text-surface-500 mt-2 text-center">
+                  <p className="text-xs text-ink-3 mt-2 text-center">
                     Point your camera at a barcode to scan
                   </p>
                 </div>
@@ -1104,7 +1104,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                       onClick={() => { void toggleWebTorch(); }}
                       aria-label={torchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
                       className={`absolute bottom-2 right-2 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                        torchOn ? 'bg-primary-500 text-white' : 'bg-black/50 text-white'
+                        torchOn ? 'bg-action text-on-action' : 'bg-black/50 text-white'
                       }`}
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1134,8 +1134,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             </div>
 
             {/* Manual entry */}
-            <div className="border-t border-surface-700 pt-4">
-              <p className="text-sm text-surface-400 mb-2">Or enter barcode manually:</p>
+            <div className="border-t border-sep pt-4">
+              <p className="text-sm text-ink-2 mb-2">Or enter barcode manually:</p>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -1145,7 +1145,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                   onChange={(e) => setManualBarcode(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleManualLookup()}
                   placeholder="Enter barcode number"
-                  className="flex-1 px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="flex-1 px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                 />
                 <Button onClick={handleManualLookup} disabled={!manualBarcode.trim()}>
                   Look Up
@@ -1168,8 +1168,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
       {/* Tips */}
       <div className="px-4 pb-2">
-        <div className="p-2 bg-surface-900/50 rounded-lg">
-          <p className="text-xs text-surface-500">
+        <div className="p-2 bg-card/50 rounded-lg">
+          <p className="text-xs text-ink-3">
             💡 Hold the barcode 6–10 inches (15–25 cm) from the camera — too close and it can&apos;t focus. If it stays blurry, use Take Photo instead.
           </p>
         </div>
@@ -1178,7 +1178,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       {/* Debug info (development only) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="px-4 pb-4">
-          <div className="p-2 bg-black/50 rounded-lg border border-surface-700">
+          <div className="p-2 bg-black/50 rounded-lg border border-sep">
             <p className="text-[10px] text-yellow-400 font-mono mb-1">DEBUG:</p>
             <pre className="text-[10px] text-green-400 font-mono overflow-x-auto whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
               {debugInfo}

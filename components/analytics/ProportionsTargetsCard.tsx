@@ -90,7 +90,7 @@ function HowYouCompareSection({
 
   if (benchmarks.length === 0) {
     return (
-      <p className="text-xs text-surface-500">
+      <p className="text-xs text-ink-3">
         Add measurements to see how you compare to physique benchmarks.
       </p>
     );
@@ -127,31 +127,31 @@ function HowYouCompareSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[10px] text-surface-500 flex-wrap">
+        <div className="flex items-center gap-2 text-[10px] text-ink-3 flex-wrap">
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full border-2 border-surface-700" />
+            <div className="w-3 h-3 rounded-full border-2 border-sep" />
             <span>Current</span>
           </div>
           {targetMeasurements && (
             <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded border border-primary-400 bg-primary-400/20" />
+              <div className="w-3 h-3 rounded border border-action bg-action/20" />
               <span>Target</span>
             </div>
           )}
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-warning-500/50" />
+            <div className="w-2 h-2 rounded bg-status-warn/50" />
             <span>Attainable</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-primary-500/50" />
+            <div className="w-2 h-2 rounded bg-action/50" />
             <span>Elite</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-success-500/50" />
+            <div className="w-2 h-2 rounded bg-status-ok/50" />
             <span>Superhero</span>
           </div>
         </div>
-        <span className="text-[10px] text-surface-500 flex-shrink-0">
+        <span className="text-[10px] text-ink-3 flex-shrink-0">
           Scaled for {formatHeight(heightCm, displayUnit)}
         </span>
       </div>
@@ -174,10 +174,10 @@ function HowYouCompareSection({
             />
             {targetDisplay != null && targetDisplay !== current && (
               <div className="flex items-center gap-2 pl-2">
-                <span className="text-[10px] text-primary-400">
+                <span className="text-[10px] text-action">
                   Target: {targetDisplay} {displayUnit}
                 </span>
-                <span className="text-[10px] text-surface-500">
+                <span className="text-[10px] text-ink-3">
                   ({targetDisplay - current >= 0 ? '+' : ''}
                   {(targetDisplay - current).toFixed(1)} {displayUnit})
                 </span>
@@ -190,7 +190,7 @@ function HowYouCompareSection({
       {benchmarks.length > 4 && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="w-full text-center text-xs text-primary-400 hover:text-primary-300 py-1"
+          className="w-full text-center text-xs text-action py-1"
         >
           {showAll ? 'Show less' : `Show ${benchmarks.length - 4} more`}
         </button>
@@ -214,17 +214,17 @@ function FfmiCeilingSection({
 }) {
   if (currentFfmi == null) {
     return (
-      <p className="text-xs text-surface-500">
+      <p className="text-xs text-ink-3">
         Add body composition data to see your FFMI ceiling.
       </p>
     );
   }
 
   const tiers = [
-    { label: 'Average', min: 18, max: 20, color: 'bg-surface-600' },
-    { label: 'Above Avg', min: 20, max: 22, color: 'bg-warning-500/50' },
-    { label: 'Excellent', min: 22, max: 24, color: 'bg-primary-500/50' },
-    { label: 'Elite', min: 24, max: 26, color: 'bg-success-500/50' },
+    { label: 'Average', min: 18, max: 20, color: 'bg-sep' },
+    { label: 'Above Avg', min: 20, max: 22, color: 'bg-status-warn/50' },
+    { label: 'Excellent', min: 22, max: 24, color: 'bg-action/50' },
+    { label: 'Elite', min: 24, max: 26, color: 'bg-status-ok/50' },
   ];
 
   // Experience-scaled ceiling (getNaturalFFMILimit) — the old card hardcoded
@@ -235,11 +235,11 @@ function FfmiCeilingSection({
   const getFeasibility = () => {
     if (!targetFfmi) return null;
     const change = targetFfmi - currentFfmi;
-    if (change <= 0.3) return { label: 'Very Achievable', color: 'text-success-400' };
-    if (change <= 0.6) return { label: 'Achievable', color: 'text-primary-400' };
-    if (change <= 1.0) return { label: 'Ambitious', color: 'text-warning-400' };
-    if (change <= 1.5) return { label: 'Very Ambitious', color: 'text-warning-500' };
-    return { label: 'Unrealistic', color: 'text-danger-400' };
+    if (change <= 0.3) return { label: 'Very Achievable', color: 'text-status-ok' };
+    if (change <= 0.6) return { label: 'Achievable', color: 'text-action' };
+    if (change <= 1.0) return { label: 'Ambitious', color: 'text-status-warn' };
+    if (change <= 1.5) return { label: 'Very Ambitious', color: 'text-status-warn' };
+    return { label: 'Unrealistic', color: 'text-status-bad' };
   };
 
   const feasibility = getFeasibility();
@@ -250,7 +250,7 @@ function FfmiCeilingSection({
 
   return (
     <div>
-      <div className="relative h-10 bg-surface-900 rounded overflow-hidden mb-1">
+      <div className="relative h-10 bg-card rounded overflow-hidden mb-1">
         {tiers.map((tier) => (
           <div
             key={tier.label}
@@ -265,7 +265,7 @@ function FfmiCeilingSection({
           {tiers.map((tier) => (
             <div
               key={tier.label}
-              className="absolute text-[8px] text-surface-400 text-center"
+              className="absolute text-[8px] text-ink-2 text-center"
               style={{
                 left: `${toPercent(tier.min) + (toPercent(tier.max) - toPercent(tier.min)) / 2}%`,
                 transform: 'translateX(-50%)',
@@ -287,13 +287,13 @@ function FfmiCeilingSection({
             className="absolute top-0 bottom-0 flex flex-col items-center justify-start pt-1"
             style={{ left: `${toPercent(targetFfmi)}%`, transform: 'translateX(-50%)' }}
           >
-            <div className="w-1 h-4 bg-primary-400 rounded" />
-            <span className="text-[10px] text-primary-400 font-bold mt-0.5">○</span>
+            <div className="w-1 h-4 bg-action rounded" />
+            <span className="text-[10px] text-action font-bold mt-0.5">○</span>
           </div>
         )}
       </div>
 
-      <div className="flex justify-between text-[10px] text-surface-500 mb-4">
+      <div className="flex justify-between text-[10px] text-ink-3 mb-4">
         {[18, 20, 22, 24, 26].map((val) => (
           <span key={val}>{val}</span>
         ))}
@@ -301,30 +301,30 @@ function FfmiCeilingSection({
 
       <div className="space-y-2">
         <div className="flex justify-between text-xs">
-          <span className="text-surface-400">Current FFMI</span>
-          <span className="text-surface-200 font-medium">{currentFfmi.toFixed(1)}</span>
+          <span className="text-ink-2">Current FFMI</span>
+          <span className="text-ink font-medium">{currentFfmi.toFixed(1)}</span>
         </div>
         {targetFfmi && (
           <div className="flex justify-between text-xs">
-            <span className="text-surface-400">Target FFMI</span>
-            <span className="text-primary-400 font-medium">{targetFfmi.toFixed(1)}</span>
+            <span className="text-ink-2">Target FFMI</span>
+            <span className="text-action font-medium">{targetFfmi.toFixed(1)}</span>
           </div>
         )}
         {feasibility && (
           <div className="flex justify-between text-xs">
-            <span className="text-surface-400">Feasibility</span>
+            <span className="text-ink-2">Feasibility</span>
             <span className={`font-medium ${feasibility.color}`}>{feasibility.label}</span>
           </div>
         )}
         <div className="flex justify-between text-xs">
-          <span className="text-surface-400">
+          <span className="text-ink-2">
             Natural ceiling estimate ({experience ?? 'intermediate'})
           </span>
-          <span className="text-surface-300">~{naturalCeiling.toFixed(1)}</span>
+          <span className="text-ink-2">~{naturalCeiling.toFixed(1)}</span>
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-surface-400">Distance to ceiling</span>
-          <span className="text-surface-300">~{distanceToCeiling.toFixed(1)}</span>
+          <span className="text-ink-2">Distance to ceiling</span>
+          <span className="text-ink-2">~{distanceToCeiling.toFixed(1)}</span>
         </div>
       </div>
     </div>
@@ -409,7 +409,7 @@ function WeightProjectionSection({
 
   if (weightHistory.length < 2) {
     return (
-      <p className="text-xs text-surface-500">
+      <p className="text-xs text-ink-3">
         Add more weigh-ins to see your weight projection.
       </p>
     );
@@ -428,7 +428,7 @@ function WeightProjectionSection({
 
   return (
     <div>
-      <p className="text-[10px] text-surface-500 mb-2">
+      <p className="text-[10px] text-ink-3 mb-2">
         {mesocycle
           ? `Scope: this mesocycle (week ${mesocycle.currentWeek} of ${mesocycle.totalWeeks})`
           : `Scope: last 90 days of weigh-ins, projected ${DEFAULT_PROJECTION_WEEKS - currentWeek} weeks ahead`}
@@ -487,16 +487,16 @@ function WeightProjectionSection({
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-surface-800 grid grid-cols-3 gap-2 text-center">
+      <div className="mt-3 pt-3 border-t border-sep grid grid-cols-3 gap-2 text-center">
         <div>
-          <p className="text-[10px] text-surface-500 uppercase">Weekly Rate</p>
+          <p className="text-[10px] text-ink-3 uppercase">Weekly Rate</p>
           <p
             className={`text-sm font-medium ${
               currentWeekRate < 0
-                ? 'text-success-400'
+                ? 'text-status-ok'
                 : currentWeekRate > 0
-                  ? 'text-warning-400'
-                  : 'text-surface-300'
+                  ? 'text-status-warn'
+                  : 'text-ink-2'
             }`}
           >
             {currentWeekRate >= 0 ? '+' : ''}
@@ -504,21 +504,21 @@ function WeightProjectionSection({
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-surface-500 uppercase">Projected End</p>
-          <p className="text-sm font-medium text-surface-200">
+          <p className="text-[10px] text-ink-3 uppercase">Projected End</p>
+          <p className="text-sm font-medium text-ink">
             {projectedEndWeight.toFixed(1)} {unit}
           </p>
         </div>
         {targetWeightDisplay && (
           <div>
-            <p className="text-[10px] text-surface-500 uppercase">vs Target</p>
+            <p className="text-[10px] text-ink-3 uppercase">vs Target</p>
             <p
               className={`text-sm font-medium ${
                 Math.abs(projectedEndWeight - targetWeightDisplay) < 1
-                  ? 'text-success-400'
+                  ? 'text-status-ok'
                   : projectedEndWeight > targetWeightDisplay
-                    ? 'text-warning-400'
-                    : 'text-primary-400'
+                    ? 'text-status-warn'
+                    : 'text-action'
               }`}
             >
               {projectedEndWeight > targetWeightDisplay ? '+' : ''}
@@ -535,19 +535,19 @@ function WeightProjectionSection({
         only — this never asserts an absolute BF%.
       */}
       {partition && projectedGain > 0.1 && (
-        <div className="mt-3 pt-3 border-t border-surface-800" data-testid="projection-partition">
+        <div className="mt-3 pt-3 border-t border-sep" data-testid="projection-partition">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] text-surface-500 uppercase">Projected gain split</p>
-            <span className="text-[10px] text-surface-400" data-testid="projection-partition-source">
+            <p className="text-[10px] text-ink-3 uppercase">Projected gain split</p>
+            <span className="text-[10px] text-ink-2" data-testid="projection-partition-source">
               {partition.label}
             </span>
           </div>
-          <p className="text-xs text-surface-300 mt-1">
+          <p className="text-xs text-ink-2 mt-1">
             +{projectedGain.toFixed(1)} {unit} → ~{(projectedGain * partition.leanFractionOfGain).toFixed(1)} lean
             {' / '}~{(projectedGain * (1 - partition.leanFractionOfGain)).toFixed(1)} fat
           </p>
           {partition.source === 'waist' && partition.anchor && (
-            <p className="text-[10px] text-surface-500 mt-1">
+            <p className="text-[10px] text-ink-3 mt-1">
               Waist trend {partition.anchor.deltaWaistIn >= 0 ? '+' : ''}
               {partition.anchor.deltaWaistIn.toFixed(2)}&quot; vs{' '}
               {partition.anchor.deltaWeightLb >= 0 ? '+' : ''}

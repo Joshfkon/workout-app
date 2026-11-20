@@ -40,25 +40,25 @@ import {
 } from '../_lib/planPreview';
 import type { FullProgramRecommendation } from '@/types/schema';
 
-const CARD_CLASS = 'rounded-2xl bg-surface-900 border border-surface-800';
+const CARD_CLASS = 'rounded-card bg-card shadow-card';
 
 function PlanSkeleton() {
   return (
     <div className="max-w-lg mx-auto space-y-4" data-testid="mesocycle-plan-loading">
       <div className={`${CARD_CLASS} p-4 animate-pulse space-y-3`} aria-busy="true">
-        <div className="h-3 w-24 bg-surface-800 rounded" />
-        <div className="h-6 w-44 bg-surface-800 rounded" />
-        <div className="h-3 w-56 bg-surface-800 rounded" />
+        <div className="h-3 w-24 bg-fill rounded" />
+        <div className="h-6 w-44 bg-fill rounded" />
+        <div className="h-3 w-56 bg-fill rounded" />
       </div>
       <div className="flex gap-2">
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-12 w-16 bg-surface-800 rounded-xl animate-pulse" />
+          <div key={i} className="h-12 w-16 bg-fill rounded-xl animate-pulse" />
         ))}
       </div>
       {[0, 1, 2].map((i) => (
         <div key={i} className={`${CARD_CLASS} p-4 animate-pulse space-y-2`} aria-busy="true">
-          <div className="h-4 w-32 bg-surface-800 rounded" />
-          <div className="h-3 w-48 bg-surface-800 rounded" />
+          <div className="h-4 w-32 bg-fill rounded" />
+          <div className="h-3 w-48 bg-fill rounded" />
         </div>
       ))}
     </div>
@@ -69,7 +69,7 @@ function BackLink() {
   return (
     <Link
       href="/dashboard/mesocycle"
-      className="inline-flex items-center gap-1 text-[13px] font-medium text-surface-400 hover:text-surface-200 transition-colors"
+      className="inline-flex items-center gap-1 text-[13px] font-medium text-ink-2 hover:text-ink transition-colors"
     >
       <IconChevronLeft size={16} aria-hidden="true" />
       Mesocycle
@@ -86,10 +86,10 @@ function Chip({
   tone?: 'neutral' | 'primary' | 'warning' | 'success';
 }) {
   const tones = {
-    neutral: 'bg-surface-800 text-surface-300',
-    primary: 'bg-primary-500/15 text-primary-300',
-    warning: 'bg-warning-500/15 text-warning-300',
-    success: 'bg-success-500/15 text-success-300',
+    neutral: 'bg-fill text-ink-2',
+    primary: 'bg-action/15 text-action',
+    warning: 'bg-status-warn/15 text-status-warn',
+    success: 'bg-status-ok/15 text-status-ok',
   } as const;
   return (
     <span
@@ -122,38 +122,38 @@ function SessionCard({
     <div
       className={`rounded-xl border overflow-hidden ${
         status === 'next'
-          ? 'border-primary-500/40 bg-primary-500/[0.06]'
-          : 'border-surface-800 bg-surface-900'
+          ? 'border-action/40 bg-action/[0.06]'
+          : 'border-sep bg-card'
       }`}
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isOpen}
-        className="w-full flex items-center gap-3 p-3 text-left hover:bg-surface-800/40 transition-colors"
+        className="w-full flex items-center gap-3 p-3 text-left hover:bg-fill/40 transition-colors"
       >
-        <span className="w-10 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-surface-500">
+        <span className="w-10 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
           {entry.weekdayLabel ?? `S${entry.index + 1}`}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span
               className={`text-[15px] font-semibold truncate ${
-                status === 'done' ? 'text-surface-400' : 'text-surface-100'
+                status === 'done' ? 'text-ink-2' : 'text-ink'
               }`}
             >
               {session.dayName}
             </span>
             {status === 'next' && <Chip tone="primary">Next up</Chip>}
             {status === 'done' && (
-              <IconCircleCheck size={15} className="text-success-400 flex-shrink-0" aria-label="Completed" />
+              <IconCircleCheck size={15} className="text-status-ok flex-shrink-0" aria-label="Completed" />
             )}
           </span>
-          <span className="block text-[12px] text-surface-500 mt-0.5">{meta}</span>
+          <span className="block text-[12px] text-ink-3 mt-0.5">{meta}</span>
         </span>
         <IconChevronDown
           size={18}
-          className={`flex-shrink-0 text-surface-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`flex-shrink-0 text-ink-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           aria-hidden="true"
         />
       </button>
@@ -163,13 +163,13 @@ function SessionCard({
           {session.exercises.length > 0 ? (
             <SessionExerciseList exercises={session.exercises} showNotes />
           ) : (
-            <p className="text-[13px] text-surface-400">
+            <p className="text-[13px] text-ink-2">
               Exercises for this session are chosen when you start it.
             </p>
           )}
           {session.warmup.length > 0 && (
-            <p className="text-[11px] text-surface-500">
-              <span className="text-surface-400">Warm-up:</span> {session.warmup.join(' · ')}
+            <p className="text-[11px] text-ink-3">
+              <span className="text-ink-2">Warm-up:</span> {session.warmup.join(' · ')}
             </p>
           )}
         </div>
@@ -198,12 +198,12 @@ function WeekDetail({
     <div className="space-y-3">
       <div className={`${CARD_CLASS} p-4`}>
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-[17px] font-bold text-surface-100">Week {week.weekNumber}</h2>
+          <h2 className="text-[17px] font-bold text-ink">Week {week.weekNumber}</h2>
           {week.status === 'current' && <Chip tone="primary">This week</Chip>}
           {week.isDeload && <Chip tone="warning">Deload</Chip>}
           {week.status === 'done' && <Chip tone="success">Done</Chip>}
         </div>
-        <p className="text-[13px] text-surface-400 mt-1">
+        <p className="text-[13px] text-ink-2 mt-1">
           {[
             week.focus || null,
             `${week.sessions.length} ${week.sessions.length === 1 ? 'session' : 'sessions'}`,
@@ -214,7 +214,7 @@ function WeekDetail({
             .join(' · ')}
         </p>
         {hasModifiers && (
-          <p className="text-[12px] text-surface-500 mt-1">
+          <p className="text-[12px] text-ink-3 mt-1">
             Volume {Math.round(week.volumeModifier * 100)}% · intensity{' '}
             {Math.round(week.intensityModifier * 100)}% of baseline
           </p>
@@ -225,10 +225,10 @@ function WeekDetail({
             {week.setsByMuscle.map(({ muscle, sets }) => (
               <span
                 key={muscle}
-                className="px-2 py-1 rounded-lg bg-surface-800 text-[11px] text-surface-300"
+                className="px-2 py-1 rounded-lg bg-fill text-[11px] text-ink-2"
               >
                 {muscleDisplayName(muscle)}{' '}
-                <span className="text-surface-500 tabular-nums">{sets}</span>
+                <span className="text-ink-3 tabular-nums">{sets}</span>
               </span>
             ))}
           </div>
@@ -304,11 +304,11 @@ function PlanContent() {
       <div className="max-w-lg mx-auto space-y-4">
         <BackLink />
         <div className={`${CARD_CLASS} p-6 text-center`}>
-          <p className="text-[15px] text-surface-200">Couldn&apos;t load your plan</p>
+          <p className="text-[15px] text-ink">Couldn&apos;t load your plan</p>
           <button
             type="button"
             onClick={() => refetch()}
-            className="mt-4 px-4 py-2 rounded-xl bg-surface-800 text-[13px] font-medium text-surface-100 hover:bg-surface-700 transition-colors"
+            className="mt-4 px-4 py-2 rounded-xl bg-fill text-[13px] font-medium text-ink hover:bg-sep transition-colors"
           >
             Try again
           </button>
@@ -322,14 +322,14 @@ function PlanContent() {
       <div className="max-w-lg mx-auto space-y-4">
         <BackLink />
         <div className={`${CARD_CLASS} p-6 text-center`}>
-          <h1 className="text-[17px] font-bold text-surface-100">No plan to preview</h1>
-          <p className="text-[13px] text-surface-400 mt-1">
+          <h1 className="text-[17px] font-bold text-ink">No plan to preview</h1>
+          <p className="text-[13px] text-ink-2 mt-1">
             Plan a mesocycle and you&apos;ll be able to read every week of it here before you
             train.
           </p>
           <Link
             href="/dashboard/mesocycle/new"
-            className="inline-block mt-4 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[14px] font-semibold hover:opacity-90 transition-opacity"
+            className="inline-block mt-4 px-4 py-2.5 rounded-xl bg-action text-on-action text-[14px] font-semibold hover:opacity-90 transition-opacity"
           >
             Plan a mesocycle
           </Link>
@@ -347,13 +347,13 @@ function PlanContent() {
 
       {/* Block header */}
       <div className={`${CARD_CLASS} p-4`}>
-        <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-surface-500">
+        <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-ink-3">
           {mesocycle.state === 'active' ? 'Your plan' : `${mesocycle.state} plan`}
         </p>
-        <h1 className="text-[24px] leading-tight font-bold text-surface-100 mt-1">
+        <h1 className="text-[24px] leading-tight font-bold text-ink mt-1">
           {mesocycle.name}
         </h1>
-        <p className="text-[13px] text-surface-400 mt-1">
+        <p className="text-[13px] text-ink-2 mt-1">
           {[
             mesocycle.split_type,
             // An interval block isn't N×/week — say the cadence it really runs.
@@ -370,15 +370,15 @@ function PlanContent() {
         </p>
         {plannedTotal > 0 && (
           <div className="mt-3">
-            <div className="flex justify-between text-[12px] text-surface-500 mb-1">
+            <div className="flex justify-between text-[12px] text-ink-3 mb-1">
               <span>
                 {Math.min(completed, plannedTotal)} of {plannedTotal} sessions done
               </span>
               <span>Week {mesocycle.current_week}</span>
             </div>
-            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-fill rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"
+                className="h-full bg-action rounded-full"
                 style={{
                   width: `${Math.min(100, Math.round((completed / plannedTotal) * 100))}%`,
                 }}
@@ -390,17 +390,17 @@ function PlanContent() {
 
       {weeks.length === 0 ? (
         <div className={`${CARD_CLASS} p-4`}>
-          <p className="text-[15px] font-semibold text-surface-100">
+          <p className="text-[15px] font-semibold text-ink">
             This block has no stored program
           </p>
-          <p className="text-[13px] text-surface-400 mt-1">
+          <p className="text-[13px] text-ink-2 mt-1">
             It was created before plans were saved week by week, so its exercises are chosen when
             each workout starts. Regenerating the schedule from the Mesocycle page will build a
             full plan you can read here.
           </p>
           <Link
             href="/dashboard/mesocycle"
-            className="inline-block mt-3 text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+            className="inline-block mt-3 text-[13px] font-medium text-action transition-colors"
           >
             Go to Mesocycle
           </Link>
@@ -420,29 +420,29 @@ function PlanContent() {
                     aria-current={isActive ? 'true' : undefined}
                     className={`flex-shrink-0 px-3 py-2 rounded-xl border text-center transition-colors ${
                       isActive
-                        ? 'border-primary-500/50 bg-primary-500/15'
-                        : 'border-surface-800 bg-surface-900 hover:bg-surface-800/70'
+                        ? 'border-action/50 bg-action/15'
+                        : 'border-sep bg-card hover:bg-fill/70'
                     }`}
                   >
                     <span
                       className={`flex items-center justify-center gap-1 text-[13px] font-semibold ${
                         isActive
-                          ? 'text-primary-300'
+                          ? 'text-action'
                           : week.status === 'done'
-                            ? 'text-surface-400'
-                            : 'text-surface-200'
+                            ? 'text-ink-2'
+                            : 'text-ink'
                       }`}
                     >
                       W{week.weekNumber}
                       {week.status === 'done' && (
                         <IconCircleCheck
                           size={13}
-                          className="text-success-400"
+                          className="text-status-ok"
                           aria-label="Week complete"
                         />
                       )}
                     </span>
-                    <span className="block text-[10px] text-surface-500 mt-0.5">
+                    <span className="block text-[10px] text-ink-3 mt-0.5">
                       {week.isDeload ? 'deload' : `${week.totalSets} sets`}
                     </span>
                   </button>
@@ -452,7 +452,7 @@ function PlanContent() {
             <button
               type="button"
               onClick={toggleExpandAll}
-              className="ml-auto flex-shrink-0 text-[12px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+              className="ml-auto flex-shrink-0 text-[12px] font-medium text-action transition-colors"
             >
               {expandAll ? 'Collapse all' : 'Expand all'}
             </button>
@@ -462,7 +462,7 @@ function PlanContent() {
             <WeekDetail week={activeWeek} isOpen={isOpen} onToggleSession={toggleSession} />
           )}
 
-          <p className="text-[11px] text-surface-500 px-1">
+          <p className="text-[11px] text-ink-3 px-1">
             Sets and rep ranges are the plan. Weights are suggested from your history when you
             start each session, and volume adapts to your feedback week to week.
           </p>
@@ -470,7 +470,7 @@ function PlanContent() {
           {mesocycle.state === 'active' && (
             <Link
               href="/dashboard/train"
-              className="block w-full py-3 rounded-xl text-center bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 transition-opacity"
+              className="block w-full py-3 rounded-xl text-center bg-action text-on-action text-[15px] font-semibold hover:opacity-90 transition-opacity"
             >
               Go to Train
             </Link>

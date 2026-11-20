@@ -542,7 +542,7 @@ describe('getSeverityInfo', () => {
     const info = getSeverityInfo('stop');
 
     expect(info.label).toContain('Stop');
-    expect(info.color).toContain('danger');
+    expect(info.color).toContain('status-bad');
     expect(info.icon).toBeDefined();
   });
 
@@ -554,7 +554,7 @@ describe('getSeverityInfo', () => {
     // Yellow for mild, orange for moderate, red/danger for severe
     expect(twingeInfo.color).toContain('yellow');
     expect(discomfortInfo.color).toContain('orange');
-    expect(painInfo.color).toContain('danger');
+    expect(painInfo.color).toContain('status-bad');
   });
 
   it('uses distinct icons for each severity', () => {

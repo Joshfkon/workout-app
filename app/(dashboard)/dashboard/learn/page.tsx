@@ -104,28 +104,28 @@ const colorClasses: Record<string, { bg: string; border: string; text: string; g
     gradient: 'from-orange-500/10',
   },
   green: {
-    bg: 'bg-success-500/10',
-    border: 'border-success-500/20',
-    text: 'text-success-400',
-    gradient: 'from-success-500/10',
+    bg: 'bg-status-ok/10',
+    border: 'border-status-ok/20',
+    text: 'text-status-ok',
+    gradient: 'from-status-ok/10',
   },
   purple: {
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-500/20',
-    text: 'text-purple-400',
-    gradient: 'from-purple-500/10',
+    bg: 'bg-action/10',
+    border: 'border-action/20',
+    text: 'text-action',
+    gradient: 'from-action/10',
   },
   blue: {
-    bg: 'bg-primary-500/10',
-    border: 'border-primary-500/20',
-    text: 'text-primary-400',
-    gradient: 'from-primary-500/10',
+    bg: 'bg-action/10',
+    border: 'border-action/20',
+    text: 'text-action',
+    gradient: 'from-action/10',
   },
   cyan: {
-    bg: 'bg-accent-500/10',
-    border: 'border-accent-500/20',
-    text: 'text-accent-400',
-    gradient: 'from-accent-500/10',
+    bg: 'bg-action/10',
+    border: 'border-action/20',
+    text: 'text-action',
+    gradient: 'from-action/10',
   },
 };
 
@@ -135,10 +135,10 @@ export default function LearnPage() {
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
       {/* Header */}
       <div className="text-center space-y-4">
-        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-purple-400 to-pink-400">
+        <h1 className="text-3xl font-bold text-ink">
           Learn & Science
         </h1>
-        <p className="text-surface-400 max-w-xl mx-auto">
+        <p className="text-ink-2 max-w-xl mx-auto">
           Understand the research and algorithms that power HyperTrack. Every feature is built on
           evidence-based science.
         </p>
@@ -147,20 +147,20 @@ export default function LearnPage() {
       {/* Quick Stats */}
       <div className="grid grid-cols-4 gap-3">
         <Card className="p-3 text-center">
-          <p className="text-xl font-bold text-primary-400">12+</p>
-          <p className="text-xs text-surface-500">Principles</p>
+          <p className="text-xl font-bold text-action">12+</p>
+          <p className="text-xs text-ink-3">Principles</p>
         </Card>
         <Card className="p-3 text-center">
-          <p className="text-xl font-bold text-success-400">20+</p>
-          <p className="text-xs text-surface-500">Injury Types</p>
+          <p className="text-xl font-bold text-status-ok">20+</p>
+          <p className="text-xs text-ink-3">Injury Types</p>
         </Card>
         <Card className="p-3 text-center">
-          <p className="text-xl font-bold text-purple-400">500+</p>
-          <p className="text-xs text-surface-500">S-Tier Exercises</p>
+          <p className="text-xl font-bold text-action">500+</p>
+          <p className="text-xs text-ink-3">S-Tier Exercises</p>
         </Card>
         <Card className="p-3 text-center">
           <p className="text-xl font-bold text-orange-400">AI</p>
-          <p className="text-xs text-surface-500">TDEE</p>
+          <p className="text-xs text-ink-3">TDEE</p>
         </Card>
       </div>
 
@@ -171,17 +171,17 @@ export default function LearnPage() {
           return (
             <Link key={article.id} href={`/dashboard/learn/${article.id}`}>
               <Card
-                className={`p-6 border ${colors.border} hover:border-opacity-60 transition-all duration-200 bg-gradient-to-r ${colors.gradient} to-transparent cursor-pointer group`}
+                className="p-6 transition-colors duration-200 active:bg-fill cursor-pointer group"
               >
                 <div className="flex items-start gap-4">
                   <div className="text-4xl shrink-0">{article.icon}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
                       <div>
-                        <h3 className="text-lg font-semibold text-surface-100 group-hover:text-surface-50 transition-colors">
+                        <h3 className="text-lg font-semibold text-ink group-hover:text-ink transition-colors">
                           {article.title}
                         </h3>
-                        <p className="text-sm text-surface-400">{article.subtitle}</p>
+                        <p className="text-sm text-ink-2">{article.subtitle}</p>
                       </div>
                       <span
                         className={`px-3 py-1 ${colors.bg} ${colors.text} rounded-full text-xs font-medium shrink-0`}
@@ -189,9 +189,9 @@ export default function LearnPage() {
                         {article.tag}
                       </span>
                     </div>
-                    <p className="text-sm text-surface-500 mb-3">{article.description}</p>
+                    <p className="text-sm text-ink-3 mb-3">{article.description}</p>
                     <div className="flex items-center gap-4">
-                      <span className="text-xs text-surface-600">{article.readTime}</span>
+                      <span className="text-xs text-ink-3">{article.readTime}</span>
                       <span
                         className={`text-xs ${colors.text} group-hover:translate-x-1 transition-transform`}
                       >
@@ -208,35 +208,35 @@ export default function LearnPage() {
 
       {/* Featured Researchers */}
       <Card className="p-6">
-        <h2 className="text-lg font-semibold text-surface-100 mb-4">Research We Build On</h2>
+        <h2 className="text-lg font-semibold text-ink mb-4">Research We Build On</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center p-3 bg-surface-800/50 rounded-lg">
-            <p className="font-medium text-surface-200 text-sm">Dr. Mike Israetel</p>
-            <p className="text-xs text-surface-500">Volume, SFR</p>
+          <div className="text-center p-3 bg-fill/50 rounded-lg">
+            <p className="font-medium text-ink text-sm">Dr. Mike Israetel</p>
+            <p className="text-xs text-ink-3">Volume, SFR</p>
           </div>
-          <div className="text-center p-3 bg-surface-800/50 rounded-lg">
-            <p className="font-medium text-surface-200 text-sm">Dr. Brad Schoenfeld</p>
-            <p className="text-xs text-surface-500">Hypertrophy</p>
+          <div className="text-center p-3 bg-fill/50 rounded-lg">
+            <p className="font-medium text-ink text-sm">Dr. Brad Schoenfeld</p>
+            <p className="text-xs text-ink-3">Hypertrophy</p>
           </div>
-          <div className="text-center p-3 bg-surface-800/50 rounded-lg">
-            <p className="font-medium text-surface-200 text-sm">Dr. Greg Nuckols</p>
-            <p className="text-xs text-surface-500">Periodization</p>
+          <div className="text-center p-3 bg-fill/50 rounded-lg">
+            <p className="font-medium text-ink text-sm">Dr. Greg Nuckols</p>
+            <p className="text-xs text-ink-3">Periodization</p>
           </div>
-          <div className="text-center p-3 bg-surface-800/50 rounded-lg">
-            <p className="font-medium text-surface-200 text-sm">Dr. Eric Helms</p>
-            <p className="text-xs text-surface-500">Natural BBing</p>
+          <div className="text-center p-3 bg-fill/50 rounded-lg">
+            <p className="font-medium text-ink text-sm">Dr. Eric Helms</p>
+            <p className="text-xs text-ink-3">Natural BBing</p>
           </div>
         </div>
       </Card>
 
       {/* CTA */}
-      <Card className="p-6 text-center bg-gradient-to-r from-primary-500/10 to-purple-500/10 border-primary-500/20">
-        <h2 className="text-xl font-bold text-surface-100 mb-2">Want More Science?</h2>
-        <p className="text-sm text-surface-400 mb-4">
+      <Card className="bg-action/10 p-6 text-center border-action/20">
+        <h2 className="text-xl font-bold text-ink mb-2">Want More Science?</h2>
+        <p className="text-sm text-ink-2 mb-4">
           Check out our full science page with all 12+ research principles.
         </p>
         <Link href="/dashboard/science">
-          <button className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors">
+          <button className="px-6 py-2 bg-action hover:bg-action text-on-action font-semibold rounded-lg transition-colors">
             View All Principles
           </button>
         </Link>

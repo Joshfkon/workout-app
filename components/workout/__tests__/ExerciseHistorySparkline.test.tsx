@@ -70,7 +70,7 @@ describe('ExerciseHistorySparkline', () => {
     expect(screen.getByText('100 kg')).toBeInTheDocument();
     expect(screen.getByText('110 kg')).toBeInTheDocument();
     expect(screen.getByTestId('history-sparkline-delta')).toHaveTextContent('+10');
-    expect(screen.getByTestId('history-sparkline-delta')).toHaveClass('text-success-400');
+    expect(screen.getByTestId('history-sparkline-delta')).toHaveClass('text-status-ok');
   });
 
   it('marks a declining window with the danger color', () => {
@@ -81,7 +81,7 @@ describe('ExerciseHistorySparkline', () => {
     render(<ExerciseHistorySparkline exerciseId="exercise-1" metric="e1rm" unit="kg" />);
 
     expect(screen.getByTestId('history-sparkline-delta')).toHaveTextContent('−5');
-    expect(screen.getByTestId('history-sparkline-delta')).toHaveClass('text-danger-400');
+    expect(screen.getByTestId('history-sparkline-delta')).toHaveClass('text-status-bad');
   });
 
   it('plots session volume natively per set for rep_total exercises', () => {

@@ -75,10 +75,10 @@ function bodyCompArrow(
   risingIsGood: boolean
 ): { icon: string; color: string } {
   if (ratePerMonth > threshold) {
-    return { icon: '↑', color: risingIsGood ? 'text-success-400' : 'text-warning-400' };
+    return { icon: '↑', color: risingIsGood ? 'text-status-ok' : 'text-status-warn' };
   }
   if (ratePerMonth < -threshold) {
-    return { icon: '↓', color: risingIsGood ? 'text-danger-400' : 'text-success-400' };
+    return { icon: '↓', color: risingIsGood ? 'text-status-bad' : 'text-status-ok' };
   }
   return { icon: '→', color: 'text-ink-2' };
 }
@@ -153,7 +153,7 @@ export function MetricTileGrid({
   );
   const kcalPaceColor =
     kcalVerdict.tone === 'yellow'
-      ? 'text-warning-400'
+      ? 'text-status-warn'
       : kcalVerdict.tone === 'orange'
         ? 'text-orange-400'
         : 'text-ink-2';
@@ -196,7 +196,7 @@ export function MetricTileGrid({
             ) : (
               <>
                 {Math.abs(kcalLeft).toLocaleString()}
-                <span className="text-sm text-warning-400 font-normal"> over</span>
+                <span className="text-sm text-status-warn font-normal"> over</span>
               </>
             )}
           </div>
@@ -216,7 +216,7 @@ export function MetricTileGrid({
       {showLifts && liftTrends && (
         <MetricTile icon={IconTrendingUp} label="Lifts" href="/dashboard/analytics?tab=strength&section=lift-trends">
           {confidentLifts > 0 ? (
-            <div className="text-xl font-semibold text-success-400">
+            <div className="text-xl font-semibold text-status-ok">
               {liftTrends.rising} rising
               <span className="text-sm text-ink-2 font-normal"> of {confidentLifts}</span>
             </div>
@@ -235,7 +235,7 @@ export function MetricTileGrid({
                 className={`h-1.5 flex-1 rounded-full ${
                   lift.lowConfidence
                     ? 'bg-fill'
-                    : lift.direction === 'rising' ? 'bg-success-500' : lift.direction === 'down' ? 'bg-danger-500' : 'bg-ink-3/50'
+                    : lift.direction === 'rising' ? 'bg-status-ok' : lift.direction === 'down' ? 'bg-status-bad' : 'bg-ink-3/50'
                 }`}
               />
             ))}
@@ -263,11 +263,11 @@ export function MetricTileGrid({
           </div>
           <div className="h-1 bg-fill rounded-full mt-2 overflow-hidden">
             <div
-              className={`h-full ${volume.lowCount > 0 ? 'bg-warning-500' : 'bg-success-500'}`}
+              className={`h-full ${volume.lowCount > 0 ? 'bg-status-warn' : 'bg-status-ok'}`}
               style={{ width: `${Math.min(100, (volume.totalSets / Math.max(1, volume.totalTarget)) * 100)}%` }}
             />
           </div>
-          <div className={`text-[11px] mt-1.5 ${volume.lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
+          <div className={`text-[11px] mt-1.5 ${volume.lowCount > 0 ? 'text-status-warn' : 'text-status-ok'}`}>
             {volume.lowCount > 0
               ? `${volume.lowCount} muscle${volume.lowCount === 1 ? '' : 's'} under weekly minimum →`
               : 'Every muscle at its weekly minimum'}
@@ -285,7 +285,7 @@ export function MetricTileGrid({
             <button
               type="button"
               onClick={onLogWeight}
-              className="text-xs font-medium text-action hover:text-primary-300 transition-colors"
+              className="text-xs font-medium text-action transition-colors"
             >
               + log
             </button>
@@ -297,7 +297,7 @@ export function MetricTileGrid({
           </div>
           <Sparkline values={sparkValues} />
           {weightRate && (
-            <div className={`text-[11px] mt-1 ${rateOnTrack ? 'text-success-400' : 'text-warning-400'}`}>
+            <div className={`text-[11px] mt-1 ${rateOnTrack ? 'text-status-ok' : 'text-status-warn'}`}>
               {signed(weightRate.perWeek)} {weightUnit}/wk
               {weightRate.target !== null && (
                 <span className="text-ink-2"> · target {signed(weightRate.target)}</span>

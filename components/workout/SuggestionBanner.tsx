@@ -206,7 +206,7 @@ export function SuggestionBanner({
             : explanation
           ).map((line, i) => (
             <li key={i} className="flex items-start gap-2 text-[13px] text-ink">
-              <span className="mt-1.5 w-1 h-1 rounded-full bg-primary-400 flex-shrink-0" aria-hidden="true" />
+              <span className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0" aria-hidden="true" />
               {line}
             </li>
           ))}

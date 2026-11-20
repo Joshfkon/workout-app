@@ -374,8 +374,8 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     return (
       <Card className="p-4">
         <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-surface-700 rounded w-1/3" />
-          <div className="h-8 bg-surface-700 rounded" />
+          <div className="h-4 bg-sep rounded w-1/3" />
+          <div className="h-8 bg-sep rounded" />
         </div>
       </Card>
     );
@@ -398,12 +398,12 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <IconCircleCheck size={20} className="text-success-400" aria-hidden="true" />
-            <h3 className="font-medium text-surface-100">Daily Check-In Complete</h3>
+            <IconCircleCheck size={20} className="text-status-ok" aria-hidden="true" />
+            <h3 className="font-medium text-ink">Daily Check-In Complete</h3>
           </div>
           <button 
             onClick={handleReset}
-            className="text-xs text-surface-400 hover:text-surface-200"
+            className="text-xs text-ink-2 hover:text-ink"
           >
             Update
           </button>
@@ -411,41 +411,41 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         
         {/* Quick stats */}
         <div className="grid grid-cols-5 gap-2 text-center">
-          <div className="p-2 bg-surface-800 rounded-lg">
-            <IconMoon size={18} className="mx-auto text-surface-400" aria-hidden="true" />
-            <p className="text-sm font-medium text-surface-100">{displayData.sleepHours}h</p>
-            <p className="text-xs text-surface-500">Sleep</p>
+          <div className="p-2 bg-fill rounded-lg">
+            <IconMoon size={18} className="mx-auto text-ink-2" aria-hidden="true" />
+            <p className="text-sm font-medium text-ink">{displayData.sleepHours}h</p>
+            <p className="text-xs text-ink-3">Sleep</p>
           </div>
-          <div className="p-2 bg-surface-800 rounded-lg">
-            <IconBolt size={18} className="mx-auto text-surface-400" aria-hidden="true" />
-            <p className="text-sm font-medium text-surface-100">{displayData.energyLevel}/5</p>
-            <p className="text-xs text-surface-500">Energy</p>
+          <div className="p-2 bg-fill rounded-lg">
+            <IconBolt size={18} className="mx-auto text-ink-2" aria-hidden="true" />
+            <p className="text-sm font-medium text-ink">{displayData.energyLevel}/5</p>
+            <p className="text-xs text-ink-3">Energy</p>
           </div>
-          <div className="p-2 bg-surface-800 rounded-lg">
-            <IconMoodSmile size={18} className="mx-auto text-surface-400" aria-hidden="true" />
-            <p className="text-sm font-medium text-surface-100">{displayData.moodRating}/5</p>
-            <p className="text-xs text-surface-500">Mood</p>
+          <div className="p-2 bg-fill rounded-lg">
+            <IconMoodSmile size={18} className="mx-auto text-ink-2" aria-hidden="true" />
+            <p className="text-sm font-medium text-ink">{displayData.moodRating}/5</p>
+            <p className="text-xs text-ink-3">Mood</p>
           </div>
-          <div className="p-2 bg-surface-800 rounded-lg">
-            <IconMoodNervous size={18} className="mx-auto text-surface-400" aria-hidden="true" />
-            <p className="text-sm font-medium text-surface-100">{displayData.stressLevel}/5</p>
-            <p className="text-xs text-surface-500">Stress</p>
+          <div className="p-2 bg-fill rounded-lg">
+            <IconMoodNervous size={18} className="mx-auto text-ink-2" aria-hidden="true" />
+            <p className="text-sm font-medium text-ink">{displayData.stressLevel}/5</p>
+            <p className="text-xs text-ink-3">Stress</p>
           </div>
-          <div className="p-2 bg-surface-800 rounded-lg">
-            <IconBarbell size={18} className="mx-auto text-surface-400" aria-hidden="true" />
-            <p className="text-sm font-medium text-surface-100">{displayData.sorenessLevel}/5</p>
-            <p className="text-xs text-surface-500">Recovery</p>
+          <div className="p-2 bg-fill rounded-lg">
+            <IconBarbell size={18} className="mx-auto text-ink-2" aria-hidden="true" />
+            <p className="text-sm font-medium text-ink">{displayData.sorenessLevel}/5</p>
+            <p className="text-xs text-ink-3">Recovery</p>
           </div>
         </div>
         
         {/* Morning waist (value only — never a day-over-day delta). */}
         {trackWaist && savedWaistCm !== null && (
-          <div className="mt-3 flex items-center justify-between px-3 py-2 bg-surface-800 rounded-lg" data-testid="checkin-waist-summary">
-            <span className="flex items-center gap-1.5 text-xs text-surface-400">
+          <div className="mt-3 flex items-center justify-between px-3 py-2 bg-fill rounded-lg" data-testid="checkin-waist-summary">
+            <span className="flex items-center gap-1.5 text-xs text-ink-2">
               <IconRuler size={14} aria-hidden="true" />
               Morning waist
             </span>
-            <span className="text-sm font-medium text-surface-100">
+            <span className="text-sm font-medium text-ink">
               {measurementUnit === 'in' ? cmToIn(savedWaistCm).toFixed(1) : savedWaistCm.toFixed(1)} {measurementUnit}
             </span>
           </div>
@@ -468,7 +468,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
                 <p className={`text-sm font-medium ${refeedStatus.level === 'high' ? 'text-amber-400' : 'text-yellow-400'}`}>
                   {refeedStatus.message}
                 </p>
-                <p className="text-xs text-surface-300 mt-1">{refeedStatus.recommendation}</p>
+                <p className="text-xs text-ink-2 mt-1">{refeedStatus.recommendation}</p>
               </div>
             </div>
           </div>
@@ -483,9 +483,9 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           {currentQuestion?.icon && (
-            <currentQuestion.icon size={20} className="text-primary-400" aria-hidden="true" />
+            <currentQuestion.icon size={20} className="text-action" aria-hidden="true" />
           )}
-          <h3 className="font-medium text-surface-100">Daily Check-In</h3>
+          <h3 className="font-medium text-ink">Daily Check-In</h3>
         </div>
         <Badge variant="default" size="sm">
           {step + 1}/{questions.length}
@@ -493,9 +493,9 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       </div>
       
       {/* Progress bar */}
-      <div className="h-1 bg-surface-700 rounded-full mb-4 overflow-hidden">
+      <div className="h-1 bg-sep rounded-full mb-4 overflow-hidden">
         <div 
-          className="h-full bg-primary-500 transition-all duration-300"
+          className="h-full bg-action transition-all duration-300"
           style={{ width: `${((step + 1) / questions.length) * 100}%` }}
         />
       </div>
@@ -503,7 +503,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       {/* Question */}
       {currentQuestion && (
         <div className="space-y-4">
-          <p className="text-surface-200">{currentQuestion.question}</p>
+          <p className="text-ink">{currentQuestion.question}</p>
           
           {currentQuestion.type === 'sleep' && (
             <SleepFields
@@ -526,16 +526,16 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
                   value={waistInput}
                   onChange={(e) => setWaistInput(e.target.value)}
                   placeholder={measurementUnit === 'in' ? 'e.g. 33.5' : 'e.g. 85.0'}
-                  className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-surface-100 focus:outline-none focus:border-primary-500"
+                  className="flex-1 bg-fill border border-sep rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-action"
                 />
-                <span className="text-sm text-surface-400 w-8">{measurementUnit}</span>
+                <span className="text-sm text-ink-2 w-8">{measurementUnit}</span>
               </div>
               {!waistHintSeen && (
-                <p className="text-xs text-surface-500 leading-snug" data-testid="waist-protocol-hint">
+                <p className="text-xs text-ink-3 leading-snug" data-testid="waist-protocol-hint">
                   Morning, fasted, after using the bathroom, at navel level — consistency matters more than precision.
                 </p>
               )}
-              <p className="text-xs text-surface-500">
+              <p className="text-xs text-ink-3">
                 Optional — leave blank to skip. One entry per day; you can edit it anytime.
               </p>
             </div>
@@ -552,13 +552,13 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
                       currentQuestion.value === rating
                         ? (currentQuestion as any).warning && rating <= 2
                           ? 'bg-amber-500 text-white'
-                          : 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                          : 'bg-action text-on-action'
+                        : 'bg-fill text-ink-2 hover:bg-sep'
                     }`}
                   >
                     <span className="text-lg font-medium">{rating}</span>
                     <span className={`text-[10px] leading-tight text-center ${
-                      currentQuestion.value === rating ? 'text-white/80' : 'text-surface-500'
+                      currentQuestion.value === rating ? 'text-white/80' : 'text-ink-3'
                     }`}>
                       {currentQuestion.labels?.[index]}
                     </span>

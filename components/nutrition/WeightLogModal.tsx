@@ -86,13 +86,13 @@ export function WeightLogModal({
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
           {error && (
-            <div className="p-3 text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg">
+            <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="weight" className="block text-sm font-medium text-surface-300 mb-1">
+            <label htmlFor="weight" className="block text-sm font-medium text-ink-2 mb-1">
               Weight ({preferredUnit === 'kg' ? 'kg' : 'lbs'})
             </label>
             <Input
@@ -108,7 +108,7 @@ export function WeightLogModal({
           </div>
 
           <div>
-            <label htmlFor="date" className="block text-sm font-medium text-surface-300 mb-1">
+            <label htmlFor="date" className="block text-sm font-medium text-ink-2 mb-1">
               Date
             </label>
             <Input
@@ -121,14 +121,14 @@ export function WeightLogModal({
           </div>
 
           <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-surface-300 mb-1">
+            <label htmlFor="notes" className="block text-sm font-medium text-ink-2 mb-1">
               Notes (optional)
             </label>
             <textarea
               id="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent"
               rows={3}
               placeholder="How are you feeling?"
             />

@@ -129,7 +129,7 @@ export function SwipeableRow({ children, onDelete, deleteLabel = 'Delete' }: Swi
     >
       {/* Delete button background */}
       <div 
-        className="absolute inset-y-0 right-0 flex items-center justify-end bg-danger-500"
+        className="absolute inset-y-0 right-0 flex items-center justify-end bg-status-bad"
         style={{ width: DELETE_WIDTH }}
       >
         <button
@@ -149,7 +149,7 @@ export function SwipeableRow({ children, onDelete, deleteLabel = 'Delete' }: Swi
 
       {/* Swipeable content */}
       <div
-        className="relative bg-surface-900 transition-transform duration-150 ease-out"
+        className="relative bg-card transition-transform duration-150 ease-out"
         style={{ 
           transform: `translateX(${translateX}px)`,
           transitionDuration: isDraggingRef.current ? '0ms' : '150ms'

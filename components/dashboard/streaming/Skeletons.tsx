@@ -5,21 +5,21 @@ export function WorkoutCardSkeleton() {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 bg-surface-700 rounded animate-pulse" />
-          <div className="h-5 w-32 bg-surface-700 rounded animate-pulse" />
+          <div className="w-5 h-5 bg-sep rounded animate-pulse" />
+          <div className="h-5 w-32 bg-sep rounded animate-pulse" />
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           <div>
-            <div className="h-5 w-40 bg-surface-700 rounded animate-pulse" />
-            <div className="h-4 w-24 bg-surface-700 rounded animate-pulse mt-2" />
+            <div className="h-5 w-40 bg-sep rounded animate-pulse" />
+            <div className="h-4 w-24 bg-sep rounded animate-pulse mt-2" />
           </div>
           <div className="space-y-2">
-            <div className="h-4 w-full bg-surface-700 rounded animate-pulse" />
-            <div className="h-2 w-full bg-surface-800 rounded-full" />
+            <div className="h-4 w-full bg-sep rounded animate-pulse" />
+            <div className="h-2 w-full bg-fill rounded-full" />
           </div>
-          <div className="h-12 w-full bg-surface-700 rounded-lg animate-pulse" />
+          <div className="h-12 w-full bg-sep rounded-lg animate-pulse" />
         </div>
       </CardContent>
     </Card>
@@ -32,10 +32,10 @@ export function NutritionCardSkeleton() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 bg-surface-700 rounded animate-pulse" />
-            <div className="h-5 w-24 bg-surface-700 rounded animate-pulse" />
+            <div className="w-5 h-5 bg-sep rounded animate-pulse" />
+            <div className="h-5 w-24 bg-sep rounded animate-pulse" />
           </div>
-          <div className="h-4 w-12 bg-surface-700 rounded animate-pulse" />
+          <div className="h-4 w-12 bg-sep rounded animate-pulse" />
         </div>
       </CardHeader>
       <CardContent>
@@ -43,10 +43,10 @@ export function NutritionCardSkeleton() {
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="space-y-1">
               <div className="flex justify-between">
-                <div className="h-4 w-16 bg-surface-700 rounded animate-pulse" />
-                <div className="h-4 w-24 bg-surface-700 rounded animate-pulse" />
+                <div className="h-4 w-16 bg-sep rounded animate-pulse" />
+                <div className="h-4 w-24 bg-sep rounded animate-pulse" />
               </div>
-              <div className="h-2 w-full bg-surface-800 rounded-full" />
+              <div className="h-2 w-full bg-fill rounded-full" />
             </div>
           ))}
         </div>
@@ -61,14 +61,14 @@ export function WeightCardSkeleton() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 bg-surface-700 rounded animate-pulse" />
-            <div className="h-5 w-20 bg-surface-700 rounded animate-pulse" />
+            <div className="w-5 h-5 bg-sep rounded animate-pulse" />
+            <div className="h-5 w-20 bg-sep rounded animate-pulse" />
           </div>
-          <div className="h-4 w-16 bg-surface-700 rounded animate-pulse" />
+          <div className="h-4 w-16 bg-sep rounded animate-pulse" />
         </div>
       </CardHeader>
       <CardContent>
-        <div className="h-48 w-full bg-surface-800 rounded animate-pulse" />
+        <div className="h-48 w-full bg-fill rounded animate-pulse" />
       </CardContent>
     </Card>
   );
@@ -81,8 +81,8 @@ export function QuickActionsCardSkeleton() {
         <div className="grid grid-cols-4 gap-3">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 bg-surface-700 rounded-xl animate-pulse" />
-              <div className="h-3 w-12 bg-surface-700 rounded animate-pulse" />
+              <div className="w-12 h-12 bg-sep rounded-xl animate-pulse" />
+              <div className="h-3 w-12 bg-sep rounded animate-pulse" />
             </div>
           ))}
         </div>
@@ -95,13 +95,13 @@ export function GenericCardSkeleton() {
   return (
     <Card>
       <CardHeader>
-        <div className="h-5 w-32 bg-surface-700 rounded animate-pulse" />
+        <div className="h-5 w-32 bg-sep rounded animate-pulse" />
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          <div className="h-4 w-full bg-surface-700 rounded animate-pulse" />
-          <div className="h-4 w-3/4 bg-surface-700 rounded animate-pulse" />
-          <div className="h-4 w-1/2 bg-surface-700 rounded animate-pulse" />
+          <div className="h-4 w-full bg-sep rounded animate-pulse" />
+          <div className="h-4 w-3/4 bg-sep rounded animate-pulse" />
+          <div className="h-4 w-1/2 bg-sep rounded animate-pulse" />
         </div>
       </CardContent>
     </Card>

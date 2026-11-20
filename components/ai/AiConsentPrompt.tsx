@@ -64,7 +64,7 @@ export function AiConsentPrompt({ suppressed }: { suppressed: boolean }) {
     >
       <div data-testid="ai-consent-prompt">
         <AiDataSharingDetails />
-        {error && <p className="mt-3 text-xs text-danger-400">{error}</p>}
+        {error && <p className="mt-3 text-xs text-status-bad">{error}</p>}
         <ModalFooter>
           <Button variant="ghost" onClick={() => answer(false)} disabled={isSaving}>
             Don&apos;t allow

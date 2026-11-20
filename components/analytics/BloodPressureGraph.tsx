@@ -62,11 +62,11 @@ const BPTooltip = memo(function BPTooltip({
   if (!active || !payload || !payload.length) return null;
   const data = payload[0].payload;
   return (
-    <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
-      <p className="text-sm text-surface-400 mb-1">{formatDate(data.localDay)}</p>
-      <p className="text-surface-100 font-semibold tabular-nums">
+    <div className="bg-fill border border-sep rounded-lg p-3 shadow-lg">
+      <p className="text-sm text-ink-2 mb-1">{formatDate(data.localDay)}</p>
+      <p className="text-ink font-semibold tabular-nums">
         {data.systolic}/{data.diastolic}{' '}
-        <span className="text-surface-400 font-normal">mmHg</span>
+        <span className="text-ink-2 font-normal">mmHg</span>
       </p>
     </div>
   );
@@ -115,7 +115,7 @@ export const BloodPressureGraph = memo(function BloodPressureGraph({
     return (
       <div className={className}>
         <div className="text-center py-8">
-          <p className="text-surface-400 text-sm">No readings for this period</p>
+          <p className="text-ink-2 text-sm">No readings for this period</p>
         </div>
       </div>
     );

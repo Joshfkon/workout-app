@@ -61,18 +61,18 @@ describe('MuscleMap', () => {
     };
     const { container } = render(<MuscleMap data={data} mode="volume" view="both" />);
     // No band on the datum → the middle shade (legacy fallback).
-    expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-success-500');
-    expect(musclePaths(container, 'hamstrings')[0]!.getAttribute('class')).toContain('fill-success-300');
-    expect(musclePaths(container, 'glutes')[0]!.getAttribute('class')).toContain('fill-success-600');
-    expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-warning-500');
+    expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-status-ok');
+    expect(musclePaths(container, 'hamstrings')[0]!.getAttribute('class')).toContain('fill-status-ok/50');
+    expect(musclePaths(container, 'glutes')[0]!.getAttribute('class')).toContain('fill-status-ok');
+    expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-status-warn');
     // Zero volume warns in light red, and must NOT reuse the over-MRV red.
     const untrained = musclePaths(container, 'chest_upper')[0]!.getAttribute('class')!;
-    expect(untrained).toContain('fill-danger-300');
-    expect(untrained).not.toContain('fill-danger-500');
-    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-danger-500');
+    expect(untrained).toContain('fill-status-bad/50');
+    expect(untrained).not.toMatch(/fill-status-bad(?!\/)/);
+    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-status-bad');
     // No data at all (region not covered by any row) → neutral base tone, so an
     // untrained muscle stays distinguishable from an unmapped one.
-    expect(musclePaths(container, 'gastrocnemius')[0]!.getAttribute('class')).toContain('fill-surface-800');
+    expect(musclePaths(container, 'gastrocnemius')[0]!.getAttribute('class')).toContain('fill-fill');
   });
 
   it('recovery mode: fresh green / recovering amber / fatigued gray, matching the badges', () => {
@@ -82,10 +82,10 @@ describe('MuscleMap', () => {
       biceps: { value: 3, status: 'fatigued' },
     };
     const { container } = render(<MuscleMap data={data} mode="recovery" view="both" />);
-    expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-success-500');
-    expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-warning-500');
-    expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-surface-600');
-    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-surface-800');
+    expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-status-ok');
+    expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-status-warn');
+    expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-sep');
+    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-fill');
   });
 
   it('heat mode: reds/amber below MEV, greens darkening with volume, neutral without a bucket', () => {
@@ -101,14 +101,14 @@ describe('MuscleMap', () => {
       forearms: { value: 3 },
     };
     const { container } = render(<MuscleMap data={data} mode="heat" view="both" />);
-    expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-danger-300');
-    expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-danger-500');
-    expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-warning-500');
-    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-success-300');
-    expect(musclePaths(container, 'hamstrings')[0]!.getAttribute('class')).toContain('fill-success-500');
-    expect(musclePaths(container, 'glutes')[0]!.getAttribute('class')).toContain('fill-success-600');
-    expect(musclePaths(container, 'erectors')[0]!.getAttribute('class')).toContain('fill-success-700');
-    expect(musclePaths(container, 'forearms')[0]!.getAttribute('class')).toContain('fill-surface-800');
+    expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-status-bad/50');
+    expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-status-bad');
+    expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-status-warn');
+    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-status-ok/50');
+    expect(musclePaths(container, 'hamstrings')[0]!.getAttribute('class')).toContain('fill-status-ok');
+    expect(musclePaths(container, 'glutes')[0]!.getAttribute('class')).toContain('fill-status-ok');
+    expect(musclePaths(container, 'erectors')[0]!.getAttribute('class')).toContain('fill-status-ok');
+    expect(musclePaths(container, 'forearms')[0]!.getAttribute('class')).toContain('fill-fill');
     // Aria reads the bucket, not the color.
     expect(musclePaths(container, 'glutes')[0]!.getAttribute('aria-label')).toBe(
       'Glutes: upper end of the optimal volume zone'
@@ -125,12 +125,12 @@ describe('MuscleMap', () => {
     const glutes = musclePaths(container, 'glutes')[0]!;
     const hams = musclePaths(container, 'hamstrings')[0]!;
     const erectors = musclePaths(container, 'erectors')[0]!;
-    expect(glutes.getAttribute('class')).toContain('fill-primary-500');
+    expect(glutes.getAttribute('class')).toContain('fill-action');
     expect(glutes.getAttribute('fill-opacity')).toBe('1');
-    expect(hams.getAttribute('class')).toContain('fill-primary-500');
+    expect(hams.getAttribute('class')).toContain('fill-action');
     expect(hams.getAttribute('fill-opacity')).toBe('0.4');
     expect(erectors.getAttribute('fill-opacity')).toBe('0.4');
-    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-surface-800');
+    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-fill');
   });
 
   it('tapping a quads region fires onMuscleTap with "quads" (mouse and keyboard)', async () => {
@@ -170,7 +170,7 @@ describe('MuscleMap', () => {
 
     const head = container.querySelector('path[data-region="head"]')!;
     expect(head.getAttribute('aria-hidden')).toBe('true');
-    expect(head.getAttribute('class')).toContain('fill-surface-800');
+    expect(head.getAttribute('class')).toContain('fill-fill');
 
     // Every vendored region renders exactly once across both views.
     expect(container.querySelectorAll('path[data-region]').length).toBe(ALL_REGION_IDS.size);

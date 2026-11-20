@@ -188,7 +188,7 @@ export default function ProfileSetupPage() {
       <Card>
         <CardHeader>
           <CardTitle>Create Your Profile</CardTitle>
-          <p className="text-surface-400 text-sm mt-1">
+          <p className="text-ink-2 text-sm mt-1">
             Set up your profile to connect with other lifters
           </p>
         </CardHeader>
@@ -203,14 +203,14 @@ export default function ProfileSetupPage() {
                 onChange={(e) => handleUsernameChange(e.target.value)}
                 placeholder="your_username"
                 error={usernameError || undefined}
-                leftIcon={<span className="text-surface-500">@</span>}
+                leftIcon={<span className="text-ink-3">@</span>}
                 rightIcon={
                   checkingUsername ? (
-                    <div className="animate-spin h-4 w-4 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+                    <div className="animate-spin h-4 w-4 border-2 border-ink-3 border-t-action rounded-full" />
                   ) : usernameAvailable === true ? (
-                    <span className="text-success-500">✓</span>
+                    <span className="text-status-ok">✓</span>
                   ) : usernameAvailable === false ? (
-                    <span className="text-danger-500">✗</span>
+                    <span className="text-status-bad">✗</span>
                   ) : null
                 }
                 hint="3-30 characters, letters, numbers, and underscores only"
@@ -219,14 +219,14 @@ export default function ProfileSetupPage() {
               {/* Suggestions */}
               {suggestions.length > 0 && !username && (
                 <div className="mt-3">
-                  <p className="text-xs text-surface-400 mb-2">Suggestions:</p>
+                  <p className="text-xs text-ink-2 mb-2">Suggestions:</p>
                   <div className="flex flex-wrap gap-2">
                     {suggestions.map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion)}
-                        className="px-3 py-1 text-sm bg-surface-800 hover:bg-surface-700 text-surface-300 rounded-full transition-colors"
+                        className="px-3 py-1 text-sm bg-fill hover:bg-sep text-ink-2 rounded-full transition-colors"
                       >
                         @{suggestion}
                       </button>
@@ -247,7 +247,7 @@ export default function ProfileSetupPage() {
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-medium text-surface-200 mb-1.5">
+              <label className="block text-sm font-medium text-ink mb-1.5">
                 Bio
               </label>
               <textarea
@@ -255,12 +255,12 @@ export default function ProfileSetupPage() {
                 onChange={(e) => setBio(e.target.value.slice(0, 500))}
                 placeholder="Tell others about yourself..."
                 rows={3}
-                className="w-full rounded-lg bg-surface-800 border border-surface-700 px-4 py-2.5
-                  text-surface-100 placeholder:text-surface-500
-                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                className="w-full rounded-lg bg-fill border border-sep px-4 py-2.5
+                  text-ink placeholder:text-ink-3
+                  focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent
                   transition-all duration-200 resize-none"
               />
-              <p className="mt-1 text-xs text-surface-500 text-right">
+              <p className="mt-1 text-xs text-ink-3 text-right">
                 {bio.length}/500
               </p>
             </div>
@@ -301,7 +301,7 @@ export default function ProfileSetupPage() {
               </Button>
             </div>
 
-            <p className="text-xs text-surface-500 text-center">
+            <p className="text-xs text-ink-3 text-center">
               You can change these settings later in your profile settings
             </p>
           </form>

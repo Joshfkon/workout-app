@@ -73,14 +73,14 @@ export default function GlossaryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Training Glossary</h1>
-          <p className="text-surface-400 mt-1">
+          <h1 className="text-2xl font-bold text-ink">Training Glossary</h1>
+          <p className="text-ink-2 mt-1">
             Look up any training term or concept
           </p>
         </div>
         <Link
           href="/dashboard/settings"
-          className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"
+          className="text-sm text-action flex items-center gap-1"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -96,7 +96,7 @@ export default function GlossaryPage() {
             {/* Search Input */}
             <div className="flex-1 relative">
               <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-ink-3"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -113,12 +113,12 @@ export default function GlossaryPage() {
                 placeholder="Search terms..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                className="w-full pl-10 pr-4 py-2.5 bg-fill border border-sep rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:border-action focus:ring-1 focus:ring-action"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -133,8 +133,8 @@ export default function GlossaryPage() {
                 onClick={() => setSelectedCategory('all')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                   selectedCategory === 'all'
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                    ? 'bg-action text-on-action'
+                    : 'bg-fill text-ink-2 hover:bg-sep'
                 }`}
               >
                 All
@@ -145,8 +145,8 @@ export default function GlossaryPage() {
                   onClick={() => setSelectedCategory(cat)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                     selectedCategory === cat
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                      ? 'bg-action text-on-action'
+                      : 'bg-fill text-ink-2 hover:bg-sep'
                   }`}
                 >
                   <span>{GLOSSARY_CATEGORIES[cat].icon}</span>
@@ -159,14 +159,14 @@ export default function GlossaryPage() {
       </Card>
 
       {/* Results Count */}
-      <div className="flex items-center justify-between text-sm text-surface-400">
+      <div className="flex items-center justify-between text-sm text-ink-2">
         <span>
           {filteredTerms.length} {filteredTerms.length === 1 ? 'term' : 'terms'} found
         </span>
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
-            className="text-primary-400 hover:text-primary-300"
+            className="text-action"
           >
             Clear search
           </button>
@@ -178,7 +178,7 @@ export default function GlossaryPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <svg
-              className="w-12 h-12 mx-auto text-surface-600 mb-4"
+              className="w-12 h-12 mx-auto text-ink-3 mb-4"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -190,13 +190,13 @@ export default function GlossaryPage() {
                 d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <p className="text-surface-400">No terms match your search.</p>
+            <p className="text-ink-2">No terms match your search.</p>
             <button
               onClick={() => {
                 setSearchQuery('');
                 setSelectedCategory('all');
               }}
-              className="mt-2 text-primary-400 hover:text-primary-300 text-sm"
+              className="mt-2 text-action text-sm"
             >
               Reset filters
             </button>
@@ -217,10 +217,10 @@ export default function GlossaryPage() {
                     <span>{catInfo.icon}</span>
                     {catInfo.label}
                   </CardTitle>
-                  <p className="text-sm text-surface-500">{catInfo.description}</p>
+                  <p className="text-sm text-ink-3">{catInfo.description}</p>
                 </CardHeader>
                 <CardContent className="pt-2">
-                  <div className="divide-y divide-surface-800">
+                  <div className="divide-y divide-sep">
                     {terms.map((term) => (
                       <GlossaryTerm
                         key={term.key}
@@ -241,7 +241,7 @@ export default function GlossaryPage() {
         // Show flat list when filtering
         <Card>
           <CardContent className="py-2">
-            <div className="divide-y divide-surface-800">
+            <div className="divide-y divide-sep">
               {filteredTerms.map((term) => (
                 <GlossaryTerm
                   key={term.key}
@@ -262,16 +262,16 @@ export default function GlossaryPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary-500/10 flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-8 h-8 rounded-lg bg-action/10 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div>
-              <p className="text-sm font-medium text-surface-200">Need more detail?</p>
-              <p className="text-xs text-surface-500 mt-0.5">
+              <p className="text-sm font-medium text-ink">Need more detail?</p>
+              <p className="text-xs text-ink-3 mt-0.5">
                 Check out the{' '}
-                <Link href="/dashboard/learn" className="text-primary-400 hover:underline">
+                <Link href="/dashboard/learn" className="text-action hover:underline">
                   Learn Hub
                 </Link>{' '}
                 for in-depth articles on these concepts.
@@ -304,11 +304,11 @@ function GlossaryTerm({
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-surface-100 group-hover:text-primary-400 transition-colors">
+            <span className="font-medium text-ink group-hover:text-action transition-colors">
               {term.term}
             </span>
             {term.fullName && (
-              <span className="text-sm text-surface-500">({term.fullName})</span>
+              <span className="text-sm text-ink-3">({term.fullName})</span>
             )}
             {showCategory && term.category && (
               <Badge variant="outline" className="text-xs">
@@ -316,10 +316,10 @@ function GlossaryTerm({
               </Badge>
             )}
           </div>
-          <p className="text-sm text-surface-400 mt-1">{term.shortExplanation}</p>
+          <p className="text-sm text-ink-2 mt-1">{term.shortExplanation}</p>
         </div>
         <svg
-          className={`w-5 h-5 text-surface-500 flex-shrink-0 transition-transform ${
+          className={`w-5 h-5 text-ink-3 flex-shrink-0 transition-transform ${
             isExpanded ? 'rotate-180' : ''
           }`}
           fill="none"
@@ -332,14 +332,14 @@ function GlossaryTerm({
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="mt-3 pl-4 border-l-2 border-primary-500/30">
+        <div className="mt-3 pl-4 border-l-2 border-action/30">
           {term.longExplanation && (
-            <p className="text-sm text-surface-300 mb-3">{term.longExplanation}</p>
+            <p className="text-sm text-ink-2 mb-3">{term.longExplanation}</p>
           )}
           {term.learnMoreSlug && (
             <Link
               href={`/dashboard/learn/${term.learnMoreSlug}`}
-              className="inline-flex items-center gap-1.5 text-sm text-primary-400 hover:text-primary-300"
+              className="inline-flex items-center gap-1.5 text-sm text-action"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />

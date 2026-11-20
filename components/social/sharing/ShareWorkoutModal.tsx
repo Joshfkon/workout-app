@@ -135,20 +135,20 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
           <form onSubmit={handleSubmit} className="space-y-6">
             {isSerializing ? (
               <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500" />
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-action" />
               </div>
             ) : (
               <>
                 {/* Title */}
                 <div>
-                  <label className="block text-sm font-medium text-surface-200 mb-2">
+                  <label className="block text-sm font-medium text-ink mb-2">
                     Title *
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                     placeholder="My Awesome Workout"
                     required
                     maxLength={100}
@@ -157,13 +157,13 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
 
                 {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-surface-200 mb-2">
+                  <label className="block text-sm font-medium text-ink mb-2">
                     Description
                   </label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                    className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action resize-none shadow-card"
                     rows={3}
                     placeholder="Describe your workout..."
                     maxLength={500}
@@ -172,7 +172,7 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
 
                 {/* Share Type */}
                 <div>
-                  <label className="block text-sm font-medium text-surface-200 mb-2">
+                  <label className="block text-sm font-medium text-ink mb-2">
                     Share Type
                   </label>
                   <div className="flex gap-2 flex-wrap">
@@ -183,8 +183,8 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
                         onClick={() => setShareType(type)}
                         className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
                           shareType === type
-                            ? 'bg-primary-500 border-primary-500 text-white'
-                            : 'bg-surface-900 border-surface-700 text-surface-200 hover:border-surface-600'
+                            ? 'bg-action border-action text-on-action'
+                            : 'bg-card border-sep text-ink hover:border-sep'
                         }`}
                       >
                         {type === 'single_workout' ? 'Single Workout' : 'Template'}
@@ -195,7 +195,7 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
 
                 {/* Difficulty */}
                 <div>
-                  <label className="block text-sm font-medium text-surface-200 mb-2">
+                  <label className="block text-sm font-medium text-ink mb-2">
                     Difficulty (optional)
                   </label>
                   <div className="flex gap-2">
@@ -206,8 +206,8 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
                         onClick={() => setDifficulty(difficulty === diff ? '' : diff)}
                         className={`flex-1 px-4 py-2 rounded-lg border transition-colors capitalize ${
                           difficulty === diff
-                            ? 'bg-primary-500 border-primary-500 text-white'
-                            : 'bg-surface-900 border-surface-700 text-surface-200 hover:border-surface-600'
+                            ? 'bg-action border-action text-on-action'
+                            : 'bg-card border-sep text-ink hover:border-sep'
                         }`}
                       >
                         {diff}
@@ -223,26 +223,26 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
                     id="isPublic"
                     checked={isPublic}
                     onChange={(e) => setIsPublic(e.target.checked)}
-                    className="w-4 h-4 text-primary-500 bg-surface-900 border-surface-700 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-action bg-card border-sep rounded focus:ring-action"
                   />
-                  <label htmlFor="isPublic" className="text-sm text-surface-200">
+                  <label htmlFor="isPublic" className="text-sm text-ink">
                     Make this workout public (visible in Discover feed)
                   </label>
                 </div>
 
                 {/* Workout Preview */}
                 {workoutData && (
-                  <div className="bg-surface-800 rounded-lg p-4">
-                    <p className="text-sm font-medium text-surface-200 mb-2">Workout Preview</p>
-                    <div className="space-y-2 text-sm text-surface-300">
+                  <div className="bg-fill rounded-lg p-4">
+                    <p className="text-sm font-medium text-ink mb-2">Workout Preview</p>
+                    <div className="space-y-2 text-sm text-ink-2">
                       <p>
-                        <span className="text-surface-400">Exercises:</span> {workoutData.exercises.length}
+                        <span className="text-ink-2">Exercises:</span> {workoutData.exercises.length}
                       </p>
                       <p>
-                        <span className="text-surface-400">Total Sets:</span> {workoutData.total_sets}
+                        <span className="text-ink-2">Total Sets:</span> {workoutData.total_sets}
                       </p>
                       <p>
-                        <span className="text-surface-400">Est. Duration:</span> {workoutData.estimated_duration_minutes} min
+                        <span className="text-ink-2">Est. Duration:</span> {workoutData.estimated_duration_minutes} min
                       </p>
                     </div>
                   </div>

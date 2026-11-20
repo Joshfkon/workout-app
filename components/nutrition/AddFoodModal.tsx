@@ -197,10 +197,10 @@ function QuickAddButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-500/15 text-action flex items-center justify-center hover:bg-primary-500/25 transition-colors disabled:opacity-40"
+      className="flex-shrink-0 w-8 h-8 rounded-full bg-action/15 text-action flex items-center justify-center hover:bg-action/25 transition-colors disabled:opacity-40"
     >
       {loading ? (
-        <span className="w-3.5 h-3.5 border-2 border-primary-400/40 border-t-primary-400 rounded-full animate-spin" />
+        <span className="w-3.5 h-3.5 border-2 border-action/40 border-t-action rounded-full animate-spin" />
       ) : (
         <IconPlus size={16} aria-hidden="true" />
       )}
@@ -242,7 +242,7 @@ function RecentFoodRow({
           <span className="block text-sm font-medium text-ink truncate">{recent.food_name}</span>
           <span className="text-xs text-ink-2 flex items-center gap-1.5">
             <span className="truncate">{subtitle}</span>
-            <span className="text-surface-600" aria-hidden="true">·</span>
+            <span className="text-ink-3" aria-hidden="true">·</span>
             <span className="flex-shrink-0 flex items-center gap-0.5 text-ink-2">
               <IconClock size={11} aria-hidden="true" />
               {dayLabel(recent.loggedAt)}
@@ -929,7 +929,7 @@ export function AddFoodModal({
         )}
 
         {error && (
-          <div className="p-3 text-sm text-status-bad bg-danger-500/10 border border-danger-500/20 rounded-lg">
+          <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
             {error}
           </div>
         )}
@@ -1023,7 +1023,7 @@ export function AddFoodModal({
                   </>
                 ) : visibleMeals.length === 0 ? (
                   <div className="py-8 text-center" data-testid="prior-meals-empty">
-                    <IconToolsKitchen2 size={28} className="mx-auto text-surface-600 mb-2" aria-hidden="true" />
+                    <IconToolsKitchen2 size={28} className="mx-auto text-ink-3 mb-2" aria-hidden="true" />
                     <p className="text-sm text-ink-2">No prior meals yet</p>
                     <p className="text-xs text-ink-2 mt-1">
                       Meals you log will appear here so you can grab foods from them.
@@ -1064,7 +1064,7 @@ export function AddFoodModal({
                               type="button"
                               onClick={() => handleAddAllFromMeal(meal)}
                               disabled={isSubmitting || quickAddingKey !== null}
-                              className="flex-shrink-0 text-xs font-semibold text-action px-2 py-1 rounded-md hover:bg-primary-500/15 transition-colors disabled:opacity-40"
+                              className="flex-shrink-0 text-xs font-semibold text-action px-2 py-1 rounded-md hover:bg-action/15 transition-colors disabled:opacity-40"
                               data-testid="prior-meal-add-all"
                             >
                               {quickAddingKey === `all:${meal.key}` ? 'Adding…' : 'Add all'}
@@ -1104,7 +1104,7 @@ export function AddFoodModal({
                       <button
                         type="button"
                         onClick={() => setMealsVisibleDays((d) => d + MEALS_LOAD_MORE_DAYS)}
-                        className="w-full py-2 text-sm text-action hover:text-action transition-colors"
+                        className="w-full py-2 text-sm text-action transition-colors"
                         data-testid="prior-meals-load-more"
                       >
                         Load more
@@ -1231,7 +1231,7 @@ export function AddFoodModal({
                   ) : (
                     Object.entries(groupedSystemFoods).map(([category, foods]) => (
                       <div key={category} className="mb-2">
-                        <p className="text-[11px] text-surface-600 mb-1">
+                        <p className="text-[11px] text-ink-3 mb-1">
                           {CATEGORY_LABELS[category] || category}
                         </p>
                         <div className="space-y-1">
@@ -1301,7 +1301,7 @@ export function AddFoodModal({
         {activeTab === 'barcode' && (
           <div className="space-y-4">
             {barcodeError && (
-              <div className="p-3 text-sm text-warning-400 bg-warning-500/10 border border-warning-500/20 rounded-lg space-y-2">
+              <div className="p-3 text-sm text-status-warn bg-status-warn/10 border border-status-warn/20 rounded-lg space-y-2">
                 <p>{barcodeError}</p>
                 {notFoundBarcode && onCreateCustomFood && (
                   <Button

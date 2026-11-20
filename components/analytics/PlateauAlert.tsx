@@ -56,9 +56,9 @@ export function PlateauAlert({
   const unitLabel = safeUnits === 'lb' ? 'lbs' : 'kg';
 
   const getSeverityColor = () => {
-    if (result.weeksSinceProgress >= 6) return 'border-danger-500/50 bg-danger-500/5';
-    if (result.weeksSinceProgress >= 4) return 'border-warning-500/50 bg-warning-500/5';
-    return 'border-primary-500/50 bg-primary-500/5';
+    if (result.weeksSinceProgress >= 6) return 'border-status-bad/50 bg-status-bad/5';
+    if (result.weeksSinceProgress >= 4) return 'border-status-warn/50 bg-status-warn/5';
+    return 'border-action/50 bg-action/5';
   };
 
   const getSeverityLabel = () => {
@@ -129,7 +129,7 @@ export function PlateauAlert({
         <div className="mt-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-sm text-action hover:text-action transition-colors"
+            className="flex items-center gap-1 text-sm text-action transition-colors"
           >
             {isExpanded ? 'Hide' : 'Show'} suggestions
             <svg
@@ -180,7 +180,7 @@ export function PlateauAlertList({ alerts, units, onDismiss }: PlateauAlertListP
     return (
       <Card>
         <div className="text-center py-6">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-success-500/20 flex items-center justify-center">
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-status-ok/20 flex items-center justify-center">
             <svg className="w-6 h-6 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>

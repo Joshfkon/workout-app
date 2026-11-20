@@ -158,7 +158,7 @@ export function FFMIGauge({ ffmiResult, size = 'md' }: FFMIGaugeProps) {
               y={y}
               textAnchor="middle"
               dominantBaseline="middle"
-              className="fill-surface-500 text-[10px]"
+              className="fill-ink-3 text-[10px]"
             >
               {value}
             </text>
@@ -171,13 +171,13 @@ export function FFMIGauge({ ffmiResult, size = 'md' }: FFMIGaugeProps) {
         <div className={`${sizeConfig.fontSize} font-bold ${getFFMIColor(classification)}`}>
           {ffmi}
         </div>
-        <div className="text-sm text-surface-400 mt-1">
+        <div className="text-sm text-ink-2 mt-1">
           {getFFMILabel(classification)}
         </div>
-        <div className="text-xs text-surface-500 mt-0.5">
+        <div className="text-xs text-ink-3 mt-0.5">
           {percentOfLimit}% of natural limit
         </div>
-        <div className="text-[10px] text-surface-500 mt-0.5">
+        <div className="text-[10px] text-ink-3 mt-0.5">
           Normalized (height-adj.): {normalizedFfmi}
         </div>
       </div>

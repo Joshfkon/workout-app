@@ -205,11 +205,11 @@ export function ExerciseHistoryCharts({
           <div className="flex justify-center gap-6 mt-2 text-xs">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-              <span className="text-surface-400">Weight ({unit})</span>
+              <span className="text-ink-2">Weight ({unit})</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-              <span className="text-surface-400">Reps</span>
+              <span className="text-ink-2">Reps</span>
             </span>
           </div>
         </div>

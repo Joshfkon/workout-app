@@ -48,9 +48,9 @@ export { SLEEP_QUALITY_LABELS };
 
 /** Chip dot colors shared with the Sleep card's quality dot. */
 export const SLEEP_QUALITY_DOT_CLASS: Record<SleepQuality, string> = {
-  poor: 'bg-warning-400',
-  ok: 'bg-surface-400',
-  good: 'bg-success-400',
+  poor: 'bg-status-warn',
+  ok: 'bg-ink-3',
+  good: 'bg-status-ok',
 };
 
 export function clampSleepHours(value: number): number {
@@ -73,19 +73,19 @@ export function SleepFields({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs text-surface-500 mb-2">Hours slept</p>
+        <p className="text-xs text-ink-3 mb-2">Hours slept</p>
         <div className="flex items-center justify-center gap-4">
           <button
             type="button"
             aria-label="Decrease hours"
             onClick={() => onHoursChange(clampSleepHours(hours - STEP))}
-            className="w-11 h-11 rounded-full bg-surface-800 text-surface-200 text-xl font-medium hover:bg-surface-700 transition-colors"
+            className="w-11 h-11 rounded-full bg-fill text-ink text-xl font-medium hover:bg-sep transition-colors"
           >
             −
           </button>
           <span
             data-testid="sleep-hours-value"
-            className="text-2xl font-bold text-surface-100 min-w-[4.5rem] text-center tabular-nums"
+            className="text-2xl font-bold text-ink min-w-[4.5rem] text-center tabular-nums"
           >
             {hours}h
           </span>
@@ -93,7 +93,7 @@ export function SleepFields({
             type="button"
             aria-label="Increase hours"
             onClick={() => onHoursChange(clampSleepHours(hours + STEP))}
-            className="w-11 h-11 rounded-full bg-surface-800 text-surface-200 text-xl font-medium hover:bg-surface-700 transition-colors"
+            className="w-11 h-11 rounded-full bg-fill text-ink text-xl font-medium hover:bg-sep transition-colors"
           >
             +
           </button>
@@ -101,7 +101,7 @@ export function SleepFields({
       </div>
 
       <div>
-        <p className="text-xs text-surface-500 mb-2">Quality</p>
+        <p className="text-xs text-ink-3 mb-2">Quality</p>
         <div className="flex gap-2">
           {SLEEP_QUALITIES.map((q) => (
             <button
@@ -111,8 +111,8 @@ export function SleepFields({
               onClick={() => onQualityChange(q)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-colors ${
                 quality === q
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                  ? 'bg-action text-on-action'
+                  : 'bg-fill text-ink-2 hover:bg-sep'
               }`}
             >
               <span
@@ -242,7 +242,7 @@ export function SleepQuickLog({ onSaved }: SleepQuickLogProps) {
       {/* Auto-filled from Apple Health — an untouched import keeps its tag;
           saving here stamps the day manual (manual entries always win). */}
       {todaysEntry?.source === 'healthkit' && !touchedRef.current && (
-        <p className="text-xs text-surface-500 text-center" data-testid="sleep-healthkit-tag">
+        <p className="text-xs text-ink-3 text-center" data-testid="sleep-healthkit-tag">
           ⌚ from Apple Health — adjust if it looks off
         </p>
       )}
@@ -250,13 +250,13 @@ export function SleepQuickLog({ onSaved }: SleepQuickLogProps) {
       {/* One-time inline offer (iOS native, not yet connected) */}
       {isIOSNative && healthKitConnected === false && !healthOfferDismissed && (
         <div
-          className="flex items-center justify-between gap-2 p-2 bg-surface-800 rounded-lg"
+          className="flex items-center justify-between gap-2 p-2 bg-fill rounded-lg"
           data-testid="sleep-healthkit-offer"
         >
           <button
             onClick={handleConnectAppleHealth}
             disabled={isConnectingHealth}
-            className="flex-1 text-left text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50"
+            className="flex-1 text-left text-xs text-action disabled:opacity-50"
           >
             {isConnectingHealth
               ? 'Connecting to Apple Health…'
@@ -265,14 +265,14 @@ export function SleepQuickLog({ onSaved }: SleepQuickLogProps) {
           <button
             onClick={handleDismissHealthOffer}
             aria-label="Dismiss Apple Health offer"
-            className="text-surface-500 hover:text-surface-300 text-xs px-1"
+            className="text-ink-3 hover:text-ink-2 text-xs px-1"
           >
             ✕
           </button>
         </div>
       )}
 
-      {error && <p className="text-xs text-danger-400">{error}</p>}
+      {error && <p className="text-xs text-status-bad">{error}</p>}
       <Button onClick={handleSave} isLoading={isSaving} className="w-full" data-testid="sleep-save">
         {todaysEntry ? 'Update sleep' : 'Save sleep'}
       </Button>

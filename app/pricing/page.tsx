@@ -26,8 +26,8 @@ export default function PublicPricingPage() {
         <div className="space-y-8">
           {/* Header */}
           <div className="text-center">
-            <h1 className="text-4xl font-black text-surface-100 mb-2">Pricing</h1>
-            <p className="text-surface-400 mt-2 max-w-xl mx-auto">
+            <h1 className="text-4xl font-black text-ink mb-2">Pricing</h1>
+            <p className="text-ink-2 mt-2 max-w-xl mx-auto">
               Choose the plan that fits your training goals. All plans include access to the web and mobile apps.
             </p>
           </div>
@@ -42,10 +42,10 @@ export default function PublicPricingPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="font-medium text-surface-200 mb-1">
+                  <p className="font-medium text-ink mb-1">
                     Subscription Management
                   </p>
-                  <p className="text-sm text-surface-400">
+                  <p className="text-sm text-ink-2">
                     Subscriptions are purchased and managed on the web. The iOS and Android apps are free to download 
                     and automatically sync your subscription when you log in.
                   </p>
@@ -56,13 +56,13 @@ export default function PublicPricingPage() {
 
           {/* Billing Period Toggle */}
           <div className="flex justify-center">
-            <div className="inline-flex items-center gap-2 p-1 bg-surface-800 rounded-lg">
+            <div className="inline-flex items-center gap-2 p-1 bg-fill rounded-lg">
               <button
                 onClick={() => setBillingPeriod('monthly')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   billingPeriod === 'monthly'
-                    ? 'bg-surface-700 text-surface-100'
-                    : 'text-surface-400 hover:text-surface-200'
+                    ? 'bg-sep text-ink'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 Monthly
@@ -71,8 +71,8 @@ export default function PublicPricingPage() {
                 onClick={() => setBillingPeriod('yearly')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   billingPeriod === 'yearly'
-                    ? 'bg-surface-700 text-surface-100'
-                    : 'text-surface-400 hover:text-surface-200'
+                    ? 'bg-sep text-ink'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 Yearly
@@ -138,16 +138,16 @@ export default function PublicPricingPage() {
           {/* Feature Comparison */}
           <Card>
             <CardContent className="p-6">
-              <h2 className="text-xl font-bold text-surface-100 mb-6 text-center">Feature Comparison</h2>
+              <h2 className="text-xl font-bold text-ink mb-6 text-center">Feature Comparison</h2>
               
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-surface-700">
-                      <th className="py-3 px-4 text-left text-surface-400 font-medium">Feature</th>
-                      <th className="py-3 px-4 text-center text-surface-400 font-medium">Free</th>
-                      <th className="py-3 px-4 text-center text-surface-400 font-medium">Pro</th>
-                      <th className="py-3 px-4 text-center text-surface-400 font-medium">Elite</th>
+                    <tr className="border-b border-sep">
+                      <th className="py-3 px-4 text-left text-ink-2 font-medium">Feature</th>
+                      <th className="py-3 px-4 text-center text-ink-2 font-medium">Free</th>
+                      <th className="py-3 px-4 text-center text-ink-2 font-medium">Pro</th>
+                      <th className="py-3 px-4 text-center text-ink-2 font-medium">Elite</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -172,7 +172,7 @@ export default function PublicPricingPage() {
           {/* FAQ */}
           <Card>
             <CardContent className="p-6">
-              <h2 className="text-xl font-bold text-surface-100 mb-6 text-center">Frequently Asked Questions</h2>
+              <h2 className="text-xl font-bold text-ink mb-6 text-center">Frequently Asked Questions</h2>
 
               <div className="space-y-4 max-w-2xl mx-auto">
                 <FaqItem
@@ -199,11 +199,11 @@ export default function PublicPricingPage() {
             </CardContent>
           </Card>
 
-          <div className="text-center text-surface-400 text-sm space-y-2">
+          <div className="text-center text-ink-2 text-sm space-y-2">
             <p>30-day money-back guarantee. No questions asked.</p>
             <p>
               Already have an account?{' '}
-              <Link href="/login" className="text-primary-400 hover:underline">
+              <Link href="/login" className="text-action hover:underline">
                 Log in
               </Link>
             </p>
@@ -237,7 +237,7 @@ function PricingCard({
   isPopular?: boolean;
 }) {
   return (
-    <Card className={`relative ${isPopular ? 'border-primary-500/50 shadow-lg shadow-primary-500/10' : ''}`}>
+    <Card className={`relative ${isPopular ? 'border-action/50 shadow-lg shadow-action/10' : ''}`}>
       {isPopular && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <Badge variant="info" size="sm">Most Popular</Badge>
@@ -245,23 +245,23 @@ function PricingCard({
       )}
       <CardContent className="p-6 space-y-6">
         <div>
-          <h3 className="text-xl font-bold text-surface-100">{name}</h3>
-          <p className="text-sm text-surface-400 mt-1">{description}</p>
+          <h3 className="text-xl font-bold text-ink">{name}</h3>
+          <p className="text-sm text-ink-2 mt-1">{description}</p>
         </div>
 
         <div>
           <div className="flex items-baseline gap-1">
-            <span className="text-4xl font-bold text-surface-100">{price}</span>
+            <span className="text-4xl font-bold text-ink">{price}</span>
           </div>
-          <p className="text-sm text-surface-400 mt-1">{period}</p>
+          <p className="text-sm text-ink-2 mt-1">{period}</p>
         </div>
 
         <Link
           href={ctaHref}
           className={`block w-full text-center px-4 py-2.5 rounded-lg font-medium transition-colors ${
             isPopular
-              ? 'bg-primary-500 hover:bg-primary-600 text-white'
-              : 'bg-surface-700 hover:bg-surface-600 text-surface-100'
+              ? 'bg-action hover:bg-action text-on-action'
+              : 'bg-sep hover:bg-sep text-ink'
           }`}
         >
           {cta}
@@ -269,19 +269,19 @@ function PricingCard({
 
         {/* Accurate billing disclosure for paid tiers */}
         {tier !== 'free' && (
-          <p className="text-xs text-surface-500 text-center leading-relaxed">
+          <p className="text-xs text-ink-3 text-center leading-relaxed">
             Sign up for 14-day Elite trial. Free plan after trial—upgrade anytime for {price}/{period === 'per year' ? 'year' : 'month'}.
           </p>
         )}
 
-        <div className="pt-4 border-t border-surface-800">
+        <div className="pt-4 border-t border-sep">
           <ul className="space-y-3">
             {features.map((feature, i) => (
               <li key={i} className="flex items-start gap-2 text-sm">
-                <svg className="w-5 h-5 text-success-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-status-ok flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-surface-300">{feature}</span>
+                <span className="text-ink-2">{feature}</span>
               </li>
             ))}
           </ul>
@@ -304,25 +304,25 @@ function FeatureRow({
 }) {
   const renderValue = (value: boolean | string) => {
     if (typeof value === 'string') {
-      return <span className="text-surface-300">{value}</span>;
+      return <span className="text-ink-2">{value}</span>;
     }
     if (value) {
       return (
-        <svg className="w-5 h-5 text-success-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-5 h-5 text-status-ok mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       );
     }
     return (
-      <svg className="w-5 h-5 text-surface-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="w-5 h-5 text-ink-3 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
       </svg>
     );
   };
 
   return (
-    <tr className="border-b border-surface-800">
-      <td className="py-3 px-4 text-surface-300">{feature}</td>
+    <tr className="border-b border-sep">
+      <td className="py-3 px-4 text-ink-2">{feature}</td>
       <td className="py-3 px-4 text-center">{renderValue(free)}</td>
       <td className="py-3 px-4 text-center">{renderValue(pro)}</td>
       <td className="py-3 px-4 text-center">{renderValue(elite)}</td>
@@ -332,9 +332,9 @@ function FeatureRow({
 
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   return (
-    <div className="p-4 bg-surface-800/50 rounded-lg">
-      <h3 className="font-medium text-surface-200 mb-2">{question}</h3>
-      <p className="text-sm text-surface-400">{answer}</p>
+    <div className="p-4 bg-fill/50 rounded-lg">
+      <h3 className="font-medium text-ink mb-2">{question}</h3>
+      <p className="text-sm text-ink-2">{answer}</p>
     </div>
   );
 }

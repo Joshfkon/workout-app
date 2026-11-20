@@ -88,8 +88,8 @@ export function TrainingScheduleSelector({
               aria-pressed={isActive}
               className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                 isActive
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                  ? 'bg-action text-on-action'
+                  : 'bg-fill text-ink-2 hover:bg-sep'
               }`}
             >
               {option.label}
@@ -108,7 +108,7 @@ export function TrainingScheduleSelector({
       ) : (
         <div className="space-y-4">
           <div>
-            <p className="text-xs text-surface-500 mb-2">
+            <p className="text-xs text-ink-3 mb-2">
               Train on a rolling cadence instead of fixed weekdays. Your training days move
               through the week, so weekends are in the rotation like any other day.
             </p>
@@ -123,8 +123,8 @@ export function TrainingScheduleSelector({
                     aria-pressed={isActive}
                     className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                       isActive
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                        ? 'bg-action text-on-action'
+                        : 'bg-fill text-ink-2 hover:bg-sep'
                     }`}
                   >
                     {intervalLabel(option)}
@@ -134,15 +134,15 @@ export function TrainingScheduleSelector({
             </div>
           </div>
 
-          <div className="p-3 bg-surface-800/50 rounded-lg space-y-2">
-            <p className="text-xs text-surface-500">
+          <div className="p-3 bg-fill/50 rounded-lg space-y-2">
+            <p className="text-xs text-ink-3">
               Your workout schedule: {intervalLabel(intervalDays).toLowerCase()}, starting{' '}
               {previewDates[0]
                 ? previewDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                 : anchorDate}
             </p>
             {previewDates.length > 0 && (
-              <p className="text-sm text-surface-200 font-medium">
+              <p className="text-sm text-ink font-medium">
                 {previewDates
                   // Composed rather than a single toLocaleDateString call:
                   // the {weekday, day} combination renders as "3 Mon" in some
@@ -155,7 +155,7 @@ export function TrainingScheduleSelector({
                 {' → …'}
               </p>
             )}
-            <p className="text-xs text-surface-500">
+            <p className="text-xs text-ink-3">
               ~{sessionsPerWeekLabel} sessions/week. Volume and progression are planned at{' '}
               {plannedDaysPerWeek} sessions/week, the nearest whole number.
             </p>

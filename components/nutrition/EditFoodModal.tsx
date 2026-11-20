@@ -201,15 +201,15 @@ export function EditFoodModal({
     >
       <div
         ref={scrollContainerRef}
-        className="bg-surface-900 border border-surface-700 rounded-xl max-w-md w-full overflow-y-auto shadow-xl"
+        className="bg-card rounded-card max-w-md w-full overflow-y-auto shadow-xl"
         style={{ maxHeight: `min(90vh, calc(100vh - 2rem - ${keyboardInset}px))` }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-surface-800">
-          <h2 className="text-lg font-semibold text-surface-100">Edit Food</h2>
+        <div className="flex items-center justify-between p-4 border-b border-sep">
+          <h2 className="text-lg font-semibold text-ink">Edit Food</h2>
           <button
             onClick={onClose}
-            className="text-surface-400 hover:text-surface-200 text-2xl leading-none"
+            className="text-ink-2 hover:text-ink text-2xl leading-none"
           >
             ×
           </button>
@@ -218,13 +218,13 @@ export function EditFoodModal({
         {/* Content */}
         <div className="p-4 space-y-5">
           {/* Food Info */}
-          <div className="p-4 bg-surface-800/50 rounded-lg">
-            <h3 className="font-medium text-surface-100 text-lg">{entry.food_name}</h3>
-            <p className="text-sm text-surface-400 mt-1">
+          <div className="p-4 bg-fill/50 rounded-lg">
+            <h3 className="font-medium text-ink text-lg">{entry.food_name}</h3>
+            <p className="text-sm text-ink-2 mt-1">
               {entry.serving_size || '1 serving'}
             </p>
             <div className="flex items-center justify-between gap-2 mt-2">
-              <p className="text-xs text-surface-500" data-testid="edit-food-per-serving">
+              <p className="text-xs text-ink-3" data-testid="edit-food-per-serving">
                 Per serving: {Math.round(baseNutrition.calories)} cal ·
                 P: {Math.round(baseNutrition.protein)}g ·
                 C: {Math.round(baseNutrition.carbs)}g ·
@@ -236,8 +236,8 @@ export function EditFoodModal({
                 aria-expanded={showNutritionEditor}
                 className={`p-1.5 rounded-md flex-shrink-0 transition-colors ${
                   showNutritionEditor
-                    ? 'bg-primary-500/20 text-primary-400'
-                    : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700'
+                    ? 'bg-action/20 text-action'
+                    : 'text-ink-2 hover:text-ink hover:bg-sep'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -246,7 +246,7 @@ export function EditFoodModal({
               </button>
             </div>
             {macrosMismatchCalories && (
-              <p className="text-[11px] text-warning-400/80 mt-1.5">
+              <p className="text-[11px] text-status-warn/80 mt-1.5">
                 Heads up: these macros don&apos;t quite match the calories.
               </p>
             )}
@@ -256,13 +256,13 @@ export function EditFoodModal({
           {looksIncomplete && !showNutritionEditor && (
             <button
               onClick={() => setShowNutritionEditor(true)}
-              className="w-full p-3 bg-warning-500/10 border border-warning-500/30 rounded-lg text-left hover:bg-warning-500/15 transition-colors"
+              className="w-full p-3 bg-status-warn/10 border border-status-warn/30 rounded-lg text-left hover:bg-status-warn/15 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 text-status-warn flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <p className="text-sm text-warning-400">
+                <p className="text-sm text-status-warn">
                   This entry looks incomplete — tap to edit nutrition.
                 </p>
               </div>
@@ -271,9 +271,9 @@ export function EditFoodModal({
 
           {/* Per-serving nutrition editor */}
           {showNutritionEditor && (
-            <div className="p-4 bg-surface-800/50 border border-surface-700 rounded-lg space-y-3">
-              <p className="text-sm font-medium text-surface-300">
-                Edit nutrition <span className="text-surface-500 font-normal">(per serving)</span>
+            <div className="p-4 bg-fill/50 border border-sep rounded-lg space-y-3">
+              <p className="text-sm font-medium text-ink-2">
+                Edit nutrition <span className="text-ink-3 font-normal">(per serving)</span>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {([
@@ -283,7 +283,7 @@ export function EditFoodModal({
                   { key: 'fat', label: 'Fat (g)', step: '0.1' },
                 ] as const).map(({ key, label, step }) => (
                   <div key={key}>
-                    <label className="block text-xs text-surface-500 mb-1">{label}</label>
+                    <label className="block text-xs text-ink-3 mb-1">{label}</label>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -294,12 +294,12 @@ export function EditFoodModal({
                         setMacrosDirty(true);
                         setEditedMacros((prev) => ({ ...prev, [key]: e.target.value }));
                       }}
-                      className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                     />
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-surface-500">
+              <p className="text-[10px] text-ink-3">
                 Corrections are saved to this food, so future logs use the updated values.
               </p>
             </div>
@@ -307,7 +307,7 @@ export function EditFoodModal({
 
           {/* Shared AMOUNT + UNIT editor — identical to the add sheet */}
           <div>
-            <label className="block text-sm font-medium text-surface-300 mb-2">
+            <label className="block text-sm font-medium text-ink-2 mb-2">
               How much did you have?
             </label>
             <ServingAmountEditor
@@ -321,40 +321,40 @@ export function EditFoodModal({
           </div>
 
           {/* Updated Nutrition */}
-          <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-            <p className="text-sm font-medium text-primary-400 mb-3">Updated Nutrition</p>
+          <div className="p-4 bg-action/10 border border-action/20 rounded-lg">
+            <p className="text-sm font-medium text-action mb-3">Updated Nutrition</p>
             <div className="grid grid-cols-4 gap-3 text-center">
               <div>
-                <div className="text-2xl font-bold text-surface-100" data-testid="edit-food-calories">{result.macros.calories}</div>
-                <div className="text-xs text-surface-400">Calories</div>
+                <div className="text-2xl font-bold text-ink" data-testid="edit-food-calories">{result.macros.calories}</div>
+                <div className="text-xs text-ink-2">Calories</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-accent-400">{result.macros.protein}g</div>
-                <div className="text-xs text-surface-400">Protein</div>
+                <div className="text-xl font-bold text-action">{result.macros.protein}g</div>
+                <div className="text-xs text-ink-2">Protein</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-warning-400">{result.macros.carbs}g</div>
-                <div className="text-xs text-surface-400">Carbs</div>
+                <div className="text-xl font-bold text-status-warn">{result.macros.carbs}g</div>
+                <div className="text-xs text-ink-2">Carbs</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-danger-400">{result.macros.fat}g</div>
-                <div className="text-xs text-surface-400">Fat</div>
+                <div className="text-xl font-bold text-status-bad">{result.macros.fat}g</div>
+                <div className="text-xs text-ink-2">Fat</div>
               </div>
             </div>
           </div>
 
           {error && (
-            <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-sm">
+            <div className="p-3 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-sm">
               {error}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-surface-800">
+        <div className="flex items-center justify-between p-4 border-t border-sep">
           <button
             onClick={handleDelete}
-            className="text-danger-400 hover:text-danger-300 text-sm flex items-center gap-1"
+            className="text-status-bad hover:text-status-bad text-sm flex items-center gap-1"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

@@ -19,8 +19,8 @@ import { getJointDisplayName } from '@/services/discomfortTracker';
 const chipBase =
   'px-2.5 py-1.5 rounded-full text-[12px] font-medium border transition-colors whitespace-nowrap';
 const chipIdle =
-  'bg-surface-800 border-surface-700 text-surface-300 active:bg-surface-700';
-const chipSelected = 'bg-primary-500/20 border-primary-500/60 text-primary-300';
+  'bg-fill border-sep text-ink-2 active:bg-sep';
+const chipSelected = 'bg-action/20 border-action/60 text-action';
 
 // ---------------------------------------------------------------------------
 // 1. Soreness (recovery ground truth) — start-of-session, once per muscle
@@ -50,10 +50,10 @@ export function SorenessChipRow({ muscleLabel, answered, onAnswer }: SorenessChi
     const chip = SORENESS_CHIPS.find((c) => c.value === answered);
     return (
       <div
-        className="flex items-center gap-1.5 px-1 py-1 text-[12px] text-surface-400"
+        className="flex items-center gap-1.5 px-1 py-1 text-[12px] text-ink-2"
         data-testid="soreness-answered"
       >
-        <span className="text-success-400">✓</span>
+        <span className="text-status-ok">✓</span>
         <span>
           {muscleLabel}: {chip ? `${chip.emoji} ${chip.label}` : 'recorded'}
         </span>
@@ -63,7 +63,7 @@ export function SorenessChipRow({ muscleLabel, answered, onAnswer }: SorenessChi
 
   return (
     <div className="px-1 py-1.5" data-testid="soreness-chip-row">
-      <div className="text-[12px] text-surface-400 mb-1.5">
+      <div className="text-[12px] text-ink-2 mb-1.5">
         {muscleLabel} since last session:
       </div>
       <div className="flex gap-1.5 overflow-x-auto">
@@ -128,12 +128,12 @@ export function JointPainPicker({ onPick, onCancel }: JointPainPickerProps) {
 
   return (
     <div
-      className="rounded-lg bg-surface-800/70 border border-surface-700 px-2 py-1.5 space-y-1.5"
+      className="rounded-lg bg-fill/70 border border-sep px-2 py-1.5 space-y-1.5"
       data-testid="joint-pain-picker"
     >
       {joint === null ? (
         <div className="flex items-center gap-1.5 overflow-x-auto">
-          <span className="text-[12px] text-surface-400 flex-shrink-0">Joint:</span>
+          <span className="text-[12px] text-ink-2 flex-shrink-0">Joint:</span>
           {JOINT_PAIN_JOINTS.map((j) => (
             <button
               key={j}
@@ -149,7 +149,7 @@ export function JointPainPicker({ onPick, onCancel }: JointPainPickerProps) {
             <button
               type="button"
               onClick={onCancel}
-              className="text-surface-500 text-[12px] px-1.5 flex-shrink-0"
+              className="text-ink-3 text-[12px] px-1.5 flex-shrink-0"
               aria-label="Cancel joint pain"
             >
               ✕
@@ -158,7 +158,7 @@ export function JointPainPicker({ onPick, onCancel }: JointPainPickerProps) {
         </div>
       ) : (
         <div className="flex items-center gap-1.5 overflow-x-auto">
-          <span className="text-[12px] text-surface-400 flex-shrink-0">
+          <span className="text-[12px] text-ink-2 flex-shrink-0">
             {getJointDisplayName(joint)}:
           </span>
           {JOINT_SEVERITY_CHIPS.map((s) => (
@@ -175,7 +175,7 @@ export function JointPainPicker({ onPick, onCancel }: JointPainPickerProps) {
           <button
             type="button"
             onClick={() => setJoint(null)}
-            className="text-surface-500 text-[12px] px-1.5 flex-shrink-0"
+            className="text-ink-3 text-[12px] px-1.5 flex-shrink-0"
             aria-label="Back to joint list"
           >
             ←

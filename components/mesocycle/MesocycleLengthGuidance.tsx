@@ -36,13 +36,13 @@ export function MesocycleLengthGuidance({
 
   return (
     <div
-      className={`p-4 rounded-lg bg-warning-500/10 border border-warning-500/30 ${className}`}
+      className={`p-4 rounded-lg bg-status-warn/10 border border-status-warn/30 ${className}`}
       role="alert"
     >
       <div className="flex items-start gap-3">
         {/* Info icon */}
         <svg
-          className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5"
+          className="w-5 h-5 text-status-warn flex-shrink-0 mt-0.5"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -56,7 +56,7 @@ export function MesocycleLengthGuidance({
         </svg>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-surface-200 leading-relaxed">
+          <p className="text-sm text-ink leading-relaxed">
             {reasoning}
           </p>
 
@@ -65,7 +65,7 @@ export function MesocycleLengthGuidance({
             {onAcceptRecommendation && (
               <button
                 onClick={() => onAcceptRecommendation(suggestedWeeks)}
-                className="text-sm font-medium text-warning-400 hover:text-warning-300 transition-colors"
+                className="text-sm font-medium text-status-warn hover:text-status-warn transition-colors"
               >
                 Adjust to {recommendedRange.min === recommendedRange.max
                   ? `${recommendedRange.min} weeks`
@@ -74,7 +74,7 @@ export function MesocycleLengthGuidance({
             )}
             <button
               onClick={() => setDismissed(true)}
-              className="text-sm text-surface-400 hover:text-surface-300 transition-colors"
+              className="text-sm text-ink-2 hover:text-ink-2 transition-colors"
             >
               Keep {guidance.selectedWeeks} weeks
             </button>

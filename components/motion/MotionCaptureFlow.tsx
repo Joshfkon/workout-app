@@ -398,12 +398,12 @@ export function MotionCaptureFlow({
         aria-label="Stop recording"
       >
         <div
-          className={`w-3 h-3 rounded-full ${recordingLive ? 'bg-danger-500/60 animate-pulse' : 'bg-surface-700'}`}
+          className={`w-3 h-3 rounded-full ${recordingLive ? 'bg-status-bad/60 animate-pulse' : 'bg-sep'}`}
         />
-        <p className="text-surface-700 text-sm">
+        <p className="text-ink-3 text-sm">
           {recordingLive ? 'Recording — auto-stops after 5 s of rest' : 'Armed — start your set'}
         </p>
-        <p className="text-surface-800 text-xs">Tap anywhere to stop</p>
+        <p className="text-ink-3 text-xs">Tap anywhere to stop</p>
       </button>
     );
   }
@@ -433,12 +433,12 @@ export function MotionCaptureFlow({
                 <div
                   className={`p-3 rounded-lg ${
                     persistResult.reps.filter((r) => !r.rejected).length !== analysis.reps.length
-                      ? 'bg-warning-500/10 border border-warning-500/20'
-                      : 'bg-surface-700/50'
+                      ? 'bg-status-warn/10 border border-status-warn/20'
+                      : 'bg-sep/50'
                   }`}
                   data-testid="motion-persist-summary"
                 >
-                  <p className="text-xs text-surface-300">
+                  <p className="text-xs text-ink-2">
                     Save stores the calibrated pipeline&apos;s metrics:{' '}
                     <span className="font-medium">
                       {persistResult.reps.filter((r) => !r.rejected).length} rep
@@ -453,7 +453,7 @@ export function MotionCaptureFlow({
                     .
                   </p>
                   {persistResult.reps.filter((r) => !r.rejected).length !== analysis.reps.length && (
-                    <p className="mt-1 text-xs text-warning-400">
+                    <p className="mt-1 text-xs text-status-warn">
                       This differs from the {analysis.reps.length} rep
                       {analysis.reps.length === 1 ? '' : 's'} displayed above — the calibrated
                       pipeline applies stricter gravity-integrity checks before persisting.
@@ -471,16 +471,16 @@ export function MotionCaptureFlow({
                     onChange={(e) => setAttachSetId(e.target.value)}
                   />
                 ) : (
-                  <div className="p-3 rounded-lg bg-surface-700/50">
-                    <p className="text-xs text-surface-300">
+                  <div className="p-3 rounded-lg bg-sep/50">
+                    <p className="text-xs text-ink-2">
                       No logged sets for this exercise in the active workout. Log the set first,
                       then save the capture — captures always attach to a set.
                     </p>
                   </div>
                 )
               ) : (
-                <div className="p-3 rounded-lg bg-surface-700/50">
-                  <p className="text-xs text-surface-300">
+                <div className="p-3 rounded-lg bg-sep/50">
+                  <p className="text-xs text-ink-2">
                     Quick capture — display only. Export the CSV to keep the data, or select a
                     machine calibration before recording to save captures against a set.
                   </p>
@@ -505,13 +505,13 @@ export function MotionCaptureFlow({
             </>
           ) : (
             <div className="space-y-2">
-              <div className="p-3 rounded-lg bg-success-500/10 border border-success-500/20">
-                <p className="text-sm text-success-400">
+              <div className="p-3 rounded-lg bg-status-ok/10 border border-status-ok/20">
+                <p className="text-sm text-status-ok">
                   {saveState === 'synced'
                     ? 'Capture saved.'
                     : 'Capture queued — it will sync when you’re back online.'}
                 </p>
-                {rawNote && <p className="text-xs text-surface-400 mt-1">{rawNote}</p>}
+                {rawNote && <p className="text-xs text-ink-2 mt-1">{rawNote}</p>}
               </div>
               <Button variant="secondary" onClick={discard} className="w-full">
                 New capture
@@ -520,8 +520,8 @@ export function MotionCaptureFlow({
           )}
 
           {error && (
-            <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-              <p className="text-sm text-danger-400">{error}</p>
+            <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+              <p className="text-sm text-status-bad">{error}</p>
             </div>
           )}
         </CardContent>
@@ -552,7 +552,7 @@ export function MotionCaptureFlow({
           onChange={(e) => setCalibrationId(e.target.value)}
         />
         <div>
-          <p className="text-sm font-medium text-surface-300 mb-1.5">Side</p>
+          <p className="text-sm font-medium text-ink-2 mb-1.5">Side</p>
           <div className="flex gap-2">
             {(['left', 'right'] as CaptureSide[]).map((s) => (
               <Button
@@ -567,7 +567,7 @@ export function MotionCaptureFlow({
             ))}
           </div>
         </div>
-        <p className="text-xs text-surface-500">
+        <p className="text-xs text-ink-3">
           Mount or hold the phone, then arm. The screen goes dark; recording starts when movement
           begins and stops after 5 s of stillness. You&apos;ll review before anything is saved.
         </p>
@@ -575,8 +575,8 @@ export function MotionCaptureFlow({
           ARM
         </Button>
         {error && (
-          <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-            <p className="text-sm text-danger-400">{error}</p>
+          <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+            <p className="text-sm text-status-bad">{error}</p>
           </div>
         )}
       </CardContent>

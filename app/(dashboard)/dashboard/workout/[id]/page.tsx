@@ -70,13 +70,13 @@ const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.
   loading: () => (
     <div className="max-w-lg mx-auto space-y-6 animate-pulse" aria-busy="true">
       <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800" />
-        <div className="h-7 bg-surface-800 rounded w-56 mx-auto" />
-        <div className="h-4 bg-surface-800 rounded w-40 mx-auto mt-2" />
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill" />
+        <div className="h-7 bg-fill rounded w-56 mx-auto" />
+        <div className="h-4 bg-fill rounded w-40 mx-auto mt-2" />
       </div>
-      <div className="h-40 bg-surface-800/60 rounded-xl" />
-      <div className="h-32 bg-surface-800/60 rounded-xl" />
-      <div className="h-32 bg-surface-800/60 rounded-xl" />
+      <div className="h-40 bg-fill/60 rounded-xl" />
+      <div className="h-32 bg-fill/60 rounded-xl" />
+      <div className="h-32 bg-fill/60 rounded-xl" />
     </div>
   ),
 });
@@ -357,15 +357,15 @@ function CancelWorkoutModal({
         className="absolute inset-0 bg-black/60"
         onClick={() => !isCancelling && onKeepGoing()}
       />
-      <div className="relative w-full max-w-sm mx-4 bg-surface-900 rounded-2xl border border-surface-800 overflow-hidden">
+      <div className="relative w-full max-w-sm mx-4 bg-card rounded-card overflow-hidden shadow-card">
         <div className="p-6 text-center">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
-            <svg className="w-7 h-7 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-status-bad/20 flex items-center justify-center">
+            <svg className="w-7 h-7 text-status-bad" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-surface-100 mb-2">Discard Workout?</h3>
-          <p className="text-sm text-surface-400 mb-6">
+          <h3 className="text-lg font-semibold text-ink mb-2">Discard Workout?</h3>
+          <p className="text-sm text-ink-2 mb-6">
             {totalCompletedSets > 0
               ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Discarding will delete all progress and can't be undone.`
               : 'This will remove the workout session. You can start fresh later.'}
@@ -6637,13 +6637,13 @@ export default function WorkoutPage() {
         <div className="animate-pulse py-4">
           <div className="flex items-center justify-between">
             <div className="space-y-2">
-              <div className="h-7 bg-surface-800 rounded w-40" />
-              <div className="h-4 bg-surface-800 rounded w-28" />
+              <div className="h-7 bg-fill rounded w-40" />
+              <div className="h-4 bg-fill rounded w-28" />
             </div>
-            <div className="h-11 w-24 bg-surface-800 rounded-lg" />
+            <div className="h-11 w-24 bg-fill rounded-lg" />
           </div>
         </div>
-        <p className="text-sm text-surface-500">
+        <p className="text-sm text-ink-3">
           {fromCreate ? 'Starting workout…' : 'Loading workout…'}
         </p>
         <SkeletonExercise />
@@ -6656,13 +6656,13 @@ export default function WorkoutPage() {
     return (
       <div className="max-w-lg mx-auto py-8">
         <Card className="text-center py-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-status-bad/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-status-bad" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
-          <p className="text-lg font-medium text-surface-200">Error Loading Workout</p>
-          <p className="text-surface-500 mt-1">{error}</p>
+          <p className="text-lg font-medium text-ink">Error Loading Workout</p>
+          <p className="text-ink-3 mt-1">{error}</p>
           <Button className="mt-4" onClick={() => router.push('/dashboard/workout')}>
             Go Back
           </Button>
@@ -6780,35 +6780,35 @@ export default function WorkoutPage() {
     return (
       <div className="max-w-2xl mx-auto flex flex-col min-h-[calc(100vh-9rem)] pb-8">
         {/* Header: back chevron + title/timer on the left, Finish on the right */}
-        <div className="sticky top-0 z-10 bg-surface-950 py-4 -mx-4 px-4">
+        <div className="sticky top-0 z-10 bg-canvas py-4 -mx-4 px-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-1 min-w-0">
               <button
                 onClick={() => router.push('/dashboard/log')}
                 aria-label="Minimize workout"
                 title="Minimize workout"
-                className="w-11 h-11 -ml-2 flex-shrink-0 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+                className="w-11 h-11 -ml-2 flex-shrink-0 flex items-center justify-center rounded-lg text-ink-2 hover:bg-fill hover:text-ink transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
               <div className="min-w-0">
-                <h1 className="text-3xl font-bold text-surface-100">Workout</h1>
-                <div className="flex items-center gap-1.5 text-surface-400 mt-0.5">
+                <h1 className="text-3xl font-bold text-ink">Workout</h1>
+                <div className="flex items-center gap-1.5 text-ink-2 mt-0.5">
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <circle cx="12" cy="12" r="9" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" />
                   </svg>
                   <span className="tabular-nums">{workoutTimer.formattedTime}</span>
-                  <span className="text-surface-600">·</span>
+                  <span className="text-ink-3">·</span>
                   <span className="truncate">Building a plan</span>
                 </div>
               </div>
             </div>
             <button
               onClick={handleWorkoutComplete}
-              className="flex-shrink-0 px-6 py-3 rounded-2xl bg-surface-800 text-surface-400 text-lg font-semibold hover:bg-surface-700 hover:text-surface-300 transition-colors"
+              className="flex-shrink-0 px-6 py-3 rounded-2xl bg-fill text-ink-2 text-lg font-semibold hover:bg-sep hover:text-ink-2 transition-colors"
             >
               Finish
             </button>
@@ -6844,7 +6844,7 @@ export default function WorkoutPage() {
               <button
                 onClick={handleCopyLastWorkout}
                 disabled={isAddingExercise || isCopyingLastWorkout}
-                className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
+                className="mt-10 mx-auto flex items-center gap-2 text-ink-2 hover:text-ink font-medium disabled:opacity-50 transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -6858,7 +6858,7 @@ export default function WorkoutPage() {
         {/* Destructive escape hatch pinned to the bottom */}
         <button
           onClick={() => setShowCancelModal(true)}
-          className="mt-auto pt-16 mx-auto text-danger-500 hover:text-danger-400 font-medium transition-colors"
+          className="mt-auto pt-16 mx-auto text-status-bad hover:text-status-bad font-medium transition-colors"
         >
           Discard workout
         </button>
@@ -7044,7 +7044,7 @@ export default function WorkoutPage() {
     items.push({
       key: 'info',
       label: 'Exercise info',
-      icon: <IconInfoCircle size={16} className="text-surface-400" stroke={2} />,
+      icon: <IconInfoCircle size={16} className="text-ink-2" stroke={2} />,
       onSelect: () => setSelectedExerciseForDetails(block.exercise),
     });
 
@@ -7089,7 +7089,7 @@ export default function WorkoutPage() {
       key: 'swap',
       label: 'Swap exercise',
       icon: (
-        <svg className="h-4 w-4 text-warning-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="h-4 w-4 text-status-warn" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
       ),
@@ -7119,8 +7119,8 @@ export default function WorkoutPage() {
             size={16}
             className={
               hasLocationOverride(override, sessionLocationId)
-                ? 'text-primary-400'
-                : 'text-surface-400'
+                ? 'text-action'
+                : 'text-ink-2'
             }
             stroke={2}
           />
@@ -7133,7 +7133,7 @@ export default function WorkoutPage() {
       key: 'plates',
       label: 'Plate calculator',
       icon: (
-        <svg className="h-4 w-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="h-4 w-4 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
         </svg>
       ),
@@ -7226,7 +7226,7 @@ export default function WorkoutPage() {
       {/* Offline banner (P0-2): honest state — nothing is lost, writes queue */}
       {!isOnline && (
         <div
-          className="flex items-center gap-2.5 rounded-xl border border-warning-500/45 bg-warning-500/10 px-4 py-2.5 text-[13px] text-warning-400"
+          className="flex items-center gap-2.5 rounded-xl border border-status-warn/45 bg-status-warn/10 px-4 py-2.5 text-[13px] text-status-warn"
           role="status"
         >
           <span aria-hidden="true">⚠</span>
@@ -7242,7 +7242,7 @@ export default function WorkoutPage() {
           so instead of showing them as saved. */}
       {failedSyncCount > 0 && (
         <div
-          className="flex items-center gap-2.5 rounded-xl border border-danger-500/45 bg-danger-500/10 px-4 py-2.5 text-[13px] text-danger-400"
+          className="flex items-center gap-2.5 rounded-xl border border-status-bad/45 bg-status-bad/10 px-4 py-2.5 text-[13px] text-status-bad"
           role="alert"
           data-testid="sync-failed-banner"
         >
@@ -7255,7 +7255,7 @@ export default function WorkoutPage() {
           <button
             type="button"
             onClick={retryFailedSync}
-            className="flex-shrink-0 rounded-lg border border-danger-500/45 px-2.5 py-1 font-medium"
+            className="flex-shrink-0 rounded-lg border border-status-bad/45 px-2.5 py-1 font-medium"
           >
             Retry
           </button>
@@ -7285,12 +7285,12 @@ export default function WorkoutPage() {
       {/* Auto-adjust message */}
       {autoAdjustMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
-          <div className="bg-primary-50 dark:bg-primary-500/20 backdrop-blur-sm border border-primary-200 dark:border-primary-500/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
-            <span className="text-primary-600 dark:text-primary-400 text-lg">🔄</span>
-            <p className="text-sm text-primary-800 dark:text-primary-200 flex-1">{autoAdjustMessage}</p>
+          <div className="bg-action-tint dark:bg-action/20 backdrop-blur-sm border border-action/40 dark:border-action/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
+            <span className="text-action dark:text-action text-lg">🔄</span>
+            <p className="text-sm text-on-action dark:text-action flex-1">{autoAdjustMessage}</p>
             <button
               onClick={() => setAutoAdjustMessage(null)}
-              className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200"
+              className="text-action hover:text-on-action dark:text-action dark:hover:text-action"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -7395,13 +7395,13 @@ export default function WorkoutPage() {
         <InlineHint id="first-workout-intro">
           <div>
             <p className="font-medium mb-2">Welcome to your first workout!</p>
-            <ul className="space-y-1 text-sm text-primary-800 dark:text-primary-200">
+            <ul className="space-y-1 text-sm text-on-action dark:text-action">
               <li>• <strong>Log each set</strong> - Enter weight and reps after completing a set</li>
               <li>• <strong>Rate difficulty</strong> - tell us how many more reps you could have done</li>
               <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
               <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
             </ul>
-            <p className="text-xs text-primary-700 dark:text-primary-300 mt-2">
+            <p className="text-xs text-action dark:text-action mt-2">
               We&apos;ll learn your patterns and personalize recommendations as you train!
             </p>
           </div>
@@ -7410,16 +7410,16 @@ export default function WorkoutPage() {
 
       {/* Error alert */}
       {error && (
-        <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg flex items-center gap-2">
-          <svg className="w-5 h-5 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="p-3 bg-status-bad/10 border border-status-bad/30 rounded-lg flex items-center gap-2">
+          <svg className="w-5 h-5 text-status-bad flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="text-sm text-danger-300">{error}</span>
+          <span className="text-sm text-status-bad">{error}</span>
           <button 
             onClick={() => setError(null)} 
-            className="ml-auto p-1 hover:bg-danger-500/20 rounded"
+            className="ml-auto p-1 hover:bg-status-bad/20 rounded"
           >
-            <svg className="w-4 h-4 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-status-bad" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -7428,7 +7428,7 @@ export default function WorkoutPage() {
 
       {/* Coach Message - only show if AI coach notes are enabled */}
       {coachMessage && aiCoachNotesEnabled && (
-        <Card className="overflow-hidden border-primary-500/20 bg-gradient-to-br from-primary-500/5 to-surface-900">
+        <Card className="overflow-hidden border-action/20 bg-action/5 ">
           <button
             onClick={() => setShowCoachMessage(!showCoachMessage)}
             className="w-full p-4 flex items-center gap-3 text-left"
@@ -7437,13 +7437,13 @@ export default function WorkoutPage() {
               <span className="text-lg">🏋️</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-surface-100">Coach&apos;s Notes</p>
-              <p className="text-sm text-surface-400 truncate">
+              <p className="font-semibold text-ink">Coach&apos;s Notes</p>
+              <p className="text-sm text-ink-2 truncate">
                 {showCoachMessage ? 'Tap to collapse' : coachMessage.greeting}
               </p>
             </div>
             <svg 
-              className={`w-5 h-5 text-surface-400 transition-transform ${showCoachMessage ? 'rotate-180' : ''}`} 
+              className={`w-5 h-5 text-ink-2 transition-transform ${showCoachMessage ? 'rotate-180' : ''}`} 
               fill="none" 
               viewBox="0 0 24 24" 
               stroke="currentColor"
@@ -7456,32 +7456,32 @@ export default function WorkoutPage() {
             <div className="px-4 pb-4 space-y-4">
               {/* Greeting & Overview */}
               <div className="pl-13 space-y-2">
-                <p className="text-surface-200 font-medium">{coachMessage.greeting}</p>
-                <p className="text-sm text-surface-400">{coachMessage.overview}</p>
+                <p className="text-ink font-medium">{coachMessage.greeting}</p>
+                <p className="text-sm text-ink-2">{coachMessage.overview}</p>
               </div>
 
               {/* AI-Powered Coach Notes - only show if enabled */}
               {aiCoachNotesEnabled && (
                 <>
                   {isLoadingAiNotes ? (
-                    <div className="ml-13 p-3 rounded-lg bg-surface-800 border border-surface-700">
+                    <div className="ml-13 p-3 rounded-lg bg-fill border border-sep">
                       <div className="flex items-center gap-3">
                         <LoadingAnimation type="dots" size="sm" />
-                        <p className="text-sm text-surface-400">Your coach is reviewing your session...</p>
+                        <p className="text-sm text-ink-2">Your coach is reviewing your session...</p>
                       </div>
                     </div>
                   ) : aiCoachNotes ? (
-                    <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                    <div className="ml-13 p-3 rounded-lg bg-action/10 border border-action/20">
                       <div className="flex items-start gap-2">
-                        <span className="text-primary-400 text-lg mt-0.5">💬</span>
-                        <p className="text-sm text-primary-300 leading-relaxed">
+                        <span className="text-action text-lg mt-0.5">💬</span>
+                        <p className="text-sm text-action leading-relaxed">
                           {aiCoachNotes}
                         </p>
                       </div>
                     </div>
                   ) : coachMessage.personalizedInsight && (
-                    <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
-                      <p className="text-sm text-primary-300">
+                    <div className="ml-13 p-3 rounded-lg bg-action/10 border border-action/20">
+                      <p className="text-sm text-action">
                         {coachMessage.personalizedInsight}
                       </p>
                     </div>
@@ -7491,13 +7491,13 @@ export default function WorkoutPage() {
 
               {/* Tips */}
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider pl-13">
+                <p className="text-xs font-semibold text-ink-3 uppercase tracking-wider pl-13">
                   Pro Tips
                 </p>
                 <div className="pl-13 space-y-1">
                   {coachMessage.tips.map((tip, idx) => (
-                    <p key={idx} className="text-xs text-surface-400 flex gap-2">
-                      <span className="text-primary-400">•</span>
+                    <p key={idx} className="text-xs text-ink-2 flex gap-2">
+                      <span className="text-action">•</span>
                       {tip}
                     </p>
                   ))}
@@ -7622,10 +7622,10 @@ export default function WorkoutPage() {
                 <div
                   className={`flex items-center gap-2 rounded-lg px-2 py-0.5 transition-colors cursor-pointer ${
                     isCurrent
-                      ? 'bg-surface-800/60 ring-1 ring-primary-500/50'
+                      ? 'bg-fill/60 ring-1 ring-action/50'
                       : isComplete
-                        ? 'bg-success-500/5 hover:bg-surface-800/50'
-                        : 'bg-surface-800/40 hover:bg-surface-800/60'
+                        ? 'bg-status-ok/5 hover:bg-fill/50'
+                        : 'bg-fill/40 hover:bg-fill/60'
                   }`}
                   onClick={(e) => {
                     // Tap anywhere non-interactive: activate + expand (same as
@@ -7643,7 +7643,7 @@ export default function WorkoutPage() {
                   <div
                     data-drag-handle
                     aria-label="Hold to reorder exercise"
-                    className="-my-1.5 -ml-2 flex min-h-[44px] min-w-[40px] flex-shrink-0 cursor-grab touch-none items-center justify-center text-surface-500 active:cursor-grabbing"
+                    className="-my-1.5 -ml-2 flex min-h-[44px] min-w-[40px] flex-shrink-0 cursor-grab touch-none items-center justify-center text-ink-3 active:cursor-grabbing"
                     onTouchStart={(e) => {
                       e.stopPropagation();
                       handleBlockLongPressStart(index, e.touches[0].clientY);
@@ -7683,22 +7683,22 @@ export default function WorkoutPage() {
                     data-testid="position-badge"
                     className={`flex-shrink-0 rounded-md px-1.5 py-1 text-[11px] font-bold leading-none transition-colors ${
                       isComplete
-                        ? 'bg-success-500/20 text-success-400'
+                        ? 'bg-status-ok/20 text-status-ok'
                         : isCurrent
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-400'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2'
                     }`}
                   >
                     {positionLabel}
                   </span>
                   <span
                     className={`min-w-0 flex-1 truncate text-sm font-medium ${
-                      isCurrent ? 'text-surface-100' : 'text-surface-300'
+                      isCurrent ? 'text-ink' : 'text-ink-2'
                     }`}
                   >
                     {block.exercise.name}
                   </span>
-                  <span className="flex-shrink-0 text-[11px] text-surface-500">
+                  <span className="flex-shrink-0 text-[11px] text-ink-3">
                     {blockSets.length}/{block.targetSets} · {formatMuscleName(block.exercise.primaryMuscle)}
                   </span>
                   {/* Row overflow menu — same items as the expanded card's ⋮
@@ -7718,7 +7718,7 @@ export default function WorkoutPage() {
                       e.stopPropagation();
                       revealBlock(block.id);
                     }}
-                    className="-my-1.5 -ml-1 -mr-2 flex min-h-[44px] min-w-[40px] flex-shrink-0 items-center justify-center text-surface-400 hover:text-surface-200 transition-colors"
+                    className="-my-1.5 -ml-1 -mr-2 flex min-h-[44px] min-w-[40px] flex-shrink-0 items-center justify-center text-ink-2 hover:text-ink transition-colors"
                     aria-label="Expand exercise"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -7777,7 +7777,7 @@ export default function WorkoutPage() {
                       const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
                       return injuryRisk.isRisky && isCurrent ? (
                         <div className={`mb-2 text-xs ${
-                          injuryRisk.severity === 3 ? 'text-danger-400' : 'text-warning-400'
+                          injuryRisk.severity === 3 ? 'text-status-bad' : 'text-status-warn'
                         }`}>
                           ⚠️ {injuryRisk.reasons[0]}
                           <button
@@ -7985,18 +7985,18 @@ export default function WorkoutPage() {
 
                   {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
                   {amrapSuggestion && amrapSuggestion.blockId === block.id && (
-                    <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
+                    <Card className="p-4 bg-action/20 border-action/30">
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 mt-0.5">
-                          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
-                            <span className="text-primary-400 text-lg">🎯</span>
+                          <div className="w-8 h-8 rounded-full bg-action/20 flex items-center justify-center">
+                            <span className="text-action text-lg">🎯</span>
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-surface-100 mb-1">
+                          <h3 className="text-sm font-semibold text-ink mb-1">
                             AMRAP Set Suggestion
                           </h3>
-                          <p className="text-xs text-surface-300 mb-3">
+                          <p className="text-xs text-ink-2 mb-3">
                             This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>.
                             Push to failure (RPE 9.5+) to calibrate your RPE perception.
                             This helps us adjust your future RIR prescriptions.
@@ -8063,7 +8063,7 @@ export default function WorkoutPage() {
         {/* Up next - compact rows for exercises not started yet */}
         {upNextEntries.length > 0 && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-surface-500">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
               Up next
             </p>
             {upNextEntries.map(({ block, index }) => {
@@ -8075,20 +8075,20 @@ export default function WorkoutPage() {
               if (isSkipped) {
                 return (
                   <SwipeableRow key={block.id} onDelete={() => handleExerciseDelete(block.id)}>
-                  <div className="flex items-center gap-3 bg-surface-800/30 rounded-lg px-3 py-2.5 opacity-60">
-                    <span className="text-[13px] text-surface-400 line-through truncate flex-1">
+                  <div className="flex items-center gap-3 bg-fill/30 rounded-lg px-3 py-2.5 opacity-60">
+                    <span className="text-[13px] text-ink-2 line-through truncate flex-1">
                       {block.exercise.name}
                     </span>
-                    <span className="text-[11px] text-surface-500 flex-shrink-0">Skipped today</span>
+                    <span className="text-[11px] text-ink-3 flex-shrink-0">Skipped today</span>
                     <button
                       onClick={() => handleUnskipBlock(block.id)}
-                      className="text-[11px] font-medium text-primary-400 hover:text-primary-300 transition-colors flex-shrink-0"
+                      className="text-[11px] font-medium text-action transition-colors flex-shrink-0"
                     >
                       Undo
                     </button>
                     <button
                       onClick={() => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name })}
-                      className="text-[11px] font-medium text-surface-500 hover:text-danger-400 transition-colors flex-shrink-0"
+                      className="text-[11px] font-medium text-ink-3 hover:text-status-bad transition-colors flex-shrink-0"
                     >
                       Remove
                     </button>
@@ -8111,7 +8111,7 @@ export default function WorkoutPage() {
                 >
                 <SwipeableRow onDelete={() => handleExerciseDelete(block.id)}>
                 <div
-                  className="flex items-center gap-3 bg-surface-800/50 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-surface-800"
+                  className="flex items-center gap-3 bg-fill/50 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-fill"
                   onClick={(e) => {
                     if (isDraggingBlock) return;
                     const target = e.target as HTMLElement;
@@ -8120,22 +8120,22 @@ export default function WorkoutPage() {
                     setCurrentSetNumber(getSetsForBlock(block.id).length + 1);
                   }}
                 >
-                  <span className="text-[13px] text-surface-200 truncate flex-1">
+                  <span className="text-[13px] text-ink truncate flex-1">
                     {block.exercise.name}
                   </span>
-                  <span className="text-[11px] text-surface-500 flex-shrink-0">
+                  <span className="text-[11px] text-ink-3 flex-shrink-0">
                     {block.targetSets} sets · {muscleLabel}
                   </span>
                   <button
                     onClick={() => handleSkipBlock(block.id)}
-                    className="text-[11px] text-surface-500 hover:text-warning-400 transition-colors flex-shrink-0"
+                    className="text-[11px] text-ink-3 hover:text-status-warn transition-colors flex-shrink-0"
                     title="Skip this exercise today"
                   >
                     Skip today
                   </button>
                   <button
                     onClick={() => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name })}
-                    className="text-surface-500 hover:text-danger-400 transition-colors p-1 -m-1 flex-shrink-0"
+                    className="text-ink-3 hover:text-status-bad transition-colors p-1 -m-1 flex-shrink-0"
                     title="Remove from this workout"
                     aria-label={`Remove ${block.exercise.name} from this workout`}
                   >
@@ -8144,7 +8144,7 @@ export default function WorkoutPage() {
                   {/* Drag handle - hold to reorder (wired to the existing block drag state) */}
                   <div
                     data-drag-handle
-                    className="text-surface-500 cursor-grab active:cursor-grabbing p-1.5 -m-1 touch-none flex-shrink-0"
+                    className="text-ink-3 cursor-grab active:cursor-grabbing p-1.5 -m-1 touch-none flex-shrink-0"
                     onTouchStart={(e) => {
                       e.stopPropagation();
                       handleBlockLongPressStart(index, e.touches[0].clientY);
@@ -8188,16 +8188,16 @@ export default function WorkoutPage() {
             width: draggedBlockRect?.width ?? 'auto',
           }}
         >
-          <div className="bg-surface-900 rounded-xl p-3 shadow-2xl shadow-black/50 ring-2 ring-primary-500 scale-[1.02]">
+          <div className="bg-card rounded-card p-3 shadow-2xl shadow-black/50 ring-2 ring-action scale-[1.02]">
             <div className="flex items-center gap-3">
               {/* Drag handle */}
-              <div className="flex flex-col gap-0.5 text-surface-400 p-1">
+              <div className="flex flex-col gap-0.5 text-ink-2 p-1">
                 <div className="w-4 h-0.5 bg-current rounded" />
                 <div className="w-4 h-0.5 bg-current rounded" />
                 <div className="w-4 h-0.5 bg-current rounded" />
               </div>
               {/* Position badge — same "3/8" format as the list rows */}
-              <div className="rounded-md px-1.5 py-1 text-[11px] font-bold leading-none bg-primary-500 text-white flex-shrink-0">
+              <div className="rounded-md px-1.5 py-1 text-[11px] font-bold leading-none bg-action text-on-action flex-shrink-0">
                 {(() => {
                   const pos = activeBlocks.findIndex((b) => b.id === draggedBlock.id);
                   const fallback = blocks.findIndex((b) => b.id === draggedBlock.id);
@@ -8208,10 +8208,10 @@ export default function WorkoutPage() {
               </div>
               {/* Exercise name */}
               <div className="flex-1">
-                <p className="font-medium text-surface-100">
+                <p className="font-medium text-ink">
                   {draggedBlock.exercise?.name}
                 </p>
-                <p className="text-xs text-surface-500">
+                <p className="text-xs text-ink-3">
                   {getSetsForBlock(draggedBlock.id).length}/{draggedBlock.targetSets} sets
                 </p>
               </div>
@@ -8225,7 +8225,7 @@ export default function WorkoutPage() {
           the header. */}
       {blocks.length > 0 && (
       <Card className="text-center py-6 mt-8">
-        <p className={durationEstimate.remainingSets > 0 ? 'text-surface-400' : 'text-surface-400 mb-4'}>
+        <p className={durationEstimate.remainingSets > 0 ? 'text-ink-2' : 'text-ink-2 mb-4'}>
           {blocks.length === 0
             ? 'No exercises yet'
             : overallProgress >= 100
@@ -8235,7 +8235,7 @@ export default function WorkoutPage() {
         {/* The plain-language version of the header pill: what's left, and what
             the whole session comes to. Hidden once there's nothing left to do. */}
         {durationEstimate.remainingSets > 0 && (
-          <p className="text-xs text-surface-500 mt-1 mb-4" data-testid="workout-duration-summary">
+          <p className="text-xs text-ink-3 mt-1 mb-4" data-testid="workout-duration-summary">
             About {formatDurationEstimate(durationEstimate.remainingSeconds)} left ·{' '}
             {durationTotalLabel} total for {durationEstimate.totalSets} sets
           </p>
@@ -8360,19 +8360,19 @@ export default function WorkoutPage() {
           />
           
           {/* Modal */}
-          <div className="relative w-full max-w-lg max-h-[90vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+          <div className="relative w-full max-w-lg max-h-[90vh] bg-card rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col shadow-card">
             {/* Header */}
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
+            <div className="p-4 border-b border-sep flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setShowCustomExercise(false); setCustomSwapBlockId(null); }}
-                  className="p-1 text-surface-400 hover:text-surface-200"
+                  className="p-1 text-ink-2 hover:text-ink"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-                <h2 className="text-lg font-semibold text-surface-100">Create Custom Exercise</h2>
+                <h2 className="text-lg font-semibold text-ink">Create Custom Exercise</h2>
               </div>
             </div>
 
@@ -8449,15 +8449,15 @@ export default function WorkoutPage() {
             onClick={() => setShowInjuryModal(false)}
           />
           
-          <div className="relative w-full max-w-md max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+          <div className="relative w-full max-w-md max-h-[85vh] bg-card rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col shadow-card">
+            <div className="p-4 border-b border-sep flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🤕</span>
-                <h2 className="text-lg font-semibold text-surface-100">Report Pain/Injury</h2>
+                <h2 className="text-lg font-semibold text-ink">Report Pain/Injury</h2>
               </div>
               <button
                 onClick={() => setShowInjuryModal(false)}
-                className="p-2 text-surface-400 hover:text-surface-200"
+                className="p-2 text-ink-2 hover:text-ink"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -8466,14 +8466,14 @@ export default function WorkoutPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <p className="text-sm text-surface-400">
+              <p className="text-sm text-ink-2">
                 Tell us about any pain or discomfort. We&apos;ll suggest exercise swaps to avoid aggravating it.
               </p>
 
               {/* Current injuries */}
               {temporaryInjuries.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-surface-300">Currently reported:</p>
+                  <p className="text-xs font-medium text-ink-2">Currently reported:</p>
                   <div className="flex flex-wrap gap-2">
                     {temporaryInjuries.map(injury => {
                       const areaLabels: Record<string, string> = {
@@ -8492,17 +8492,17 @@ export default function WorkoutPage() {
                           key={injury.area}
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
                             injury.severity === 3 
-                              ? 'bg-danger-500/20 text-danger-400' 
+                              ? 'bg-status-bad/20 text-status-bad' 
                               : injury.severity === 2 
-                                ? 'bg-warning-500/20 text-warning-400'
-                                : 'bg-surface-700 text-surface-300'
+                                ? 'bg-status-warn/20 text-status-warn'
+                                : 'bg-sep text-ink-2'
                           }`}
                         >
                           <span>{areaLabels[injury.area] || injury.area}</span>
                           <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
                           <button
                             onClick={() => setTemporaryInjuries(temporaryInjuries.filter(i => i.area !== injury.area))}
-                            className="ml-1 p-0.5 hover:bg-surface-600 rounded-full"
+                            className="ml-1 p-0.5 hover:bg-sep rounded-full"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -8516,15 +8516,15 @@ export default function WorkoutPage() {
               )}
 
               {/* Add new injury */}
-              <div className="space-y-3 p-4 bg-surface-800/50 rounded-lg">
-                <p className="text-xs font-medium text-surface-300">Add an issue:</p>
+              <div className="space-y-3 p-4 bg-fill/50 rounded-lg">
+                <p className="text-xs font-medium text-ink-2">Add an issue:</p>
                 
                 <div>
-                  <label className="block text-xs text-surface-400 mb-1">Area affected</label>
+                  <label className="block text-xs text-ink-2 mb-1">Area affected</label>
                   <select
                     value={selectedInjuryArea}
                     onChange={(e) => setSelectedInjuryArea(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                    className="w-full px-3 py-2 bg-sep border border-sep rounded-lg text-ink text-sm"
                   >
                     <option value="">Select area...</option>
                     <optgroup label="Back & Core">
@@ -8554,7 +8554,7 @@ export default function WorkoutPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-surface-400 mb-1">Severity</label>
+                  <label className="block text-xs text-ink-2 mb-1">Severity</label>
                   <div className="flex gap-2">
                     {[1, 2, 3].map(level => (
                       <button
@@ -8564,11 +8564,11 @@ export default function WorkoutPage() {
                         className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
                           selectedInjurySeverity === level
                             ? level === 3 
-                              ? 'bg-danger-500 text-white'
+                              ? 'bg-status-bad text-white'
                               : level === 2
-                                ? 'bg-warning-500 text-black'
-                                : 'bg-primary-500 text-white'
-                            : 'bg-surface-700 text-surface-400 hover:bg-surface-600'
+                                ? 'bg-status-warn text-black'
+                                : 'bg-action text-on-action'
+                            : 'bg-sep text-ink-2 hover:bg-sep'
                         }`}
                       >
                         {level === 1 ? 'Mild' : level === 2 ? 'Moderate' : 'Significant'}
@@ -8596,25 +8596,25 @@ export default function WorkoutPage() {
 
               {/* What will happen info */}
               {temporaryInjuries.length > 0 && (
-                <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-                  <p className="text-xs text-primary-400 font-medium mb-1">What happens now?</p>
-                  <p className="text-xs text-surface-400">
+                <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
+                  <p className="text-xs text-action font-medium mb-1">What happens now?</p>
+                  <p className="text-xs text-ink-2">
                     We&apos;ll flag exercises that could aggravate these areas. You can easily swap them for safer alternatives.
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="p-4 border-t border-surface-800 space-y-2">
+            <div className="p-4 border-t border-sep space-y-2">
               {/* Show risky exercises count */}
               {temporaryInjuries.length > 0 && (
-                <div className="text-center text-sm text-surface-400 mb-2">
+                <div className="text-center text-sm text-ink-2 mb-2">
                   {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).isRisky).length > 0 ? (
-                    <span className="text-warning-400">
+                    <span className="text-status-warn">
                       ⚠️ {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).severity >= 2).length} exercise(s) may need swapping
                     </span>
                   ) : (
-                    <span className="text-success-400">✓ All exercises look safe!</span>
+                    <span className="text-status-ok">✓ All exercises look safe!</span>
                   )}
                 </div>
               )}
@@ -8746,18 +8746,18 @@ export default function WorkoutPage() {
               onClick={() => setShowPageLevelSwapModal(false)}
             />
             
-            <div className="relative w-full max-w-lg max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-surface-800">
+            <div className="relative w-full max-w-lg max-h-[85vh] bg-card rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col shadow-card">
+              <div className="p-4 border-b border-sep">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-surface-100">Swap Exercise</h3>
-                    <p className="text-sm text-surface-400">
-                      Replace <span className="text-warning-400 font-medium">{targetBlock.exercise.name}</span>
+                    <h3 className="text-lg font-semibold text-ink">Swap Exercise</h3>
+                    <p className="text-sm text-ink-2">
+                      Replace <span className="text-status-warn font-medium">{targetBlock.exercise.name}</span>
                     </p>
                   </div>
                   <button
                     onClick={() => setShowPageLevelSwapModal(false)}
-                    className="p-2 text-surface-400 hover:text-surface-200"
+                    className="p-2 text-ink-2 hover:text-ink"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -8779,15 +8779,15 @@ export default function WorkoutPage() {
                 {/* Info banner */}
                 <div className={`mb-3 p-3 rounded-lg ${
                   safeAlternatives.length > 0 
-                    ? 'bg-success-500/10 border border-success-500/20' 
-                    : 'bg-warning-500/10 border border-warning-500/20'
+                    ? 'bg-status-ok/10 border border-status-ok/20' 
+                    : 'bg-status-warn/10 border border-status-warn/20'
                 }`}>
                   {safeAlternatives.length > 0 ? (
-                    <p className="text-xs text-success-400">
+                    <p className="text-xs text-status-ok">
                       ✓ <span className="font-medium">{safeAlternatives.filter(a => a.risk.risk === 'safe').length} safe alternative(s)</span> found for {targetBlock.exercise.primaryMuscle}
                     </p>
                   ) : (
-                    <p className="text-xs text-warning-400">
+                    <p className="text-xs text-status-warn">
                       ⚠️ No safe alternatives found. Consider skipping this exercise.
                     </p>
                   )}
@@ -8819,34 +8819,34 @@ export default function WorkoutPage() {
                         setAutoAdjustMessage(`✓ Swapped ${targetBlock.exercise.name} → ${alt.name}`);
                         setTimeout(() => setAutoAdjustMessage(null), 5000);
                       }}
-                      className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
+                      className="w-full p-3 text-left rounded-lg hover:bg-fill transition-colors flex items-center gap-3"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-medium text-surface-100 truncate">{alt.name}</p>
+                          <p className="font-medium text-ink truncate">{alt.name}</p>
                           {risk.risk === 'safe' && temporaryInjuries.length > 0 && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-success-500/20 text-success-400">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-ok/20 text-status-ok">
                               ✓ Safe
                             </span>
                           )}
                           {risk.risk === 'caution' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning-500/20 text-warning-400">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-warn/20 text-status-warn">
                               ⚠️ Caution
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-surface-500 capitalize">
+                        <p className="text-xs text-ink-3 capitalize">
                           {alt.primary_muscle} • {alt.mechanic}
                         </p>
                       </div>
-                      <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-4 h-4 text-ink-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
                   ))}
                   
                   {safeAlternatives.length === 0 && (
-                    <p className="py-8 text-center text-surface-500">
+                    <p className="py-8 text-center text-ink-3">
                       No safe alternatives found for {targetBlock.exercise.primaryMuscle}
                     </p>
                   )}
@@ -8854,7 +8854,7 @@ export default function WorkoutPage() {
               </div>
               
               {/* Skip option */}
-              <div className="p-3 border-t border-surface-800 bg-surface-800/50 space-y-2">
+              <div className="p-3 border-t border-sep bg-fill/50 space-y-2">
                 <button
                   onClick={() => {
                     setCustomSwapBlockId(swapTargetBlockId);
@@ -8862,7 +8862,7 @@ export default function WorkoutPage() {
                     setShowPageLevelSwapModal(false);
                     setShowCustomExercise(true);
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-primary-400 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-sep hover:bg-sep text-action text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -8876,7 +8876,7 @@ export default function WorkoutPage() {
                     setAutoAdjustMessage(`Removed ${targetBlock.exercise.name} from workout`);
                     setTimeout(() => setAutoAdjustMessage(null), 5000);
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-surface-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-sep hover:bg-sep text-ink-2 text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

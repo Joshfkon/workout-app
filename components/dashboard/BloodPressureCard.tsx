@@ -20,10 +20,10 @@ import type { BloodPressureCategory as BPCategory } from '@/services/bloodPressu
 
 /** Category tone -> badge classes on the app's token scale. */
 const TONE_BADGE: Record<BPCategory['tone'], string> = {
-  success: 'bg-success-500/15 text-success-300',
-  primary: 'bg-primary-500/15 text-primary-300',
-  warning: 'bg-warning-500/15 text-warning-300',
-  danger: 'bg-danger-500/15 text-danger-300',
+  success: 'bg-status-ok/15 text-status-ok',
+  primary: 'bg-action/15 text-action',
+  warning: 'bg-status-warn/15 text-status-warn',
+  danger: 'bg-status-bad/15 text-status-bad',
 };
 
 export const BloodPressureCard = memo(function BloodPressureCard() {
@@ -54,11 +54,11 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
       </CardHeader>
       <CardContent>
         {isLoading && !latest ? (
-          <div className="h-16 animate-pulse rounded-lg bg-surface-800" />
+          <div className="h-16 animate-pulse rounded-lg bg-fill" />
         ) : !latest || !latestCategory ? (
           <div className="py-2">
-            <p className="text-sm text-surface-400">No readings yet.</p>
-            <p className="text-xs text-surface-500 mt-1">
+            <p className="text-sm text-ink-2">No readings yet.</p>
+            <p className="text-xs text-ink-3 mt-1">
               Log your first reading to start tracking your trend.
             </p>
           </div>
@@ -69,14 +69,14 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
               <div>
                 <div className="flex items-baseline gap-2">
                   <span
-                    className="text-3xl font-bold text-surface-100 tabular-nums"
+                    className="text-3xl font-bold text-ink tabular-nums"
                     data-testid="bp-latest-reading"
                   >
                     {formatReading(latest.systolic, latest.diastolic)}
                   </span>
-                  <span className="text-xs text-surface-500">mmHg</span>
+                  <span className="text-xs text-ink-3">mmHg</span>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-surface-500">
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
                   <span>{takenLabel}</span>
                   {latest.pulse != null && (
                     <>
@@ -103,7 +103,7 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
             {/* Crisis-level guidance — calm but clear. */}
             {latestCategory.id === 'crisis' && (
               <p
-                className="rounded-lg border border-danger-500/30 bg-danger-500/10 px-3 py-2 text-xs text-danger-300"
+                className="rounded-lg border border-status-bad/30 bg-status-bad/10 px-3 py-2 text-xs text-status-bad"
                 role="alert"
               >
                 {latestCategory.advice}
@@ -126,7 +126,7 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
 
             <Link
               href="/dashboard/blood-pressure"
-              className="inline-block text-xs font-medium text-primary-400 hover:text-primary-300"
+              className="inline-block text-xs font-medium text-action"
             >
               View history & trends →
             </Link>
@@ -149,17 +149,17 @@ function AvgTile({
   avg: { systolic: number; diastolic: number; count: number } | null;
 }) {
   return (
-    <div className="rounded-lg bg-surface-800 px-3 py-2">
-      <p className="text-[11px] text-surface-500">{label}</p>
+    <div className="rounded-lg bg-fill px-3 py-2">
+      <p className="text-[11px] text-ink-3">{label}</p>
       {avg && avg.count > 1 ? (
-        <p className="text-sm font-semibold text-surface-100 tabular-nums">
+        <p className="text-sm font-semibold text-ink tabular-nums">
           {formatReading(avg.systolic, avg.diastolic)}
-          <span className="ml-1 text-[11px] font-normal text-surface-500">
+          <span className="ml-1 text-[11px] font-normal text-ink-3">
             ({avg.count})
           </span>
         </p>
       ) : (
-        <p className="text-sm text-surface-500">—</p>
+        <p className="text-sm text-ink-3">—</p>
       )}
     </div>
   );

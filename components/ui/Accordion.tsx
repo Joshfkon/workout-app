@@ -53,7 +53,7 @@ export function Accordion({
 
   return (
     <AccordionContext.Provider value={{ openItems, toggle, type }}>
-      <div className={cn('divide-y divide-surface-800', className)}>
+      <div className={cn('divide-y divide-sep', className)}>
         {children}
       </div>
     </AccordionContext.Provider>
@@ -90,7 +90,7 @@ export function AccordionTrigger({ id, children, className }: AccordionTriggerPr
     <button
       onClick={() => toggle(id)}
       className={cn(
-        'flex items-center justify-between w-full py-3 text-left text-surface-200 hover:text-surface-100 transition-colors',
+        'flex items-center justify-between w-full py-3 text-left text-ink hover:text-ink transition-colors',
         className
       )}
       aria-expanded={isOpen}
@@ -98,7 +98,7 @@ export function AccordionTrigger({ id, children, className }: AccordionTriggerPr
       <span className="font-medium">{children}</span>
       <svg
         className={cn(
-          'w-5 h-5 text-surface-400 transition-transform duration-200',
+          'w-5 h-5 text-ink-2 transition-transform duration-200',
           isOpen && 'rotate-180'
         )}
         fill="none"
@@ -132,7 +132,7 @@ export function AccordionContent({ id, children, className }: AccordionContentPr
   return (
     <div
       className={cn(
-        'pb-4 text-sm text-surface-400 animate-slide-down',
+        'pb-4 text-sm text-ink-2 animate-slide-down',
         className
       )}
     >

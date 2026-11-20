@@ -296,7 +296,7 @@ export default function FeedPage() {
     if (profileLoading) {
       return (
         <div className="flex items-center justify-center min-h-[50vh]">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500" />
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-action" />
         </div>
       );
     }
@@ -309,7 +309,7 @@ export default function FeedPage() {
               <CardTitle>Create Your Profile</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-surface-400 mb-6">
+              <p className="text-ink-2 mb-6">
                 Set up your profile to connect with other lifters, share your workouts, and appear on leaderboards.
               </p>
               <Link href="/dashboard/profile/setup">
@@ -341,16 +341,16 @@ export default function FeedPage() {
             />
 
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold text-surface-100 truncate">
+              <h1 className="text-2xl font-bold text-ink truncate">
                 {displayName}
               </h1>
-              <p className="text-surface-400">@{profile.username}</p>
+              <p className="text-ink-2">@{profile.username}</p>
 
               {profile.bio && (
-                <p className="mt-3 text-surface-300">{profile.bio}</p>
+                <p className="mt-3 text-ink-2">{profile.bio}</p>
               )}
 
-              <div className="flex flex-wrap gap-2 mt-3 text-sm text-surface-400">
+              <div className="flex flex-wrap gap-2 mt-3 text-sm text-ink-2">
                 {profile.training_experience && (
                   <span className="capitalize">{profile.training_experience}</span>
                 )}
@@ -371,36 +371,36 @@ export default function FeedPage() {
           </div>
 
           {/* Stats */}
-          <div className="flex items-center justify-around mt-6 pt-6 border-t border-surface-800">
+          <div className="flex items-center justify-around mt-6 pt-6 border-t border-sep">
             <div className="text-center">
-              <p className="text-2xl font-bold text-surface-100">
+              <p className="text-2xl font-bold text-ink">
                 {formatSocialCount(profile.workout_count)}
               </p>
-              <p className="text-sm text-surface-400">Workouts</p>
+              <p className="text-sm text-ink-2">Workouts</p>
             </div>
 
-            <div className="w-px h-10 bg-surface-800" />
+            <div className="w-px h-10 bg-fill" />
 
             <Link
               href={`${getProfileUrl(profile.username)}/followers`}
               className="text-center hover:opacity-80 transition-opacity"
             >
-              <p className="text-2xl font-bold text-surface-100">
+              <p className="text-2xl font-bold text-ink">
                 {formatSocialCount(profile.follower_count)}
               </p>
-              <p className="text-sm text-surface-400">Followers</p>
+              <p className="text-sm text-ink-2">Followers</p>
             </Link>
 
-            <div className="w-px h-10 bg-surface-800" />
+            <div className="w-px h-10 bg-fill" />
 
             <Link
               href={`${getProfileUrl(profile.username)}/following`}
               className="text-center hover:opacity-80 transition-opacity"
             >
-              <p className="text-2xl font-bold text-surface-100">
+              <p className="text-2xl font-bold text-ink">
                 {formatSocialCount(profile.following_count)}
               </p>
-              <p className="text-sm text-surface-400">Following</p>
+              <p className="text-sm text-ink-2">Following</p>
             </Link>
           </div>
         </Card>
@@ -416,15 +416,15 @@ export default function FeedPage() {
                 {profile.badges.map((badge) => (
                   <div
                     key={badge.id}
-                    className="flex items-center gap-2 px-3 py-2 bg-surface-800 rounded-lg"
+                    className="flex items-center gap-2 px-3 py-2 bg-fill rounded-lg"
                     title={badge.description}
                   >
                     <span className="text-xl">{badge.icon}</span>
                     <div>
-                      <p className="text-sm font-medium text-surface-100">
+                      <p className="text-sm font-medium text-ink">
                         {badge.name}
                       </p>
-                      <p className="text-xs text-surface-400">
+                      <p className="text-xs text-ink-2">
                         {badge.description}
                       </p>
                     </div>
@@ -443,32 +443,32 @@ export default function FeedPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-surface-800 rounded-lg">
-                  <p className="text-2xl font-bold text-surface-100">
+                <div className="p-4 bg-fill rounded-lg">
+                  <p className="text-2xl font-bold text-ink">
                     {stats.total_workouts}
                   </p>
-                  <p className="text-sm text-surface-400">Total Workouts</p>
+                  <p className="text-sm text-ink-2">Total Workouts</p>
                 </div>
 
-                <div className="p-4 bg-surface-800 rounded-lg">
-                  <p className="text-2xl font-bold text-surface-100">
+                <div className="p-4 bg-fill rounded-lg">
+                  <p className="text-2xl font-bold text-ink">
                     {stats.total_sets.toLocaleString()}
                   </p>
-                  <p className="text-sm text-surface-400">Total Sets</p>
+                  <p className="text-sm text-ink-2">Total Sets</p>
                 </div>
 
-                <div className="p-4 bg-surface-800 rounded-lg">
-                  <p className="text-2xl font-bold text-surface-100">
+                <div className="p-4 bg-fill rounded-lg">
+                  <p className="text-2xl font-bold text-ink">
                     {formatWeight(stats.total_volume_kg, units, 0)}
                   </p>
-                  <p className="text-sm text-surface-400">Total Volume</p>
+                  <p className="text-sm text-ink-2">Total Volume</p>
                 </div>
 
-                <div className="p-4 bg-surface-800 rounded-lg">
-                  <p className="text-2xl font-bold text-surface-100">
+                <div className="p-4 bg-fill rounded-lg">
+                  <p className="text-2xl font-bold text-ink">
                     {stats.current_streak}
                   </p>
-                  <p className="text-sm text-surface-400">Day Streak</p>
+                  <p className="text-sm text-ink-2">Day Streak</p>
                 </div>
               </div>
             </CardContent>
@@ -479,8 +479,8 @@ export default function FeedPage() {
         <Card>
           <CardContent className="flex items-center justify-between py-4">
             <div>
-              <p className="font-medium text-surface-100">Privacy Settings</p>
-              <p className="text-sm text-surface-400">
+              <p className="font-medium text-ink">Privacy Settings</p>
+              <p className="text-sm text-ink-2">
                 Profile is {profile.profile_visibility}
               </p>
             </div>
@@ -496,8 +496,8 @@ export default function FeedPage() {
         <Card>
           <CardContent className="flex items-center justify-between py-4">
             <div>
-              <p className="font-medium text-surface-100">Share Profile</p>
-              <p className="text-sm text-surface-400">
+              <p className="font-medium text-ink">Share Profile</p>
+              <p className="text-sm text-ink-2">
                 hypertrack.app{getProfileUrl(profile.username)}
               </p>
             </div>
@@ -532,8 +532,8 @@ export default function FeedPage() {
               className={cn(
                 'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
                 selectedLeaderboardType === tab.id
-                  ? 'bg-accent-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                  ? 'bg-action text-on-action'
+                  : 'bg-fill text-ink-2 hover:text-ink'
               )}
             >
               {tab.label}
@@ -543,7 +543,7 @@ export default function FeedPage() {
 
         {/* Description */}
         {selectedTab && (
-          <p className="text-surface-400 text-sm">{selectedTab.description}</p>
+          <p className="text-ink-2 text-sm">{selectedTab.description}</p>
         )}
 
         {/* User's rank card */}
@@ -583,11 +583,11 @@ export default function FeedPage() {
         )}
 
         {/* Info card */}
-        <Card className="bg-surface-800/50">
+        <Card className="bg-fill/50">
           <CardContent className="py-4">
             <div className="flex items-start gap-3">
               <svg
-                className="w-5 h-5 text-surface-400 mt-0.5"
+                className="w-5 h-5 text-ink-2 mt-0.5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -599,8 +599,8 @@ export default function FeedPage() {
                   d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-sm text-surface-400">
-                <p className="font-medium text-surface-300 mb-1">How rankings work</p>
+              <div className="text-sm text-ink-2">
+                <p className="font-medium text-ink-2 mb-1">How rankings work</p>
                 <p>
                   Leaderboards update throughout the week as you complete workouts.
                   Only users who have opted in to leaderboards in their privacy settings are shown.
@@ -620,7 +620,7 @@ export default function FeedPage() {
         <div className="flex gap-2">
           <div className="relative flex-1">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-500"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-ink-3"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -637,7 +637,7 @@ export default function FeedPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search workouts..."
-              className="w-full pl-10 pr-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full pl-10 pr-4 py-2.5 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action shadow-card"
             />
           </div>
           <button
@@ -645,8 +645,8 @@ export default function FeedPage() {
             className={cn(
               'px-4 py-2.5 rounded-lg border transition-colors flex items-center gap-2',
               showFilters
-                ? 'bg-primary-500/10 border-primary-500 text-primary-400'
-                : 'bg-surface-900 border-surface-700 text-surface-400 hover:border-surface-600'
+                ? 'bg-action/10 border-action text-action'
+                : 'bg-card border-sep text-ink-2 hover:border-sep'
             )}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -654,7 +654,7 @@ export default function FeedPage() {
             </svg>
             Filters
             {hasActiveFilters && (
-              <span className="w-2 h-2 rounded-full bg-primary-500" />
+              <span className="w-2 h-2 rounded-full bg-action" />
             )}
           </button>
         </div>
@@ -668,8 +668,8 @@ export default function FeedPage() {
               className={cn(
                 'px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize',
                 sortBy === option
-                  ? 'bg-accent-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                  ? 'bg-action text-on-action'
+                  : 'bg-fill text-ink-2 hover:text-ink'
               )}
             >
               {option === 'saves' ? 'Most Saved' : option === 'popular' ? 'Most Viewed' : 'Recent'}
@@ -679,10 +679,10 @@ export default function FeedPage() {
 
         {/* Expanded filters */}
         {showFilters && (
-          <div className="p-4 bg-surface-900 rounded-lg border border-surface-800 space-y-4">
+          <div className="p-4 bg-card rounded-lg space-y-4 shadow-card">
             {/* Type filter */}
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-2">Type</label>
+              <label className="block text-sm font-medium text-ink-2 mb-2">Type</label>
               <div className="flex flex-wrap gap-2">
                 {(['all', 'single_workout', 'template', 'program'] as const).map((type) => (
                   <button
@@ -691,8 +691,8 @@ export default function FeedPage() {
                     className={cn(
                       'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
                       shareType === type
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                        ? 'bg-action text-on-action'
+                        : 'bg-fill text-ink-2 hover:text-ink'
                     )}
                   >
                     {type === 'all' ? 'All Types' : type.replace('_', ' ')}
@@ -703,7 +703,7 @@ export default function FeedPage() {
 
             {/* Difficulty filter */}
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-2">Difficulty</label>
+              <label className="block text-sm font-medium text-ink-2 mb-2">Difficulty</label>
               <div className="flex flex-wrap gap-2">
                 {(['all', 'beginner', 'intermediate', 'advanced'] as const).map((diff) => (
                   <button
@@ -712,8 +712,8 @@ export default function FeedPage() {
                     className={cn(
                       'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
                       difficulty === diff
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                        ? 'bg-action text-on-action'
+                        : 'bg-fill text-ink-2 hover:text-ink'
                     )}
                   >
                     {diff === 'all' ? 'All Levels' : diff}
@@ -724,7 +724,7 @@ export default function FeedPage() {
 
             {/* Muscle groups filter */}
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-2">Muscle Groups</label>
+              <label className="block text-sm font-medium text-ink-2 mb-2">Muscle Groups</label>
               <div className="flex flex-wrap gap-2">
                 {MUSCLE_GROUPS.map((muscle) => (
                   <button
@@ -733,8 +733,8 @@ export default function FeedPage() {
                     className={cn(
                       'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
                       selectedMuscles.includes(muscle)
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                        ? 'bg-action text-on-action'
+                        : 'bg-fill text-ink-2 hover:text-ink'
                     )}
                   >
                     {muscle}
@@ -747,7 +747,7 @@ export default function FeedPage() {
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+                className="text-sm text-action transition-colors"
               >
                 Clear all filters
               </button>
@@ -765,10 +765,10 @@ export default function FeedPage() {
         {!workoutsError && workouts.length === 0 && !workoutsLoading && (
           <div className="text-center py-16">
             <p className="text-5xl mb-4">🏋️</p>
-            <h2 className="text-xl font-semibold text-surface-100 mb-2">
+            <h2 className="text-xl font-semibold text-ink mb-2">
               No workouts found
             </h2>
-            <p className="text-surface-400 max-w-sm mx-auto">
+            <p className="text-ink-2 max-w-sm mx-auto">
               {hasActiveFilters
                 ? 'Try adjusting your filters to find more workouts.'
                 : 'Be the first to share a workout with the community!'}
@@ -801,7 +801,7 @@ export default function FeedPage() {
         {/* Loading state */}
         {workoutsLoading && (
           <div className="flex justify-center py-8">
-            <div className="animate-spin h-8 w-8 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+            <div className="animate-spin h-8 w-8 border-2 border-ink-3 border-t-action rounded-full" />
           </div>
         )}
 
@@ -816,7 +816,7 @@ export default function FeedPage() {
 
         {/* End of feed */}
         {!workoutsLoading && !hasMoreWorkouts && workouts.length > 0 && (
-          <p className="text-center text-surface-500 py-8">
+          <p className="text-center text-ink-3 py-8">
             That&apos;s all the workouts!
           </p>
         )}
@@ -841,12 +841,12 @@ export default function FeedPage() {
             <p className="text-5xl mb-4">
               {activeTab === 'following' ? '👥' : '🌎'}
             </p>
-            <h2 className="text-xl font-semibold text-surface-100 mb-2">
+            <h2 className="text-xl font-semibold text-ink mb-2">
               {activeTab === 'following'
                 ? 'No activities yet'
                 : 'Nothing to discover'}
             </h2>
-            <p className="text-surface-400 max-w-sm mx-auto">
+            <p className="text-ink-2 max-w-sm mx-auto">
               {activeTab === 'following'
                 ? 'Follow other lifters to see their workouts and achievements here.'
                 : 'Be the first to share your workout with the community!'}
@@ -883,7 +883,7 @@ export default function FeedPage() {
         {/* Loading state */}
         {feedLoading && (
           <div className="flex justify-center py-8">
-            <div className="animate-spin h-8 w-8 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+            <div className="animate-spin h-8 w-8 border-2 border-ink-3 border-t-action rounded-full" />
           </div>
         )}
 
@@ -901,7 +901,7 @@ export default function FeedPage() {
 
         {/* End of feed */}
         {!feedLoading && !hasMore && activities.length > 0 && (
-          <p className="text-center text-surface-500 py-8">
+          <p className="text-center text-ink-3 py-8">
             You&apos;re all caught up!
           </p>
         )}
@@ -957,8 +957,8 @@ export default function FeedPage() {
           className={cn(
             'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
             activeTab === 'following'
-              ? 'bg-primary-600 text-white'
-              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              ? 'bg-action text-on-action'
+              : 'bg-fill text-ink-2 hover:text-ink'
           )}
         >
           Following
@@ -968,8 +968,8 @@ export default function FeedPage() {
           className={cn(
             'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
             activeTab === 'discover'
-              ? 'bg-primary-600 text-white'
-              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              ? 'bg-action text-on-action'
+              : 'bg-fill text-ink-2 hover:text-ink'
           )}
         >
           Discover
@@ -979,8 +979,8 @@ export default function FeedPage() {
           className={cn(
             'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
             activeTab === 'discover_workouts'
-              ? 'bg-primary-600 text-white'
-              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              ? 'bg-action text-on-action'
+              : 'bg-fill text-ink-2 hover:text-ink'
           )}
         >
           Workouts
@@ -990,8 +990,8 @@ export default function FeedPage() {
           className={cn(
             'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
             activeTab === 'leaderboards'
-              ? 'bg-primary-600 text-white'
-              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              ? 'bg-action text-on-action'
+              : 'bg-fill text-ink-2 hover:text-ink'
           )}
         >
           Leaderboards
@@ -1001,8 +1001,8 @@ export default function FeedPage() {
           className={cn(
             'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
             activeTab === 'profile'
-              ? 'bg-primary-600 text-white'
-              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              ? 'bg-action text-on-action'
+              : 'bg-fill text-ink-2 hover:text-ink'
           )}
         >
           Profile
@@ -1074,23 +1074,23 @@ function CopyWorkoutModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-surface-900 rounded-xl border border-surface-800 overflow-hidden">
+      <div className="w-full max-w-md bg-card rounded-card overflow-hidden shadow-card">
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-surface-100 mb-2">
+          <h2 className="text-lg font-semibold text-ink mb-2">
             Copy Workout
           </h2>
-          <p className="text-sm text-surface-400 mb-4">
+          <p className="text-sm text-ink-2 mb-4">
             This will add &quot;{workout.title}&quot; to your workout templates.
           </p>
 
           {/* Exercise preview */}
-          <div className="bg-surface-800/50 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
-            <p className="text-xs font-medium text-surface-400 mb-2">Exercises included:</p>
+          <div className="bg-fill/50 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
+            <p className="text-xs font-medium text-ink-2 mb-2">Exercises included:</p>
             <div className="space-y-1">
               {workout.workout_data?.exercises?.map((exercise, index) => (
                 <div key={index} className="flex justify-between text-sm">
-                  <span className="text-surface-200">{exercise.exercise_name}</span>
-                  <span className="text-surface-400">
+                  <span className="text-ink">{exercise.exercise_name}</span>
+                  <span className="text-ink-2">
                     {exercise.sets} x {exercise.rep_range[0]}-{exercise.rep_range[1]}
                   </span>
                 </div>
@@ -1105,7 +1105,7 @@ function CopyWorkoutModal({
           )}
 
           {success ? (
-            <div className="flex items-center justify-center gap-2 py-4 text-success-400">
+            <div className="flex items-center justify-center gap-2 py-4 text-status-ok">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>

@@ -314,10 +314,10 @@ export function BodyTargets({
   };
 
   const getProgressColor = (progress: number): string => {
-    if (progress >= 100) return 'text-success-400';
-    if (progress >= 75) return 'text-success-300';
-    if (progress >= 50) return 'text-warning-400';
-    return 'text-danger-400';
+    if (progress >= 100) return 'text-status-ok';
+    if (progress >= 75) return 'text-status-ok';
+    if (progress >= 50) return 'text-status-warn';
+    return 'text-status-bad';
   };
 
   const getProgressBadge = (progress: number): 'success' | 'warning' | 'danger' => {
@@ -349,14 +349,14 @@ export function BodyTargets({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
-            <IconTarget size={16} className="text-surface-400" aria-hidden="true" /> Body Composition Goals
+            <IconTarget size={16} className="text-ink-2" aria-hidden="true" /> Body Composition Goals
           </CardTitle>
           <div className="flex items-center gap-2">
-            <div className="flex bg-surface-800 rounded-lg p-0.5">
+            <div className="flex bg-fill rounded-lg p-0.5">
               <button
                 onClick={() => setDisplayUnit('in')}
                 className={`px-2 py-1 text-xs rounded transition-colors ${
-                  displayUnit === 'in' ? 'bg-primary-500 text-white' : 'text-surface-400'
+                  displayUnit === 'in' ? 'bg-action text-on-action' : 'text-ink-2'
                 }`}
               >
                 in
@@ -364,7 +364,7 @@ export function BodyTargets({
               <button
                 onClick={() => setDisplayUnit('cm')}
                 className={`px-2 py-1 text-xs rounded transition-colors ${
-                  displayUnit === 'cm' ? 'bg-primary-500 text-white' : 'text-surface-400'
+                  displayUnit === 'cm' ? 'bg-action text-on-action' : 'text-ink-2'
                 }`}
               >
                 cm
@@ -382,11 +382,11 @@ export function BodyTargets({
             {/* Header with name and overall progress */}
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-surface-200">
+                <h3 className="text-sm font-medium text-ink">
                   {activeTarget.name || 'Current Goals'}
                 </h3>
                 {progress.daysRemaining !== undefined && (
-                  <p className="text-xs text-surface-500">
+                  <p className="text-xs text-ink-3">
                     {progress.daysRemaining > 0
                       ? `${progress.daysRemaining} days remaining`
                       : progress.daysRemaining === 0
@@ -404,17 +404,17 @@ export function BodyTargets({
             {/* Main targets */}
             <div className="grid grid-cols-3 gap-3">
               {progress.weight && (
-                <div className="p-3 bg-surface-800/50 rounded-lg">
-                  <p className="text-xs text-surface-500 mb-1">Weight</p>
+                <div className="p-3 bg-fill/50 rounded-lg">
+                  <p className="text-xs text-ink-3 mb-1">Weight</p>
                   <p className={`text-lg font-medium ${getProgressColor(progress.weight.progress)}`}>
                     {formatWeight(progress.weight.current, weightUnit)}
                   </p>
-                  <p className="text-xs text-surface-400">
+                  <p className="text-xs text-ink-2">
                     → {formatWeight(progress.weight.target, weightUnit)}
                   </p>
-                  <div className="mt-1 h-1 bg-surface-700 rounded-full overflow-hidden">
+                  <div className="mt-1 h-1 bg-sep rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary-500 transition-all"
+                      className="h-full bg-action transition-all"
                       style={{ width: `${Math.min(100, progress.weight.progress)}%` }}
                     />
                   </div>
@@ -422,17 +422,17 @@ export function BodyTargets({
               )}
 
               {progress.bodyFat && (
-                <div className="p-3 bg-surface-800/50 rounded-lg">
-                  <p className="text-xs text-surface-500 mb-1">Body Fat</p>
+                <div className="p-3 bg-fill/50 rounded-lg">
+                  <p className="text-xs text-ink-3 mb-1">Body Fat</p>
                   <p className={`text-lg font-medium ${getProgressColor(progress.bodyFat.progress)}`}>
                     {progress.bodyFat.current.toFixed(1)}%
                   </p>
-                  <p className="text-xs text-surface-400">
+                  <p className="text-xs text-ink-2">
                     → {progress.bodyFat.target.toFixed(1)}%
                   </p>
-                  <div className="mt-1 h-1 bg-surface-700 rounded-full overflow-hidden">
+                  <div className="mt-1 h-1 bg-sep rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary-500 transition-all"
+                      className="h-full bg-action transition-all"
                       style={{ width: `${Math.min(100, progress.bodyFat.progress)}%` }}
                     />
                   </div>
@@ -440,17 +440,17 @@ export function BodyTargets({
               )}
 
               {progress.ffmi && (
-                <div className="p-3 bg-surface-800/50 rounded-lg">
-                  <p className="text-xs text-surface-500 mb-1">FFMI</p>
+                <div className="p-3 bg-fill/50 rounded-lg">
+                  <p className="text-xs text-ink-3 mb-1">FFMI</p>
                   <p className={`text-lg font-medium ${getProgressColor(progress.ffmi.progress)}`}>
                     {progress.ffmi.current.toFixed(1)}
                   </p>
-                  <p className="text-xs text-surface-400">
+                  <p className="text-xs text-ink-2">
                     → {progress.ffmi.target.toFixed(1)}
                   </p>
-                  <div className="mt-1 h-1 bg-surface-700 rounded-full overflow-hidden">
+                  <div className="mt-1 h-1 bg-sep rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary-500 transition-all"
+                      className="h-full bg-action transition-all"
                       style={{ width: `${Math.min(100, progress.ffmi.progress)}%` }}
                     />
                   </div>
@@ -460,13 +460,13 @@ export function BodyTargets({
 
             {/* Measurement targets */}
             {Object.keys(progress.measurements).length > 0 && (
-              <div className="pt-2 border-t border-surface-800">
+              <div className="pt-2 border-t border-sep">
                 <button
                   onClick={() => setShowMeasurements(!showMeasurements)}
                   className="w-full flex items-center justify-between text-left"
                 >
-                  <span className="text-sm font-medium text-surface-300">Measurement Goals</span>
-                  <span className="text-surface-500 text-xs">{showMeasurements ? '▲' : '▼'}</span>
+                  <span className="text-sm font-medium text-ink-2">Measurement Goals</span>
+                  <span className="text-ink-3 text-xs">{showMeasurements ? '▲' : '▼'}</span>
                 </button>
 
                 {showMeasurements && (
@@ -475,13 +475,13 @@ export function BodyTargets({
                       const label = MEASUREMENT_LABELS.find(l => l.key === key)?.label || key;
                       return (
                         <div key={key} className="flex items-center justify-between py-1">
-                          <span className="text-xs text-surface-400">{label}</span>
+                          <span className="text-xs text-ink-2">{label}</span>
                           <div className="flex items-center gap-2">
                             <span className={`text-sm ${getProgressColor(m.progress)}`}>
                               {formatMeasurementValue(m.current)}
                             </span>
-                            <span className="text-xs text-surface-500">→</span>
-                            <span className="text-xs text-surface-400">
+                            <span className="text-xs text-ink-3">→</span>
+                            <span className="text-xs text-ink-2">
                               {formatMeasurementValue(m.target)} {displayUnit}
                             </span>
                           </div>
@@ -495,8 +495,8 @@ export function BodyTargets({
 
             {/* Linked mesocycle */}
             {activeTarget.mesocycleId && (
-              <div className="pt-2 border-t border-surface-800">
-                <p className="text-xs text-surface-500">
+              <div className="pt-2 border-t border-sep">
+                <p className="text-xs text-ink-3">
                   Linked to mesocycle: {mesocycles.find(m => m.id === activeTarget.mesocycleId)?.name || 'Unknown'}
                 </p>
               </div>
@@ -504,8 +504,8 @@ export function BodyTargets({
           </div>
         ) : (
           <div className="text-center py-6">
-            <p className="text-surface-400 text-sm mb-2">No goals set yet</p>
-            <p className="text-xs text-surface-500 mb-3">
+            <p className="text-ink-2 text-sm mb-2">No goals set yet</p>
+            <p className="text-xs text-ink-3 mb-3">
               Set target weight, body fat, FFMI, or measurements to track progress
             </p>
             <Button variant="outline" size="sm" onClick={startEditing}>
@@ -520,7 +520,7 @@ export function BodyTargets({
         <div className="space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Goal name */}
           <div>
-            <label className="block text-sm text-surface-300 mb-1">Goal Name (optional)</label>
+            <label className="block text-sm text-ink-2 mb-1">Goal Name (optional)</label>
             <Input
               placeholder="e.g., Summer Cut, Bulk Phase 1"
               value={formData.name}
@@ -531,7 +531,7 @@ export function BodyTargets({
           {/* Main targets */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm text-surface-300 mb-1">Target Weight ({weightUnit})</label>
+              <label className="block text-sm text-ink-2 mb-1">Target Weight ({weightUnit})</label>
               <Input
                 type="number"
                 step="0.1"
@@ -547,7 +547,7 @@ export function BodyTargets({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-300 mb-1">Target Body Fat %</label>
+              <label className="block text-sm text-ink-2 mb-1">Target Body Fat %</label>
               <Input
                 type="number"
                 step="0.1"
@@ -560,7 +560,7 @@ export function BodyTargets({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-300 mb-1">Target FFMI</label>
+              <label className="block text-sm text-ink-2 mb-1">Target FFMI</label>
               <Input
                 type="number"
                 step="0.1"
@@ -576,7 +576,7 @@ export function BodyTargets({
 
           {/* Target date */}
           <div>
-            <label className="block text-sm text-surface-300 mb-1">Target Date (optional)</label>
+            <label className="block text-sm text-ink-2 mb-1">Target Date (optional)</label>
             <Input
               type="date"
               value={formData.targetDate || ''}
@@ -587,9 +587,9 @@ export function BodyTargets({
           {/* Link to mesocycle */}
           {mesocycles.length > 0 && (
             <div>
-              <label className="block text-sm text-surface-300 mb-1">Link to Mesocycle (optional)</label>
+              <label className="block text-sm text-ink-2 mb-1">Link to Mesocycle (optional)</label>
               <select
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink shadow-card"
                 value={formData.mesocycleId || ''}
                 onChange={(e) => setFormData({ ...formData, mesocycleId: e.target.value || undefined })}
               >
@@ -604,15 +604,15 @@ export function BodyTargets({
           )}
 
           {/* Measurement targets */}
-          <div className="pt-2 border-t border-surface-800">
-            <h4 className="text-sm font-medium text-surface-300 mb-3">Measurement Targets ({displayUnit})</h4>
+          <div className="pt-2 border-t border-sep">
+            <h4 className="text-sm font-medium text-ink-2 mb-3">Measurement Targets ({displayUnit})</h4>
             {Object.entries(groupedMeasurements).map(([group, fields]) => (
               <div key={group} className="mb-4">
-                <p className="text-xs text-surface-500 uppercase tracking-wide mb-2">{group}</p>
+                <p className="text-xs text-ink-3 uppercase tracking-wide mb-2">{group}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {fields.map((field) => (
                     <div key={field.key} className="flex items-center gap-2">
-                      <label className="text-xs text-surface-400 w-24 flex-shrink-0">{field.label}</label>
+                      <label className="text-xs text-ink-2 w-24 flex-shrink-0">{field.label}</label>
                       <Input
                         type="number"
                         step="0.1"
@@ -639,9 +639,9 @@ export function BodyTargets({
 
           {/* Notes */}
           <div>
-            <label className="block text-sm text-surface-300 mb-1">Notes (optional)</label>
+            <label className="block text-sm text-ink-2 mb-1">Notes (optional)</label>
             <textarea
-              className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm"
+              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
               rows={2}
               placeholder="Any notes about this goal..."
               value={formData.notes || ''}

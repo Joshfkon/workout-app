@@ -52,28 +52,28 @@ interface WarningEventRow {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  fresh: 'text-success-400',
-  recovering: 'text-warning-400',
-  fatigued: 'text-danger-400',
+  fresh: 'text-status-ok',
+  recovering: 'text-status-warn',
+  fatigued: 'text-status-bad',
 };
 
 function ReadinessRowView({ label, result }: { label: string; result: MuscleRecoveryResult }) {
   return (
-    <tr className="border-b border-surface-800/60">
-      <td className="py-1.5 pr-3 text-surface-200">{label}</td>
+    <tr className="border-b border-sep/60">
+      <td className="py-1.5 pr-3 text-ink">{label}</td>
       <td className={`py-1.5 pr-3 font-medium ${STATUS_COLOR[result.status] ?? ''}`}>
         {result.status}
       </td>
-      <td className="py-1.5 pr-3 tabular-nums text-surface-300">
+      <td className="py-1.5 pr-3 tabular-nums text-ink-2">
         {(result.readinessRatio * 100).toFixed(0)}%
       </td>
-      <td className="py-1.5 pr-3 tabular-nums text-surface-400">
+      <td className="py-1.5 pr-3 tabular-nums text-ink-2">
         {result.windowHours !== null ? `${result.windowHours.toFixed(0)}h` : '—'}
       </td>
-      <td className="py-1.5 pr-3 tabular-nums text-surface-400">
+      <td className="py-1.5 pr-3 tabular-nums text-ink-2">
         {result.hoursSinceLast !== null ? `${result.hoursSinceLast.toFixed(0)}h ago` : 'never'}
       </td>
-      <td className="py-1.5 tabular-nums text-surface-400">
+      <td className="py-1.5 tabular-nums text-ink-2">
         {result.hoursUntilReady > 0 ? `${result.hoursUntilReady.toFixed(0)}h` : 'ready'}
       </td>
     </tr>
@@ -139,7 +139,7 @@ export default function RecoveryDebugPage() {
   }, [user?.id]);
 
   const header = (
-    <tr className="text-left text-[11px] uppercase tracking-wide text-surface-500">
+    <tr className="text-left text-[11px] uppercase tracking-wide text-ink-3">
       <th className="py-1 pr-3">Muscle</th>
       <th className="py-1 pr-3">Status</th>
       <th className="py-1 pr-3">Ready</th>
@@ -152,17 +152,17 @@ export default function RecoveryDebugPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-surface-100">Recovery debug</h1>
-        <p className="text-[13px] text-surface-400">
+        <h1 className="text-lg font-semibold text-ink">Recovery debug</h1>
+        <p className="text-[13px] text-ink-2">
           Live output of the mover model and the stabilizer channel over the last week of
           completed sessions{isLoading ? ' (history loading…)' : ''}.
         </p>
       </div>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-surface-200 mb-2">
+        <h2 className="text-sm font-semibold text-ink mb-2">
           Stabilizer channel
-          <span className="ml-2 font-normal text-[12px] text-surface-500">
+          <span className="ml-2 font-normal text-[12px] text-ink-3">
             warn below {(config.stabilizerReadinessThreshold * 100).toFixed(0)}% ready at ≥
             {(config.stabilizerIntensityThreshold * 100).toFixed(0)}% intensity
           </span>
@@ -186,7 +186,7 @@ export default function RecoveryDebugPage() {
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-surface-200 mb-2">Mover model (all muscles)</h2>
+        <h2 className="text-sm font-semibold text-ink mb-2">Mover model (all muscles)</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>{header}</thead>
@@ -204,16 +204,16 @@ export default function RecoveryDebugPage() {
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-surface-200 mb-2">
+        <h2 className="text-sm font-semibold text-ink mb-2">
           Recent stabilizer warnings
         </h2>
         {warningEvents.length === 0 ? (
-          <p className="text-[13px] text-surface-500">No warnings recorded yet.</p>
+          <p className="text-[13px] text-ink-3">No warnings recorded yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-surface-500">
+                <tr className="text-left text-[11px] uppercase tracking-wide text-ink-3">
                   <th className="py-1 pr-3">When</th>
                   <th className="py-1 pr-3">Muscle</th>
                   <th className="py-1 pr-3">Ready</th>
@@ -223,18 +223,18 @@ export default function RecoveryDebugPage() {
               </thead>
               <tbody>
                 {warningEvents.map((event) => (
-                  <tr key={event.id} className="border-b border-surface-800/60">
-                    <td className="py-1.5 pr-3 text-surface-400">
+                  <tr key={event.id} className="border-b border-sep/60">
+                    <td className="py-1.5 pr-3 text-ink-2">
                       {new Date(event.shown_at).toLocaleString()}
                     </td>
-                    <td className="py-1.5 pr-3 text-surface-200">{event.muscle_group}</td>
-                    <td className="py-1.5 pr-3 tabular-nums text-surface-300">
+                    <td className="py-1.5 pr-3 text-ink">{event.muscle_group}</td>
+                    <td className="py-1.5 pr-3 tabular-nums text-ink-2">
                       {(event.readiness_ratio * 100).toFixed(0)}%
                     </td>
-                    <td className="py-1.5 pr-3 tabular-nums text-surface-300">
+                    <td className="py-1.5 pr-3 tabular-nums text-ink-2">
                       {(event.intensity_ratio * 100).toFixed(0)}%
                     </td>
-                    <td className="py-1.5 text-surface-300">{event.response}</td>
+                    <td className="py-1.5 text-ink-2">{event.response}</td>
                   </tr>
                 ))}
               </tbody>

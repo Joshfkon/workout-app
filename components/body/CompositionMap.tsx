@@ -1131,7 +1131,7 @@ export function CompositionMap({
               onClick={() => setViewMode(option.value)}
               className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
                 viewMode === option.value
-                  ? 'bg-surface-600 text-ink'
+                  ? 'bg-sep text-ink'
                   : 'text-ink-2 hover:text-ink'
               }`}
             >
@@ -1312,7 +1312,7 @@ export function CompositionMap({
           {suggestion && ' Tap the suggested dot to set it as your target.'}{' '}
           <Link
             href="/dashboard/analytics?tab=goals&section=body-targets"
-            className="text-action hover:text-action font-medium"
+            className="text-action font-medium"
           >
             Set a target
           </Link>{' '}
@@ -1339,7 +1339,7 @@ export function CompositionMap({
           <div className="flex gap-2 mt-2">
             <button
               type="button"
-              className="px-2.5 py-1 text-xs font-medium rounded bg-success-500/20 text-success-300 hover:bg-success-500/30 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium rounded bg-status-ok/20 text-status-ok hover:bg-status-ok/30 transition-colors"
               onClick={async () => {
                 await onSetTarget?.({
                   targetFfmi: suggestion.ffmi,
@@ -1352,7 +1352,7 @@ export function CompositionMap({
             </button>
             <button
               type="button"
-              className="px-2.5 py-1 text-xs font-medium rounded bg-fill text-ink hover:bg-surface-600 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium rounded bg-fill text-ink hover:bg-sep transition-colors"
               onClick={async () => {
                 // Save first so the goals editor opens pre-filled with it.
                 await onSetTarget?.({
@@ -1401,7 +1401,7 @@ export function CompositionMap({
                     onClick={() => setStartMode(option.value)}
                     className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
                       startMode === option.value
-                        ? 'bg-surface-600 text-ink'
+                        ? 'bg-sep text-ink'
                         : 'text-ink-2 hover:text-ink'
                     }`}
                   >
@@ -1518,7 +1518,7 @@ export function CompositionMap({
               No target set —{' '}
               <Link
                 href="/dashboard/analytics?tab=goals&section=body-targets"
-                className="text-action hover:text-action"
+                className="text-action"
               >
                 add one in Goals
               </Link>{' '}

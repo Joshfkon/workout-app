@@ -57,7 +57,7 @@ export function WeightHistoryModal({
     >
       <div className="space-y-2 max-h-[60vh] overflow-y-auto">
         {entries.length === 0 ? (
-          <p className="text-center text-surface-400 py-8">No weight entries yet</p>
+          <p className="text-center text-ink-2 py-8">No weight entries yet</p>
         ) : (
           entries.map((entry, index) => {
             const change = getChange(index);
@@ -76,17 +76,17 @@ export function WeightHistoryModal({
                   type="button"
                   onClick={() => onEdit(entry)}
                   disabled={deletingId === entry.id}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors text-left disabled:opacity-50"
+                  className="w-full flex items-center gap-3 p-3 hover:bg-fill/50 rounded-lg transition-colors text-left disabled:opacity-50"
                 >
                   {/* Date */}
                   <div className="flex-shrink-0 w-16 text-center">
-                    <div className="text-sm font-medium text-surface-100">
+                    <div className="text-sm font-medium text-ink">
                       {new Date(entry.logged_at + 'T00:00:00').toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
                       })}
                     </div>
-                    <div className="text-xs text-surface-500">
+                    <div className="text-xs text-ink-3">
                       {new Date(entry.logged_at + 'T00:00:00').toLocaleDateString('en-US', {
                         weekday: 'short',
                       })}
@@ -95,11 +95,11 @@ export function WeightHistoryModal({
 
                   {/* Weight */}
                   <div className="flex-1">
-                    <div className="text-lg font-semibold text-surface-100">
+                    <div className="text-lg font-semibold text-ink">
                       {displayWeight.toFixed(1)} {preferredUnit === 'kg' ? 'kg' : 'lbs'}
                     </div>
                     {entry.notes && (
-                      <div className="text-xs text-surface-500 truncate max-w-[200px]">
+                      <div className="text-xs text-ink-3 truncate max-w-[200px]">
                         {entry.notes}
                       </div>
                     )}
@@ -108,7 +108,7 @@ export function WeightHistoryModal({
                   {/* Change indicator */}
                   {change !== null && (
                     <div className={`flex-shrink-0 text-right ${
-                      change > 0 ? 'text-danger-400' : change < 0 ? 'text-success-400' : 'text-surface-400'
+                      change > 0 ? 'text-status-bad' : change < 0 ? 'text-status-ok' : 'text-ink-2'
                     }`}>
                       <div className="text-sm font-medium">
                         {change > 0 ? '+' : ''}{change.toFixed(1)}
@@ -118,7 +118,7 @@ export function WeightHistoryModal({
                   )}
 
                   {/* Edit icon */}
-                  <div className="flex-shrink-0 text-surface-600">
+                  <div className="flex-shrink-0 text-ink-3">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>

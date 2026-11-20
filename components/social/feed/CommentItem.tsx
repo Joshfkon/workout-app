@@ -51,7 +51,7 @@ export function CommentItem({ comment, currentUserId, onReply, onDelete, depth =
   if (isBlocked(comment.user_id)) return null;
 
   return (
-    <div className={depth > 0 ? 'ml-6 border-l-2 border-surface-800 pl-4' : ''}>
+    <div className={depth > 0 ? 'ml-6 border-l-2 border-sep pl-4' : ''}>
       <div className="flex gap-3">
         <Link href={comment.user_profile ? getProfileUrl(comment.user_profile.username) : '#'}>
           <Avatar
@@ -66,21 +66,21 @@ export function CommentItem({ comment, currentUserId, onReply, onDelete, depth =
             <div className="flex-1 min-w-0">
               <Link
                 href={comment.user_profile ? getProfileUrl(comment.user_profile.username) : '#'}
-                className="font-medium text-surface-100 hover:underline text-sm"
+                className="font-medium text-ink hover:underline text-sm"
               >
                 {displayName}
               </Link>
-              <p className="text-sm text-surface-300 mt-1 whitespace-pre-wrap break-words">
+              <p className="text-sm text-ink-2 mt-1 whitespace-pre-wrap break-words">
                 {comment.content}
               </p>
               <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs text-surface-400">
+                <span className="text-xs text-ink-2">
                   {formatRelativeTime(comment.created_at)}
                 </span>
                 {currentUserId && depth < maxDepth && onReply && (
                   <button
                     onClick={() => setIsReplying(!isReplying)}
-                    className="text-xs text-surface-400 hover:text-surface-200 transition-colors"
+                    className="text-xs text-ink-2 hover:text-ink transition-colors"
                   >
                     Reply
                   </button>
@@ -89,7 +89,7 @@ export function CommentItem({ comment, currentUserId, onReply, onDelete, depth =
                   <button
                     onClick={handleDelete}
                     disabled={isDeleting}
-                    className="text-xs text-surface-400 hover:text-error-400 transition-colors disabled:opacity-50"
+                    className="text-xs text-ink-2 hover:text-error-400 transition-colors disabled:opacity-50"
                   >
                     {isDeleting ? 'Deleting...' : 'Delete'}
                   </button>

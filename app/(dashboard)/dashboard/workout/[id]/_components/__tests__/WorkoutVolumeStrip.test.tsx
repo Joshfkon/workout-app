@@ -49,7 +49,7 @@ describe('WorkoutVolumeStrip', () => {
     );
 
     expect(screen.getByTestId('workout-volume-chip-chest')).toBeInTheDocument();
-    expect(screen.getByTestId('workout-volume-readiness-dot-quads')).toHaveClass('bg-success-500');
+    expect(screen.getByTestId('workout-volume-readiness-dot-quads')).toHaveClass('bg-status-ok');
     expect(screen.getByTestId('workout-volume-readiness-quads')).toHaveTextContent('Ready');
   });
 
@@ -65,9 +65,9 @@ describe('WorkoutVolumeStrip', () => {
       />
     );
 
-    expect(screen.getByTestId('workout-volume-readiness-dot-back')).toHaveClass('bg-warning-500');
+    expect(screen.getByTestId('workout-volume-readiness-dot-back')).toHaveClass('bg-status-warn');
     expect(screen.getByTestId('workout-volume-readiness-back')).toHaveTextContent('~10h');
-    expect(screen.getByTestId('workout-volume-readiness-dot-glutes')).toHaveClass('bg-danger-500');
+    expect(screen.getByTestId('workout-volume-readiness-dot-glutes')).toHaveClass('bg-status-bad');
     expect(screen.getByTestId('workout-volume-readiness-glutes')).toHaveTextContent('~36h');
   });
 
@@ -336,10 +336,10 @@ describe('WorkoutVolumeStrip', () => {
         onOpenDetail={noop}
       />
     );
-    expect(screen.getByTestId('workout-volume-chip-chest')).toHaveClass('border-warning-500/50');
+    expect(screen.getByTestId('workout-volume-chip-chest')).toHaveClass('border-status-warn/50');
     await user.click(screen.getByTestId('workout-volume-projection-summary'));
     const label = screen.getByText('Over max');
-    expect(label).toHaveClass('text-warning-400');
+    expect(label).toHaveClass('text-status-warn');
   });
 
   it('marks a locked-in deficit red and explains it in the expanded list', async () => {
@@ -361,10 +361,10 @@ describe('WorkoutVolumeStrip', () => {
         onOpenDetail={noop}
       />
     );
-    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-danger-500/50');
+    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-status-bad/50');
     await user.click(screen.getByTestId('workout-volume-projection-summary'));
     const label = screen.getByText('Locked in');
-    expect(label).toHaveClass('text-danger-400');
+    expect(label).toHaveClass('text-status-bad');
     expect(screen.getByTestId('workout-volume-projection-list')).toHaveTextContent(
       'recovery won’t allow more quality sets'
     );
@@ -387,9 +387,9 @@ describe('WorkoutVolumeStrip', () => {
         onOpenDetail={noop}
       />
     );
-    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-surface-800');
+    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-sep');
     await user.click(screen.getByTestId('workout-volume-projection-summary'));
-    expect(screen.getByText('Under min')).toHaveClass('text-surface-400');
+    expect(screen.getByText('Under min')).toHaveClass('text-ink-2');
   });
 
   it('tapping a chip opens the full "What to train" sheet', async () => {

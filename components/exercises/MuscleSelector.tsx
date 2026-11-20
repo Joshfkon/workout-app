@@ -43,8 +43,8 @@ export function MuscleSelector({
         className={`${isFine ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-sm'} rounded-lg transition-all duration-200
           ${
             isSelected
-              ? 'bg-primary-600 text-white'
-              : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+              ? 'bg-action text-on-action'
+              : 'bg-fill text-ink-2 hover:bg-sep'
           }
         `}
       >
@@ -74,7 +74,7 @@ export function MuscleSelector({
         ))}
       </div>
       {splitWarnings.length > 0 && (
-        <p className="mt-2 text-xs text-warning-400">{splitWarnings[0]}</p>
+        <p className="mt-2 text-xs text-status-warn">{splitWarnings[0]}</p>
       )}
     </div>
   );

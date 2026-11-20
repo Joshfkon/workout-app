@@ -202,13 +202,13 @@ export function ProfilePromptModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-surface-900 rounded-xl border border-surface-800 overflow-hidden animate-fade-in">
+      <div className="w-full max-w-md bg-card rounded-card overflow-hidden animate-fade-in shadow-card">
         <div className="p-6">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-500/20 flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-action/20 flex items-center justify-center">
               <svg
-                className="w-8 h-8 text-primary-400"
+                className="w-8 h-8 text-action"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -221,10 +221,10 @@ export function ProfilePromptModal({
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-surface-100">
+            <h2 className="text-xl font-bold text-ink">
               {needsProfile ? 'Create Your Profile' : 'Personalize Your Profile'}
             </h2>
-            <p className="text-sm text-surface-400 mt-2">
+            <p className="text-sm text-ink-2 mt-2">
               {needsProfile
                 ? 'Set up your profile to share workouts and connect with other lifters.'
                 : 'Update your username to make it easier for friends to find you.'}
@@ -241,14 +241,14 @@ export function ProfilePromptModal({
                 onChange={(e) => handleUsernameChange(e.target.value)}
                 placeholder="your_username"
                 error={usernameError || undefined}
-                leftIcon={<span className="text-surface-500">@</span>}
+                leftIcon={<span className="text-ink-3">@</span>}
                 rightIcon={
                   checkingUsername ? (
-                    <div className="animate-spin h-4 w-4 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+                    <div className="animate-spin h-4 w-4 border-2 border-ink-3 border-t-action rounded-full" />
                   ) : usernameAvailable === true ? (
-                    <span className="text-success-500">&#10003;</span>
+                    <span className="text-status-ok">&#10003;</span>
                   ) : usernameAvailable === false ? (
-                    <span className="text-danger-500">&#10007;</span>
+                    <span className="text-status-bad">&#10007;</span>
                   ) : null
                 }
               />
@@ -256,14 +256,14 @@ export function ProfilePromptModal({
               {/* Suggestions */}
               {suggestions.length > 0 && (hasAnonymousUsername || needsProfile || !username) && (
                 <div className="mt-2">
-                  <p className="text-xs text-surface-500 mb-1.5">Suggestions:</p>
+                  <p className="text-xs text-ink-3 mb-1.5">Suggestions:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {suggestions.slice(0, 3).map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion)}
-                        className="px-2.5 py-1 text-xs bg-surface-800 hover:bg-surface-700 text-surface-300 rounded-full transition-colors"
+                        className="px-2.5 py-1 text-xs bg-fill hover:bg-sep text-ink-2 rounded-full transition-colors"
                       >
                         @{suggestion}
                       </button>
@@ -313,7 +313,7 @@ export function ProfilePromptModal({
           </div>
 
           {hasAnonymousUsername && (
-            <p className="text-xs text-surface-500 text-center mt-4">
+            <p className="text-xs text-ink-3 text-center mt-4">
               You can share workouts anonymously with your current username
             </p>
           )}

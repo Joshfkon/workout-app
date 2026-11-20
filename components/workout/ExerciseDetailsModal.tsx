@@ -113,7 +113,7 @@ function DetailHeaderMeta({
   const chip = (label: string, key: string) => (
     <span
       key={key}
-      className="px-2 py-0.5 rounded-full bg-surface-800 text-surface-300 text-xs capitalize"
+      className="px-2 py-0.5 rounded-full bg-fill text-ink-2 text-xs capitalize"
     >
       {label}
     </span>
@@ -132,7 +132,7 @@ function DetailHeaderMeta({
         {isCautioned && (
           <span
             data-testid="exercise-detail-caution"
-            className="px-2 py-0.5 rounded-full bg-warning-500/15 text-warning-400 text-xs font-medium"
+            className="px-2 py-0.5 rounded-full bg-status-warn/15 text-status-warn text-xs font-medium"
           >
             ⚠ {safetyInfo.shortLabel}
           </span>
@@ -146,12 +146,12 @@ function DetailHeaderMeta({
 
       {/* Caution reason — why this exercise carries the flag */}
       {isCautioned && (
-        <p className="mt-2 text-xs text-warning-400/90">{safetyInfo.description}</p>
+        <p className="mt-2 text-xs text-status-warn/90">{safetyInfo.description}</p>
       )}
 
       {/* Compact last-session summary (full history lives in the History tab) */}
       {lastSessionSummary && (
-        <p data-testid="exercise-detail-last-session" className="mt-2 text-xs text-surface-400">
+        <p data-testid="exercise-detail-last-session" className="mt-2 text-xs text-ink-2">
           {lastSessionSummary}
         </p>
       )}
@@ -328,14 +328,14 @@ export function ExerciseDetailsModal({
         <div className="p-4 sm:p-6">
           {/* Compact header — line 1: name · edit · close */}
           <div className="flex items-start justify-between gap-3">
-            <h2 className="flex-1 min-w-0 text-xl font-bold text-surface-100 break-words">
+            <h2 className="flex-1 min-w-0 text-xl font-bold text-ink break-words">
               {exercise.name}
             </h2>
             <div className="flex items-center gap-1 shrink-0">
               {!isEditing && (
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
+                  className="p-2 text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
                   aria-label="Edit exercise"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -345,7 +345,7 @@ export function ExerciseDetailsModal({
               )}
               <button
                 onClick={onClose}
-                className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
+                className="p-2 text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
                 aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -370,7 +370,7 @@ export function ExerciseDetailsModal({
             <>
               {/* Tab bar */}
               <div
-                className="flex border-b border-surface-800 mt-3 -mx-4 px-4 sm:-mx-6 sm:px-6"
+                className="flex border-b border-sep mt-3 -mx-4 px-4 sm:-mx-6 sm:px-6"
                 role="tablist"
               >
                 {TABS.map((tab) => {
@@ -384,8 +384,8 @@ export function ExerciseDetailsModal({
                       onClick={() => setActiveTab(tab.id)}
                       className={`flex-1 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                         isActive
-                          ? 'text-primary-400 border-primary-500'
-                          : 'text-surface-400 border-transparent hover:text-surface-200'
+                          ? 'text-action border-action'
+                          : 'text-ink-2 border-transparent hover:text-ink'
                       }`}
                     >
                       {tab.label}
@@ -412,8 +412,8 @@ export function ExerciseDetailsModal({
                           onClick={() => setSelectedTrack(opt.key)}
                           className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                             isSelected
-                              ? 'bg-primary-500/20 text-primary-300'
-                              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                              ? 'bg-action/20 text-action'
+                              : 'bg-fill text-ink-2 hover:text-ink'
                           }`}
                         >
                           {opt.label}
@@ -430,7 +430,7 @@ export function ExerciseDetailsModal({
                 {activeTab === null && (
                   <div className="space-y-2" data-testid="exercise-detail-resolving">
                     {[0, 1, 2].map((i) => (
-                      <div key={i} className="h-14 rounded-lg bg-surface-800/50 animate-pulse" />
+                      <div key={i} className="h-14 rounded-lg bg-fill/50 animate-pulse" />
                     ))}
                   </div>
                 )}

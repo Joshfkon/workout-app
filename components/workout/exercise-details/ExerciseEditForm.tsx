@@ -366,14 +366,14 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
   const primaryInList = ALL_MUSCLE_TOKENS.includes(editData.primaryMuscle);
 
   return (
-    <div className="space-y-4 p-4 bg-surface-800/50 rounded-lg border border-surface-700">
+    <div className="space-y-4 p-4 bg-fill/50 rounded-lg border border-sep">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-lg font-semibold text-surface-100">Edit Exercise</h3>
+        <h3 className="text-lg font-semibold text-ink">Edit Exercise</h3>
         <div className="flex items-center gap-2">
           <button
             onClick={handleSaveEdit}
             disabled={isSaving}
-            className="px-3 py-1.5 text-sm bg-success-500 hover:bg-success-600 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-status-ok hover:bg-status-ok text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
           >
             {isSaving ? (
               <>
@@ -394,7 +394,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           </button>
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 text-sm bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg transition-colors"
+            className="px-3 py-1.5 text-sm bg-sep hover:bg-sep text-ink rounded-lg transition-colors"
           >
             Cancel
           </button>
@@ -409,26 +409,26 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         <div
           ref={saveMessageRef}
           data-testid="exercise-edit-save-error"
-          className="p-3 bg-danger-900/30 border border-danger-700 rounded-lg"
+          className="p-3 bg-status-bad/15 border border-status-bad rounded-lg"
         >
-          <p className="text-sm text-danger-400">{saveError}</p>
+          <p className="text-sm text-status-bad">{saveError}</p>
         </div>
       )}
       {saveSuccessMessage && (
         <div
           ref={saveMessageRef}
           data-testid="exercise-edit-save-success"
-          className="p-3 bg-success-900/30 border border-success-700 rounded-lg"
+          className="p-3 bg-status-ok/15 border border-status-ok rounded-lg"
         >
-          <p className="text-sm text-success-400">{saveSuccessMessage}</p>
+          <p className="text-sm text-status-ok">{saveSuccessMessage}</p>
         </div>
       )}
 
       {/* Rows the user doesn't own are shared — edits go through the audited
           shared write path and apply to every user. Say so before saving. */}
       {isSharedExercise === true && (
-        <div className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg" data-testid="catalog-exercise-notice">
-          <p className="text-sm text-warning-400">
+        <div className="p-3 bg-status-warn/15 border border-status-warn rounded-lg" data-testid="catalog-exercise-notice">
+          <p className="text-sm text-status-warn">
             Shared exercise (not created by you) — saving edits it for every
             user (previous values are kept in the audit trail). Gym
             availability below stays personal to you.
@@ -438,13 +438,13 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
       {/* Name */}
       <div>
-        <label className="block text-xs font-medium text-surface-400 mb-1">Name</label>
+        <label className="block text-xs font-medium text-ink-2 mb-1">Name</label>
         <input
           type="text"
           value={editData.name}
           onChange={(e) => setEditData({ ...editData, name: e.target.value })}
           placeholder="Exercise name"
-          className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 text-sm focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
         />
       </div>
 
@@ -455,19 +455,19 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
             type="checkbox"
             checked={editData.isBodyweight}
             onChange={(e) => setEditData({ ...editData, isBodyweight: e.target.checked })}
-            className="w-4 h-4 rounded border-surface-600 bg-surface-900 text-primary-500 focus:ring-primary-500"
+            className="w-4 h-4 rounded border-sep bg-card text-action focus:ring-action"
           />
-          <span className="text-sm text-surface-200">Bodyweight Exercise</span>
+          <span className="text-sm text-ink">Bodyweight Exercise</span>
         </label>
 
         {editData.isBodyweight && (
           <div className="ml-6 space-y-3">
             <div>
-              <label className="block text-xs font-medium text-surface-400 mb-1">Bodyweight Type</label>
+              <label className="block text-xs font-medium text-ink-2 mb-1">Bodyweight Type</label>
               <select
                 value={editData.bodyweightType || ''}
                 onChange={(e) => setEditData({ ...editData, bodyweightType: (e.target.value || null) as EditData['bodyweightType'] })}
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
               >
                 <option value="">Not specified</option>
                 <option value="pure">Pure (always bodyweight)</option>
@@ -479,11 +479,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
             {(editData.bodyweightType === 'assisted_possible' || editData.bodyweightType === 'both') && (
               <div>
-                <label className="block text-xs font-medium text-surface-400 mb-1">Assistance Type</label>
+                <label className="block text-xs font-medium text-ink-2 mb-1">Assistance Type</label>
                 <select
                   value={editData.assistanceType || ''}
                   onChange={(e) => setEditData({ ...editData, assistanceType: (e.target.value || null) as EditData['assistanceType'] })}
-                  className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                  className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
                 >
                   <option value="">Not specified</option>
                   <option value="machine">Machine</option>
@@ -498,11 +498,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
       {/* Equipment */}
       <div>
-        <label className="block text-xs font-medium text-surface-400 mb-1">Equipment</label>
+        <label className="block text-xs font-medium text-ink-2 mb-1">Equipment</label>
         <select
           value={editData.equipment}
           onChange={(e) => setEditData({ ...editData, equipment: e.target.value })}
-          className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+          className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
         >
           {EQUIPMENT_OPTIONS.map((value) => (
             <option key={value} value={value} className="capitalize">
@@ -515,8 +515,8 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       {/* Location Availability */}
       {gymLocations.length > 0 && (
         <div>
-          <label className="block text-xs font-medium text-surface-400 mb-2">Available At</label>
-          <p className="text-xs text-surface-500 mb-2">Select which gym locations have the equipment for this exercise</p>
+          <label className="block text-xs font-medium text-ink-2 mb-2">Available At</label>
+          <p className="text-xs text-ink-3 mb-2">Select which gym locations have the equipment for this exercise</p>
           <div className="space-y-2">
             {gymLocations.map((location) => {
               const isAvailable = locationAvailability[location.id] !== false;
@@ -531,12 +531,12 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                         [location.id]: e.target.checked
                       }));
                     }}
-                    className="w-4 h-4 rounded border-surface-600 bg-surface-900 text-primary-500 focus:ring-primary-500"
+                    className="w-4 h-4 rounded border-sep bg-card text-action focus:ring-action"
                   />
-                  <span className="text-sm text-surface-200">
+                  <span className="text-sm text-ink">
                     {location.name}
                     {location.is_default && (
-                      <span className="text-xs text-surface-500 ml-1">(Default)</span>
+                      <span className="text-xs text-ink-3 ml-1">(Default)</span>
                     )}
                   </span>
                 </label>
@@ -548,11 +548,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
       {/* Movement Pattern */}
       <div>
-        <label className="block text-xs font-medium text-surface-400 mb-1">Movement Pattern</label>
+        <label className="block text-xs font-medium text-ink-2 mb-1">Movement Pattern</label>
         <select
           value={editData.movementPattern}
           onChange={(e) => setEditData({ ...editData, movementPattern: e.target.value })}
-          className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+          className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
         >
           {MOVEMENT_PATTERN_OPTIONS.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
@@ -562,11 +562,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
       {/* Primary Muscle */}
       <div>
-        <label className="block text-xs font-medium text-surface-400 mb-1">Primary Muscle</label>
+        <label className="block text-xs font-medium text-ink-2 mb-1">Primary Muscle</label>
         <select
           value={editData.primaryMuscle}
           onChange={(e) => setEditData({ ...editData, primaryMuscle: e.target.value })}
-          className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+          className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
         >
           {/* Keep a legacy/unknown current value visible (e.g. an existing
               exercise still tagged 'shoulders') without offering it as a
@@ -595,15 +595,15 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
             )
           )}
         </select>
-        <p className="mt-1 text-xs text-surface-500">
+        <p className="mt-1 text-xs text-ink-3">
           Pick the specific head this exercise targets (e.g. Side Delts) — that&apos;s where its volume credit lands.
         </p>
       </div>
 
       {/* Secondary Muscles */}
       <div>
-        <label className="block text-xs font-medium text-surface-400 mb-1">Secondary Muscles</label>
-        <div className="space-y-2 max-h-56 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+        <label className="block text-xs font-medium text-ink-2 mb-1">Secondary Muscles</label>
+        <div className="space-y-2 max-h-56 overflow-y-auto p-2 bg-fill/50 rounded-lg">
           {MUSCLE_GROUP_OPTIONS.map((group) => {
             const isPrimaryGroup = group.value === editData.primaryMuscle;
             const subMuscles = group.subMuscles.filter((s) => s.value !== editData.primaryMuscle);
@@ -622,20 +622,20 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                   // group's label, which is how Gastrocnemius/Soleus ended up
                   // reading as sub-muscles of Adductors.
                   <div className="flex items-center gap-2 p-1 pl-6">
-                    <span className="text-xs font-medium text-surface-200">{group.label}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-surface-500">
+                    <span className="text-xs font-medium text-ink">{group.label}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-ink-3">
                       Primary
                     </span>
                   </div>
                 ) : (
-                  <label className="flex items-center gap-2 p-1 rounded hover:bg-surface-700/50 cursor-pointer">
+                  <label className="flex items-center gap-2 p-1 rounded hover:bg-sep/50 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={editData.secondaryMuscles.includes(group.value)}
                       onChange={(e) => toggleSecondary(group.value, e.target.checked)}
-                      className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                      className="w-4 h-4 text-action bg-sep border-sep rounded focus:ring-action"
                     />
-                    <span className="text-xs font-medium text-surface-200">{group.label}</span>
+                    <span className="text-xs font-medium text-ink">{group.label}</span>
                   </label>
                 )}
                 {subMuscles.length > 0 && (
@@ -646,9 +646,9 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                           type="checkbox"
                           checked={editData.secondaryMuscles.includes(s.value)}
                           onChange={(e) => toggleSecondary(s.value, e.target.checked)}
-                          className="w-3.5 h-3.5 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                          className="w-3.5 h-3.5 text-action bg-sep border-sep rounded focus:ring-action"
                         />
-                        <span className="text-xs text-surface-400">{s.label}</span>
+                        <span className="text-xs text-ink-2">{s.label}</span>
                       </label>
                     ))}
                   </div>
@@ -660,11 +660,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       </div>
 
       {/* Advanced Fields Toggle */}
-      <div className="pt-2 border-t border-surface-700">
+      <div className="pt-2 border-t border-sep">
         <button
           type="button"
           onClick={() => setShowAdvancedFields(!showAdvancedFields)}
-          className="flex items-center justify-between w-full text-sm text-surface-400 hover:text-surface-200 transition-colors"
+          className="flex items-center justify-between w-full text-sm text-ink-2 hover:text-ink transition-colors"
         >
           <span>Advanced Fields</span>
           <svg
@@ -680,17 +680,17 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
       {/* Advanced Fields */}
       {showAdvancedFields && (
-        <div className="space-y-4 pt-2 border-t border-surface-700">
+        <div className="space-y-4 pt-2 border-t border-sep">
           {/* Equipment Required (Multi-select) */}
           <div>
-            <label className="block text-sm font-medium text-surface-300 mb-2">
+            <label className="block text-sm font-medium text-ink-2 mb-2">
               Equipment Required (select all that apply)
             </label>
-            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-fill/50 rounded-lg">
               {equipmentTypes.map((eq) => (
                 <label
                   key={eq.id}
-                  className="flex items-center gap-2 p-2 rounded hover:bg-surface-700/50 cursor-pointer"
+                  className="flex items-center gap-2 p-2 rounded hover:bg-sep/50 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -702,14 +702,14 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                         setEditData({ ...editData, equipmentRequired: editData.equipmentRequired.filter(name => name !== eq.name.toLowerCase()) });
                       }
                     }}
-                    className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-action bg-sep border-sep rounded focus:ring-action"
                   />
-                  <span className="text-sm text-surface-300">{eq.name}</span>
+                  <span className="text-sm text-ink-2">{eq.name}</span>
                 </label>
               ))}
             </div>
             {editData.equipmentRequired.length > 0 && (
-              <p className="text-xs text-surface-500 mt-1">
+              <p className="text-xs text-ink-3 mt-1">
                 Selected: {editData.equipmentRequired.join(', ')}
               </p>
             )}
@@ -717,11 +717,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
           {/* Hypertrophy Tier */}
           <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1">Hypertrophy Tier</label>
+            <label className="block text-xs font-medium text-ink-2 mb-1">Hypertrophy Tier</label>
             <select
               value={editData.hypertrophyTier || ''}
               onChange={(e) => setEditData({ ...editData, hypertrophyTier: (e.target.value || undefined) as EditData['hypertrophyTier'] })}
-              className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
             >
               <option value="">Not set</option>
               <option value="S">S (Best)</option>
@@ -736,7 +736,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           {/* Rep Range */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-surface-400 mb-1">Default Rep Range (Min)</label>
+              <label className="block text-xs font-medium text-ink-2 mb-1">Default Rep Range (Min)</label>
               <input
                 type="number"
                 value={editData.defaultRepRangeMin?.toString() || ''}
@@ -745,11 +745,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                   defaultRepRangeMin: e.target.value ? parseInt(e.target.value) : undefined
                 })}
                 placeholder="8"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-surface-400 mb-1">Default Rep Range (Max)</label>
+              <label className="block text-xs font-medium text-ink-2 mb-1">Default Rep Range (Max)</label>
               <input
                 type="number"
                 value={editData.defaultRepRangeMax?.toString() || ''}
@@ -758,14 +758,14 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                   defaultRepRangeMax: e.target.value ? parseInt(e.target.value) : undefined
                 })}
                 placeholder="12"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
               />
             </div>
           </div>
 
           {/* Default RIR */}
           <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1">Default RIR (Reps In Reserve)</label>
+            <label className="block text-xs font-medium text-ink-2 mb-1">Default RIR (Reps In Reserve)</label>
             <input
               type="number"
               value={editData.defaultRir?.toString() || ''}
@@ -774,18 +774,18 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                 defaultRir: e.target.value ? parseInt(e.target.value) : undefined
               })}
               placeholder="2"
-              className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
             />
           </div>
 
           {/* Setup Note */}
           <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1">Setup Note</label>
+            <label className="block text-xs font-medium text-ink-2 mb-1">Setup Note</label>
             <textarea
               value={editData.setupNote || ''}
               onChange={(e) => setEditData({ ...editData, setupNote: e.target.value })}
               placeholder="Instructions for setting up the exercise..."
-              className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent resize-none shadow-card"
               rows={2}
             />
           </div>
@@ -794,7 +794,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
       {/* Curated YouTube Video */}
       <div>
-        <label className="block text-xs font-medium text-surface-400 mb-1">
+        <label className="block text-xs font-medium text-ink-2 mb-1">
           Curated video (YouTube URL or ID)
         </label>
         <input
@@ -802,22 +802,22 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           value={editData.youtubeVideoInput || ''}
           onChange={(e) => setEditData({ ...editData, youtubeVideoInput: e.target.value })}
           placeholder="https://youtu.be/… or video ID"
-          className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 text-sm focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
         />
         {(() => {
           const trimmed = (editData.youtubeVideoInput || '').trim();
           if (!trimmed) {
             return (
-              <p className="mt-1 text-xs text-surface-500">
+              <p className="mt-1 text-xs text-ink-3">
                 Shown instead of the MuscleWiki demo. Leave blank to use MuscleWiki.
               </p>
             );
           }
           const parsed = parseYouTubeVideoId(trimmed);
           return parsed ? (
-            <p className="mt-1 text-xs text-success-400">Video ID: {parsed}</p>
+            <p className="mt-1 text-xs text-status-ok">Video ID: {parsed}</p>
           ) : (
-            <p className="mt-1 text-xs text-danger-400">
+            <p className="mt-1 text-xs text-status-bad">
               Couldn&apos;t find a YouTube video ID in that text.
             </p>
           );

@@ -67,22 +67,22 @@ export function WarmupProtocol({
           }
         }}
         aria-expanded={isExpanded}
-        className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between p-3 hover:bg-fill/50 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <div
             className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
               allCompleted
-                ? 'bg-success-500/20 text-success-400'
-                : 'bg-surface-700 text-surface-300'
+                ? 'bg-status-ok/20 text-status-ok'
+                : 'bg-sep text-ink-2'
             }`}
           >
             {allCompleted ? '✓' : completedSets.size}
           </div>
-          <span className="text-sm font-medium text-surface-200">
+          <span className="text-sm font-medium text-ink">
             Warmup Protocol
           </span>
-          <span className="text-xs text-surface-500">
+          <span className="text-xs text-ink-3">
             ({completedSets.size}/{warmupSets.length})
           </span>
           {/* Why-warmup rationale — stop propagation so opening the tooltip
@@ -95,7 +95,7 @@ export function WarmupProtocol({
           </span>
         </div>
         <svg
-          className={`w-4 h-4 text-surface-400 transition-transform ${
+          className={`w-4 h-4 text-ink-2 transition-transform ${
             isExpanded ? 'rotate-180' : ''
           }`}
           fill="none"
@@ -108,8 +108,8 @@ export function WarmupProtocol({
 
       {/* Content */}
       {isExpanded && (
-        <div className="border-t border-surface-800">
-          <div className="divide-y divide-surface-800">
+        <div className="border-t border-sep">
+          <div className="divide-y divide-sep">
             {warmupSets.map((set) => {
               const warmupWeightKg = workingWeight * (set.percentOfWorking / 100);
               // Round to 2.5lb/2.5kg increments based on user unit preference
@@ -144,16 +144,16 @@ export function WarmupProtocol({
                   onClick={() => toggleSet(set.setNumber)}
                   className={`w-full flex items-center gap-3 p-3 text-left transition-colors ${
                     isCompleted
-                      ? 'bg-success-500/5'
-                      : 'hover:bg-surface-800/50'
+                      ? 'bg-status-ok/5'
+                      : 'hover:bg-fill/50'
                   }`}
                 >
                   {/* Checkbox */}
                   <div
                     className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                       isCompleted
-                        ? 'bg-success-500 border-success-500'
-                        : 'border-surface-600'
+                        ? 'bg-status-ok border-status-ok'
+                        : 'border-sep'
                     }`}
                   >
                     {isCompleted && (
@@ -168,28 +168,28 @@ export function WarmupProtocol({
                     <div className="flex items-center gap-3">
                       <span
                         className={`font-mono text-sm ${
-                          isCompleted ? 'text-surface-500' : 'text-surface-200'
+                          isCompleted ? 'text-ink-3' : 'text-ink'
                         }`}
                       >
                         {warmupWeight}
                       </span>
-                      <span className="text-surface-500">×</span>
+                      <span className="text-ink-3">×</span>
                       <span
                         className={`font-mono text-sm ${
-                          isCompleted ? 'text-surface-500' : 'text-surface-200'
+                          isCompleted ? 'text-ink-3' : 'text-ink'
                         }`}
                       >
                         {set.targetReps} reps
                       </span>
                       {set.percentOfWorking > 0 && (
-                        <span className="text-xs text-surface-600">
+                        <span className="text-xs text-ink-3">
                           ({set.percentOfWorking}%)
                         </span>
                       )}
                     </div>
                     <p
                       className={`text-xs mt-0.5 ${
-                        isCompleted ? 'text-surface-600' : 'text-surface-500'
+                        isCompleted ? 'text-ink-3' : 'text-ink-3'
                       }`}
                     >
                       {set.purpose}
@@ -202,13 +202,13 @@ export function WarmupProtocol({
 
           {/* Skip all button */}
           {!allCompleted && (
-            <div className="p-3 bg-surface-800/30">
+            <div className="p-3 bg-fill/30">
               <button
                 onClick={() => {
                   setCompletedSets(new Set(warmupSets.map((s) => s.setNumber)));
                   onComplete?.();
                 }}
-                className="w-full text-xs text-surface-500 hover:text-surface-400 transition-colors"
+                className="w-full text-xs text-ink-3 hover:text-ink-2 transition-colors"
               >
                 Skip warmup (already warm)
               </button>

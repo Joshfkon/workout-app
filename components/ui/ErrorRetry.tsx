@@ -39,11 +39,11 @@ export function ErrorRetry({
       role="alert"
       data-testid="error-retry"
     >
-      <div className="w-14 h-14 mb-4 rounded-2xl bg-danger-500/15 flex items-center justify-center">
-        <IconAlertTriangle size={28} className="text-danger-400" aria-hidden="true" />
+      <div className="w-14 h-14 mb-4 rounded-2xl bg-status-bad/15 flex items-center justify-center">
+        <IconAlertTriangle size={28} className="text-status-bad" aria-hidden="true" />
       </div>
-      <h2 className="text-lg font-bold text-surface-100">{title}</h2>
-      <p className="mt-2 max-w-sm text-sm text-surface-400">{message}</p>
+      <h2 className="text-lg font-bold text-ink">{title}</h2>
+      <p className="mt-2 max-w-sm text-sm text-ink-2">{message}</p>
       <Button className="mt-6 min-h-[44px]" onClick={onRetry} disabled={isRetrying}>
         <span className="inline-flex items-center gap-2">
           <IconRefresh size={18} className={isRetrying ? 'animate-spin' : ''} aria-hidden="true" />

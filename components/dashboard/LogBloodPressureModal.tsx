@@ -149,7 +149,7 @@ export function LogBloodPressureModal({
               max={250}
             />
           </div>
-          <div className="pb-3 text-2xl font-semibold text-surface-500 select-none">
+          <div className="pb-3 text-2xl font-semibold text-ink-3 select-none">
             /
           </div>
           <div className="flex-1">
@@ -211,7 +211,7 @@ export function LogBloodPressureModal({
         <div>
           <label
             htmlFor="bp-notes"
-            className="block text-sm font-medium text-surface-200 mb-1.5"
+            className="block text-sm font-medium text-ink mb-1.5"
           >
             Notes (optional)
           </label>
@@ -221,12 +221,12 @@ export function LogBloodPressureModal({
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             placeholder="e.g. after coffee, felt fine"
-            className="w-full rounded-lg bg-surface-800 border border-surface-700 px-4 py-2.5 text-surface-100 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
+            className="w-full rounded-lg bg-fill border border-sep px-4 py-2.5 text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent transition-all resize-none"
           />
         </div>
 
         {saveError && (
-          <p className="text-sm text-danger-400" role="alert">
+          <p className="text-sm text-status-bad" role="alert">
             {saveError}
           </p>
         )}
@@ -246,10 +246,10 @@ export function LogBloodPressureModal({
 
 /** Banner classes per category tone (borrowed from the app's token scale). */
 const TONE_BANNER: Record<BloodPressureCategory_Tone, string> = {
-  success: 'bg-success-500/10 border-success-500/30 text-success-300',
-  primary: 'bg-primary-500/10 border-primary-500/30 text-primary-300',
-  warning: 'bg-warning-500/10 border-warning-500/30 text-warning-300',
-  danger: 'bg-danger-500/10 border-danger-500/30 text-danger-300',
+  success: 'bg-status-ok/10 border-status-ok/30 text-status-ok',
+  primary: 'bg-action/10 border-action/30 text-action',
+  warning: 'bg-status-warn/10 border-status-warn/30 text-status-warn',
+  danger: 'bg-status-bad/10 border-status-bad/30 text-status-bad',
 };
 
 type BloodPressureCategory_Tone =

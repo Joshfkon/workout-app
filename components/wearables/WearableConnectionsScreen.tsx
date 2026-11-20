@@ -309,7 +309,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-action" />
       </div>
     );
   }
@@ -334,7 +334,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
               return (
                 <div
                   key={connection.id}
-                  className="flex items-center justify-between p-4 bg-surface-800 rounded-lg"
+                  className="flex items-center justify-between p-4 bg-fill rounded-lg"
                 >
                   <div className="flex items-center gap-4">
                     <div className="text-3xl">{option?.icon || '📱'}</div>
@@ -345,7 +345,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
                         </span>
                         <span className="w-2 h-2 rounded-full bg-green-500" />
                       </div>
-                      <div className="text-sm text-surface-500">
+                      <div className="text-sm text-ink-3">
                         Last sync: {formatLastSync(connection.lastSyncAt)}
                       </div>
                     </div>
@@ -374,13 +374,13 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
             {availableOptions.map((option) => (
               <div
                 key={option.source}
-                className="flex items-center justify-between p-4 bg-surface-900 rounded-lg border border-surface-700"
+                className="flex items-center justify-between p-4 bg-card rounded-lg shadow-card"
               >
                 <div className="flex items-center gap-4">
                   <div className="text-3xl opacity-60">{option.icon}</div>
                   <div>
                     <div className="font-medium">{option.name}</div>
-                    <div className="text-sm text-surface-500">{option.description}</div>
+                    <div className="text-sm text-ink-3">{option.description}</div>
                   </div>
                 </div>
                 <Button
@@ -400,7 +400,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
       {connectError && (
         <div
           role="alert"
-          className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20 text-sm text-danger-400"
+          className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20 text-sm text-status-bad"
         >
           {connectError}
         </div>
@@ -411,14 +411,14 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
         <Card>
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 shrink-0 rounded-xl bg-danger-500/15 flex items-center justify-center">
-                <IconAlertTriangle size={24} className="text-danger-400" aria-hidden="true" />
+              <div className="w-12 h-12 shrink-0 rounded-xl bg-status-bad/15 flex items-center justify-center">
+                <IconAlertTriangle size={24} className="text-status-bad" aria-hidden="true" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-surface-200 mb-2">
+                <h3 className="font-semibold text-ink mb-2">
                   Apple Health Access Required
                 </h3>
-                <p className="text-sm text-surface-400 mb-4">
+                <p className="text-sm text-ink-2 mb-4">
                   HyperTrack reads your sleep, steps, active energy, and heart-rate data from
                   Apple Health to improve recovery and calorie estimates.
                 </p>
@@ -447,7 +447,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
       {/* No Available Connections */}
       {availableOptions.length === 0 && connectedDevices.length === 0 && (
         <Card>
-          <CardContent className="p-8 text-center text-surface-500">
+          <CardContent className="p-8 text-center text-ink-3">
             <p>No wearable integrations available on this device.</p>
             <p className="text-sm mt-2">
               Apple Health connects from the HyperTrack iPhone app. You can still enter
@@ -462,7 +462,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <span className="text-xl">ℹ️</span>
-            <div className="text-sm text-surface-400">
+            <div className="text-sm text-ink-2">
               <p className="font-medium mb-1">About wearable connections</p>
               <p>
                 Apple Health syncs automatically in the iOS app: sleep auto-fills your

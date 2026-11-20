@@ -64,7 +64,7 @@ export function ExerciseSafetyWarning({
           <h3 className={`font-semibold ${isAvoid ? 'text-red-400' : 'text-amber-400'}`}>
             {isAvoid ? 'Not Recommended' : 'Use Caution'}: {exercise.name}
           </h3>
-          <p className="text-sm text-surface-400 mt-1">
+          <p className="text-sm text-ink-2 mt-1">
             {isAvoid
               ? 'This exercise may aggravate your injury.'
               : 'This exercise may require modifications.'}
@@ -74,21 +74,21 @@ export function ExerciseSafetyWarning({
 
       {/* Reasons */}
       <div className="mt-4 space-y-2">
-        <p className="text-sm font-medium text-surface-300">
+        <p className="text-sm font-medium text-ink-2">
           This exercise stresses your injured area due to:
         </p>
         <ul className="space-y-1">
           {displayReasons.map((reason, idx) => (
             <li key={idx} className="flex items-start gap-2 text-sm">
               <span className={getSeverityDot(reason.severity)} />
-              <span className="text-surface-300">{reason.description}</span>
+              <span className="text-ink-2">{reason.description}</span>
             </li>
           ))}
         </ul>
         {hasMoreReasons && !showAllReasons && (
           <button
             onClick={() => setShowAllReasons(true)}
-            className="text-sm text-primary-400 hover:text-primary-300"
+            className="text-sm text-action"
           >
             + {safetyResult.reasons.length - 3} more reasons
           </button>
@@ -97,11 +97,11 @@ export function ExerciseSafetyWarning({
 
       {/* Caution Recommendations */}
       {safetyResult.level === 'caution' && safetyResult.cautionRecommendations && (
-        <div className="mt-4 p-3 bg-surface-700/50 rounded-lg">
-          <p className="text-sm font-medium text-surface-300 mb-2">Recommendations:</p>
+        <div className="mt-4 p-3 bg-sep/50 rounded-lg">
+          <p className="text-sm font-medium text-ink-2 mb-2">Recommendations:</p>
           <ul className="space-y-1">
             {safetyResult.cautionRecommendations.map((rec, idx) => (
-              <li key={idx} className="text-sm text-surface-400 flex items-start gap-2">
+              <li key={idx} className="text-sm text-ink-2 flex items-start gap-2">
                 <span className="text-amber-400">•</span>
                 {rec}
               </li>
@@ -113,7 +113,7 @@ export function ExerciseSafetyWarning({
       {/* Alternatives */}
       {showAlternatives && safetyResult.alternatives.length > 0 && (
         <div className="mt-4">
-          <p className="text-sm font-medium text-surface-300 mb-2">
+          <p className="text-sm font-medium text-ink-2 mb-2">
             Safer alternatives for {formatMuscleName(exercise.primaryMuscle)}:
           </p>
           <div className="space-y-2">
@@ -121,13 +121,13 @@ export function ExerciseSafetyWarning({
               <button
                 key={alt.id}
                 onClick={() => onSelectAlternative(alt)}
-                className="w-full flex items-center justify-between p-3 bg-surface-700/50 hover:bg-surface-600/50 rounded-lg transition-colors"
+                className="w-full flex items-center justify-between p-3 bg-sep/50 hover:bg-sep/50 rounded-lg transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-emerald-400">✓</span>
                   <div className="text-left">
-                    <span className="text-surface-200">{alt.name}</span>
-                    <div className="text-xs text-surface-400">
+                    <span className="text-ink">{alt.name}</span>
+                    <div className="text-xs text-ink-2">
                       {alt.equipment} • {formatSpinalLoading(alt.spinalLoading)}
                     </div>
                   </div>
@@ -243,17 +243,17 @@ export function WorkoutScanModal({
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md p-6 bg-surface-800">
+      <Card className="w-full max-w-md p-6 bg-fill">
         <div className="text-center mb-6">
           <div className="text-4xl mb-3">
             {avoidExercises.length > 0 ? '⚠️' : '💡'}
           </div>
-          <h2 className="text-xl font-bold text-surface-100">
+          <h2 className="text-xl font-bold text-ink">
             {avoidExercises.length > 0
               ? 'Some Exercises May Aggravate Your Injury'
               : 'Workout Review'}
           </h2>
-          <p className="text-surface-400 mt-2">
+          <p className="text-ink-2 mt-2">
             Found {totalIssues} exercise{totalIssues !== 1 ? 's' : ''} that may need attention
           </p>
         </div>
@@ -267,7 +267,7 @@ export function WorkoutScanModal({
                 <span className="font-medium text-red-400">
                   {avoidExercises.length} Not Recommended
                 </span>
-                <div className="text-sm text-surface-400">
+                <div className="text-sm text-ink-2">
                   {avoidExercises.map((e) => e.exercise.name).join(', ')}
                 </div>
               </div>
@@ -281,7 +281,7 @@ export function WorkoutScanModal({
                 <span className="font-medium text-amber-400">
                   {cautionExercises.length} Use Caution
                 </span>
-                <div className="text-sm text-surface-400">
+                <div className="text-sm text-ink-2">
                   {cautionExercises.map((e) => e.exercise.name).join(', ')}
                 </div>
               </div>
@@ -312,7 +312,7 @@ export function WorkoutScanModal({
           <Button
             variant="ghost"
             size="lg"
-            className="w-full text-surface-400"
+            className="w-full text-ink-2"
             onClick={onDismiss}
           >
             Proceed Without Changes
@@ -331,7 +331,7 @@ function getSeverityDot(severity: 'high' | 'medium' | 'low'): string {
     case 'medium':
       return 'w-2 h-2 rounded-full bg-amber-500 mt-1.5 flex-shrink-0';
     case 'low':
-      return 'w-2 h-2 rounded-full bg-surface-500 mt-1.5 flex-shrink-0';
+      return 'w-2 h-2 rounded-full bg-ink-3 mt-1.5 flex-shrink-0';
   }
 }
 

@@ -53,7 +53,7 @@ export function CaptureChart({ analysis }: CaptureChartProps) {
   if (!model) return null;
 
   return (
-    <div className="overflow-hidden rounded-lg bg-surface-900/60 p-2" data-testid="motion-capture-chart">
+    <div className="overflow-hidden rounded-lg bg-card/60 p-2" data-testid="motion-capture-chart">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Angular velocity over the set">
         {/* Concentric (positive) vs eccentric (negative) span shading */}
         {model.spans.map((s, i) => (
@@ -63,30 +63,30 @@ export function CaptureChart({ analysis }: CaptureChartProps) {
             y={PAD_Y}
             width={Math.max(1, s.x1 - s.x0)}
             height={H - 2 * PAD_Y}
-            className={s.dir === 1 ? 'fill-primary-500/15' : 'fill-warning-500/15'}
+            className={s.dir === 1 ? 'fill-action/15' : 'fill-status-warn/15'}
           />
         ))}
         {/* Zero line */}
-        <line x1={PAD_X} y1={H / 2} x2={W - PAD_X} y2={H / 2} className="stroke-surface-600" strokeWidth="1" strokeDasharray="4 4" />
+        <line x1={PAD_X} y1={H / 2} x2={W - PAD_X} y2={H / 2} className="stroke-sep" strokeWidth="1" strokeDasharray="4 4" />
         {/* Rep boundaries */}
         {model.repStarts.map((r) => (
           <g key={r.index}>
-            <line x1={r.x0} y1={PAD_Y} x2={r.x0} y2={H - PAD_Y} className="stroke-surface-400" strokeWidth="1" />
-            <text x={r.x0 + 3} y={PAD_Y + 10} className="fill-surface-400" fontSize="10">
+            <line x1={r.x0} y1={PAD_Y} x2={r.x0} y2={H - PAD_Y} className="stroke-ink-3" strokeWidth="1" />
+            <text x={r.x0 + 3} y={PAD_Y + 10} className="fill-ink-3" fontSize="10">
               {r.index + 1}
             </text>
           </g>
         ))}
         {/* w(t) */}
-        <polyline points={model.points} fill="none" className="stroke-primary-400" strokeWidth="1.5" />
+        <polyline points={model.points} fill="none" className="stroke-action" strokeWidth="1.5" />
         {/* Scale hint */}
-        <text x={W - PAD_X - 2} y={PAD_Y + 2} textAnchor="end" className="fill-surface-500" fontSize="10">
+        <text x={W - PAD_X - 2} y={PAD_Y + 2} textAnchor="end" className="fill-ink-3" fontSize="10">
           ±{model.wMax.toFixed(1)} rad/s
         </text>
       </svg>
-      <p className="mt-1 text-[10px] text-surface-500">
-        <span className="text-primary-400">■</span> concentric&nbsp;&nbsp;
-        <span className="text-warning-400">■</span> eccentric&nbsp;&nbsp;— numbered lines mark rep starts
+      <p className="mt-1 text-[10px] text-ink-3">
+        <span className="text-action">■</span> concentric&nbsp;&nbsp;
+        <span className="text-status-warn">■</span> eccentric&nbsp;&nbsp;— numbered lines mark rep starts
       </p>
     </div>
   );

@@ -27,16 +27,16 @@ import {
 import { TAP_LATENCY_WARN_MS } from '@/lib/motion/deviceMotionRecorder';
 
 export const ZONE_TEXT: Record<EffortZone, string> = {
-  easy: 'text-success-400',
-  moderate: 'text-success-300',
-  hard: 'text-warning-400',
-  'near-failure': 'text-danger-400',
+  easy: 'text-status-ok',
+  moderate: 'text-status-ok',
+  hard: 'text-status-warn',
+  'near-failure': 'text-status-bad',
 };
 const ZONE_BAR: Record<EffortZone, string> = {
-  easy: 'bg-success-500',
-  moderate: 'bg-success-600',
-  hard: 'bg-warning-500',
-  'near-failure': 'bg-danger-500',
+  easy: 'bg-status-ok',
+  moderate: 'bg-status-ok',
+  hard: 'bg-status-warn',
+  'near-failure': 'bg-status-bad',
 };
 export const ZONE_LABEL: Record<EffortZone, string> = {
   easy: 'Easy',
@@ -46,9 +46,9 @@ export const ZONE_LABEL: Record<EffortZone, string> = {
 };
 
 const TIER_LABEL: Record<CaptureAnalysis['tier'], { text: string; className: string }> = {
-  mounted: { text: 'mounted', className: 'text-success-400' },
-  handheld: { text: 'hand-held', className: 'text-warning-400' },
-  none: { text: 'no still ref', className: 'text-danger-400' },
+  mounted: { text: 'mounted', className: 'text-status-ok' },
+  handheld: { text: 'hand-held', className: 'text-status-warn' },
+  none: { text: 'no still ref', className: 'text-status-bad' },
 };
 
 /** Bar area height, px (fixed so bar heights never depend on flex sizing). */
@@ -76,22 +76,22 @@ export function CoachBlock({ feedback, text }: { feedback: CoachFeedback; text: 
   return (
     <div className="space-y-2" data-testid="coach-feedback">
       {feedback.unclearLine ? (
-        <p className="text-sm text-surface-300" data-testid="coach-unclear">
+        <p className="text-sm text-ink-2" data-testid="coach-unclear">
           {feedback.unclearLine}
         </p>
       ) : text.verdict ? (
-        <p className="text-[15px] font-medium text-surface-100" data-testid="coach-verdict">
+        <p className="text-[15px] font-medium text-ink" data-testid="coach-verdict">
           {text.verdict}
         </p>
       ) : null}
       {!feedback.unclearLine &&
         text.cues.map((cue) => (
-          <p key={cue} className="text-sm text-surface-300 pl-3 border-l-2 border-surface-600" data-testid="coach-cue">
+          <p key={cue} className="text-sm text-ink-2 pl-3 border-l-2 border-sep" data-testid="coach-cue">
             {cue}
           </p>
         ))}
       {text.nextSetCall && (
-        <p className="text-sm font-medium text-primary-300" data-testid="coach-next-set">
+        <p className="text-sm font-medium text-action" data-testid="coach-next-set">
           {text.nextSetCall}
         </p>
       )}
@@ -109,8 +109,8 @@ export function VelocityBars({ perRep }: { perRep: RepVelocity[] }) {
   // fastest), so heights scale to the tallest bar.
   const maxRel = Math.max(1, ...perRep.map((p) => p.relative ?? 0));
   return (
-    <div className="rounded-lg bg-surface-900/60 p-3" data-testid="motion-velocity-bars">
-      <p className="mb-2 text-[10px] uppercase tracking-wide text-surface-500">
+    <div className="rounded-lg bg-card/60 p-3" data-testid="motion-velocity-bars">
+      <p className="mb-2 text-[10px] uppercase tracking-wide text-ink-3">
         Velocity by rep · % of start
       </p>
       <div className="flex items-end gap-1" role="list" aria-label="Velocity by rep">
@@ -129,14 +129,14 @@ export function VelocityBars({ perRep }: { perRep: RepVelocity[] }) {
                 style={{ height: BAR_AREA_PX + (showPct ? 14 : 0) }}
               >
                 {showPct && (
-                  <span className="mb-0.5 text-[10px] leading-none text-surface-400">{pct ?? '—'}</span>
+                  <span className="mb-0.5 text-[10px] leading-none text-ink-2">{pct ?? '—'}</span>
                 )}
                 <div
-                  className={`w-full max-w-[28px] rounded-t ${rel === null ? 'bg-surface-700' : ZONE_BAR[relZone(rel)]}`}
+                  className={`w-full max-w-[28px] rounded-t ${rel === null ? 'bg-sep' : ZONE_BAR[relZone(rel)]}`}
                   style={{ height: rel === null ? 3 : Math.max(3, (rel / maxRel) * BAR_AREA_PX) }}
                 />
               </div>
-              <span className="mt-1 text-[10px] leading-none text-surface-500">{p.n}</span>
+              <span className="mt-1 text-[10px] leading-none text-ink-3">{p.n}</span>
             </div>
           );
         })}
@@ -166,7 +166,7 @@ export function RepTable({
   return (
     <table className="w-full table-fixed text-sm" data-testid="motion-analysis-rep-table">
       <thead>
-        <tr className="text-left text-xs text-surface-500">
+        <tr className="text-left text-xs text-ink-3">
           <th className="w-[18%] py-1 font-medium">Rep</th>
           <th className="w-[36%] py-1 font-medium">Tempo</th>
           <th className="w-[26%] py-1 font-medium">Velocity</th>
@@ -178,9 +178,9 @@ export function RepTable({
         const isOpen = expanded === rep.n;
         const toggle = () => setExpanded(isOpen ? null : rep.n);
         return (
-          <tbody key={rep.n} className="border-t border-surface-800">
+          <tbody key={rep.n} className="border-t border-sep">
             <tr
-              className="cursor-pointer text-surface-300"
+              className="cursor-pointer text-ink-2"
               onClick={toggle}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -195,9 +195,9 @@ export function RepTable({
               <td className="py-2">
                 <span className="inline-flex items-center gap-0.5">
                   {isOpen ? (
-                    <IconChevronDown size={12} className="text-surface-500" aria-hidden />
+                    <IconChevronDown size={12} className="text-ink-3" aria-hidden />
                   ) : (
-                    <IconChevronRight size={12} className="text-surface-500" aria-hidden />
+                    <IconChevronRight size={12} className="text-ink-3" aria-hidden />
                   )}
                   {rep.n}
                 </span>
@@ -205,7 +205,7 @@ export function RepTable({
               <td className="py-2 whitespace-nowrap tabular-nums">
                 {(rep.concentricMs / 1000).toFixed(1)}↑ {(rep.eccentricMs / 1000).toFixed(1)}↓
               </td>
-              <td className={`py-2 tabular-nums ${rel === null ? 'text-surface-500' : ZONE_TEXT[relZone(rel)]}`}>
+              <td className={`py-2 tabular-nums ${rel === null ? 'text-ink-3' : ZONE_TEXT[relZone(rel)]}`}>
                 {rel === null ? '—' : `${Math.round(rel * 100)}%`}
               </td>
               <td className="py-2 text-right tabular-nums">
@@ -242,11 +242,11 @@ function RepDetail({ rep, gravityLabel }: { rep: CleanRep; gravityLabel: string 
     items.push([gravityLabel, rep.romGravityDeg === null ? '—' : `${rep.romGravityDeg.toFixed(0)}°`]);
   }
   return (
-    <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-lg bg-surface-900/60 p-2.5 text-xs">
+    <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-lg bg-card/60 p-2.5 text-xs">
       {items.map(([k, val]) => (
         <div key={k} className="flex min-w-0 justify-between gap-2">
-          <dt className="truncate text-surface-500">{k}</dt>
-          <dd className="whitespace-nowrap tabular-nums text-surface-200">{val}</dd>
+          <dt className="truncate text-ink-3">{k}</dt>
+          <dd className="whitespace-nowrap tabular-nums text-ink">{val}</dd>
         </div>
       ))}
     </dl>
@@ -271,11 +271,11 @@ export function Collapsible({
   children: ReactNode;
 }) {
   return (
-    <div className="border-t border-surface-800 pt-2" data-testid={testId}>
+    <div className="border-t border-sep pt-2" data-testid={testId}>
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between py-1 text-xs font-medium uppercase tracking-wide text-surface-500 hover:text-surface-300"
+        className="flex w-full items-center justify-between py-1 text-xs font-medium uppercase tracking-wide text-ink-3 hover:text-ink-2"
         aria-expanded={open}
         data-testid={`${testId}-toggle`}
       >
@@ -287,9 +287,9 @@ export function Collapsible({
   );
 }
 
-const Tile = ({ label, value, className = 'text-surface-200' }: { label: string; value: string; className?: string }) => (
-  <div className="rounded-lg bg-surface-900/60 p-2">
-    <p className="text-[10px] uppercase tracking-wide text-surface-500">{label}</p>
+const Tile = ({ label, value, className = 'text-ink' }: { label: string; value: string; className?: string }) => (
+  <div className="rounded-lg bg-card/60 p-2">
+    <p className="text-[10px] uppercase tracking-wide text-ink-3">{label}</p>
     <p className={`text-sm font-semibold ${className}`}>{value}</p>
   </div>
 );
@@ -320,7 +320,7 @@ export function Diagnostics({
           <Tile
             label="Dropped"
             value={String(analysis.droppedFrames)}
-            className={analysis.droppedFrames > 0 ? 'text-warning-400' : 'text-surface-200'}
+            className={analysis.droppedFrames > 0 ? 'text-status-warn' : 'text-ink'}
           />
         )}
         {analysis && (
@@ -329,11 +329,11 @@ export function Diagnostics({
         <Tile
           label="PC1 share"
           value={`${(pc1 * 100).toFixed(0)}%`}
-          className={pc1 < min ? 'text-warning-400' : 'text-surface-200'}
+          className={pc1 < min ? 'text-status-warn' : 'text-ink'}
         />
       </div>
 
-      <p className="text-xs text-surface-500" data-testid="motion-pc1-technical">
+      <p className="text-xs text-ink-3" data-testid="motion-pc1-technical">
         PC1 variance share {(cleaned.pc1ShareRaw * 100).toFixed(0)}% over the whole capture
         {cleaned.pc1ShareClean !== null && `, ${(cleaned.pc1ShareClean * 100).toFixed(0)}% over the clean reps`}
         {pc1 < min
@@ -342,11 +342,11 @@ export function Diagnostics({
       </p>
 
       {analysis && (
-        <p className="text-xs text-surface-400" data-testid="motion-stop-latency">
+        <p className="text-xs text-ink-2" data-testid="motion-stop-latency">
           Sensor latency at stop tap:{' '}
           {stopLatencyMs === null ? stopLatencyFallback : `${Math.round(stopLatencyMs)} ms`}
           {stopLatencyMs !== null && stopLatencyMs > TAP_LATENCY_WARN_MS && (
-            <span className="text-warning-400">
+            <span className="text-status-warn">
               {' '}
               — stale (&gt;{TAP_LATENCY_WARN_MS} ms; sensor delivery is lagging taps)
             </span>
@@ -355,7 +355,7 @@ export function Diagnostics({
       )}
 
       {analysis?.gravityRomStatus === 'suppressed' && (
-        <p className="text-xs text-surface-500" data-testid="motion-gravity-rom-suppressed">
+        <p className="text-xs text-ink-3" data-testid="motion-gravity-rom-suppressed">
           The rotation axis is within {GRAVITY_ROM_SUPPRESS_BELOW_DEG}° of vertical, so the
           accelerometer cross-check can&apos;t resolve this rotation — gravity ROM is hidden.
         </p>
@@ -363,9 +363,9 @@ export function Diagnostics({
 
       {cleaningLog.length > 0 && (
         <div className="space-y-1" data-testid="motion-cleaning-log">
-          <p className="text-[10px] uppercase tracking-wide text-surface-500">Rep cleaning</p>
+          <p className="text-[10px] uppercase tracking-wide text-ink-3">Rep cleaning</p>
           {cleaningLog.map((line) => (
-            <p key={line} className="text-xs text-surface-400">
+            <p key={line} className="text-xs text-ink-2">
               {line}
             </p>
           ))}
@@ -376,7 +376,7 @@ export function Diagnostics({
         <button
           type="button"
           onClick={onDownloadCsv}
-          className="text-xs text-primary-400 hover:text-primary-300"
+          className="text-xs text-action"
           data-testid="motion-download-csv"
         >
           {downloadLabel}

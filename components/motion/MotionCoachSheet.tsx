@@ -91,17 +91,17 @@ export function MotionCoachSheet({
           <CoachBlock feedback={feedback} text={phrased ?? coachTemplateText(feedback, nextSetCall)} />
         ) : (
           <div className="space-y-2" data-testid="motion-legacy-capture">
-            <p className="text-sm text-surface-300">
+            <p className="text-sm text-ink-2">
               This capture was recorded before the current rep analysis and its raw data
               wasn&apos;t kept, so there&apos;s no coach feedback for it.
             </p>
-            {nextSetCall && <p className="text-sm font-medium text-primary-300">{nextSetCall}</p>}
+            {nextSetCall && <p className="text-sm font-medium text-action">{nextSetCall}</p>}
           </div>
         )}
 
         <div className="space-y-4" data-testid="motion-sheet-details">
           {velocityRirLine && feedback?.confidence.confidence === 'ok' && (
-            <p className="text-xs text-surface-400" data-testid="velocity-rir-line">
+            <p className="text-xs text-ink-2" data-testid="velocity-rir-line">
               {velocityRirLine}
             </p>
           )}
@@ -127,7 +127,7 @@ function LegacyMetrics({ metrics }: { metrics: CaptureAnalysisMetrics }) {
   return (
     <table className="w-full table-fixed text-xs" data-testid="motion-legacy-metrics">
       <thead>
-        <tr className="text-left text-surface-500">
+        <tr className="text-left text-ink-3">
           <th className="py-1 font-medium">Rep</th>
           <th className="py-1 font-medium">Mean ω</th>
           <th className="py-1 font-medium">Peak ω</th>
@@ -136,7 +136,7 @@ function LegacyMetrics({ metrics }: { metrics: CaptureAnalysisMetrics }) {
       </thead>
       <tbody>
         {metrics.reps.map((r) => (
-          <tr key={r.index} className="border-t border-surface-800 text-surface-300">
+          <tr key={r.index} className="border-t border-sep text-ink-2">
             <td className="py-1.5">{r.index + 1}</td>
             <td className="py-1.5 tabular-nums">{deg(r.meanConcentricW_radps)}°/s</td>
             <td className="py-1.5 tabular-nums">{deg(r.peakConcentricW_radps)}°/s</td>

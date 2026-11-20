@@ -61,17 +61,17 @@ export function StabilizerWarningBanner({ warning, unit, onDismiss }: Stabilizer
 
   return (
     <div
-      className="rounded-xl border border-warning-500/45 bg-warning-500/10 px-4 py-3"
+      className="rounded-xl border border-status-warn/45 bg-status-warn/10 px-4 py-3"
       role="status"
       data-testid="stabilizer-warning-banner"
     >
       <div className="flex items-start gap-3">
-        <span aria-hidden="true" className="text-warning-400 mt-0.5">⚠</span>
+        <span aria-hidden="true" className="text-status-warn mt-0.5">⚠</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-warning-300">
+          <p className="text-sm font-medium text-status-warn">
             {warning.displayName} still recovering ({recoveredPct}%)
           </p>
-          <p className="text-[13px] text-surface-400 mt-0.5">
+          <p className="text-[13px] text-ink-2 mt-0.5">
             {warning.hoursSinceLoaded !== null
               ? `Last loaded ${formatHoursAgo(warning.hoursSinceLoaded)}`
               : 'Recently loaded'}
@@ -81,12 +81,12 @@ export function StabilizerWarningBanner({ warning, unit, onDismiss }: Stabilizer
           {warning.mitigations.length > 0 && (
             <ul className="mt-1.5 space-y-0.5">
               {warning.suggestedLoadKg !== null && (
-                <li className="text-[13px] text-surface-300">
+                <li className="text-[13px] text-ink-2">
                   • Drop to ~{formatWeight(warning.suggestedLoadKg, unit, 0)} to stay easy on it
                 </li>
               )}
               {warning.mitigations.map((m) => (
-                <li key={m} className="text-[13px] text-surface-300">• {m}</li>
+                <li key={m} className="text-[13px] text-ink-2">• {m}</li>
               ))}
             </ul>
           )}
@@ -94,7 +94,7 @@ export function StabilizerWarningBanner({ warning, unit, onDismiss }: Stabilizer
             <button
               type="button"
               onClick={onDismiss}
-              className="min-h-[36px] px-3 text-sm text-surface-400 hover:text-surface-200"
+              className="min-h-[36px] px-3 text-sm text-ink-2 hover:text-ink"
               data-testid="stabilizer-warning-dismiss"
             >
               Got it — train as planned

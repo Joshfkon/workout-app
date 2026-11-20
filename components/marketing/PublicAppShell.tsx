@@ -17,42 +17,42 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
   const isNative = useIsNativePlatform();
 
   return (
-    <div className="min-h-screen bg-surface-950 flex flex-col">
+    <div className="min-h-screen bg-canvas flex flex-col">
       {/* Top navigation */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800/50">
+      <nav className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-canvas/95 backdrop-blur-sm border-b border-sep/50">
         <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-action flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-lg font-bold text-surface-100 tracking-tight">HyperTrack</span>
+          <span className="text-lg font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
 
         {/* Desktop navigation */}
         <div className="hidden md:flex items-center gap-6">
-          <Link href="/learn" className="text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors">
+          <Link href="/learn" className="text-sm font-medium text-ink-2 hover:text-ink transition-colors">
             Learn
           </Link>
           {!isNative && (
-            <Link href="/pricing" className="text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors">
+            <Link href="/pricing" className="text-sm font-medium text-ink-2 hover:text-ink transition-colors">
               Pricing
             </Link>
           )}
-          <Link href="/support" className="text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors">
+          <Link href="/support" className="text-sm font-medium text-ink-2 hover:text-ink transition-colors">
             Support
           </Link>
-          <div className="w-px h-5 bg-surface-700" />
+          <div className="w-px h-5 bg-sep" />
           <ThemeToggleCompact />
           <Link
             href="/login"
-            className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-ink-2 hover:text-ink transition-colors"
           >
             Login
           </Link>
           <Link
             href="/register"
-            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-action hover:bg-action text-on-action transition-colors"
           >
             Sign Up
           </Link>
@@ -63,7 +63,7 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
           <ThemeToggleCompact />
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 text-surface-300 hover:text-surface-100 transition-colors"
+            className="p-2 text-ink-2 hover:text-ink transition-colors"
             aria-label="Toggle menu"
           >
             {mobileMenuOpen ? (
@@ -81,11 +81,11 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
 
       {/* Mobile menu dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-surface-900 border-b border-surface-800">
+        <div className="md:hidden bg-card border-b border-sep">
           <div className="px-4 py-4 space-y-3">
             <Link
               href="/learn"
-              className="block px-3 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
+              className="block px-3 py-2 text-sm font-medium text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
               onClick={() => setMobileMenuOpen(false)}
             >
               Learn
@@ -93,7 +93,7 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
             {!isNative && (
               <Link
                 href="/pricing"
-                className="block px-3 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
+                className="block px-3 py-2 text-sm font-medium text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Pricing
@@ -101,22 +101,22 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
             )}
             <Link
               href="/support"
-              className="block px-3 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
+              className="block px-3 py-2 text-sm font-medium text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
               onClick={() => setMobileMenuOpen(false)}
             >
               Support
             </Link>
-            <div className="border-t border-surface-800 pt-3 mt-3 space-y-2">
+            <div className="border-t border-sep pt-3 mt-3 space-y-2">
               <Link
                 href="/login"
-                className="block px-3 py-2 text-sm font-medium text-center text-surface-300 hover:text-surface-100 border border-surface-700 rounded-lg transition-colors"
+                className="block px-3 py-2 text-sm font-medium text-center text-ink-2 hover:text-ink border border-sep rounded-lg transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Login
               </Link>
               <Link
                 href="/register"
-                className="block px-3 py-2 text-sm font-medium text-center rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+                className="block px-3 py-2 text-sm font-medium text-center rounded-lg bg-action hover:bg-action text-on-action transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Sign Up
@@ -132,29 +132,29 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-surface-800/50">
+      <footer className="mt-auto border-t border-sep/50">
         <div className="max-w-5xl mx-auto px-4 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-action flex items-center justify-center flex-shrink-0">
                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <span className="text-sm text-surface-400">© 2026 HyperTrack</span>
+              <span className="text-sm text-ink-2">© 2026 HyperTrack</span>
             </div>
             <div className="flex items-center gap-6 text-sm">
-              <Link href="/privacy" className="text-surface-400 hover:text-surface-200 transition-colors">
+              <Link href="/privacy" className="text-ink-2 hover:text-ink transition-colors">
                 Privacy
               </Link>
-              <Link href="/terms" className="text-surface-400 hover:text-surface-200 transition-colors">
+              <Link href="/terms" className="text-ink-2 hover:text-ink transition-colors">
                 Terms
               </Link>
-              <Link href="/support" className="text-surface-400 hover:text-surface-200 transition-colors">
+              <Link href="/support" className="text-ink-2 hover:text-ink transition-colors">
                 Support
               </Link>
               {!isNative && (
-                <Link href="/pricing" className="text-surface-400 hover:text-surface-200 transition-colors">
+                <Link href="/pricing" className="text-ink-2 hover:text-ink transition-colors">
                   Pricing
                 </Link>
               )}

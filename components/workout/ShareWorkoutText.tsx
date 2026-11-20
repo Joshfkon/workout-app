@@ -39,14 +39,14 @@ export function ShareWorkoutText({ input }: ShareWorkoutTextProps) {
 
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Share Workout" size="sm">
         <div className="space-y-4">
-          <pre className="whitespace-pre-wrap break-words rounded-lg bg-surface-900 border border-surface-700 p-4 font-mono text-sm text-surface-100 select-all">
+          <pre className="whitespace-pre-wrap break-words rounded-lg bg-card p-4 font-mono text-sm text-ink select-all shadow-card">
             {shareText}
           </pre>
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-surface-200">Cryptic mode</p>
-              <p className="text-xs text-surface-500">Hide exercise names — just flex the grid</p>
+              <p className="text-sm font-medium text-ink">Cryptic mode</p>
+              <p className="text-xs text-ink-3">Hide exercise names — just flex the grid</p>
             </div>
             <Toggle checked={cryptic} onChange={setCryptic} />
           </div>

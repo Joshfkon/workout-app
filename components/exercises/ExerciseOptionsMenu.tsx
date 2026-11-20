@@ -89,13 +89,13 @@ export function ExerciseOptionsMenu({
   const menuContent = isOpen && (
     <div
       ref={menuRef}
-      className="fixed z-50 w-56 bg-surface-900 border border-surface-700 rounded-lg shadow-xl py-1 animate-fade-in"
+      className="fixed z-50 w-56 bg-card rounded-lg shadow-xl py-1 animate-fade-in"
       style={{ top: menuPosition.top, left: menuPosition.left }}
     >
-      <div className="px-3 py-2 border-b border-surface-800">
-        <p className="text-sm font-medium text-surface-200 truncate">{exerciseName}</p>
+      <div className="px-3 py-2 border-b border-sep">
+        <p className="text-sm font-medium text-ink truncate">{exerciseName}</p>
         {status !== 'active' && (
-          <p className="text-xs text-surface-500 mt-0.5">
+          <p className="text-xs text-ink-3 mt-0.5">
             {status === 'do_not_suggest' ? 'Not suggesting' : 'Archived'}
           </p>
         )}
@@ -105,9 +105,9 @@ export function ExerciseOptionsMenu({
         {onAddToWorkout && (
           <button
             onClick={() => handleAction(onAddToWorkout)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
           >
-            <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add to Workout
@@ -117,9 +117,9 @@ export function ExerciseOptionsMenu({
         {onViewHistory && (
           <button
             onClick={() => handleAction(onViewHistory)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
           >
-            <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -132,14 +132,14 @@ export function ExerciseOptionsMenu({
         )}
       </div>
 
-      <div className="border-t border-surface-800 py-1">
+      <div className="border-t border-sep py-1">
         {status === 'active' && (
           <>
             <button
               onClick={() => handleAction(onMute)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800 transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
             >
-              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -157,9 +157,9 @@ export function ExerciseOptionsMenu({
             </button>
             <button
               onClick={() => handleAction(onArchive)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800 transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
             >
-              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -176,7 +176,7 @@ export function ExerciseOptionsMenu({
           <>
             <button
               onClick={() => handleAction(onRestore)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-400 hover:bg-surface-800 transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-400 hover:bg-fill transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -185,9 +185,9 @@ export function ExerciseOptionsMenu({
             </button>
             <button
               onClick={() => handleAction(onArchive)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800 transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
             >
-              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -203,7 +203,7 @@ export function ExerciseOptionsMenu({
         {status === 'archived' && (
           <button
             onClick={() => handleAction(onRestore)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-400 hover:bg-surface-800 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-400 hover:bg-fill transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -219,10 +219,10 @@ export function ExerciseOptionsMenu({
       </div>
 
       {onDelete && (
-        <div className="border-t border-surface-800 py-1">
+        <div className="border-t border-sep py-1">
           <button
             onClick={() => handleAction(onDelete)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-danger-400 hover:bg-danger-500/10 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-status-bad hover:bg-status-bad/10 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -244,7 +244,7 @@ export function ExerciseOptionsMenu({
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className="p-1.5 text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
+        className="p-1.5 text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
         aria-label="Exercise options"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

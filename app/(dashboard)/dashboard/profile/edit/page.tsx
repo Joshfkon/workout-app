@@ -113,7 +113,7 @@ export default function ProfileEditPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-action" />
       </div>
     );
   }
@@ -128,14 +128,14 @@ export default function ProfileEditPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Display Name */}
             <div>
-              <label className="block text-sm font-medium text-surface-200 mb-2">
+              <label className="block text-sm font-medium text-ink mb-2">
                 Display Name
               </label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                 placeholder="Your name"
                 maxLength={50}
               />
@@ -143,70 +143,70 @@ export default function ProfileEditPage() {
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-medium text-surface-200 mb-2">
+              <label className="block text-sm font-medium text-ink mb-2">
                 Bio
               </label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action resize-none shadow-card"
                 rows={4}
                 placeholder="Tell us about yourself..."
                 maxLength={500}
               />
-              <p className="text-xs text-surface-400 mt-1">{bio.length}/500</p>
+              <p className="text-xs text-ink-2 mt-1">{bio.length}/500</p>
             </div>
 
             {/* Privacy Settings */}
-            <div className="border-t border-surface-800 pt-6">
-              <h3 className="text-lg font-semibold text-surface-100 mb-4">Privacy Settings</h3>
+            <div className="border-t border-sep pt-6">
+              <h3 className="text-lg font-semibold text-ink mb-4">Privacy Settings</h3>
 
               {/* Profile Visibility */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-surface-200 mb-2">
+                <label className="block text-sm font-medium text-ink mb-2">
                   Profile Visibility
                 </label>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 p-3 bg-surface-800 rounded-lg cursor-pointer hover:bg-surface-700 transition-colors">
+                  <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
                     <input
                       type="radio"
                       name="visibility"
                       value="public"
                       checked={profileVisibility === 'public'}
                       onChange={(e) => setProfileVisibility(e.target.value as ProfileVisibility)}
-                      className="w-4 h-4 text-primary-500"
+                      className="w-4 h-4 text-action"
                     />
                     <div>
-                      <p className="text-surface-100 font-medium">Public</p>
-                      <p className="text-xs text-surface-400">Anyone can view your profile and workouts</p>
+                      <p className="text-ink font-medium">Public</p>
+                      <p className="text-xs text-ink-2">Anyone can view your profile and workouts</p>
                     </div>
                   </label>
-                  <label className="flex items-center gap-3 p-3 bg-surface-800 rounded-lg cursor-pointer hover:bg-surface-700 transition-colors">
+                  <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
                     <input
                       type="radio"
                       name="visibility"
                       value="followers_only"
                       checked={profileVisibility === 'followers_only'}
                       onChange={(e) => setProfileVisibility(e.target.value as ProfileVisibility)}
-                      className="w-4 h-4 text-primary-500"
+                      className="w-4 h-4 text-action"
                     />
                     <div>
-                      <p className="text-surface-100 font-medium">Followers Only</p>
-                      <p className="text-xs text-surface-400">Only people you follow can view your profile</p>
+                      <p className="text-ink font-medium">Followers Only</p>
+                      <p className="text-xs text-ink-2">Only people you follow can view your profile</p>
                     </div>
                   </label>
-                  <label className="flex items-center gap-3 p-3 bg-surface-800 rounded-lg cursor-pointer hover:bg-surface-700 transition-colors">
+                  <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
                     <input
                       type="radio"
                       name="visibility"
                       value="private"
                       checked={profileVisibility === 'private'}
                       onChange={(e) => setProfileVisibility(e.target.value as ProfileVisibility)}
-                      className="w-4 h-4 text-primary-500"
+                      className="w-4 h-4 text-action"
                     />
                     <div>
-                      <p className="text-surface-100 font-medium">Private</p>
-                      <p className="text-xs text-surface-400">Only you can view your profile</p>
+                      <p className="text-ink font-medium">Private</p>
+                      <p className="text-xs text-ink-2">Only you can view your profile</p>
                     </div>
                   </label>
                 </div>
@@ -214,50 +214,50 @@ export default function ProfileEditPage() {
 
               {/* Show Workouts */}
               <div className="mb-4">
-                <label className="flex items-center gap-3 p-3 bg-surface-800 rounded-lg cursor-pointer hover:bg-surface-700 transition-colors">
+                <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
                   <input
                     type="checkbox"
                     checked={showWorkouts}
                     onChange={(e) => setShowWorkouts(e.target.checked)}
-                    className="w-4 h-4 text-primary-500 bg-surface-900 border-surface-700 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-action bg-card border-sep rounded focus:ring-action"
                   />
                   <div>
-                    <p className="text-surface-100 font-medium">Show Workouts</p>
-                    <p className="text-xs text-surface-400">Allow others to see your completed workouts</p>
+                    <p className="text-ink font-medium">Show Workouts</p>
+                    <p className="text-xs text-ink-2">Allow others to see your completed workouts</p>
                   </div>
                 </label>
               </div>
 
               {/* Show Stats */}
               <div>
-                <label className="flex items-center gap-3 p-3 bg-surface-800 rounded-lg cursor-pointer hover:bg-surface-700 transition-colors">
+                <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
                   <input
                     type="checkbox"
                     checked={showStats}
                     onChange={(e) => setShowStats(e.target.checked)}
-                    className="w-4 h-4 text-primary-500 bg-surface-900 border-surface-700 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-action bg-card border-sep rounded focus:ring-action"
                   />
                   <div>
-                    <p className="text-surface-100 font-medium">Show Stats</p>
-                    <p className="text-xs text-surface-400">Allow others to see your training statistics</p>
+                    <p className="text-ink font-medium">Show Stats</p>
+                    <p className="text-xs text-ink-2">Allow others to see your training statistics</p>
                   </div>
                 </label>
               </div>
             </div>
 
             {/* Training Info */}
-            <div className="border-t border-surface-800 pt-6">
-              <h3 className="text-lg font-semibold text-surface-100 mb-4">Training Info</h3>
+            <div className="border-t border-sep pt-6">
+              <h3 className="text-lg font-semibold text-ink mb-4">Training Info</h3>
 
               {/* Training Experience */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-surface-200 mb-2">
+                <label className="block text-sm font-medium text-ink mb-2">
                   Training Experience
                 </label>
                 <select
                   value={trainingExperience}
                   onChange={(e) => setTrainingExperience(e.target.value as TrainingExperience | '')}
-                  className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                 >
                   <option value="">Select experience level</option>
                   <option value="beginner">Beginner</option>
@@ -269,14 +269,14 @@ export default function ProfileEditPage() {
 
               {/* Gym Name */}
               <div>
-                <label className="block text-sm font-medium text-surface-200 mb-2">
+                <label className="block text-sm font-medium text-ink mb-2">
                   Gym Name
                 </label>
                 <input
                   type="text"
                   value={gymName}
                   onChange={(e) => setGymName(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                   placeholder="Your gym name"
                   maxLength={100}
                 />
@@ -292,8 +292,8 @@ export default function ProfileEditPage() {
 
             {/* Success Message */}
             {success && (
-              <div className="bg-success-900/20 border border-success-500 rounded-lg p-3">
-                <p className="text-sm text-success-400">Profile updated successfully!</p>
+              <div className="bg-status-ok/15 border border-status-ok rounded-lg p-3">
+                <p className="text-sm text-status-ok">Profile updated successfully!</p>
               </div>
             )}
 

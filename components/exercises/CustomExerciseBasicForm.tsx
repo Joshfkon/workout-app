@@ -206,10 +206,10 @@ export function CustomExerciseBasicForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-surface-100">
+        <h2 className="text-xl font-semibold text-ink">
           Create Custom Exercise
         </h2>
-        <p className="text-sm text-surface-400 mt-1">
+        <p className="text-sm text-ink-2 mt-1">
           Just the basics — AI fills in the rest, and you can fine-tune anything next.
         </p>
       </div>
@@ -227,10 +227,10 @@ export function CustomExerciseBasicForm({
         {/* Inline duplicate suggestions — advisory, never blocks creation. */}
         {onUseExisting && dupMatches.length > 0 && (
           <div
-            className="rounded-lg border border-warning-700/60 bg-warning-900/20 p-3"
+            className="rounded-lg border border-status-warn/60 bg-status-warn/15 p-3"
             data-testid="dup-exercise-suggestions"
           >
-            <p className="text-sm font-medium text-warning-200 mb-2">
+            <p className="text-sm font-medium text-status-warn mb-2">
               Similar existing {dupMatches.length === 1 ? 'exercise' : 'exercises'} — reuse one to
               keep your history together?
             </p>
@@ -240,17 +240,17 @@ export function CustomExerciseBasicForm({
                   key={match.exercise.id}
                   className="flex items-center justify-between gap-3"
                 >
-                  <span className="text-sm text-surface-200 truncate">
+                  <span className="text-sm text-ink truncate">
                     {match.exercise.name}
                     {match.exercise.isCustom && (
-                      <span className="text-xs text-surface-500 ml-1">(custom)</span>
+                      <span className="text-xs text-ink-3 ml-1">(custom)</span>
                     )}
                   </span>
                   <button
                     type="button"
                     onClick={() => onUseExisting(match.exercise.id)}
-                    className="flex-shrink-0 text-xs font-medium text-primary-400 hover:text-primary-300
-                      rounded-md border border-primary-700/60 px-2.5 py-1 transition-colors"
+                    className="flex-shrink-0 text-xs font-medium text-action hover:text-action
+                      rounded-md border border-action/60 px-2.5 py-1 transition-colors"
                   >
                     Use this instead
                   </button>
@@ -281,27 +281,27 @@ export function CustomExerciseBasicForm({
         />
 
         <div>
-          <label className="block text-sm font-medium text-surface-200 mb-1.5">
-            Description <span className="text-surface-500 font-normal">(optional)</span>
+          <label className="block text-sm font-medium text-ink mb-1.5">
+            Description <span className="text-ink-3 font-normal">(optional)</span>
           </label>
           <textarea
-            className="w-full rounded-lg bg-surface-800 border border-surface-700 px-4 py-2.5
-              text-surface-100 placeholder:text-surface-500
-              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+            className="w-full rounded-lg bg-fill border border-sep px-4 py-2.5
+              text-ink placeholder:text-ink-3
+              focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent
               transition-all duration-200 resize-none"
             rows={3}
             placeholder="e.g., Seated, knees bent, push through the balls of your feet"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
-          <p className="mt-1.5 text-sm text-surface-500">
+          <p className="mt-1.5 text-sm text-ink-3">
             A quick note helps the AI get the details right.
           </p>
         </div>
 
         {showLocationPicker && (
           <div>
-            <label className="block text-sm font-medium text-surface-200 mb-1.5">
+            <label className="block text-sm font-medium text-ink mb-1.5">
               Available At
             </label>
             <div className="space-y-2">
@@ -323,13 +323,13 @@ export function CustomExerciseBasicForm({
                           return next;
                         });
                       }}
-                      className="w-5 h-5 rounded bg-surface-800 border-surface-600
-                        text-primary-500 focus:ring-primary-500 focus:ring-offset-0"
+                      className="w-5 h-5 rounded bg-fill border-sep
+                        text-action focus:ring-action focus:ring-offset-0"
                     />
-                    <span className="text-surface-200">
+                    <span className="text-ink">
                       {location.name}
                       {location.is_default && (
-                        <span className="text-xs text-surface-500 ml-1">(Default)</span>
+                        <span className="text-xs text-ink-3 ml-1">(Default)</span>
                       )}
                     </span>
                   </label>
@@ -337,16 +337,16 @@ export function CustomExerciseBasicForm({
               })}
             </div>
             {errors.locations ? (
-              <p className="mt-1.5 text-sm text-danger-400">{errors.locations}</p>
+              <p className="mt-1.5 text-sm text-status-bad">{errors.locations}</p>
             ) : (
-              <p className="mt-1.5 text-sm text-surface-500">
+              <p className="mt-1.5 text-sm text-ink-3">
                 Uncheck gyms that don&apos;t have the equipment for this exercise.
               </p>
             )}
           </div>
         )}
 
-        <div className="border-t border-surface-800 pt-4">
+        <div className="border-t border-sep pt-4">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -355,10 +355,10 @@ export function CustomExerciseBasicForm({
                 setIsVariation(e.target.checked);
                 if (!e.target.checked) setVariationOf('');
               }}
-              className="w-5 h-5 rounded bg-surface-800 border-surface-600
-                text-primary-500 focus:ring-primary-500 focus:ring-offset-0"
+              className="w-5 h-5 rounded bg-fill border-sep
+                text-action focus:ring-action focus:ring-offset-0"
             />
-            <span className="text-surface-200">
+            <span className="text-ink">
               This is a variation of an existing exercise
             </span>
           </label>
@@ -373,7 +373,7 @@ export function CustomExerciseBasicForm({
                 placeholder="Select base exercise"
                 error={errors.variationOf}
               />
-              <p className="mt-1.5 text-sm text-surface-500">
+              <p className="mt-1.5 text-sm text-ink-3">
                 AI will inherit properties from the base exercise and adjust for your variation.
               </p>
             </div>
@@ -381,7 +381,7 @@ export function CustomExerciseBasicForm({
         </div>
       </div>
 
-      <div className="flex gap-3 pt-4 border-t border-surface-800">
+      <div className="flex gap-3 pt-4 border-t border-sep">
         {onCancel && (
           <Button
             type="button"

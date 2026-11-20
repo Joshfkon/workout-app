@@ -151,11 +151,11 @@ export function setE1RM(set: ExerciseDetailSet): number {
  * 0 RIR orange "maxed", 4+ RIR red "too easy / junk".
  */
 export function effortColorClass(rpe: number | null): string {
-  if (rpe == null || rpe <= 0) return 'text-surface-500';
+  if (rpe == null || rpe <= 0) return 'text-ink-3';
   const rir = rpeToRir(rpe);
-  if (rir >= 4) return 'text-danger-400';
-  if (rir >= 2) return 'text-success-400';
-  if (rir === 1) return 'text-warning-400';
+  if (rir >= 4) return 'text-status-bad';
+  if (rir >= 2) return 'text-status-ok';
+  if (rir === 1) return 'text-status-warn';
   return 'text-orange-400';
 }
 

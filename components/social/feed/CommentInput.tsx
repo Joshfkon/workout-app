@@ -82,7 +82,7 @@ export function CommentInput({ onSubmit, placeholder = 'Add a comment...', onCan
           placeholder={placeholder}
           rows={1}
           maxLength={1000}
-          className="flex-1 px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-sm"
+          className="flex-1 px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent resize-none text-sm shadow-card"
           disabled={isSubmitting}
         />
       </div>
@@ -92,7 +92,7 @@ export function CommentInput({ onSubmit, placeholder = 'Add a comment...', onCan
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-surface-400">
+        <p className="text-xs text-ink-2">
           {content.length}/1000
         </p>
         <div className="flex gap-2">

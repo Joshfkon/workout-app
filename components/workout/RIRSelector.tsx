@@ -18,33 +18,33 @@ const RIR_OPTIONS: RIROption[] = [
     value: 4,
     label: '4+',
     subLabel: 'Easy',
-    color: 'text-danger-400',
-    bgColor: 'bg-danger-500/10 border-danger-500/20 hover:bg-danger-500/20',
-    selectedBg: 'bg-danger-500 text-white border-danger-500',
+    color: 'text-status-bad',
+    bgColor: 'bg-status-bad/10 border-status-bad/20 hover:bg-status-bad/20',
+    selectedBg: 'bg-status-bad text-white border-status-bad',
   },
   {
     value: 3,
     label: '3',
     subLabel: 'Good',
-    color: 'text-success-400',
-    bgColor: 'bg-success-500/10 border-success-500/20 hover:bg-success-500/20',
-    selectedBg: 'bg-success-500 text-white border-success-500',
+    color: 'text-status-ok',
+    bgColor: 'bg-status-ok/10 border-status-ok/20 hover:bg-status-ok/20',
+    selectedBg: 'bg-status-ok text-white border-status-ok',
   },
   {
     value: 2,
     label: '2',
     subLabel: 'Good',
-    color: 'text-success-400',
-    bgColor: 'bg-success-500/10 border-success-500/20 hover:bg-success-500/20',
-    selectedBg: 'bg-success-500 text-white border-success-500',
+    color: 'text-status-ok',
+    bgColor: 'bg-status-ok/10 border-status-ok/20 hover:bg-status-ok/20',
+    selectedBg: 'bg-status-ok text-white border-status-ok',
   },
   {
     value: 1,
     label: '1',
     subLabel: 'Hard',
-    color: 'text-warning-400',
-    bgColor: 'bg-warning-500/10 border-warning-500/20 hover:bg-warning-500/20',
-    selectedBg: 'bg-warning-500 text-white border-warning-500',
+    color: 'text-status-warn',
+    bgColor: 'bg-status-warn/10 border-status-warn/20 hover:bg-status-warn/20',
+    selectedBg: 'bg-status-warn text-white border-status-warn',
   },
   {
     value: 0,
@@ -73,7 +73,7 @@ export const RIRSelector = memo(function RIRSelector({
 }: RIRSelectorProps) {
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-1 text-sm font-medium text-surface-300">
+      <label className="flex items-center gap-1 text-sm font-medium text-ink-2">
         Reps left in tank?
         <InfoTooltip term="RIR" size="sm" />
       </label>
@@ -98,7 +98,7 @@ export const RIRSelector = memo(function RIRSelector({
                 {option.label}
               </span>
               <span
-                className={`text-xs ${isSelected ? 'text-white/80' : 'text-surface-400'}`}
+                className={`text-xs ${isSelected ? 'text-white/80' : 'text-ink-2'}`}
               >
                 {option.subLabel}
               </span>

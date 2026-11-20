@@ -118,11 +118,11 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
   
   // Determine status
   const getTrackingStatus = () => {
-    if (isComplete) return { status: 'complete', label: 'Goal reached!', color: 'text-success-400', emoji: '🎉' };
-    if (progressDiff >= 10) return { status: 'ahead', label: 'Ahead of schedule', color: 'text-success-400', emoji: '💪' };
-    if (progressDiff >= -10) return { status: 'ontrack', label: 'On track', color: 'text-primary-400', emoji: '✓' };
-    if (progressDiff >= -25) return { status: 'behind', label: 'Slightly behind', color: 'text-warning-400', emoji: '⚠️' };
-    return { status: 'way-behind', label: 'Catch up!', color: 'text-danger-400', emoji: '🚰' };
+    if (isComplete) return { status: 'complete', label: 'Goal reached!', color: 'text-status-ok', emoji: '🎉' };
+    if (progressDiff >= 10) return { status: 'ahead', label: 'Ahead of schedule', color: 'text-status-ok', emoji: '💪' };
+    if (progressDiff >= -10) return { status: 'ontrack', label: 'On track', color: 'text-action', emoji: '✓' };
+    if (progressDiff >= -25) return { status: 'behind', label: 'Slightly behind', color: 'text-status-warn', emoji: '⚠️' };
+    return { status: 'way-behind', label: 'Catch up!', color: 'text-status-bad', emoji: '🚰' };
   };
   
   const trackingStatus = getTrackingStatus();
@@ -132,7 +132,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center justify-between">
           <span className="flex items-center gap-2">
-            <IconDroplet size={16} className="text-surface-400" aria-hidden="true" /> Hydration
+            <IconDroplet size={16} className="text-ink-2" aria-hidden="true" /> Hydration
           </span>
           <span className={`text-xs ${trackingStatus.color} flex items-center gap-1`}>
             {trackingStatus.emoji} {trackingStatus.label}
@@ -144,18 +144,18 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <div className="flex justify-between text-sm mb-1">
-              <span className="text-surface-300">
+              <span className="text-ink-2">
                 {displayTotal.toLocaleString()} / {displayTarget.toLocaleString()} {displayUnit}
               </span>
-              <span className={percentage >= 100 ? 'text-success-400' : 'text-surface-400'}>
+              <span className={percentage >= 100 ? 'text-status-ok' : 'text-ink-2'}>
                 {percentage}%
               </span>
             </div>
-            <div className="h-3 bg-surface-800 rounded-full overflow-hidden relative">
+            <div className="h-3 bg-fill rounded-full overflow-hidden relative">
               {/* Expected progress marker */}
               {!isComplete && expectedPercentage > 0 && expectedPercentage < 100 && (
                 <div 
-                  className="absolute top-0 bottom-0 w-0.5 bg-surface-500 z-10"
+                  className="absolute top-0 bottom-0 w-0.5 bg-ink-3 z-10"
                   style={{ left: `${expectedPercentage}%` }}
                   title={`Expected: ${expectedPercentage}%`}
                 />
@@ -164,18 +164,18 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
               <div
                 className={`h-full transition-all duration-500 rounded-full ${
                   percentage >= 100 
-                    ? 'bg-success-500' 
+                    ? 'bg-status-ok' 
                     : percentage >= expectedPercentage 
-                    ? 'bg-primary-500' 
+                    ? 'bg-action' 
                     : percentage >= expectedPercentage - 15
-                    ? 'bg-warning-500'
-                    : 'bg-danger-500'
+                    ? 'bg-status-warn'
+                    : 'bg-status-bad'
                 }`}
                 style={{ width: `${percentage}%` }}
               />
             </div>
             {!isComplete && (
-              <div className="text-xs text-surface-500 mt-1">
+              <div className="text-xs text-ink-3 mt-1">
                 {progressDiff >= 0 ? (
                   <span>+{progressDiff}% vs expected</span>
                 ) : (
@@ -198,7 +198,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
                 key={option.ml}
                 onClick={() => addWater(option.ml)}
                 disabled={isAdding}
-                className="py-2 px-1 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs font-medium text-surface-200 transition-colors disabled:opacity-50"
+                className="py-2 px-1 bg-fill hover:bg-sep rounded-lg text-xs font-medium text-ink transition-colors disabled:opacity-50"
               >
                 {unit === 'oz' ? option.labelOz : option.label}
               </button>
@@ -211,7 +211,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
               value={customAmount}
               onChange={(e) => setCustomAmount(e.target.value)}
               placeholder={`Amount in ${displayUnit}`}
-              className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100"
+              className="flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink"
             />
             <Button onClick={handleCustomAdd} disabled={isAdding || !customAmount} size="sm">
               Add
@@ -226,7 +226,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
         {!showCustom && (
           <button
             onClick={() => setShowCustom(true)}
-            className="w-full py-1.5 text-xs text-surface-400 hover:text-surface-200 transition-colors"
+            className="w-full py-1.5 text-xs text-ink-2 hover:text-ink transition-colors"
           >
             + Custom amount
           </button>

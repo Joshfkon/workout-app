@@ -1,6 +1,6 @@
 /**
  * Meal-accent contrast guardrail: every accent must clear WCAG's 3:1
- * non-text contrast against the meal-card background (surface-900) in BOTH
+ * non-text contrast against the meal-card background (bg-card) in BOTH
  * themes. These hexes mirror the --meal-* CSS variables in app/globals.css —
  * if a hue gets retuned there, retune it here and this test re-verifies it.
  */

@@ -225,27 +225,27 @@ export default function NewMesocyclePage() {
     if (totalHours < quickWorkout) {
       status = 'quick';
       message = `${totalHours.toFixed(1)} hrs/week is a "quick workout" schedule. We'll maximize efficiency with S-tier exercises only.`;
-      color = 'text-accent-400';
+      color = 'text-action';
     } else if (totalHours < minEffective) {
       status = 'minimal';
       message = `${totalHours.toFixed(1)} hrs/week is minimal but effective. Focus on the highest-impact exercises.`;
-      color = 'text-warning-400';
+      color = 'text-status-warn';
     } else if (totalHours < optimalMin) {
       status = 'low';
       message = `${totalHours.toFixed(1)} hrs/week is moderate. You'll make solid progress with focused effort.`;
-      color = 'text-surface-300';
+      color = 'text-ink-2';
     } else if (totalHours <= optimalMax) {
       status = 'optimal';
       message = `${totalHours.toFixed(1)} hrs/week is in the optimal range for hypertrophy!`;
-      color = 'text-success-400';
+      color = 'text-status-ok';
     } else if (totalHours <= maxRecoverable) {
       status = 'high';
       message = `${totalHours.toFixed(1)} hrs/week is high volume. Make sure nutrition and sleep support this.`;
-      color = 'text-warning-400';
+      color = 'text-status-warn';
     } else {
       status = 'too_high';
       message = `${totalHours.toFixed(1)} hrs/week exceeds typical recovery capacity. Consider reducing.`;
-      color = 'text-danger-400';
+      color = 'text-status-bad';
     }
     
     return { status, message, color, totalHours, optimalMin, optimalMax };
@@ -492,8 +492,8 @@ export default function NewMesocyclePage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">AI Mesocycle Builder</h1>
-          <p className="text-surface-400 mt-1">Create scientifically-optimized training programs</p>
+          <h1 className="text-2xl font-bold text-ink">AI Mesocycle Builder</h1>
+          <p className="text-ink-2 mt-1">Create scientifically-optimized training programs</p>
         </div>
         <UpgradePrompt feature="mesocycleBuilder" />
       </div>
@@ -503,7 +503,7 @@ export default function NewMesocyclePage() {
   if (prefsLoading || subLoading) {
     return (
       <div className="max-w-2xl mx-auto py-8">
-        <p className="text-surface-400 text-center">Loading your profile...</p>
+        <p className="text-ink-2 text-center">Loading your profile...</p>
       </div>
     );
   }
@@ -512,23 +512,23 @@ export default function NewMesocyclePage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-surface-100">Create Mesocycle</h1>
+          <h1 className="text-2xl font-bold text-ink">Create Mesocycle</h1>
           <div className="group relative">
-            <button className="w-5 h-5 rounded-full bg-surface-700 hover:bg-surface-600 text-surface-400 text-xs flex items-center justify-center">
+            <button className="w-5 h-5 rounded-full bg-sep hover:bg-sep text-ink-2 text-xs flex items-center justify-center">
               ?
             </button>
-            <div className="absolute left-0 top-7 w-72 p-3 bg-surface-800 border border-surface-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-              <p className="text-sm font-medium text-surface-200 mb-1">What is a Mesocycle?</p>
-              <p className="text-xs text-surface-400">
-                A <span className="text-primary-400">mesocycle</span> is a training block lasting 4-8 weeks, designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
+            <div className="absolute left-0 top-7 w-72 p-3 bg-fill border border-sep rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <p className="text-sm font-medium text-ink mb-1">What is a Mesocycle?</p>
+              <p className="text-xs text-ink-2">
+                A <span className="text-action">mesocycle</span> is a training block lasting 4-8 weeks, designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
               </p>
-              <p className="text-xs text-surface-500 mt-2">
+              <p className="text-xs text-ink-3 mt-2">
                 Think of it as a &ldquo;chapter&rdquo; in your training story—focused, structured, and building toward the next phase.
               </p>
             </div>
           </div>
         </div>
-        <p className="text-surface-400 mt-1">
+        <p className="text-ink-2 mt-1">
           AI-assisted training plan based on your profile
         </p>
       </div>
@@ -539,7 +539,7 @@ export default function NewMesocyclePage() {
           <div
             key={s}
             className={`flex-1 h-1 rounded-full transition-colors ${
-              s <= step ? 'bg-primary-500' : 'bg-surface-700'
+              s <= step ? 'bg-action' : 'bg-sep'
             }`}
           />
         ))}
@@ -550,7 +550,7 @@ export default function NewMesocyclePage() {
         <InlineHint id="first-mesocycle-intro">
           <div>
             <p className="font-medium mb-1">Creating your first training program!</p>
-            <p className="text-sm text-primary-800 dark:text-primary-200">
+            <p className="text-sm text-on-action dark:text-action">
               A mesocycle is a 4-8 week training block designed to progressively build your strength and muscle.
               We&apos;ll help you set up the perfect plan based on your goals and schedule.
             </p>
@@ -565,37 +565,37 @@ export default function NewMesocyclePage() {
 
       {/* Your Profile Summary */}
       {step === 1 && (
-        <Card className="border-primary-500/30 bg-primary-500/5">
+        <Card className="border-action/30 bg-action/5">
           <CardHeader>
-            <CardTitle className="text-sm text-primary-400">Your Profile</CardTitle>
+            <CardTitle className="text-sm text-action">Your Profile</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
-                <p className="text-surface-500">Goal</p>
-                <p className="font-medium text-surface-200 capitalize">{userGoal}</p>
+                <p className="text-ink-3">Goal</p>
+                <p className="font-medium text-ink capitalize">{userGoal}</p>
               </div>
               <div>
-                <p className="text-surface-500">Experience</p>
-                <p className="font-medium text-surface-200 capitalize">{userExperience}</p>
+                <p className="text-ink-3">Experience</p>
+                <p className="font-medium text-ink capitalize">{userExperience}</p>
               </div>
               {latestDexa && (
                 <>
                   <div>
-                    <p className="text-surface-500">Lean Mass</p>
-                    <p className="font-medium text-surface-200">
+                    <p className="text-ink-3">Lean Mass</p>
+                    <p className="font-medium text-ink">
                       {formatWeight(latestDexa.leanMassKg, preferences.units)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-surface-500">Body Fat</p>
-                    <p className="font-medium text-surface-200">{latestDexa.bodyFatPercent}%</p>
+                    <p className="text-ink-3">Body Fat</p>
+                    <p className="font-medium text-ink">{latestDexa.bodyFatPercent}%</p>
                   </div>
                 </>
               )}
             </div>
             {!latestDexa && (
-              <p className="text-xs text-surface-500 mt-3">
+              <p className="text-xs text-ink-3 mt-3">
                 💡 Add a DEXA scan in Body Composition for personalized weight recommendations
               </p>
             )}
@@ -605,54 +605,54 @@ export default function NewMesocyclePage() {
 
       {/* Recovery Profile Summary */}
       {step === 1 && (
-        <Card className="border-surface-700">
+        <Card className="border-sep">
           <CardHeader>
-            <CardTitle className="text-sm text-surface-400">Recovery Profile</CardTitle>
+            <CardTitle className="text-sm text-ink-2">Recovery Profile</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
-                <p className="text-surface-500">Sleep</p>
-                <p className="font-medium text-surface-200">
+                <p className="text-ink-3">Sleep</p>
+                <p className="font-medium text-ink">
                   {sleepQuality}/5 {sleepQuality <= 2 ? '⚠️' : sleepQuality >= 4 ? '✓' : ''}
                 </p>
               </div>
               <div>
-                <p className="text-surface-500">Stress</p>
-                <p className="font-medium text-surface-200">
+                <p className="text-ink-3">Stress</p>
+                <p className="font-medium text-ink">
                   {stressLevel}/5 {stressLevel >= 4 ? '⚠️' : stressLevel <= 2 ? '✓' : ''}
                 </p>
               </div>
               <div>
-                <p className="text-surface-500">Volume Modifier</p>
-                <p className={`font-medium ${recoveryFactors.volumeMultiplier < 0.9 ? 'text-warning-400' : 'text-success-400'}`}>
+                <p className="text-ink-3">Volume Modifier</p>
+                <p className={`font-medium ${recoveryFactors.volumeMultiplier < 0.9 ? 'text-status-warn' : 'text-status-ok'}`}>
                   {(recoveryFactors.volumeMultiplier * 100).toFixed(0)}%
                 </p>
               </div>
               <div>
-                <p className="text-surface-500">Deload Every</p>
-                <p className="font-medium text-surface-200">{recoveryFactors.deloadFrequencyWeeks} weeks</p>
+                <p className="text-ink-3">Deload Every</p>
+                <p className="font-medium text-ink">{recoveryFactors.deloadFrequencyWeeks} weeks</p>
               </div>
             </div>
             {recoveryFactors.warnings.length > 0 && (
               <div className="mt-3 space-y-1">
                 {recoveryFactors.warnings.map((warning, i) => (
-                  <p key={i} className="text-xs text-warning-400 flex items-start gap-2">
+                  <p key={i} className="text-xs text-status-warn flex items-start gap-2">
                     <span>⚠️</span>
                     <span>{warning}</span>
                   </p>
                 ))}
               </div>
             )}
-            <p className="text-xs text-surface-500 mt-3">
-              Update your recovery profile in <a href="/dashboard/settings" className="text-primary-400 hover:underline">Settings</a>
+            <p className="text-xs text-ink-3 mt-3">
+              Update your recovery profile in <a href="/dashboard/settings" className="text-action hover:underline">Settings</a>
             </p>
           </CardContent>
         </Card>
       )}
 
       {error && (
-        <div className="p-4 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-sm">
+        <div className="p-4 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-sm">
           {error}
         </div>
       )}
@@ -662,8 +662,8 @@ export default function NewMesocyclePage() {
         <Card variant="elevated">
           <div className="space-y-6">
             <div className="text-center mb-6">
-              <h2 className="text-lg font-semibold text-surface-100">How often can you train?</h2>
-              <p className="text-sm text-surface-400">We&apos;ll recommend the best split for your schedule</p>
+              <h2 className="text-lg font-semibold text-ink">How often can you train?</h2>
+              <p className="text-sm text-ink-2">We&apos;ll recommend the best split for your schedule</p>
             </div>
 
             {scheduleMode === 'fixed_days' ? (
@@ -686,10 +686,10 @@ export default function NewMesocyclePage() {
                 />
 
                 {/* Two-a-day sessions */}
-                <div className="flex items-center justify-between p-3 bg-surface-800/30 rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-fill/30 rounded-lg">
                   <div>
-                    <p className="font-medium text-surface-200">Train twice a day</p>
-                    <p className="text-xs text-surface-500">
+                    <p className="font-medium text-ink">Train twice a day</p>
+                    <p className="text-xs text-ink-3">
                       {sessionsPerDay === 2
                         ? `2 sessions on each training day — ${plannedSessionsPerWeek} sessions/week`
                         : 'Two shorter sessions on each training day (advanced)'}
@@ -702,8 +702,8 @@ export default function NewMesocyclePage() {
                 </div>
 
                 {sessionsPerDay === 2 && (
-                  <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-                    <p className="text-xs text-warning-400">
+                  <div className="p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg">
+                    <p className="text-xs text-status-warn">
                       ⚠️ Two-a-day training is demanding. The plan alternates the split across
                       both sessions (e.g. Push in the morning, Pull in the evening) — make sure
                       sleep and nutrition can support {plannedSessionsPerWeek} weekly sessions.
@@ -713,8 +713,8 @@ export default function NewMesocyclePage() {
               </>
             ) : (
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-surface-200">Training Days per Week</span>
-                <span className="text-sm text-primary-400 font-medium">
+                <span className="text-sm font-medium text-ink">Training Days per Week</span>
+                <span className="text-sm text-action font-medium">
                   ~{intervalSessionsPerWeek} days
                 </span>
               </div>
@@ -722,10 +722,10 @@ export default function NewMesocyclePage() {
 
             {/* Schedule shape: fixed weekdays, or an every-N-days cadence */}
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-surface-200">
+              <label className="block text-sm font-medium text-ink">
                 When do you want to train?
               </label>
-              <p className="text-xs text-surface-500">
+              <p className="text-xs text-ink-3">
                 {scheduleMode === 'fixed_days'
                   ? `Pick ${daysPerWeek} days that work best for your schedule`
                   : 'Your training days roll through the week instead of repeating'}
@@ -763,12 +763,12 @@ export default function NewMesocyclePage() {
 
             {/* Quick workout mode indicator */}
             {sessionDurationMinutes <= 25 && (
-              <div className="p-3 bg-accent-500/10 border border-accent-500/20 rounded-lg">
+              <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-lg">⚡</span>
-                  <span className="font-medium text-accent-400">Quick Workout Mode</span>
+                  <span className="font-medium text-action">Quick Workout Mode</span>
                 </div>
-                <p className="text-xs text-surface-400">
+                <p className="text-xs text-ink-2">
                   Short on time? No problem! We&apos;ll prioritize the most effective exercises (S-tier) for maximum results. 
                   {sessionDurationMinutes <= 20 
                     ? ' Expect 2-3 exercises per session focusing on compounds.'
@@ -778,18 +778,18 @@ export default function NewMesocyclePage() {
             )}
 
             {/* Optimal session recommendation */}
-            <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
+            <div className="p-4 bg-fill/50 rounded-lg space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-surface-300">
+                <span className="text-sm font-medium text-ink-2">
                   Recommended for {plannedSessionsPerWeek} sessions/week:
                 </span>
-                <span className="text-sm text-primary-400 font-medium">{optimalTime.optimal} min</span>
+                <span className="text-sm text-action font-medium">{optimalTime.optimal} min</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-surface-700 rounded-full overflow-hidden">
+                <div className="flex-1 h-2 bg-sep rounded-full overflow-hidden">
                   {/* Optimal zone indicator */}
                   <div 
-                    className="h-full bg-gradient-to-r from-warning-500 via-success-500 to-warning-500"
+                    className="h-full bg-status-warn "
                     style={{
                       marginLeft: `${((optimalTime.min - 30) / 90) * 100}%`,
                       width: `${((optimalTime.max - optimalTime.min) / 90) * 100}%`,
@@ -797,28 +797,28 @@ export default function NewMesocyclePage() {
                   />
                 </div>
               </div>
-              <div className="flex justify-between text-xs text-surface-500">
+              <div className="flex justify-between text-xs text-ink-3">
                 <span>30 min</span>
-                <span className="text-success-400">Optimal: {optimalTime.min}-{optimalTime.max} min</span>
+                <span className="text-status-ok">Optimal: {optimalTime.min}-{optimalTime.max} min</span>
                 <span>120 min</span>
               </div>
-              <p className="text-xs text-surface-400">{optimalTime.reason}</p>
+              <p className="text-xs text-ink-2">{optimalTime.reason}</p>
               
               {/* Session time messaging */}
               {sessionDurationMinutes <= 25 && (
-                <div className="flex items-start gap-2 p-2 bg-accent-500/10 rounded text-accent-400 text-xs">
+                <div className="flex items-start gap-2 p-2 bg-action/10 rounded text-action text-xs">
                   <span>⚡</span>
                   <span>Quick workout mode: We&apos;ll select only the highest-impact S-tier exercises to maximize your limited time.</span>
                 </div>
               )}
               {sessionDurationMinutes > 25 && sessionDurationMinutes < optimalTime.min && (
-                <div className="flex items-start gap-2 p-2 bg-surface-800 rounded text-surface-400 text-xs">
+                <div className="flex items-start gap-2 p-2 bg-fill rounded text-ink-2 text-xs">
                   <span>💡</span>
                   <span>Shorter than optimal ({sessionDurationMinutes} vs {optimalTime.optimal} min), but totally workable. We&apos;ll prioritize the best exercises.</span>
                 </div>
               )}
               {sessionDurationMinutes > optimalTime.max && (
-                <div className="flex items-start gap-2 p-2 bg-warning-500/10 rounded text-warning-400 text-xs">
+                <div className="flex items-start gap-2 p-2 bg-status-warn/10 rounded text-status-warn text-xs">
                   <span>⚠️</span>
                   <span>Long sessions ({sessionDurationMinutes} min) can impact recovery. Quality &gt; quantity!</span>
                 </div>
@@ -828,25 +828,25 @@ export default function NewMesocyclePage() {
             {/* Weekly volume assessment */}
             <div className={`p-4 rounded-lg border ${
               volumeAssessment.status === 'optimal' 
-                ? 'bg-success-500/10 border-success-500/20' 
+                ? 'bg-status-ok/10 border-status-ok/20' 
                 : volumeAssessment.status === 'quick'
-                ? 'bg-accent-500/10 border-accent-500/20'
+                ? 'bg-action/10 border-action/20'
                 : volumeAssessment.status === 'too_high'
-                ? 'bg-danger-500/10 border-danger-500/20'
-                : 'bg-warning-500/10 border-warning-500/20'
+                ? 'bg-status-bad/10 border-status-bad/20'
+                : 'bg-status-warn/10 border-status-warn/20'
             }`}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-surface-200">Weekly Training Volume</span>
+                <span className="text-sm font-medium text-ink">Weekly Training Volume</span>
                 <span className={`text-lg font-bold ${volumeAssessment.color}`}>
                   {volumeAssessment.totalHours.toFixed(1)} hrs
                 </span>
               </div>
               
               {/* Volume bar */}
-              <div className="relative h-3 bg-surface-700 rounded-full overflow-hidden mb-2">
+              <div className="relative h-3 bg-sep rounded-full overflow-hidden mb-2">
                 {/* Optimal zone */}
                 <div 
-                  className="absolute h-full bg-success-500/30"
+                  className="absolute h-full bg-status-ok/30"
                   style={{
                     left: `${(volumeAssessment.optimalMin / 10) * 100}%`,
                     width: `${((volumeAssessment.optimalMax - volumeAssessment.optimalMin) / 10) * 100}%`,
@@ -855,7 +855,7 @@ export default function NewMesocyclePage() {
                 {/* Current position */}
                 <div 
                   className={`absolute h-full w-1 ${
-                    volumeAssessment.status === 'optimal' ? 'bg-success-400' : 'bg-warning-400'
+                    volumeAssessment.status === 'optimal' ? 'bg-status-ok' : 'bg-status-warn'
                   }`}
                   style={{
                     left: `${Math.min((volumeAssessment.totalHours / 10) * 100, 100)}%`,
@@ -863,9 +863,9 @@ export default function NewMesocyclePage() {
                 />
               </div>
               
-              <div className="flex justify-between text-xs text-surface-500 mb-2">
+              <div className="flex justify-between text-xs text-ink-3 mb-2">
                 <span>0h</span>
-                <span className="text-success-400/70">Optimal: {volumeAssessment.optimalMin}-{volumeAssessment.optimalMax}h</span>
+                <span className="text-status-ok/70">Optimal: {volumeAssessment.optimalMin}-{volumeAssessment.optimalMax}h</span>
                 <span>10h</span>
               </div>
               
@@ -876,14 +876,14 @@ export default function NewMesocyclePage() {
             </div>
 
             {/* Exercise count estimate */}
-            <div className="p-3 bg-surface-800/30 rounded-lg">
+            <div className="p-3 bg-fill/30 rounded-lg">
               <div className="flex items-center gap-2 text-sm">
-                <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
-                <span className="text-surface-400">
+                <span className="text-ink-2">
                   Estimated{' '}
-                  <span className="text-surface-200 font-medium">{exerciseEstimate.min}-{exerciseEstimate.max} exercises</span>
+                  <span className="text-ink font-medium">{exerciseEstimate.min}-{exerciseEstimate.max} exercises</span>
                   {' '}per session
                 </span>
               </div>
@@ -891,46 +891,46 @@ export default function NewMesocyclePage() {
 
             {/* AI Recommendation */}
             {fullProgram && (
-              <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
+              <div className="p-4 bg-fill/50 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <span className="font-medium text-surface-200">AI Recommendation</span>
+                  <span className="font-medium text-ink">AI Recommendation</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant="info">{fullProgram.split}</Badge>
-                  <span className="text-sm text-surface-400">{recommendation?.splitReason}</span>
+                  <span className="text-sm text-ink-2">{recommendation?.splitReason}</span>
                 </div>
                 {fullProgram.programNotes.length > 0 && (
-                  <div className="pt-2 border-t border-surface-700 space-y-1">
+                  <div className="pt-2 border-t border-sep space-y-1">
                     {fullProgram.programNotes.slice(0, 3).map((note, i) => (
-                      <p key={i} className="text-xs text-surface-400">{note}</p>
+                      <p key={i} className="text-xs text-ink-2">{note}</p>
                     ))}
                   </div>
                 )}
               </div>
             )}
             {!fullProgram && recommendation && (
-              <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
+              <div className="p-4 bg-fill/50 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <span className="font-medium text-surface-200">AI Recommendation</span>
+                  <span className="font-medium text-ink">AI Recommendation</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant="info">{recommendation.splitType}</Badge>
-                  <span className="text-sm text-surface-400">{recommendation.splitReason}</span>
+                  <span className="text-sm text-ink-2">{recommendation.splitReason}</span>
                 </div>
               </div>
             )}
 
             {/* Toggle for AI vs Manual */}
-            <div className="flex items-center justify-between p-3 bg-surface-800/30 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-fill/30 rounded-lg">
               <div>
-                <p className="font-medium text-surface-200">Use AI recommendations</p>
-                <p className="text-xs text-surface-500">Let us optimize your split and volume</p>
+                <p className="font-medium text-ink">Use AI recommendations</p>
+                <p className="text-xs text-ink-3">Let us optimize your split and volume</p>
               </div>
               <Toggle
                 checked={useAiRecommendation}
@@ -957,8 +957,8 @@ export default function NewMesocyclePage() {
         <Card variant="elevated">
           <div className="space-y-6">
             <div className="text-center mb-6">
-              <h2 className="text-lg font-semibold text-surface-100">Customize Your Plan</h2>
-              <p className="text-sm text-surface-400">Fine-tune the AI recommendations</p>
+              <h2 className="text-lg font-semibold text-ink">Customize Your Plan</h2>
+              <p className="text-sm text-ink-2">Fine-tune the AI recommendations</p>
             </div>
 
             <Input
@@ -998,19 +998,19 @@ export default function NewMesocyclePage() {
               onAcceptRecommendation={(weeks) => setTotalWeeks(weeks)}
             />
 
-            <div className="p-4 bg-surface-800/50 rounded-lg">
-              <p className="text-sm text-surface-400">
-                <span className="text-surface-300 font-medium">Week {totalWeeks}</span> will automatically be a deload week with 50% reduced volume.
+            <div className="p-4 bg-fill/50 rounded-lg">
+              <p className="text-sm text-ink-2">
+                <span className="text-ink-2 font-medium">Week {totalWeeks}</span> will automatically be a deload week with 50% reduced volume.
               </p>
             </div>
 
             {/* AI Recommendations list */}
             {recommendation && recommendation.recommendations.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium text-surface-300">Coaching Tips</p>
+                <p className="text-sm font-medium text-ink-2">Coaching Tips</p>
                 {recommendation.recommendations.map((rec, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm text-surface-400">
-                    <svg className="w-4 h-4 text-primary-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div key={i} className="flex items-start gap-2 text-sm text-ink-2">
+                    <svg className="w-4 h-4 text-action mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {rec}
@@ -1036,22 +1036,22 @@ export default function NewMesocyclePage() {
         <Card variant="elevated">
           <div className="space-y-6">
             <div className="text-center mb-6">
-              <h2 className="text-lg font-semibold text-surface-100">Review Your Plan</h2>
-              <p className="text-sm text-surface-400">Everything looks good?</p>
+              <h2 className="text-lg font-semibold text-ink">Review Your Plan</h2>
+              <p className="text-sm text-ink-2">Everything looks good?</p>
             </div>
 
             <div className="space-y-3">
-              <div className="flex justify-between py-2 border-b border-surface-800">
-                <span className="text-surface-400">Name</span>
-                <span className="text-surface-200 font-medium">{name}</span>
+              <div className="flex justify-between py-2 border-b border-sep">
+                <span className="text-ink-2">Name</span>
+                <span className="text-ink font-medium">{name}</span>
               </div>
-              <div className="flex justify-between py-2 border-b border-surface-800">
-                <span className="text-surface-400">Split</span>
-                <span className="text-surface-200 font-medium">{splitType}</span>
+              <div className="flex justify-between py-2 border-b border-sep">
+                <span className="text-ink-2">Split</span>
+                <span className="text-ink font-medium">{splitType}</span>
               </div>
-              <div className="flex justify-between py-2 border-b border-surface-800">
-                <span className="text-surface-400">Frequency</span>
-                <span className="text-surface-200 font-medium">
+              <div className="flex justify-between py-2 border-b border-sep">
+                <span className="text-ink-2">Frequency</span>
+                <span className="text-ink font-medium">
                   {scheduleMode === 'interval'
                     ? `~${intervalSessionsPerWeek} days/week`
                     : effectiveSessionsPerDay === 2
@@ -1059,21 +1059,21 @@ export default function NewMesocyclePage() {
                     : `${daysPerWeek} days/week`}
                 </span>
               </div>
-              <div className="flex justify-between py-2 border-b border-surface-800">
-                <span className="text-surface-400">Session Length</span>
-                <span className="text-surface-200 font-medium">{sessionDurationMinutes} min ({exerciseEstimate.min}-{exerciseEstimate.max} exercises)</span>
+              <div className="flex justify-between py-2 border-b border-sep">
+                <span className="text-ink-2">Session Length</span>
+                <span className="text-ink font-medium">{sessionDurationMinutes} min ({exerciseEstimate.min}-{exerciseEstimate.max} exercises)</span>
               </div>
-              <div className="flex justify-between py-2 border-b border-surface-800">
-                <span className="text-surface-400">Duration</span>
-                <span className="text-surface-200 font-medium">{totalWeeks} weeks</span>
+              <div className="flex justify-between py-2 border-b border-sep">
+                <span className="text-ink-2">Duration</span>
+                <span className="text-ink font-medium">{totalWeeks} weeks</span>
               </div>
-              <div className="flex justify-between py-2 border-b border-surface-800">
-                <span className="text-surface-400">Deload</span>
-                <span className="text-surface-200 font-medium">Week {totalWeeks}</span>
+              <div className="flex justify-between py-2 border-b border-sep">
+                <span className="text-ink-2">Deload</span>
+                <span className="text-ink font-medium">Week {totalWeeks}</span>
               </div>
               <div className="flex justify-between py-2">
-                <span className="text-surface-400">Workout Days</span>
-                <span className="text-surface-200 font-medium text-right">
+                <span className="text-ink-2">Workout Days</span>
+                <span className="text-ink font-medium text-right">
                   {scheduleSummary}
                 </span>
               </div>
@@ -1082,15 +1082,15 @@ export default function NewMesocyclePage() {
             {/* Weekly time commitment with status */}
             <div className={`p-3 rounded-lg border ${
               volumeAssessment.status === 'optimal'
-                ? 'bg-success-500/10 border-success-500/20'
+                ? 'bg-status-ok/10 border-status-ok/20'
                 : volumeAssessment.status === 'quick'
-                ? 'bg-accent-500/10 border-accent-500/20'
+                ? 'bg-action/10 border-action/20'
                 : volumeAssessment.status === 'too_high'
-                ? 'bg-danger-500/10 border-danger-500/20'
-                : 'bg-warning-500/10 border-warning-500/20'
+                ? 'bg-status-bad/10 border-status-bad/20'
+                : 'bg-status-warn/10 border-status-warn/20'
             }`}>
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-surface-300">Weekly Training Time</span>
+                <span className="text-sm font-medium text-ink-2">Weekly Training Time</span>
                 <span className={`text-lg font-bold ${volumeAssessment.color}`}>
                   {volumeAssessment.totalHours.toFixed(1)} hours
                 </span>
@@ -1103,10 +1103,10 @@ export default function NewMesocyclePage() {
 
             {/* Week-by-Week Preview - for beginners */}
             {showBeginnerTips && (
-              <div className="p-4 bg-surface-800/50 rounded-lg">
+              <div className="p-4 bg-fill/50 rounded-lg">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-lg">📅</span>
-                  <span className="font-medium text-surface-200">What Each Week Looks Like</span>
+                  <span className="font-medium text-ink">What Each Week Looks Like</span>
                 </div>
                 <div className="space-y-2">
                   {Array.from({ length: totalWeeks }, (_, i) => {
@@ -1118,38 +1118,38 @@ export default function NewMesocyclePage() {
                       <div
                         key={weekNum}
                         className={`flex items-center gap-3 p-2 rounded ${
-                          isDeload ? 'bg-warning-500/10 border border-warning-500/20' : 'bg-surface-900/50'
+                          isDeload ? 'bg-status-warn/10 border border-status-warn/20' : 'bg-card/50'
                         }`}
                       >
                         <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                          isDeload ? 'bg-warning-500/20 text-warning-400' : 'bg-primary-500/20 text-primary-400'
+                          isDeload ? 'bg-status-warn/20 text-status-warn' : 'bg-action/20 text-action'
                         }`}>
                           {weekNum}
                         </span>
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`text-sm ${isDeload ? 'text-warning-400' : 'text-surface-300'}`}>
+                            <span className={`text-sm ${isDeload ? 'text-status-warn' : 'text-ink-2'}`}>
                               {isDeload ? 'Deload Week' : `Week ${weekNum}`}
                             </span>
-                            <span className="text-xs text-surface-500">{volumePercent}% volume</span>
+                            <span className="text-xs text-ink-3">{volumePercent}% volume</span>
                           </div>
-                          <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                          <div className="h-1.5 bg-sep rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all ${
-                                isDeload ? 'bg-warning-500' : 'bg-primary-500'
+                                isDeload ? 'bg-status-warn' : 'bg-action'
                               }`}
                               style={{ width: `${volumePercent}%` }}
                             />
                           </div>
                         </div>
                         {isDeload && (
-                          <span className="text-xs text-warning-400">Recovery</span>
+                          <span className="text-xs text-status-warn">Recovery</span>
                         )}
                       </div>
                     );
                   })}
                 </div>
-                <p className="text-xs text-surface-500 mt-3">
+                <p className="text-xs text-ink-3 mt-3">
                   Volume gradually increases each week, then drops during deload for recovery and growth.
                 </p>
               </div>
@@ -1157,26 +1157,26 @@ export default function NewMesocyclePage() {
 
             {/* Science Behind Your Program - Collapsible */}
             <details className="group">
-              <summary className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg cursor-pointer hover:bg-surface-800/70 transition-colors">
+              <summary className="flex items-center justify-between p-4 bg-fill/50 rounded-lg cursor-pointer hover:bg-fill/70 transition-colors">
                 <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <span className="font-medium text-surface-200">Science Behind Your Program</span>
+                  <span className="font-medium text-ink">Science Behind Your Program</span>
                 </div>
-                <svg className="w-5 h-5 text-surface-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-ink-2 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </summary>
               
               <div className="mt-4 space-y-4">
                 {/* Split Selection Logic */}
-                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
-                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">1</span>
+                <div className="p-4 bg-card/50 rounded-lg border border-sep">
+                  <h4 className="font-medium text-ink flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-action/20 flex items-center justify-center text-xs text-action">1</span>
                     Why {splitType}?
                   </h4>
-                  <p className="text-sm text-surface-400 mb-3">
+                  <p className="text-sm text-ink-2 mb-3">
                     {splitType === 'Full Body'
                       ? `Full Body training ${plannedSessionsPerWeek}x/week allows you to train each muscle 2-3x per week for optimal protein synthesis and frequency. Each session hits all major muscle groups with moderate volume.`
                       : splitType === 'Upper/Lower'
@@ -1189,9 +1189,9 @@ export default function NewMesocyclePage() {
                     }
                   </p>
                   <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div className="p-2 bg-surface-800 rounded text-center">
-                      <p className="text-surface-500">Frequency</p>
-                      <p className="text-surface-200 font-medium">
+                    <div className="p-2 bg-fill rounded text-center">
+                      <p className="text-ink-3">Frequency</p>
+                      <p className="text-ink font-medium">
                         {splitType === 'Full Body' ? '2-3x'
                           : splitType === 'Upper/Lower' ? '2x'
                           : splitType === 'PPL' ? (plannedSessionsPerWeek >= 6 ? '2x' : '1x')
@@ -1199,9 +1199,9 @@ export default function NewMesocyclePage() {
                           : '1x'}/week per muscle
                       </p>
                     </div>
-                    <div className="p-2 bg-surface-800 rounded text-center">
-                      <p className="text-surface-500">Recovery</p>
-                      <p className="text-surface-200 font-medium">
+                    <div className="p-2 bg-fill rounded text-center">
+                      <p className="text-ink-3">Recovery</p>
+                      <p className="text-ink font-medium">
                         {splitType === 'Full Body' ? '48h'
                           : splitType === 'Upper/Lower' ? '72h'
                           : splitType === 'PPL' ? (plannedSessionsPerWeek >= 6 ? '72h' : '168h')
@@ -1209,9 +1209,9 @@ export default function NewMesocyclePage() {
                           : '168h'} between
                       </p>
                     </div>
-                    <div className="p-2 bg-surface-800 rounded text-center">
-                      <p className="text-surface-500">Volume/Session</p>
-                      <p className="text-surface-200 font-medium">
+                    <div className="p-2 bg-fill rounded text-center">
+                      <p className="text-ink-3">Volume/Session</p>
+                      <p className="text-ink font-medium">
                         {splitType === 'Full Body' ? 'Moderate' 
                           : splitType === 'Upper/Lower' ? 'Moderate' 
                           : splitType === 'Bro Split' ? 'Very High'
@@ -1222,154 +1222,154 @@ export default function NewMesocyclePage() {
                 </div>
 
                 {/* Rep Range Science */}
-                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
-                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">2</span>
+                <div className="p-4 bg-card/50 rounded-lg border border-sep">
+                  <h4 className="font-medium text-ink flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-action/20 flex items-center justify-center text-xs text-action">2</span>
                     Rep Range Science
                   </h4>
-                  <p className="text-sm text-surface-400 mb-3">
+                  <p className="text-sm text-ink-2 mb-3">
                     Rep ranges are optimized based on muscle fiber type dominance and exercise position in the workout.
                   </p>
                   <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between p-2 bg-surface-800 rounded">
+                    <div className="flex items-center justify-between p-2 bg-fill rounded">
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-danger-400"></span>
-                        <span className="text-surface-300">Fast-twitch dominant</span>
-                        <span className="text-surface-500">(Hamstrings, Triceps)</span>
+                        <span className="w-2 h-2 rounded-full bg-status-bad"></span>
+                        <span className="text-ink-2">Fast-twitch dominant</span>
+                        <span className="text-ink-3">(Hamstrings, Triceps)</span>
                       </div>
-                      <span className="font-mono text-surface-200">4-8 reps</span>
+                      <span className="font-mono text-ink">4-8 reps</span>
                     </div>
-                    <div className="flex items-center justify-between p-2 bg-surface-800 rounded">
+                    <div className="flex items-center justify-between p-2 bg-fill rounded">
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-warning-400"></span>
-                        <span className="text-surface-300">Mixed fiber type</span>
-                        <span className="text-surface-500">(Chest, Back, Quads)</span>
+                        <span className="w-2 h-2 rounded-full bg-status-warn"></span>
+                        <span className="text-ink-2">Mixed fiber type</span>
+                        <span className="text-ink-3">(Chest, Back, Quads)</span>
                       </div>
-                      <span className="font-mono text-surface-200">6-12 reps</span>
+                      <span className="font-mono text-ink">6-12 reps</span>
                     </div>
-                    <div className="flex items-center justify-between p-2 bg-surface-800 rounded">
+                    <div className="flex items-center justify-between p-2 bg-fill rounded">
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-success-400"></span>
-                        <span className="text-surface-300">Slow-twitch dominant</span>
-                        <span className="text-surface-500">(Calves, Core, Delts)</span>
+                        <span className="w-2 h-2 rounded-full bg-status-ok"></span>
+                        <span className="text-ink-2">Slow-twitch dominant</span>
+                        <span className="text-ink-3">(Calves, Core, Delts)</span>
                       </div>
-                      <span className="font-mono text-surface-200">10-20 reps</span>
+                      <span className="font-mono text-ink">10-20 reps</span>
                     </div>
                   </div>
-                  <p className="text-xs text-surface-500 mt-3">
+                  <p className="text-xs text-ink-3 mt-3">
                     💡 Compounds start sessions (heavier, 6-10 reps). Isolations finish (lighter, 10-15 reps) to maximize performance when fresh.
                   </p>
                 </div>
 
                 {/* Volume Logic */}
-                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
-                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">3</span>
+                <div className="p-4 bg-card/50 rounded-lg border border-sep">
+                  <h4 className="font-medium text-ink flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-action/20 flex items-center justify-center text-xs text-action">3</span>
                     Volume Recommendations
                   </h4>
-                  <p className="text-sm text-surface-400 mb-3">
+                  <p className="text-sm text-ink-2 mb-3">
                     Weekly sets per muscle are based on research-backed landmarks adjusted for your experience and recovery capacity.
                   </p>
                   <div className="grid grid-cols-3 gap-2 text-xs mb-3">
-                    <div className="p-2 bg-surface-800 rounded text-center">
-                      <p className="text-surface-500">MV (Minimum)</p>
-                      <p className="text-surface-200 font-medium">~6 sets/week</p>
-                      <p className="text-surface-600">Maintain gains</p>
+                    <div className="p-2 bg-fill rounded text-center">
+                      <p className="text-ink-3">MV (Minimum)</p>
+                      <p className="text-ink font-medium">~6 sets/week</p>
+                      <p className="text-ink-3">Maintain gains</p>
                     </div>
-                    <div className="p-2 bg-success-500/10 border border-success-500/20 rounded text-center">
-                      <p className="text-success-400">MEV-MAV</p>
-                      <p className="text-surface-200 font-medium">10-20 sets/week</p>
-                      <p className="text-surface-600">Optimal growth</p>
+                    <div className="p-2 bg-status-ok/10 border border-status-ok/20 rounded text-center">
+                      <p className="text-status-ok">MEV-MAV</p>
+                      <p className="text-ink font-medium">10-20 sets/week</p>
+                      <p className="text-ink-3">Optimal growth</p>
                     </div>
-                    <div className="p-2 bg-surface-800 rounded text-center">
-                      <p className="text-surface-500">MRV (Maximum)</p>
-                      <p className="text-surface-200 font-medium">20+ sets/week</p>
-                      <p className="text-surface-600">Risk of overtraining</p>
+                    <div className="p-2 bg-fill rounded text-center">
+                      <p className="text-ink-3">MRV (Maximum)</p>
+                      <p className="text-ink font-medium">20+ sets/week</p>
+                      <p className="text-ink-3">Risk of overtraining</p>
                     </div>
                   </div>
-                  <p className="text-xs text-surface-500">
+                  <p className="text-xs text-ink-3">
                     Your volume is modified by: Recovery capacity ({(recoveryFactors.volumeMultiplier * 100).toFixed(0)}%) • Experience ({userExperience}) • Goal ({userGoal})
                   </p>
                 </div>
 
                 {/* Fatigue Management */}
-                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
-                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">4</span>
+                <div className="p-4 bg-card/50 rounded-lg border border-sep">
+                  <h4 className="font-medium text-ink flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-action/20 flex items-center justify-center text-xs text-action">4</span>
                     Fatigue Management
                   </h4>
-                  <p className="text-sm text-surface-400 mb-3">
+                  <p className="text-sm text-ink-2 mb-3">
                     We track both systemic fatigue (CNS, whole-body) and local fatigue (per muscle group) to prevent overtraining.
                   </p>
                   <div className="space-y-2 text-sm">
-                    <div className="p-2 bg-surface-800 rounded">
+                    <div className="p-2 bg-fill rounded">
                       <div className="flex justify-between mb-1">
-                        <span className="text-surface-300">Systemic Fatigue Budget</span>
-                        <span className="text-surface-200">100 points/week</span>
+                        <span className="text-ink-2">Systemic Fatigue Budget</span>
+                        <span className="text-ink">100 points/week</span>
                       </div>
-                      <p className="text-xs text-surface-500">Compounds: 8-12 pts • Isolations: 3-5 pts • Depleted = auto-deload</p>
+                      <p className="text-xs text-ink-3">Compounds: 8-12 pts • Isolations: 3-5 pts • Depleted = auto-deload</p>
                     </div>
-                    <div className="p-2 bg-surface-800 rounded">
+                    <div className="p-2 bg-fill rounded">
                       <div className="flex justify-between mb-1">
-                        <span className="text-surface-300">Local Muscle Recovery</span>
-                        <span className="text-surface-200">48-72 hours</span>
+                        <span className="text-ink-2">Local Muscle Recovery</span>
+                        <span className="text-ink">48-72 hours</span>
                       </div>
-                      <p className="text-xs text-surface-500">We space exercises to allow full recovery before hitting the same muscle again</p>
+                      <p className="text-xs text-ink-3">We space exercises to allow full recovery before hitting the same muscle again</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Periodization */}
-                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
-                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">5</span>
+                <div className="p-4 bg-card/50 rounded-lg border border-sep">
+                  <h4 className="font-medium text-ink flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-action/20 flex items-center justify-center text-xs text-action">5</span>
                     Periodization Model
                   </h4>
                   <div className="grid grid-cols-2 gap-4 text-sm mb-3">
                     <div>
-                      <p className="text-surface-500">Model</p>
-                      <p className="text-surface-200 capitalize">{fullProgram?.periodization.model.replace('_', ' ') || 'Linear'}</p>
+                      <p className="text-ink-3">Model</p>
+                      <p className="text-ink capitalize">{fullProgram?.periodization.model.replace('_', ' ') || 'Linear'}</p>
                     </div>
                     <div>
-                      <p className="text-surface-500">Deload Strategy</p>
-                      <p className="text-surface-200 capitalize">{fullProgram?.periodization.deloadStrategy || 'Volume'}</p>
+                      <p className="text-ink-3">Deload Strategy</p>
+                      <p className="text-ink capitalize">{fullProgram?.periodization.deloadStrategy || 'Volume'}</p>
                     </div>
                   </div>
-                  <div className="p-2 bg-surface-800 rounded text-xs">
-                    <p className="text-surface-400">
-                      <span className="text-surface-300 font-medium">Week 1-{totalWeeks - 1}:</span> Progressive overload (+sets or +weight each week)
+                  <div className="p-2 bg-fill rounded text-xs">
+                    <p className="text-ink-2">
+                      <span className="text-ink-2 font-medium">Week 1-{totalWeeks - 1}:</span> Progressive overload (+sets or +weight each week)
                     </p>
-                    <p className="text-surface-400 mt-1">
-                      <span className="text-warning-400 font-medium">Week {totalWeeks} (Deload):</span> 50% volume, same intensity to dissipate fatigue
+                    <p className="text-ink-2 mt-1">
+                      <span className="text-status-warn font-medium">Week {totalWeeks} (Deload):</span> 50% volume, same intensity to dissipate fatigue
                     </p>
                   </div>
                 </div>
 
                 {/* Deload Triggers */}
-                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
-                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">6</span>
+                <div className="p-4 bg-card/50 rounded-lg border border-sep">
+                  <h4 className="font-medium text-ink flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-action/20 flex items-center justify-center text-xs text-action">6</span>
                     Auto-Deload Triggers
                   </h4>
-                  <p className="text-sm text-surface-400 mb-3">
+                  <p className="text-sm text-ink-2 mb-3">
                     Besides scheduled deloads, we&apos;ll suggest an early deload if any of these occur:
                   </p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
-                      <span className="text-danger-400">📉</span>
-                      <span className="text-surface-300">Performance drops 2+ sessions</span>
+                    <div className="p-2 bg-fill rounded flex items-center gap-2">
+                      <span className="text-status-bad">📉</span>
+                      <span className="text-ink-2">Performance drops 2+ sessions</span>
                     </div>
-                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
-                      <span className="text-danger-400">😴</span>
-                      <span className="text-surface-300">Sleep quality below 2/5</span>
+                    <div className="p-2 bg-fill rounded flex items-center gap-2">
+                      <span className="text-status-bad">😴</span>
+                      <span className="text-ink-2">Sleep quality below 2/5</span>
                     </div>
-                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
-                      <span className="text-danger-400">🔴</span>
-                      <span className="text-surface-300">RPE consistently 9.5+</span>
+                    <div className="p-2 bg-fill rounded flex items-center gap-2">
+                      <span className="text-status-bad">🔴</span>
+                      <span className="text-ink-2">RPE consistently 9.5+</span>
                     </div>
-                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
-                      <span className="text-danger-400">💔</span>
-                      <span className="text-surface-300">Joint pain reported</span>
+                    <div className="p-2 bg-fill rounded flex items-center gap-2">
+                      <span className="text-status-bad">💔</span>
+                      <span className="text-ink-2">Joint pain reported</span>
                     </div>
                   </div>
                 </div>
@@ -1378,23 +1378,23 @@ export default function NewMesocyclePage() {
 
             {/* Warnings */}
             {fullProgram && fullProgram.warnings.length > 0 && (
-              <div className="p-4 bg-warning-500/10 border border-warning-500/20 rounded-lg space-y-2">
-                <p className="text-sm font-medium text-warning-400">⚠️ Things to Consider</p>
+              <div className="p-4 bg-status-warn/10 border border-status-warn/20 rounded-lg space-y-2">
+                <p className="text-sm font-medium text-status-warn">⚠️ Things to Consider</p>
                 {fullProgram.warnings.map((warning, i) => (
-                  <p key={i} className="text-xs text-warning-300">{warning}</p>
+                  <p key={i} className="text-xs text-status-warn">{warning}</p>
                 ))}
               </div>
             )}
 
             {/* Weekly Volume Preview */}
             {recommendation && (
-              <div className="p-4 bg-surface-800/50 rounded-lg">
-                <p className="text-sm font-medium text-surface-300 mb-3">Weekly Volume (sets)</p>
+              <div className="p-4 bg-fill/50 rounded-lg">
+                <p className="text-sm font-medium text-ink-2 mb-3">Weekly Volume (sets)</p>
                 <div className="grid grid-cols-5 gap-2 text-center text-xs">
                   {Object.entries(recommendation.volumePerMuscle).slice(0, 10).map(([muscle, sets]) => (
-                    <div key={muscle} className="p-2 bg-surface-900/50 rounded">
-                      <p className="text-surface-500 truncate">{muscleDisplayName(muscle)}</p>
-                      <p className="text-surface-200 font-mono font-medium">{sets}</p>
+                    <div key={muscle} className="p-2 bg-card/50 rounded">
+                      <p className="text-ink-3 truncate">{muscleDisplayName(muscle)}</p>
+                      <p className="text-ink font-mono font-medium">{sets}</p>
                     </div>
                   ))}
                 </div>
@@ -1404,12 +1404,12 @@ export default function NewMesocyclePage() {
             {/* Workout Preview */}
             {workoutTemplates.length > 0 && (
               <div>
-                <p className="text-sm font-medium text-surface-300 mb-3">Workout Structure</p>
+                <p className="text-sm font-medium text-ink-2 mb-3">Workout Structure</p>
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {workoutTemplates.map((template, i) => (
-                    <div key={i} className="shrink-0 p-3 bg-surface-800/50 rounded-lg min-w-[140px]">
-                      <p className="font-medium text-surface-200 text-sm">{template.dayName}</p>
-                      <p className="text-xs text-surface-500 mt-1">
+                    <div key={i} className="shrink-0 p-3 bg-fill/50 rounded-lg min-w-[140px]">
+                      <p className="font-medium text-ink text-sm">{template.dayName}</p>
+                      <p className="text-xs text-ink-3 mt-1">
                         {template.exercises.length} exercises
                       </p>
                       <div className="flex flex-wrap gap-1 mt-2">

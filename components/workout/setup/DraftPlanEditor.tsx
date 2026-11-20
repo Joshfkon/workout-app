@@ -67,7 +67,7 @@ function PlanRow({
       value={item}
       dragListener={false}
       dragControls={controls}
-      className="list-none rounded-xl border border-surface-800 bg-surface-900"
+      className="list-none rounded-card bg-card shadow-card"
       data-testid={`setup-row-${item.itemId}`}
     >
       <div className="flex items-start gap-2 p-3">
@@ -75,7 +75,7 @@ function PlanRow({
           type="button"
           aria-label={`Drag to reorder ${name}`}
           onPointerDown={(e) => controls.start(e)}
-          className="-ml-1 flex h-11 w-7 flex-shrink-0 touch-none items-center justify-center text-surface-600 hover:text-surface-400"
+          className="-ml-1 flex h-11 w-7 flex-shrink-0 touch-none items-center justify-center text-ink-3 hover:text-ink-2"
         >
           <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
             <circle cx="7" cy="5" r="1.4" /><circle cx="13" cy="5" r="1.4" />
@@ -85,8 +85,8 @@ function PlanRow({
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-surface-100">
-              <span className="mr-1 text-surface-500 tabular-nums">{index + 1}.</span>
+            <p className="text-sm font-medium text-ink">
+              <span className="mr-1 text-ink-3 tabular-nums">{index + 1}.</span>
               {name}
             </p>
             <div className="flex flex-shrink-0 items-center gap-0.5">
@@ -94,7 +94,7 @@ function PlanRow({
                 type="button"
                 onClick={onSwap}
                 aria-label={`Swap ${name}`}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-2 hover:bg-fill hover:text-ink"
                 data-testid={`setup-swap-${item.itemId}`}
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
@@ -105,7 +105,7 @@ function PlanRow({
                 type="button"
                 onClick={() => onEdit({ type: 'remove', itemId: item.itemId })}
                 aria-label={`Remove ${name}`}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-surface-500 hover:bg-surface-800 hover:text-danger-400"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-3 hover:bg-fill hover:text-status-bad"
                 data-testid={`setup-remove-${item.itemId}`}
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
@@ -114,20 +114,20 @@ function PlanRow({
               </button>
             </div>
           </div>
-          <p className="truncate text-xs text-surface-500">{muscles}</p>
+          <p className="truncate text-xs text-ink-3">{muscles}</p>
           <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="flex items-center rounded-lg bg-surface-800" role="group" aria-label="Sets">
+            <div className="flex items-center rounded-lg bg-fill" role="group" aria-label="Sets">
               <button
                 type="button"
                 onClick={() => onEdit({ type: 'set_sets', itemId: item.itemId, sets: item.sets - 1 })}
                 disabled={item.sets <= SETUP_CONFIG.minSetsPerItem}
                 aria-label="Fewer sets"
-                className="h-9 w-10 text-lg text-surface-300 disabled:opacity-30"
+                className="h-9 w-10 text-lg text-ink-2 disabled:opacity-30"
                 data-testid={`setup-sets-dec-${item.itemId}`}
               >
                 −
               </button>
-              <span className="min-w-[3.5rem] text-center text-sm tabular-nums text-surface-100" data-testid={`setup-sets-${item.itemId}`}>
+              <span className="min-w-[3.5rem] text-center text-sm tabular-nums text-ink" data-testid={`setup-sets-${item.itemId}`}>
                 {item.sets} sets
               </span>
               <button
@@ -135,13 +135,13 @@ function PlanRow({
                 onClick={() => onEdit({ type: 'set_sets', itemId: item.itemId, sets: item.sets + 1 })}
                 disabled={item.sets >= SETUP_CONFIG.maxSetsPerItem}
                 aria-label="More sets"
-                className="h-9 w-10 text-lg text-surface-300 disabled:opacity-30"
+                className="h-9 w-10 text-lg text-ink-2 disabled:opacity-30"
                 data-testid={`setup-sets-inc-${item.itemId}`}
               >
                 +
               </button>
             </div>
-            <span className="text-xs tabular-nums text-surface-400">
+            <span className="text-xs tabular-nums text-ink-2">
               {item.repRange[0]}–{item.repRange[1]} reps
             </span>
           </div>
@@ -163,8 +163,8 @@ function SwapOption({ candidate: c, onPick }: { candidate: SwapCandidate; onPick
         data-testid={`setup-swap-option-${c.exercise.id}`}
       >
         <span className="min-w-0">
-          <span className="block truncate text-sm text-surface-100">{c.exercise.name}</span>
-          <span className="block text-xs text-surface-500">
+          <span className="block truncate text-sm text-ink">{c.exercise.name}</span>
+          <span className="block text-xs text-ink-3">
             {[
               !c.equipmentAvailable && 'Equipment unavailable',
               c.doneRecently && 'Done this week',
@@ -175,7 +175,7 @@ function SwapOption({ candidate: c, onPick }: { candidate: SwapCandidate; onPick
           </span>
         </span>
         {c.exercise.tier && (
-          <span className="flex-shrink-0 rounded bg-surface-800 px-1.5 py-0.5 text-[10px] text-surface-400">
+          <span className="flex-shrink-0 rounded bg-fill px-1.5 py-0.5 text-[10px] text-ink-2">
             {c.exercise.tier}
           </span>
         )}
@@ -215,30 +215,30 @@ function SwapSheet({
             aria-label="Search exercises"
             autoComplete="off"
             enterKeyHint="search"
-            className="w-full rounded-lg border border-surface-700 bg-surface-800 px-3 py-2.5 text-base text-surface-100 placeholder:text-surface-500 focus:border-primary-500 focus:outline-none"
+            className="w-full rounded-lg border border-sep bg-fill px-3 py-2.5 text-base text-ink placeholder:text-ink-3 focus:border-action focus:outline-none"
             data-testid="setup-swap-search"
           />
         </div>
         {matches.length === 0 && otherMatches.length === 0 ? (
-          <p className="py-6 text-center text-sm text-surface-400">
+          <p className="py-6 text-center text-sm text-ink-2">
             {searching ? `No exercises match “${query.trim()}”.` : 'No alternatives for this muscle in your library.'}
           </p>
         ) : (
           <>
             {searching && matches.length > 0 && otherMatches.length > 0 && (
-              <p className="pt-2 text-[11px] font-medium uppercase tracking-wide text-surface-500">Same muscle</p>
+              <p className="pt-2 text-[11px] font-medium uppercase tracking-wide text-ink-3">Same muscle</p>
             )}
-            <ul className="divide-y divide-surface-800">
+            <ul className="divide-y divide-sep">
               {matches.map((c) => (
                 <SwapOption key={c.exercise.id} candidate={c} onPick={onPick} />
               ))}
             </ul>
             {otherMatches.length > 0 && (
               <>
-                <p className="pt-4 text-[11px] font-medium uppercase tracking-wide text-surface-500" data-testid="setup-swap-other-heading">
+                <p className="pt-4 text-[11px] font-medium uppercase tracking-wide text-ink-3" data-testid="setup-swap-other-heading">
                   Other exercises
                 </p>
-                <ul className="divide-y divide-surface-800">
+                <ul className="divide-y divide-sep">
                   {otherMatches.map((c) => (
                     <SwapOption key={c.exercise.id} candidate={c} onPick={onPick} />
                   ))}
@@ -256,16 +256,16 @@ function ProjectionBar({ row }: { row: GroupProjection }) {
   const scale = Math.max(row.zoneMax, row.projected, 1);
   const pct = (n: number) => `${Math.min(100, (n / scale) * 100)}%`;
   const fill =
-    row.zone === 'over' ? 'bg-danger-500' : row.zone === 'in' ? 'bg-success-500' : 'bg-primary-400';
+    row.zone === 'over' ? 'bg-status-bad' : row.zone === 'in' ? 'bg-status-ok' : 'bg-action';
   return (
     <div className="flex items-center gap-2" data-testid={`setup-projection-${row.group}`}>
-      <span className="w-20 flex-shrink-0 truncate text-xs text-surface-300">{row.displayName}</span>
-      <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-surface-800">
-        <span className="absolute inset-y-0 bg-success-500/10" style={{ left: pct(row.zoneMin), width: `calc(${pct(row.zoneMax)} - ${pct(row.zoneMin)})` }} />
+      <span className="w-20 flex-shrink-0 truncate text-xs text-ink-2">{row.displayName}</span>
+      <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-fill">
+        <span className="absolute inset-y-0 bg-status-ok/10" style={{ left: pct(row.zoneMin), width: `calc(${pct(row.zoneMax)} - ${pct(row.zoneMin)})` }} />
         <span className={`absolute inset-y-0 left-0 rounded-full ${fill} opacity-50`} style={{ width: pct(row.projected) }} />
         <span className={`absolute inset-y-0 left-0 rounded-full ${fill}`} style={{ width: pct(row.weeklyCredited) }} />
       </span>
-      <span className="w-20 flex-shrink-0 text-right text-[11px] tabular-nums text-surface-400">
+      <span className="w-20 flex-shrink-0 text-right text-[11px] tabular-nums text-ink-2">
         {row.weeklyCredited}+{row.planned} / {row.zoneMin}–{row.zoneMax}
       </span>
     </div>
@@ -301,24 +301,24 @@ export function DraftPlanEditor({
   return (
     <div className="mt-4 flex flex-col gap-3" data-testid="setup-draft-editor">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={onBack} className="py-2 text-sm text-surface-400 hover:text-surface-200" data-testid="setup-back">
+        <button type="button" onClick={onBack} className="py-2 text-sm text-ink-2 hover:text-ink" data-testid="setup-back">
           ← Targets
         </button>
         {trimmedSets > 0 && (
-          <span className="text-xs text-surface-500">Trimmed {trimmedSets} sets to fit {timeBudget} min</span>
+          <span className="text-xs text-ink-3">Trimmed {trimmedSets} sets to fit {timeBudget} min</span>
         )}
       </div>
 
       {banner}
 
       {unfilledGroups.length > 0 && (
-        <p className="rounded-lg bg-surface-800/60 px-3 py-2 text-xs text-surface-400">
+        <p className="rounded-lg bg-fill/60 px-3 py-2 text-xs text-ink-2">
           No usable exercise for {unfilledGroups.join(', ')} at this gym — add one manually.
         </p>
       )}
 
       {items.length === 0 ? (
-        <p className="py-8 text-center text-sm text-surface-400">No exercises in the plan yet.</p>
+        <p className="py-8 text-center text-sm text-ink-2">No exercises in the plan yet.</p>
       ) : (
         <Reorder.Group
           axis="y"
@@ -346,14 +346,14 @@ export function DraftPlanEditor({
       <button
         type="button"
         onClick={onAddExercise}
-        className="rounded-xl border border-dashed border-surface-700 py-3 text-sm font-medium text-surface-300 hover:bg-surface-900"
+        className="rounded-xl border border-dashed border-sep py-3 text-sm font-medium text-ink-2 hover:bg-card"
         data-testid="setup-add-exercise"
       >
         + Add exercise
       </button>
 
       {/* Pinned footer: weekly projection, duration, warnings, actions. */}
-      <div className="sticky bottom-0 -mx-4 mt-2 border-t border-surface-800 bg-surface-950/95 px-4 pb-3 pt-3 backdrop-blur" data-testid="setup-footer">
+      <div className="sticky bottom-0 -mx-4 mt-2 border-t border-sep bg-canvas/95 px-4 pb-3 pt-3 backdrop-blur" data-testid="setup-footer">
         {selectedRows.length > 0 && (
           <div className="mb-2 flex flex-col gap-1.5">
             {selectedRows.map((row) => (
@@ -362,10 +362,10 @@ export function DraftPlanEditor({
           </div>
         )}
         <div className="flex items-center justify-between text-xs">
-          <span className={overBudget ? 'text-warning-400' : 'text-surface-400'} data-testid="setup-duration">
+          <span className={overBudget ? 'text-status-warn' : 'text-ink-2'} data-testid="setup-duration">
             ~{estimatedMinutes} min{timeBudget != null ? ` / ${timeBudget} budget` : ''}
           </span>
-          <span className="text-surface-500">{items.reduce((n, i) => n + i.sets, 0)} working sets</span>
+          <span className="text-ink-3">{items.reduce((n, i) => n + i.sets, 0)} working sets</span>
         </div>
         {warnings.filter((w) => w.severity === 'warn').length > 0 && (
           <ul className="mt-1.5 flex flex-col gap-0.5" data-testid="setup-warnings">
@@ -373,20 +373,20 @@ export function DraftPlanEditor({
               .filter((w) => w.severity === 'warn')
               .slice(0, 3)
               .map((w, k) => (
-                <li key={`${w.kind}-${k}`} className="text-[11px] text-warning-400">
+                <li key={`${w.kind}-${k}`} className="text-[11px] text-status-warn">
                   ⚠ {w.message}
                 </li>
               ))}
           </ul>
         )}
-        {startError && <p className="mt-1.5 text-xs text-danger-400" data-testid="setup-start-error">{startError}</p>}
+        {startError && <p className="mt-1.5 text-xs text-status-bad" data-testid="setup-start-error">{startError}</p>}
         <div className="mt-3 flex gap-2">
           {secondaryAction}
           <button
             type="button"
             onClick={onStart}
             disabled={isStarting || items.length === 0}
-            className="flex-1 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 py-3.5 text-lg font-semibold text-white shadow-lg shadow-purple-500/25 active:scale-[0.99] disabled:opacity-60"
+            className="bg-action flex-1 rounded-2xl py-3.5 text-lg font-semibold text-on-action shadow-lg shadow-action/25 active:scale-[0.99] disabled:opacity-60"
             data-testid="setup-start"
           >
             {isStarting ? 'Starting…' : 'Start'}

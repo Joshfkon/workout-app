@@ -122,9 +122,9 @@ export function SavedMealsModal({ isOpen, onClose, targetMealLabel, onLog }: Sav
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Saved meals" size="lg">
       <div className="space-y-3">
-        <p className="text-[11px] text-surface-500">One tap logs everything to {targetMealLabel}.</p>
+        <p className="text-[11px] text-ink-3">One tap logs everything to {targetMealLabel}.</p>
 
-        {error && <p className="text-[13px] text-danger-400">{error}</p>}
+        {error && <p className="text-[13px] text-status-bad">{error}</p>}
 
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -132,9 +132,9 @@ export function SavedMealsModal({ isOpen, onClose, targetMealLabel, onLog }: Sav
           </div>
         ) : meals.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <IconBookmark size={20} className="text-surface-600" aria-hidden="true" />
-            <p className="text-[13px] text-surface-400">No saved meals yet.</p>
-            <p className="text-[11px] text-surface-500">
+            <IconBookmark size={20} className="text-ink-3" aria-hidden="true" />
+            <p className="text-[13px] text-ink-2">No saved meals yet.</p>
+            <p className="text-[11px] text-ink-3">
               Use the bookmark icon on a meal card to save it for one-tap logging.
             </p>
           </div>
@@ -143,11 +143,11 @@ export function SavedMealsModal({ isOpen, onClose, targetMealLabel, onLog }: Sav
             {meals.map((meal) => (
               <div
                 key={meal.id}
-                className="flex items-center gap-2 rounded-lg bg-surface-800/50 p-3"
+                className="flex items-center gap-2 rounded-lg bg-fill/50 p-3"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-surface-100 truncate">{meal.name}</p>
-                  <p className="text-[11px] text-surface-500">
+                  <p className="text-[13px] font-medium text-ink truncate">{meal.name}</p>
+                  <p className="text-[11px] text-ink-3">
                     {Math.round(meal.total_calories)} kcal · {Math.round(meal.total_protein)}p
                     {meal.times_logged > 0 ? ` · logged ${meal.times_logged}x` : ''}
                   </p>
@@ -163,7 +163,7 @@ export function SavedMealsModal({ isOpen, onClose, targetMealLabel, onLog }: Sav
                 <button
                   type="button"
                   onClick={() => handleDelete(meal)}
-                  className="p-1.5 text-surface-500 hover:text-danger-400 transition-colors flex-shrink-0"
+                  className="p-1.5 text-ink-3 hover:text-status-bad transition-colors flex-shrink-0"
                   aria-label={`Delete ${meal.name}`}
                 >
                   <IconTrash size={16} aria-hidden="true" />

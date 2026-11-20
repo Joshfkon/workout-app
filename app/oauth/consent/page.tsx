@@ -101,16 +101,16 @@ function Consent() {
   }
 
   return (
-    <main className="min-h-dvh flex items-center justify-center px-4 bg-surface-950">
+    <main className="min-h-dvh flex items-center justify-center px-4 bg-canvas">
       <Card className="w-full max-w-md p-6 space-y-4">
-        <h1 className="text-xl font-semibold text-surface-100">Connect to HyperTrack</h1>
+        <h1 className="text-xl font-semibold text-ink">Connect to HyperTrack</h1>
         {error ? (
-          <p className="text-sm text-danger-400" role="alert">
+          <p className="text-sm text-status-bad" role="alert">
             {error}
           </p>
         ) : needsSignIn ? (
           <>
-            <p className="text-sm text-surface-300">
+            <p className="text-sm text-ink-2">
               Sign in to HyperTrack first, then you&apos;ll come back here to approve the connection.
             </p>
             <Button onClick={signIn} variant="primary" className="w-full">
@@ -118,10 +118,10 @@ function Consent() {
             </Button>
           </>
         ) : !client ? (
-          <p className="text-sm text-surface-400">Loading…</p>
+          <p className="text-sm text-ink-2">Loading…</p>
         ) : (
           <>
-            <p className="text-surface-200">
+            <p className="text-ink">
               <strong>{client.name}</strong> wants to read your HyperTrack data
               {email ? (
                 <>
@@ -131,13 +131,13 @@ function Consent() {
               ) : null}
               .
             </p>
-            <ul className="text-sm text-surface-400 list-disc pl-5 space-y-1">
+            <ul className="text-sm text-ink-2 list-disc pl-5 space-y-1">
               <li>See your workouts, sets, program and training volume.</li>
               <li>See your nutrition log, body weight, body composition, steps and sleep.</li>
               <li>It cannot change or delete anything.</li>
             </ul>
             {host && (
-              <p className="text-xs text-surface-500">
+              <p className="text-xs text-ink-3">
                 You&apos;ll be sent back to {host}. You can disconnect it at any time from that app&apos;s
                 connector settings.
               </p>

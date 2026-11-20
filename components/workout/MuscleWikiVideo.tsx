@@ -18,7 +18,7 @@ export function MuscleWikiVideo({ src, name }: MuscleWikiVideoProps) {
   const isVideo = src.endsWith('.mp4') || src.endsWith('.webm') || src.endsWith('.mov');
 
   return (
-    <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+    <div className="relative rounded-lg overflow-hidden bg-card shadow-card">
       {isVideo ? (
         <video
           src={src}
@@ -47,7 +47,7 @@ export function MuscleWikiVideo({ src, name }: MuscleWikiVideoProps) {
           }}
         />
       )}
-      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-surface-300">
+      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-ink-2">
         MuscleWiki
       </div>
     </div>

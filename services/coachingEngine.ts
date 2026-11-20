@@ -1038,14 +1038,14 @@ export class CoachingSessionManager {
 
 export function getStrengthLevelColor(level: StrengthLevel): string {
   const colors: Record<StrengthLevel, string> = {
-    'untrained': 'text-surface-500',
-    'beginner': 'text-warning-400',
+    'untrained': 'text-ink-3',
+    'beginner': 'text-status-warn',
     'novice': 'text-info-400',
-    'intermediate': 'text-success-400',
-    'advanced': 'text-primary-400',
-    'elite': 'text-accent-400'
+    'intermediate': 'text-status-ok',
+    'advanced': 'text-action',
+    'elite': 'text-action'
   };
-  return colors[level] || 'text-surface-400';
+  return colors[level] || 'text-ink-2';
 }
 
 export function getStrengthLevelBadgeVariant(level: StrengthLevel): 'default' | 'warning' | 'info' | 'success' | 'danger' {

@@ -14,7 +14,7 @@ const BarcodeScanner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex items-center justify-center py-10 text-sm text-surface-400">
+      <div className="flex items-center justify-center py-10 text-sm text-ink-2">
         Loading camera…
       </div>
     ),
@@ -320,9 +320,9 @@ export function QuickFoodLogger({
   };
 
   return (
-    <div className="p-4 bg-surface-800 rounded-xl border border-surface-700 space-y-4">
+    <div className="p-4 bg-fill rounded-xl border border-sep space-y-4">
       {/* Meal Type Selector */}
-      <div className="flex gap-1 bg-surface-900 p-1 rounded-lg">
+      <div className="flex gap-1 bg-card p-1 rounded-lg">
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
           <button
             key={type}
@@ -333,8 +333,8 @@ export function QuickFoodLogger({
             }}
             className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors capitalize ${
               mealType === type
-                ? 'bg-primary-500 text-white'
-                : 'text-surface-400 hover:text-surface-200'
+                ? 'bg-action text-on-action'
+                : 'text-ink-2 hover:text-ink'
             }`}
           >
             {type}
@@ -343,13 +343,13 @@ export function QuickFoodLogger({
       </div>
 
       {/* Mode Toggle */}
-      <div className="flex gap-1 bg-surface-900 p-1 rounded-lg">
+      <div className="flex gap-1 bg-card p-1 rounded-lg">
         <button
           onClick={() => { setMode('foods'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'foods'
-              ? 'bg-surface-700 text-surface-100'
-              : 'text-surface-400 hover:text-surface-200'
+              ? 'bg-sep text-ink'
+              : 'text-ink-2 hover:text-ink'
           }`}
         >
           <IconBolt size={14} aria-hidden="true" /> Quick Add
@@ -358,8 +358,8 @@ export function QuickFoodLogger({
           onClick={() => { setMode('barcode'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'barcode'
-              ? 'bg-surface-700 text-surface-100'
-              : 'text-surface-400 hover:text-surface-200'
+              ? 'bg-sep text-ink'
+              : 'text-ink-2 hover:text-ink'
           }`}
         >
           <IconScan size={14} aria-hidden="true" /> Scan
@@ -368,8 +368,8 @@ export function QuickFoodLogger({
           onClick={() => { setMode('manual'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'manual'
-              ? 'bg-surface-700 text-surface-100'
-              : 'text-surface-400 hover:text-surface-200'
+              ? 'bg-sep text-ink'
+              : 'text-ink-2 hover:text-ink'
           }`}
         >
           <IconPencil size={14} aria-hidden="true" /> Manual
@@ -384,22 +384,22 @@ export function QuickFoodLogger({
             value={query}
             onChange={(e) => { setQuery(e.target.value); setSelectedFood(null); setSelectedFrequentFood(null); }}
             placeholder="Search foods..."
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder-surface-500"
+            className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink placeholder-ink-3 shadow-card"
           />
 
           {selectedFrequentFood ? (
             /* Selected Frequent Food - Servings/Weight Entry */
-            <div className="space-y-3 p-3 bg-surface-900 rounded-lg">
+            <div className="space-y-3 p-3 bg-card rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-sm font-medium text-surface-100">{selectedFrequentFood.food_name}</p>
-                  <p className="text-xs text-surface-400">
+                  <p className="text-sm font-medium text-ink">{selectedFrequentFood.food_name}</p>
+                  <p className="text-xs text-ink-2">
                     {selectedFrequentFood.serving_size || '1 serving'} · {Math.round(selectedFrequentFood.avg_calories)} cal
                   </p>
                 </div>
                 <button
                   onClick={() => setSelectedFrequentFood(null)}
-                  className="text-surface-400 hover:text-surface-200 text-lg"
+                  className="text-ink-2 hover:text-ink text-lg"
                 >
                   ×
                 </button>
@@ -415,8 +415,8 @@ export function QuickFoodLogger({
                         onClick={() => setFrequentServings(s.toString())}
                         className={`py-2 rounded text-xs font-medium transition-all ${
                           parseFloat(frequentServings) === s
-                            ? 'bg-primary-500 text-white'
-                            : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                            ? 'bg-action text-on-action'
+                            : 'bg-fill text-ink-2 hover:bg-sep'
                         }`}
                       >
                         {s === 0.5 ? '½' : s === 0.75 ? '¾' : `${s}×`}
@@ -432,7 +432,7 @@ export function QuickFoodLogger({
                       min="0.1"
                       value={frequentServings}
                       onChange={(e) => setFrequentServings(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                      className="flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink text-center"
                     />
                     {/* Tappable unit label */}
                     <button
@@ -446,8 +446,8 @@ export function QuickFoodLogger({
                       }}
                       className={`text-sm px-2 py-1 rounded transition-colors ${
                         frequentFoodWeightPerServing 
-                          ? 'text-primary-400 hover:bg-primary-500/20 cursor-pointer' 
-                          : 'text-surface-400 cursor-default'
+                          ? 'text-action hover:bg-action/20 cursor-pointer' 
+                          : 'text-ink-2 cursor-default'
                       }`}
                       disabled={!frequentFoodWeightPerServing}
                       title={frequentFoodWeightPerServing ? 'Tap to switch to grams' : 'Weight info not available'}
@@ -466,8 +466,8 @@ export function QuickFoodLogger({
                         onClick={() => setFrequentWeightAmount(w.toString())}
                         className={`py-2 px-3 rounded text-xs font-medium transition-all ${
                           parseFloat(frequentWeightAmount) === w
-                            ? 'bg-primary-500 text-white'
-                            : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                            ? 'bg-action text-on-action'
+                            : 'bg-fill text-ink-2 hover:bg-sep'
                         }`}
                       >
                         {w}{frequentWeightUnit}
@@ -483,7 +483,7 @@ export function QuickFoodLogger({
                       min="1"
                       value={frequentWeightAmount}
                       onChange={(e) => setFrequentWeightAmount(e.target.value)}
-                      className="min-w-0 flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                      className="min-w-0 flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink text-center"
                     />
                     {/* Tappable unit toggle */}
                     <div className="flex items-center gap-1 flex-shrink-0">
@@ -498,8 +498,8 @@ export function QuickFoodLogger({
                         }}
                         className={`text-xs px-2 py-1.5 rounded transition-colors ${
                           frequentWeightUnit === 'g'
-                            ? 'bg-primary-500 text-white'
-                            : 'text-surface-400 hover:bg-surface-700'
+                            ? 'bg-action text-on-action'
+                            : 'text-ink-2 hover:bg-sep'
                         }`}
                       >
                         g
@@ -515,8 +515,8 @@ export function QuickFoodLogger({
                         }}
                         className={`text-xs px-2 py-1.5 rounded transition-colors ${
                           frequentWeightUnit === 'oz'
-                            ? 'bg-primary-500 text-white'
-                            : 'text-surface-400 hover:bg-surface-700'
+                            ? 'bg-action text-on-action'
+                            : 'text-ink-2 hover:bg-sep'
                         }`}
                       >
                         oz
@@ -532,7 +532,7 @@ export function QuickFoodLogger({
                             setFrequentServings((weightInGrams / frequentFoodWeightPerServing).toFixed(2));
                           }
                         }}
-                        className="text-xs text-primary-400 hover:bg-primary-500/20 px-2 py-1.5 rounded"
+                        className="text-xs text-action hover:bg-action/20 px-2 py-1.5 rounded"
                         title="Switch to servings"
                       >
                         srv
@@ -542,7 +542,7 @@ export function QuickFoodLogger({
 
                   {/* Show equivalent servings */}
                   {effectiveFrequentServings > 0 && (
-                    <p className="text-xs text-surface-500 text-center">
+                    <p className="text-xs text-ink-3 text-center">
                       ≈ {effectiveFrequentServings.toFixed(2)} servings
                     </p>
                   )}
@@ -551,21 +551,21 @@ export function QuickFoodLogger({
 
               {frequentFoodNutrition && (
                 <div className="grid grid-cols-4 gap-1 text-center text-xs">
-                  <div className="p-2 bg-surface-800 rounded">
-                    <p className="text-lg font-bold text-surface-100">{frequentFoodNutrition.calories}</p>
-                    <p className="text-surface-500">cal</p>
+                  <div className="p-2 bg-fill rounded">
+                    <p className="text-lg font-bold text-ink">{frequentFoodNutrition.calories}</p>
+                    <p className="text-ink-3">cal</p>
                   </div>
-                  <div className="p-2 bg-surface-800 rounded">
+                  <div className="p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-red-400">{frequentFoodNutrition.protein}g</p>
-                    <p className="text-surface-500">protein</p>
+                    <p className="text-ink-3">protein</p>
                   </div>
-                  <div className="p-2 bg-surface-800 rounded">
+                  <div className="p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-yellow-400">{frequentFoodNutrition.carbs}g</p>
-                    <p className="text-surface-500">carbs</p>
+                    <p className="text-ink-3">carbs</p>
                   </div>
-                  <div className="p-2 bg-surface-800 rounded">
+                  <div className="p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-blue-400">{frequentFoodNutrition.fat}g</p>
-                    <p className="text-surface-500">fat</p>
+                    <p className="text-ink-3">fat</p>
                   </div>
                 </div>
               )}
@@ -580,15 +580,15 @@ export function QuickFoodLogger({
             </div>
           ) : selectedFood ? (
             /* Selected System Food - Weight Entry */
-            <div className="space-y-3 p-3 bg-surface-900 rounded-lg">
+            <div className="space-y-3 p-3 bg-card rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-sm font-medium text-surface-100">{selectedFood.name}</p>
-                  <p className="text-xs text-surface-400">{selectedFood.calories_per_100g} cal per 100g</p>
+                  <p className="text-sm font-medium text-ink">{selectedFood.name}</p>
+                  <p className="text-xs text-ink-2">{selectedFood.calories_per_100g} cal per 100g</p>
                 </div>
                 <button
                   onClick={() => setSelectedFood(null)}
-                  className="text-surface-400 hover:text-surface-200 text-lg"
+                  className="text-ink-2 hover:text-ink text-lg"
                 >
                   ×
                 </button>
@@ -600,12 +600,12 @@ export function QuickFoodLogger({
                   value={weightAmount}
                   onChange={(e) => setWeightAmount(e.target.value)}
                   placeholder="100"
-                  className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100"
+                  className="flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink"
                 />
                 <select
                   value={weightUnit}
                   onChange={(e) => setWeightUnit(e.target.value as 'g' | 'oz')}
-                  className="px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100"
+                  className="px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink"
                 >
                   <option value="g">g</option>
                   <option value="oz">oz</option>
@@ -614,21 +614,21 @@ export function QuickFoodLogger({
 
               {calculatedNutrition && (
                 <div className="grid grid-cols-4 gap-1 text-center text-xs">
-                  <div className="p-2 bg-surface-800 rounded">
-                    <p className="text-lg font-bold text-surface-100">{calculatedNutrition.calories}</p>
-                    <p className="text-surface-500">cal</p>
+                  <div className="p-2 bg-fill rounded">
+                    <p className="text-lg font-bold text-ink">{calculatedNutrition.calories}</p>
+                    <p className="text-ink-3">cal</p>
                   </div>
-                  <div className="p-2 bg-surface-800 rounded">
+                  <div className="p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-red-400">{calculatedNutrition.protein}g</p>
-                    <p className="text-surface-500">protein</p>
+                    <p className="text-ink-3">protein</p>
                   </div>
-                  <div className="p-2 bg-surface-800 rounded">
+                  <div className="p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-yellow-400">{calculatedNutrition.carbs}g</p>
-                    <p className="text-surface-500">carbs</p>
+                    <p className="text-ink-3">carbs</p>
                   </div>
-                  <div className="p-2 bg-surface-800 rounded">
+                  <div className="p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-blue-400">{calculatedNutrition.fat}g</p>
-                    <p className="text-surface-500">fat</p>
+                    <p className="text-ink-3">fat</p>
                   </div>
                 </div>
               )}
@@ -646,7 +646,7 @@ export function QuickFoodLogger({
               {/* Frequent Foods for this Meal */}
               {!query && frequentFoodsForMeal.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-surface-400 uppercase tracking-wide mb-2">
+                  <p className="text-xs font-medium text-ink-2 uppercase tracking-wide mb-2">
                     Your {MEAL_LABELS[mealType].split(' ')[1]} favorites
                   </p>
                   <div className="space-y-1">
@@ -655,15 +655,15 @@ export function QuickFoodLogger({
                         key={idx}
                         onClick={() => handleSelectFrequentFood(food)}
                         disabled={isAdding}
-                        className="w-full p-2 bg-surface-900 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center disabled:opacity-50"
+                        className="w-full p-2 bg-card hover:bg-sep rounded-lg text-left transition-colors flex justify-between items-center disabled:opacity-50"
                       >
                         <div>
-                          <p className="text-sm font-medium text-surface-200">{food.food_name}</p>
-                          <p className="text-xs text-surface-500">
+                          <p className="text-sm font-medium text-ink">{food.food_name}</p>
+                          <p className="text-xs text-ink-3">
                             {Math.round(food.avg_calories)} cal · {food.times_logged}x
                           </p>
                         </div>
-                        <span className="text-primary-400 text-xs">+ Add</span>
+                        <span className="text-action text-xs">+ Add</span>
                       </button>
                     ))}
                   </div>
@@ -673,17 +673,17 @@ export function QuickFoodLogger({
               {/* System Foods */}
               {filteredSystemFoods.length > 0 && (
                 <div>
-                  {!query && <p className="text-xs font-medium text-surface-400 uppercase tracking-wide mb-2">All Foods</p>}
+                  {!query && <p className="text-xs font-medium text-ink-2 uppercase tracking-wide mb-2">All Foods</p>}
                   <div className="space-y-1">
                     {filteredSystemFoods.map((food) => (
                       <button
                         key={food.id}
                         onClick={() => { setSelectedFood(food); setWeightAmount('100'); }}
-                        className="w-full p-2 bg-surface-900 hover:bg-surface-700 rounded-lg text-left transition-colors"
+                        className="w-full p-2 bg-card hover:bg-sep rounded-lg text-left transition-colors"
                       >
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-surface-200">{food.name}</span>
-                          <span className="text-xs text-surface-500">
+                          <span className="text-sm text-ink">{food.name}</span>
+                          <span className="text-xs text-ink-3">
                             {food.calories_per_100g} cal | {food.protein_per_100g}g P
                           </span>
                         </div>
@@ -694,7 +694,7 @@ export function QuickFoodLogger({
               )}
 
               {query && filteredSystemFoods.length === 0 && (
-                <p className="text-center text-surface-400 py-4 text-sm">No foods found</p>
+                <p className="text-center text-ink-2 py-4 text-sm">No foods found</p>
               )}
             </div>
           )}
@@ -704,7 +704,7 @@ export function QuickFoodLogger({
         barcodeProduct ? (
           /* Show scanned product with portion selector */
           <div className="space-y-3">
-            <div className="p-4 bg-surface-900 rounded-lg space-y-4">
+            <div className="p-4 bg-card rounded-lg space-y-4">
               {/* Product Info */}
               <div className="flex items-start gap-3">
                 {barcodeProduct.imageUrl ? (
@@ -717,13 +717,13 @@ export function QuickFoodLogger({
                     />
                   </div>
                 ) : (
-                  <div className="h-16 w-16 bg-surface-700 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div className="h-16 w-16 bg-sep rounded-lg flex items-center justify-center flex-shrink-0">
                     <span className="text-2xl">🍽️</span>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-surface-100 leading-tight">{barcodeProduct.name}</h3>
-                  <p className="text-xs text-surface-500 mt-1">
+                  <h3 className="text-sm font-medium text-ink leading-tight">{barcodeProduct.name}</h3>
+                  <p className="text-xs text-ink-3 mt-1">
                     Base: {barcodeProduct.servingSize}
                   </p>
                 </div>
@@ -731,7 +731,7 @@ export function QuickFoodLogger({
 
               {/* Portion Selector */}
               <div className="space-y-2">
-                <label className="block text-xs font-medium text-surface-400 uppercase tracking-wide">
+                <label className="block text-xs font-medium text-ink-2 uppercase tracking-wide">
                   Amount
                 </label>
 
@@ -746,8 +746,8 @@ export function QuickFoodLogger({
                       }}
                       className={`py-2 rounded text-xs font-medium transition-all ${
                         parseFloat(barcodeQuantity) === qty && barcodeUnit === 'serving'
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2 hover:bg-sep'
                       }`}
                     >
                       {qty === 0.5 ? '½' : qty === 0.75 ? '¾' : `${qty}×`}
@@ -763,7 +763,7 @@ export function QuickFoodLogger({
                     min="0.1"
                     value={barcodeQuantity}
                     onChange={(e) => setBarcodeQuantity(e.target.value)}
-                    className="min-w-0 flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                    className="min-w-0 flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink text-center"
                   />
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
@@ -778,8 +778,8 @@ export function QuickFoodLogger({
                       }}
                       className={`text-xs px-2 py-1.5 rounded transition-colors ${
                         barcodeUnit === 'serving'
-                          ? 'bg-primary-500 text-white'
-                          : 'text-surface-400 hover:bg-surface-700'
+                          ? 'bg-action text-on-action'
+                          : 'text-ink-2 hover:bg-sep'
                       }`}
                     >
                       serving
@@ -796,8 +796,8 @@ export function QuickFoodLogger({
                       }}
                       className={`text-xs px-2 py-1.5 rounded transition-colors ${
                         barcodeUnit === 'grams'
-                          ? 'bg-primary-500 text-white'
-                          : 'text-surface-400 hover:bg-surface-700'
+                          ? 'bg-action text-on-action'
+                          : 'text-ink-2 hover:bg-sep'
                       }`}
                     >
                       grams
@@ -807,7 +807,7 @@ export function QuickFoodLogger({
 
                 {/* Show serving equivalent when in grams mode */}
                 {barcodeUnit === 'grams' && barcodeProductNutrition && (
-                  <p className="text-xs text-surface-500 text-center">
+                  <p className="text-xs text-ink-3 text-center">
                     ≈ {barcodeProductNutrition.multiplier.toFixed(2)} servings
                   </p>
                 )}
@@ -816,21 +816,21 @@ export function QuickFoodLogger({
               {/* Live Nutrition Display */}
               {barcodeProductNutrition && (
                 <div className="grid grid-cols-4 gap-2">
-                  <div className="text-center p-2 bg-surface-800 rounded">
-                    <p className="text-lg font-bold text-primary-400">{barcodeProductNutrition.calories}</p>
-                    <p className="text-xs text-surface-500">cal</p>
+                  <div className="text-center p-2 bg-fill rounded">
+                    <p className="text-lg font-bold text-action">{barcodeProductNutrition.calories}</p>
+                    <p className="text-xs text-ink-3">cal</p>
                   </div>
-                  <div className="text-center p-2 bg-surface-800 rounded">
+                  <div className="text-center p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-red-400">{barcodeProductNutrition.protein}g</p>
-                    <p className="text-xs text-surface-500">protein</p>
+                    <p className="text-xs text-ink-3">protein</p>
                   </div>
-                  <div className="text-center p-2 bg-surface-800 rounded">
+                  <div className="text-center p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-yellow-400">{barcodeProductNutrition.carbs}g</p>
-                    <p className="text-xs text-surface-500">carbs</p>
+                    <p className="text-xs text-ink-3">carbs</p>
                   </div>
-                  <div className="text-center p-2 bg-surface-800 rounded">
+                  <div className="text-center p-2 bg-fill rounded">
                     <p className="text-lg font-bold text-blue-400">{barcodeProductNutrition.fat}g</p>
-                    <p className="text-xs text-surface-500">fat</p>
+                    <p className="text-xs text-ink-3">fat</p>
                   </div>
                 </div>
               )}
@@ -869,47 +869,47 @@ export function QuickFoodLogger({
             value={manualName}
             onChange={(e) => setManualName(e.target.value)}
             placeholder="Food name"
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder-surface-500"
+            className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink placeholder-ink-3 shadow-card"
           />
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Calories</label>
+              <label className="block text-xs text-ink-3 mb-1">Calories</label>
               <input
                 type="number"
                 value={manualCalories}
                 onChange={(e) => setManualCalories(e.target.value)}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100"
+                className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink shadow-card"
               />
             </div>
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Protein (g)</label>
+              <label className="block text-xs text-ink-3 mb-1">Protein (g)</label>
               <input
                 type="number"
                 value={manualProtein}
                 onChange={(e) => setManualProtein(e.target.value)}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100"
+                className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink shadow-card"
               />
             </div>
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Carbs (g)</label>
+              <label className="block text-xs text-ink-3 mb-1">Carbs (g)</label>
               <input
                 type="number"
                 value={manualCarbs}
                 onChange={(e) => setManualCarbs(e.target.value)}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100"
+                className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink shadow-card"
               />
             </div>
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Fat (g)</label>
+              <label className="block text-xs text-ink-3 mb-1">Fat (g)</label>
               <input
                 type="number"
                 value={manualFat}
                 onChange={(e) => setManualFat(e.target.value)}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100"
+                className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink shadow-card"
               />
             </div>
           </div>
@@ -927,7 +927,7 @@ export function QuickFoodLogger({
       {/* Close button */}
       <button
         onClick={onClose}
-        className="w-full py-2 text-sm text-surface-400 hover:text-surface-200 transition-colors"
+        className="w-full py-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         Cancel
       </button>

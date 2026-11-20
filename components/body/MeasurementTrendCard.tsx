@@ -334,7 +334,7 @@ export function MeasurementTrendCard({
                 data-testid={`measurement-trend-range-${r.key}`}
                 className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                   range === r.key
-                    ? 'bg-primary-500 text-white'
+                    ? 'bg-action text-on-action'
                     : 'bg-fill text-ink-2 hover:text-ink'
                 }`}
                 aria-pressed={range === r.key}
@@ -438,7 +438,7 @@ export function MeasurementTrendCard({
                       )}
                       {hasExcluded && (
                         <span className="flex items-center gap-1">
-                          <span className="inline-block w-2 h-2 rounded-full border border-danger-400" />
+                          <span className="inline-block w-2 h-2 rounded-full border border-status-bad" />
                           Excluded outlier
                         </span>
                       )}

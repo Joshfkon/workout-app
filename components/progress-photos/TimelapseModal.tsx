@@ -102,7 +102,7 @@ export function TimelapseModal({ isOpen, onClose, photos, photoUrls, units }: Ti
               style={{ opacity: i === index ? 1 : 0 }}
             />
           ))}
-          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-8">
+          <div className="bg-black/70 absolute bottom-0 inset-x-0 px-3 pb-2 pt-8">
             <p className="text-body font-medium text-white">
               {formatDate(current.photoDate)}
               {current.weightKg != null && ` · ${displayWeight(current.weightKg)}`}

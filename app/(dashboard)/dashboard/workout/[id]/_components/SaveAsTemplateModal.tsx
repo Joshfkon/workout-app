@@ -145,12 +145,12 @@ export function SaveAsTemplateModal({
         )}
 
         <div>
-          <p className="flex items-center gap-1.5 text-sm font-medium text-surface-200 mb-1.5">
-            <IconFolder size={16} className="text-surface-400" />
+          <p className="flex items-center gap-1.5 text-sm font-medium text-ink mb-1.5">
+            <IconFolder size={16} className="text-ink-2" />
             {exercises.length} {exercises.length === 1 ? 'exercise' : 'exercises'}
           </p>
           <ul
-            className="max-h-48 overflow-y-auto rounded-lg border border-surface-700 divide-y divide-surface-800"
+            className="max-h-48 overflow-y-auto rounded-lg border border-sep divide-y divide-sep"
             data-testid="save-as-template-preview"
           >
             {exercises.map((exercise) => (
@@ -158,8 +158,8 @@ export function SaveAsTemplateModal({
                 key={`${exercise.exercise_id}-${exercise.sort_order}`}
                 className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
               >
-                <span className="text-surface-200 truncate">{exercise.exercise_name}</span>
-                <span className="flex-shrink-0 text-xs text-surface-500 tabular-nums">
+                <span className="text-ink truncate">{exercise.exercise_name}</span>
+                <span className="flex-shrink-0 text-xs text-ink-3 tabular-nums">
                   {exercise.default_sets} × {exercise.default_reps}
                   {exercise.default_weight
                     ? ` · ${formatWeight(exercise.default_weight, units, 0)}`
@@ -171,7 +171,7 @@ export function SaveAsTemplateModal({
         </div>
 
         {error && (
-          <p className="text-sm text-danger-400" role="alert">
+          <p className="text-sm text-status-bad" role="alert">
             {error}
           </p>
         )}

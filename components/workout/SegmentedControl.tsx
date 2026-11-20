@@ -19,7 +19,7 @@ export const SegmentedControl = memo(function SegmentedControl({
   className = '',
 }: SegmentedControlProps) {
   return (
-    <div className={`inline-flex bg-surface-800 rounded-lg p-1 ${className}`}>
+    <div className={`inline-flex bg-fill rounded-lg p-1 ${className}`}>
       {options.map((option) => {
         const isSelected = value === option.value;
         return (
@@ -31,8 +31,8 @@ export const SegmentedControl = memo(function SegmentedControl({
             className={`
               px-3 py-1 text-xs font-medium rounded transition-all
               ${isSelected
-                ? 'bg-primary-500 text-white shadow-sm'
-                : 'text-surface-400 hover:text-surface-200'
+                ? 'bg-action text-on-action shadow-sm'
+                : 'text-ink-2 hover:text-ink'
               }
               ${option.disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
             `}

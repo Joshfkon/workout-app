@@ -47,7 +47,7 @@ describe('SleepTile', () => {
     render(<SleepTile sleep={glance()} onLog={() => {}} />);
     expect(screen.getByText('7.5h')).toBeInTheDocument();
     expect(screen.getByText(/last night/)).toBeInTheDocument();
-    expect(screen.getByTestId('sleep-quality-dot')).toHaveClass('bg-success-400');
+    expect(screen.getByTestId('sleep-quality-dot')).toHaveClass('bg-status-ok');
   });
 
   it('renders the 7-day average line and the trailing-week sparkline from the fixture', () => {

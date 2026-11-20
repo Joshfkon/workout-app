@@ -59,9 +59,9 @@ export function ProgressPhotosHero({
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary-500/10 flex items-center justify-center">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-action/10 flex items-center justify-center">
               <svg
-                className="w-6 h-6 text-primary-400"
+                className="w-6 h-6 text-action"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -80,10 +80,10 @@ export function ProgressPhotosHero({
                 />
               </svg>
             </div>
-            <h3 className="text-sm font-semibold text-surface-200 mb-1">
+            <h3 className="text-sm font-semibold text-ink mb-1">
               Start Tracking Your Visual Progress
             </h3>
-            <p className="text-xs text-surface-400 mb-4 max-w-sm mx-auto">
+            <p className="text-xs text-ink-2 mb-4 max-w-sm mx-auto">
               Photos are the most honest progress tracker. Take them in consistent lighting
               and poses to see changes the scale might miss.
             </p>
@@ -103,12 +103,12 @@ export function ProgressPhotosHero({
           <div className="flex-1">
             <CardTitle>Progress Photos</CardTitle>
             {latest && (
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-surface-400">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
                 <span>{formatDate(latest.photoDate)}</span>
                 {latest.weightKg != null && (
                   <>
                     <span>•</span>
-                    <span className="font-medium text-surface-300">
+                    <span className="font-medium text-ink-2">
                       {displayWeight(latest.weightKg)}
                     </span>
                   </>
@@ -116,7 +116,7 @@ export function ProgressPhotosHero({
                 {latest.bodyFatPercent != null && (
                   <>
                     <span>•</span>
-                    <span className="font-medium text-surface-300">
+                    <span className="font-medium text-ink-2">
                       {latest.bodyFatPercent}% BF
                     </span>
                   </>
@@ -139,7 +139,7 @@ export function ProgressPhotosHero({
               const url = photoUrls[photo.id];
               return (
                 <Link key={photo.id} href="/dashboard/progress-photos">
-                  <div className="aspect-[3/4] rounded-lg overflow-hidden bg-surface-800 ring-1 ring-surface-700 hover:ring-primary-500 transition-shadow">
+                  <div className="aspect-[3/4] rounded-lg overflow-hidden bg-fill ring-1 ring-sep hover:ring-action transition-shadow">
                     {url ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img
@@ -150,7 +150,7 @@ export function ProgressPhotosHero({
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <div className="w-5 h-5 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-5 h-5 border-2 border-sep border-t-transparent rounded-full animate-spin" />
                       </div>
                     )}
                   </div>

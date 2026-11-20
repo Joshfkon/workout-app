@@ -31,28 +31,28 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
 
   const colorClasses = {
     gray: {
-      border: 'border-surface-600/50',
-      bg: 'bg-surface-700/30',
-      text: 'text-surface-300',
-      accent: 'text-surface-200',
+      border: 'border-sep/50',
+      bg: 'bg-sep/30',
+      text: 'text-ink-2',
+      accent: 'text-ink',
     },
     green: {
-      border: 'border-success-500/30',
-      bg: 'bg-success-500/10',
-      text: 'text-success-400',
-      accent: 'text-success-300',
+      border: 'border-status-ok/30',
+      bg: 'bg-status-ok/10',
+      text: 'text-status-ok',
+      accent: 'text-status-ok',
     },
     yellow: {
-      border: 'border-warning-500/30',
-      bg: 'bg-warning-500/10',
-      text: 'text-warning-400',
-      accent: 'text-warning-300',
+      border: 'border-status-warn/30',
+      bg: 'bg-status-warn/10',
+      text: 'text-status-warn',
+      accent: 'text-status-warn',
     },
     red: {
-      border: 'border-danger-500/30',
-      bg: 'bg-danger-500/10',
-      text: 'text-danger-400',
-      accent: 'text-danger-300',
+      border: 'border-status-bad/30',
+      bg: 'bg-status-bad/10',
+      text: 'text-status-bad',
+      accent: 'text-status-bad',
     },
   };
 
@@ -76,27 +76,27 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
         {/* Main Stats */}
         <div className="grid grid-cols-3 gap-3 text-center">
           <div className="space-y-1">
-            <p className="text-xs text-surface-400 uppercase tracking-wide">Predicted</p>
-            <p className="text-2xl font-semibold text-surface-200">
+            <p className="text-xs text-ink-2 uppercase tracking-wide">Predicted</p>
+            <p className="text-2xl font-semibold text-ink">
               {result.predictedMaxReps.toFixed(0)}
             </p>
-            <p className="text-xs text-surface-500">reps</p>
+            <p className="text-xs text-ink-3">reps</p>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs text-surface-400 uppercase tracking-wide">Actual</p>
-            <p className="text-2xl font-semibold text-surface-100">
+            <p className="text-xs text-ink-2 uppercase tracking-wide">Actual</p>
+            <p className="text-2xl font-semibold text-ink">
               {result.actualMaxReps}
             </p>
-            <p className="text-xs text-surface-500">reps</p>
+            <p className="text-xs text-ink-3">reps</p>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs text-surface-400 uppercase tracking-wide">Bias</p>
+            <p className="text-xs text-ink-2 uppercase tracking-wide">Bias</p>
             <p className={cn('text-2xl font-semibold', colors.accent)}>
               {formatBias(result.bias)}
             </p>
-            <p className="text-xs text-surface-500">difference</p>
+            <p className="text-xs text-ink-3">difference</p>
           </div>
         </div>
 
@@ -108,24 +108,24 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
         </div>
 
         {/* Confidence indicator */}
-        <div className="flex items-center gap-2 text-xs text-surface-500">
+        <div className="flex items-center gap-2 text-xs text-ink-3">
           <span>Confidence:</span>
           <div className="flex gap-1">
             <div className={cn(
               'w-2 h-2 rounded-full',
-              result.confidenceLevel !== 'low' ? 'bg-primary-500' : 'bg-surface-700'
+              result.confidenceLevel !== 'low' ? 'bg-action' : 'bg-sep'
             )} />
             <div className={cn(
               'w-2 h-2 rounded-full',
-              result.confidenceLevel === 'high' ? 'bg-primary-500' : 'bg-surface-700'
+              result.confidenceLevel === 'high' ? 'bg-action' : 'bg-sep'
             )} />
             <div className={cn(
               'w-2 h-2 rounded-full',
-              result.confidenceLevel === 'high' ? 'bg-primary-500' : 'bg-surface-700'
+              result.confidenceLevel === 'high' ? 'bg-action' : 'bg-sep'
             )} />
           </div>
           <span className="capitalize">{result.confidenceLevel}</span>
-          <span className="text-surface-600">({result.dataPoints} data points)</span>
+          <span className="text-ink-3">({result.dataPoints} data points)</span>
         </div>
       </CardContent>
 

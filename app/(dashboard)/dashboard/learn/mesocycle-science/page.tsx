@@ -105,7 +105,7 @@ export default function MesocycleScienceArticle() {
       {/* Back Navigation */}
       <Link
         href="/dashboard/learn"
-        className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-8 transition-colors"
+        className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-8 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -117,25 +117,25 @@ export default function MesocycleScienceArticle() {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-4xl">🔬</span>
-          <span className="px-3 py-1 bg-accent-500/10 text-accent-400 rounded-full text-xs font-medium">
+          <span className="px-3 py-1 bg-action/10 text-action rounded-full text-xs font-medium">
             AI Training Science
           </span>
         </div>
-        <h1 className="text-3xl font-bold text-surface-100 mb-3">
+        <h1 className="text-3xl font-bold text-ink mb-3">
           The Science Behind Your Mesocycle
         </h1>
-        <p className="text-lg text-surface-400">
+        <p className="text-lg text-ink-2">
           How we build AI-powered training programs that adapt to YOUR body and recovery capacity.
         </p>
       </div>
 
       {/* Article Content */}
-      <article className="space-y-8 text-surface-300">
+      <article className="space-y-8 text-ink-2">
         {/* What is a Mesocycle */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">What is a Mesocycle?</h2>
-          <Card className="p-5 bg-accent-500/10 border-accent-500/20 mb-4">
-            <p className="text-lg text-accent-300">
+          <h2 className="text-xl font-bold text-ink mb-4">What is a Mesocycle?</h2>
+          <Card className="p-5 bg-action/10 border-action/20 mb-4">
+            <p className="text-lg text-action">
               A mesocycle is a 4-8 week training block designed to push your body, accumulate productive fatigue, then recover stronger.
             </p>
           </Card>
@@ -146,24 +146,24 @@ export default function MesocycleScienceArticle() {
           </p>
           <div className="grid grid-cols-3 gap-4 text-center">
             <Card className="p-4">
-              <p className="text-2xl font-bold text-primary-400">4-8</p>
-              <p className="text-xs text-surface-500">Weeks per cycle</p>
+              <p className="text-2xl font-bold text-action">4-8</p>
+              <p className="text-xs text-ink-3">Weeks per cycle</p>
             </Card>
             <Card className="p-4">
-              <p className="text-2xl font-bold text-success-400">10-15%</p>
-              <p className="text-xs text-surface-500">Volume increase</p>
+              <p className="text-2xl font-bold text-status-ok">10-15%</p>
+              <p className="text-xs text-ink-3">Volume increase</p>
             </Card>
             <Card className="p-4">
-              <p className="text-2xl font-bold text-warning-400">50%</p>
-              <p className="text-xs text-surface-500">Deload reduction</p>
+              <p className="text-2xl font-bold text-status-warn">50%</p>
+              <p className="text-xs text-ink-3">Deload reduction</p>
             </Card>
           </div>
         </section>
 
         {/* AI Features */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">AI-Powered Features</h2>
-          <p className="mb-6 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">AI-Powered Features</h2>
+          <p className="mb-6 text-ink-2">
             Our mesocycle builder isn&apos;t just a template generator. It&apos;s a sophisticated system that considers
             multiple factors to create a program truly personalized to you.
           </p>
@@ -173,9 +173,9 @@ export default function MesocycleScienceArticle() {
                 <div className="flex items-start gap-4">
                   <div className="text-2xl shrink-0">{feature.icon}</div>
                   <div>
-                    <h4 className="font-semibold text-surface-100">{feature.title}</h4>
-                    <p className="text-sm text-primary-400 mb-2">{feature.description}</p>
-                    <p className="text-sm text-surface-400">{feature.detail}</p>
+                    <h4 className="font-semibold text-ink">{feature.title}</h4>
+                    <p className="text-sm text-action mb-2">{feature.description}</p>
+                    <p className="text-sm text-ink-2">{feature.detail}</p>
                   </div>
                 </div>
               </Card>
@@ -185,42 +185,42 @@ export default function MesocycleScienceArticle() {
 
         {/* Recovery Profile */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Your Recovery Profile</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Your Recovery Profile</h2>
+          <p className="mb-4 text-ink-2">
             Generic programs assume everyone recovers the same. We don&apos;t. Your recovery profile creates a personalized
             &ldquo;volume multiplier&rdquo; that scales your training appropriately.
           </p>
-          <Card className="p-4 bg-surface-800/50">
-            <h4 className="font-semibold text-surface-200 mb-3">Factors We Analyze:</h4>
+          <Card className="p-4 bg-fill/50">
+            <h4 className="font-semibold text-ink mb-3">Factors We Analyze:</h4>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="flex items-center gap-2">
                 <span>😴</span>
-                <span className="text-surface-400">Sleep Quality (1-5)</span>
+                <span className="text-ink-2">Sleep Quality (1-5)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span>😰</span>
-                <span className="text-surface-400">Life Stress Levels (1-5)</span>
+                <span className="text-ink-2">Life Stress Levels (1-5)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span>📅</span>
-                <span className="text-surface-400">Training Age (years lifting)</span>
+                <span className="text-ink-2">Training Age (years lifting)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span>🎂</span>
-                <span className="text-surface-400">Biological Age</span>
+                <span className="text-ink-2">Biological Age</span>
               </div>
               <div className="flex items-center gap-2">
                 <span>🏅</span>
-                <span className="text-surface-400">Experience Level</span>
+                <span className="text-ink-2">Experience Level</span>
               </div>
               <div className="flex items-center gap-2">
                 <span>🩹</span>
-                <span className="text-surface-400">Injury History</span>
+                <span className="text-ink-2">Injury History</span>
               </div>
             </div>
           </Card>
-          <div className="mt-4 p-4 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-            <p className="text-sm text-warning-300">
+          <div className="mt-4 p-4 bg-status-warn/10 border border-status-warn/20 rounded-lg">
+            <p className="text-sm text-status-warn">
               <strong>Example:</strong> Poor sleep (2/5) + high stress (4/5) might reduce your volume multiplier to 80%,
               meaning we prescribe 20% less volume than someone with optimal recovery. This prevents overtraining
               when life is demanding.
@@ -230,30 +230,30 @@ export default function MesocycleScienceArticle() {
 
         {/* Periodization */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Periodization Model</h2>
-          <p className="mb-6 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Periodization Model</h2>
+          <p className="mb-6 text-ink-2">
             Your mesocycle follows a structured periodization model that progressively increases demand,
             then strategically reduces it to allow adaptation.
           </p>
           <div className="space-y-3">
             {periodizationDetails.map((phase, idx) => (
               <div key={idx} className="flex gap-4 items-start">
-                <div className="w-12 h-12 rounded-lg bg-primary-500/20 flex items-center justify-center shrink-0">
-                  <span className="text-primary-400 font-bold text-sm">{phase.week}</span>
+                <div className="w-12 h-12 rounded-lg bg-action/20 flex items-center justify-center shrink-0">
+                  <span className="text-action font-bold text-sm">{phase.week}</span>
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-surface-200">{phase.title}</h4>
+                    <h4 className="font-semibold text-ink">{phase.title}</h4>
                     <div className="flex gap-3 text-xs">
-                      <span className="px-2 py-1 bg-surface-800 rounded text-surface-400">
+                      <span className="px-2 py-1 bg-fill rounded text-ink-2">
                         Intensity: {phase.intensity}
                       </span>
-                      <span className="px-2 py-1 bg-surface-800 rounded text-surface-400">
+                      <span className="px-2 py-1 bg-fill rounded text-ink-2">
                         Volume: {phase.volume}
                       </span>
                     </div>
                   </div>
-                  <p className="text-sm text-surface-400 mt-1">{phase.description}</p>
+                  <p className="text-sm text-ink-2 mt-1">{phase.description}</p>
                 </div>
               </div>
             ))}
@@ -262,28 +262,28 @@ export default function MesocycleScienceArticle() {
 
         {/* Fatigue Management */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Dual Fatigue Tracking</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Dual Fatigue Tracking</h2>
+          <p className="mb-4 text-ink-2">
             We track two types of fatigue to prevent overtraining while maximizing productive stimulus:
           </p>
           <div className="grid md:grid-cols-2 gap-4">
-            <Card className="p-4 bg-danger-500/5 border-danger-500/20">
-              <h4 className="font-semibold text-danger-400 mb-2">Systemic Fatigue</h4>
-              <p className="text-sm text-surface-400 mb-3">
+            <Card className="p-4 bg-status-bad/5 border-status-bad/20">
+              <h4 className="font-semibold text-status-bad mb-2">Systemic Fatigue</h4>
+              <p className="text-sm text-ink-2 mb-3">
                 CNS and whole-body fatigue from training. Tracked via a weekly &ldquo;budget&rdquo; system.
               </p>
-              <div className="space-y-1 text-xs text-surface-500">
+              <div className="space-y-1 text-xs text-ink-3">
                 <p>• Compounds: 8-12 fatigue points</p>
                 <p>• Isolations: 3-5 fatigue points</p>
                 <p>• Weekly budget: ~100 points</p>
               </div>
             </Card>
-            <Card className="p-4 bg-warning-500/5 border-warning-500/20">
-              <h4 className="font-semibold text-warning-400 mb-2">Local Muscle Fatigue</h4>
-              <p className="text-sm text-surface-400 mb-3">
+            <Card className="p-4 bg-status-warn/5 border-status-warn/20">
+              <h4 className="font-semibold text-status-warn mb-2">Local Muscle Fatigue</h4>
+              <p className="text-sm text-ink-2 mb-3">
                 Per-muscle-group fatigue that requires 48-72 hours recovery.
               </p>
-              <div className="space-y-1 text-xs text-surface-500">
+              <div className="space-y-1 text-xs text-ink-3">
                 <p>• Recovery time varies by muscle</p>
                 <p>• Large muscles: 72+ hours</p>
                 <p>• Small muscles: 48 hours</p>
@@ -294,50 +294,50 @@ export default function MesocycleScienceArticle() {
 
         {/* Rep Range Science */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Fiber-Type Optimized Rep Ranges</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Fiber-Type Optimized Rep Ranges</h2>
+          <p className="mb-4 text-ink-2">
             Different muscles have different fiber type compositions. We optimize rep ranges accordingly:
           </p>
           <div className="space-y-2">
-            <div className="flex items-center justify-between p-3 bg-surface-800 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-fill rounded-lg">
               <div className="flex items-center gap-3">
-                <span className="w-3 h-3 rounded-full bg-danger-400"></span>
-                <span className="text-surface-300">Fast-Twitch Dominant</span>
-                <span className="text-xs text-surface-500">(Hamstrings, Triceps, Chest)</span>
+                <span className="w-3 h-3 rounded-full bg-status-bad"></span>
+                <span className="text-ink-2">Fast-Twitch Dominant</span>
+                <span className="text-xs text-ink-3">(Hamstrings, Triceps, Chest)</span>
               </div>
-              <span className="font-mono text-surface-200 text-sm">4-8 reps</span>
+              <span className="font-mono text-ink text-sm">4-8 reps</span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-surface-800 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-fill rounded-lg">
               <div className="flex items-center gap-3">
-                <span className="w-3 h-3 rounded-full bg-warning-400"></span>
-                <span className="text-surface-300">Mixed Fiber Type</span>
-                <span className="text-xs text-surface-500">(Back, Quads, Biceps)</span>
+                <span className="w-3 h-3 rounded-full bg-status-warn"></span>
+                <span className="text-ink-2">Mixed Fiber Type</span>
+                <span className="text-xs text-ink-3">(Back, Quads, Biceps)</span>
               </div>
-              <span className="font-mono text-surface-200 text-sm">6-12 reps</span>
+              <span className="font-mono text-ink text-sm">6-12 reps</span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-surface-800 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-fill rounded-lg">
               <div className="flex items-center gap-3">
-                <span className="w-3 h-3 rounded-full bg-success-400"></span>
-                <span className="text-surface-300">Slow-Twitch Dominant</span>
-                <span className="text-xs text-surface-500">(Calves, Delts, Core)</span>
+                <span className="w-3 h-3 rounded-full bg-status-ok"></span>
+                <span className="text-ink-2">Slow-Twitch Dominant</span>
+                <span className="text-xs text-ink-3">(Calves, Delts, Core)</span>
               </div>
-              <span className="font-mono text-surface-200 text-sm">10-20 reps</span>
+              <span className="font-mono text-ink text-sm">10-20 reps</span>
             </div>
           </div>
-          <p className="text-xs text-surface-500 mt-3">
+          <p className="text-xs text-ink-3 mt-3">
             Compounds are placed early in sessions (when fresh) for heavier loading. Isolations finish the workout with higher reps.
           </p>
         </section>
 
         {/* Science Numbers */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">The Science in Numbers</h2>
+          <h2 className="text-xl font-bold text-ink mb-4">The Science in Numbers</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {scienceHighlights.map((stat, idx) => (
               <Card key={idx} className="p-4 text-center">
-                <p className="text-2xl font-bold text-primary-400">{stat.value}</p>
-                <p className="text-sm font-medium text-surface-200 mt-1">{stat.title}</p>
-                <p className="text-xs text-surface-500 mt-1">{stat.description}</p>
+                <p className="text-2xl font-bold text-action">{stat.value}</p>
+                <p className="text-sm font-medium text-ink mt-1">{stat.title}</p>
+                <p className="text-xs text-ink-3 mt-1">{stat.description}</p>
               </Card>
             ))}
           </div>
@@ -345,45 +345,45 @@ export default function MesocycleScienceArticle() {
 
         {/* Auto-Deload Triggers */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Smart Deload Detection</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Smart Deload Detection</h2>
+          <p className="mb-4 text-ink-2">
             Besides scheduled deloads, we monitor for signs you need one early:
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <Card className="p-3 bg-surface-800/50">
+            <Card className="p-3 bg-fill/50">
               <div className="flex items-center gap-2">
-                <span className="text-danger-400">📉</span>
-                <span className="text-sm text-surface-300">Performance drops 2+ sessions</span>
+                <span className="text-status-bad">📉</span>
+                <span className="text-sm text-ink-2">Performance drops 2+ sessions</span>
               </div>
             </Card>
-            <Card className="p-3 bg-surface-800/50">
+            <Card className="p-3 bg-fill/50">
               <div className="flex items-center gap-2">
-                <span className="text-danger-400">😴</span>
-                <span className="text-sm text-surface-300">Sleep quality below 2/5</span>
+                <span className="text-status-bad">😴</span>
+                <span className="text-sm text-ink-2">Sleep quality below 2/5</span>
               </div>
             </Card>
-            <Card className="p-3 bg-surface-800/50">
+            <Card className="p-3 bg-fill/50">
               <div className="flex items-center gap-2">
-                <span className="text-danger-400">🔴</span>
-                <span className="text-sm text-surface-300">RPE consistently 9.5+</span>
+                <span className="text-status-bad">🔴</span>
+                <span className="text-sm text-ink-2">RPE consistently 9.5+</span>
               </div>
             </Card>
-            <Card className="p-3 bg-surface-800/50">
+            <Card className="p-3 bg-fill/50">
               <div className="flex items-center gap-2">
-                <span className="text-danger-400">💔</span>
-                <span className="text-sm text-surface-300">Joint pain reported</span>
+                <span className="text-status-bad">💔</span>
+                <span className="text-sm text-ink-2">Joint pain reported</span>
               </div>
             </Card>
-            <Card className="p-3 bg-surface-800/50">
+            <Card className="p-3 bg-fill/50">
               <div className="flex items-center gap-2">
-                <span className="text-danger-400">📊</span>
-                <span className="text-sm text-surface-300">RIR drift detected</span>
+                <span className="text-status-bad">📊</span>
+                <span className="text-sm text-ink-2">RIR drift detected</span>
               </div>
             </Card>
-            <Card className="p-3 bg-surface-800/50">
+            <Card className="p-3 bg-fill/50">
               <div className="flex items-center gap-2">
-                <span className="text-danger-400">⚠️</span>
-                <span className="text-sm text-surface-300">Fatigue budget exceeded</span>
+                <span className="text-status-bad">⚠️</span>
+                <span className="text-sm text-ink-2">Fatigue budget exceeded</span>
               </div>
             </Card>
           </div>
@@ -391,34 +391,34 @@ export default function MesocycleScienceArticle() {
 
         {/* Why This Matters */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Why This Matters</h2>
-          <Card className="p-5 bg-success-500/10 border-success-500/20">
-            <p className="text-success-300 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">Why This Matters</h2>
+          <Card className="p-5 bg-status-ok/10 border-status-ok/20">
+            <p className="text-status-ok mb-4">
               Most training apps give you a generic template. We build a program that:
             </p>
-            <ul className="space-y-2 text-sm text-surface-300">
+            <ul className="space-y-2 text-sm text-ink-2">
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>Adapts to YOUR recovery capacity, not population averages</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>Uses DEXA data to target YOUR lagging muscle groups</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>Tracks fatigue and warns you before overtraining</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>Adjusts to your schedule with optimal splits</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>Respects your equipment availability and injury history</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>Gets smarter over time as we learn YOUR response patterns</span>
               </li>
             </ul>
@@ -427,13 +427,13 @@ export default function MesocycleScienceArticle() {
 
         {/* CTA */}
         <section className="pt-4">
-          <Card className="p-6 text-center bg-gradient-to-r from-accent-500/10 to-primary-500/10 border-accent-500/20">
-            <h3 className="text-lg font-bold text-surface-100 mb-2">Ready to Train Smarter?</h3>
-            <p className="text-sm text-surface-400 mb-4">
+          <Card className="p-6 text-center bg-action/10 border-action/20">
+            <h3 className="text-lg font-bold text-ink mb-2">Ready to Train Smarter?</h3>
+            <p className="text-sm text-ink-2 mb-4">
               Create an AI-powered mesocycle tailored to your body, schedule, and goals.
             </p>
             <Link href="/dashboard/mesocycle/new">
-              <button className="px-6 py-2 bg-accent-500 hover:bg-accent-600 text-white font-semibold rounded-lg transition-colors">
+              <button className="px-6 py-2 bg-action hover:bg-action text-on-action font-semibold rounded-lg transition-colors">
                 Create Mesocycle
               </button>
             </Link>
@@ -442,27 +442,27 @@ export default function MesocycleScienceArticle() {
       </article>
 
       {/* Related Articles */}
-      <div className="mt-12 pt-8 border-t border-surface-800">
-        <h3 className="text-lg font-semibold text-surface-100 mb-4">Related Articles</h3>
+      <div className="mt-12 pt-8 border-t border-sep">
+        <h3 className="text-lg font-semibold text-ink mb-4">Related Articles</h3>
         <div className="grid md:grid-cols-2 gap-4">
           <Link href="/dashboard/learn/adaptive-volume">
-            <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
+            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">📊</span>
                 <div>
-                  <p className="font-medium text-surface-200">Adaptive Volume</p>
-                  <p className="text-xs text-surface-500">How we learn your recovery capacity</p>
+                  <p className="font-medium text-ink">Adaptive Volume</p>
+                  <p className="text-xs text-ink-3">How we learn your recovery capacity</p>
                 </div>
               </div>
             </Card>
           </Link>
           <Link href="/dashboard/learn/progressive-overload">
-            <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
+            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">📈</span>
                 <div>
-                  <p className="font-medium text-surface-200">Progressive Overload</p>
-                  <p className="text-xs text-surface-500">The fundamental principle of growth</p>
+                  <p className="font-medium text-ink">Progressive Overload</p>
+                  <p className="text-xs text-ink-3">The fundamental principle of growth</p>
                 </div>
               </div>
             </Card>

@@ -35,7 +35,7 @@ export function DailyCalorieAdjustment({
         {/* Target Header */}
         <div>
           <div className="flex items-baseline justify-between">
-            <span className="text-sm text-surface-500">Calorie Target</span>
+            <span className="text-sm text-ink-3">Calorie Target</span>
             {hasAdjustment && (
               <span
                 className={`text-sm font-medium ${
@@ -51,15 +51,15 @@ export function DailyCalorieAdjustment({
             <span className="text-2xl font-bold">
               {target.adjustedTarget.toLocaleString()}
             </span>
-            <span className="text-surface-500">cal</span>
+            <span className="text-ink-3">cal</span>
             {hasAdjustment && (
-              <span className="text-sm text-surface-400">
+              <span className="text-sm text-ink-2">
                 (base: {target.baseTarget.toLocaleString()})
               </span>
             )}
           </div>
           {hasAdjustment && (
-            <p className="text-sm text-surface-400 mt-1">
+            <p className="text-sm text-ink-2 mt-1">
               {target.reason}
             </p>
           )}
@@ -68,12 +68,12 @@ export function DailyCalorieAdjustment({
         {/* Progress Bar */}
         <div className="space-y-1">
           <div className="flex justify-between text-sm">
-            <span className="text-surface-400">
+            <span className="text-ink-2">
               {currentCalories.toLocaleString()} eaten
             </span>
             <span
               className={`font-medium ${
-                remaining >= 0 ? 'text-surface-300' : 'text-red-500'
+                remaining >= 0 ? 'text-ink-2' : 'text-red-500'
               }`}
             >
               {remaining >= 0
@@ -81,7 +81,7 @@ export function DailyCalorieAdjustment({
                 : `${Math.abs(remaining).toLocaleString()} over`}
             </span>
           </div>
-          <div className="h-3 bg-surface-700 rounded-full overflow-hidden">
+          <div className="h-3 bg-sep rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${getProgressColor(progress)}`}
               style={{ width: `${Math.min(progress, 100)}%` }}
@@ -103,7 +103,7 @@ export function DailyCalorieAdjustment({
 
         {/* Details Panel */}
         {showDetails && (
-          <div className="p-3 bg-surface-800 rounded-lg text-sm space-y-2">
+          <div className="p-3 bg-fill rounded-lg text-sm space-y-2">
             <div className="flex justify-between">
               <span>Today&apos;s TDEE</span>
               <span>{target.tdeeEstimate.toLocaleString()} cal</span>
@@ -112,7 +112,7 @@ export function DailyCalorieAdjustment({
               <span>Target deficit</span>
               <span>{target.targetDeficit.toLocaleString()} cal</span>
             </div>
-            <div className="flex justify-between font-medium pt-2 border-t border-surface-700">
+            <div className="flex justify-between font-medium pt-2 border-t border-sep">
               <span>Calorie target</span>
               <span>{target.adjustedTarget.toLocaleString()} cal</span>
             </div>
@@ -172,7 +172,7 @@ export function CompactCalorieTarget({
           {target.adjustment}
         </span>
       )}
-      <span className="text-surface-500 text-sm">
+      <span className="text-ink-3 text-sm">
         ({remaining >= 0 ? remaining.toLocaleString() : 0} left)
       </span>
     </div>
@@ -192,7 +192,7 @@ export function ActivityBadge({
   activityLevel: string;
 }) {
   const levelColors: Record<string, string> = {
-    sedentary: 'bg-surface-200 text-surface-600',
+    sedentary: 'bg-ink-2 text-ink-3',
     light: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
     moderate: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
     active: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
@@ -201,11 +201,11 @@ export function ActivityBadge({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-surface-400">
+      <span className="text-ink-2">
         👟 {steps.toLocaleString()} steps
       </span>
       {workoutLogged && (
-        <span className="text-surface-400">💪 Workout</span>
+        <span className="text-ink-2">💪 Workout</span>
       )}
       <span
         className={`text-xs px-2 py-0.5 rounded-full ${levelColors[activityLevel] || levelColors.sedentary}`}

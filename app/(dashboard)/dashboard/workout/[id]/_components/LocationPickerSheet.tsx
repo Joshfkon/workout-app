@@ -133,14 +133,14 @@ export function LocationPickerSheet({
   const rowClass = (active: boolean) =>
     `w-full flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-colors ${
       active
-        ? 'border-primary-500/60 bg-primary-500/10 text-surface-100'
-        : 'border-surface-800 bg-surface-800/40 text-surface-300 hover:bg-surface-800'
+        ? 'border-action/60 bg-action/10 text-ink'
+        : 'border-sep bg-fill/40 text-ink-2 hover:bg-fill'
     }`;
 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={title}>
       <div className="space-y-3" data-testid="location-picker-sheet">
-        <p className="text-[13px] leading-relaxed text-surface-400">
+        <p className="text-[13px] leading-relaxed text-ink-2">
           {scope.kind === 'session' ? (
             <>
               Machine loads aren&rsquo;t comparable between gyms, so each location keeps its own
@@ -148,7 +148,7 @@ export function LocationPickerSheet({
             </>
           ) : (
             <>
-              Use this when <span className="text-surface-200">{scope.exerciseName}</span> is on a
+              Use this when <span className="text-ink">{scope.exerciseName}</span> is on a
               different machine than the rest of the workout. Its weight history is kept separate,
               so the two stacks never average together.
             </>
@@ -164,15 +164,15 @@ export function LocationPickerSheet({
               className={rowClass(selectedId === null)}
               data-testid="location-option-inherit"
             >
-              <IconMapPin size={18} className="flex-shrink-0 text-surface-500" />
+              <IconMapPin size={18} className="flex-shrink-0 text-ink-3" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-medium">Same as workout</span>
-                <span className="block text-xs text-surface-500 truncate">
+                <span className="block text-xs text-ink-3 truncate">
                   {scope.sessionLocationName ?? 'No location set'}
                 </span>
               </span>
               {selectedId === null && (
-                <IconCheck size={18} className="flex-shrink-0 text-primary-400" />
+                <IconCheck size={18} className="flex-shrink-0 text-action" />
               )}
             </button>
           )}
@@ -193,7 +193,7 @@ export function LocationPickerSheet({
               >
                 <IconMapPin
                   size={18}
-                  className={`flex-shrink-0 ${active ? 'text-primary-400' : 'text-surface-500'}`}
+                  className={`flex-shrink-0 ${active ? 'text-action' : 'text-ink-3'}`}
                 />
                 <span className="flex-1 min-w-0">
                   <span className="flex items-center gap-2 min-w-0">
@@ -201,14 +201,14 @@ export function LocationPickerSheet({
                     {suggested && (
                       <span
                         data-testid="location-near-you"
-                        className="flex-shrink-0 rounded-full bg-success-500/15 px-1.5 py-0.5 text-[10px] font-medium text-success-400"
+                        className="flex-shrink-0 rounded-full bg-status-ok/15 px-1.5 py-0.5 text-[10px] font-medium text-status-ok"
                       >
                         Near you
                       </span>
                     )}
                   </span>
                   {(distance != null || location.is_default) && (
-                    <span className="block text-xs text-surface-500 truncate">
+                    <span className="block text-xs text-ink-3 truncate">
                       {[
                         distance != null ? formatDistanceM(distance) : null,
                         location.is_default ? 'Default' : null,
@@ -218,7 +218,7 @@ export function LocationPickerSheet({
                     </span>
                   )}
                 </span>
-                {active && <IconCheck size={18} className="flex-shrink-0 text-primary-400" />}
+                {active && <IconCheck size={18} className="flex-shrink-0 text-action" />}
               </button>
             );
           })}
@@ -246,25 +246,25 @@ export function LocationPickerSheet({
                   scope.kind === 'session' ? 'e.g. Hotel Gym' : 'e.g. Annex adduction machine'
                 }
                 maxLength={60}
-                className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-surface-800 border border-surface-700 text-sm text-surface-100 placeholder-surface-500 focus:outline-none focus:border-primary-500"
+                className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-fill border border-sep text-sm text-ink placeholder-ink-3 focus:outline-none focus:border-action"
                 data-testid="location-new-name"
               />
               <button
                 type="button"
                 onClick={() => void handleCreate()}
                 disabled={!newName.trim() || isSaving}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2.5 rounded-xl text-sm font-medium bg-action text-on-action hover:bg-action disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
-            {createError && <p className="text-xs text-danger-400">{createError}</p>}
+            {createError && <p className="text-xs text-status-bad">{createError}</p>}
           </div>
         ) : (
           <button
             type="button"
             onClick={() => setIsAdding(true)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl border border-dashed border-surface-700 text-sm font-medium text-surface-400 hover:border-surface-600 hover:text-surface-200 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl border border-dashed border-sep text-sm font-medium text-ink-2 hover:border-sep hover:text-ink transition-colors"
             data-testid="location-add-trigger"
           >
             <IconPlus size={16} />
@@ -275,7 +275,7 @@ export function LocationPickerSheet({
         {/* Already-logged sets follow the change. Saying so beats letting the
             user wonder whether today's work was left on the old track. */}
         {loggedSetCount > 0 && (
-          <p className="text-xs text-surface-500">
+          <p className="text-xs text-ink-3">
             {loggedSetCount} set{loggedSetCount === 1 ? '' : 's'} already logged{' '}
             {scope.kind === 'session' ? 'in this workout' : 'for this exercise'} will move with it.
           </p>

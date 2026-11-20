@@ -134,14 +134,14 @@ export function TwoStepMusclePicker({
             required={required}
           />
           {value && coarseSplitWarning(value) && (
-            <p className="mt-1.5 text-sm text-warning-400">{coarseSplitWarning(value)}</p>
+            <p className="mt-1.5 text-sm text-status-warn">{coarseSplitWarning(value)}</p>
           )}
         </div>
       )}
 
       {/* Show split warning if whole group is selected */}
       {!showSubMuscles && value && coarseSplitWarning(value) && (
-        <p className="mt-1.5 text-sm text-warning-400">{coarseSplitWarning(value)}</p>
+        <p className="mt-1.5 text-sm text-status-warn">{coarseSplitWarning(value)}</p>
       )}
     </div>
   );

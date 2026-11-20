@@ -45,7 +45,7 @@ export default function AddExercisePage() {
     return (
       <div className="max-w-xl mx-auto space-y-6">
         <div className="text-center py-12">
-          <p className="text-surface-400">Loading...</p>
+          <p className="text-ink-2">Loading...</p>
         </div>
       </div>
     );
@@ -58,8 +58,8 @@ export default function AddExercisePage() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-surface-100">Add Custom Exercise</h1>
-        <p className="text-surface-400 mt-1">
+        <h1 className="text-2xl font-bold text-ink">Add Custom Exercise</h1>
+        <p className="text-ink-2 mt-1">
           Enter basic information and let AI fill in the details, or review and adjust as needed
         </p>
       </div>
