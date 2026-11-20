@@ -27,9 +27,9 @@ export function FatigueAlertBanner({
   };
 
   const isAlert = alert.severity === 'alert';
-  const bgColor = isAlert ? 'bg-danger-500/10' : 'bg-warning-500/10';
-  const borderColor = isAlert ? 'border-danger-500/20' : 'border-warning-500/20';
-  const textColor = isAlert ? 'text-danger-300' : 'text-warning-300';
+  const bgColor = isAlert ? 'bg-status-bad/10' : 'bg-status-warn/10';
+  const borderColor = isAlert ? 'border-status-bad/20' : 'border-status-warn/20';
+  const textColor = isAlert ? 'text-status-bad' : 'text-status-warn';
   const icon = isAlert ? '\u26A0\uFE0F' : '\u26A0';
 
   // Capitalize muscle name
@@ -38,15 +38,15 @@ export function FatigueAlertBanner({
   return (
     <Card className={`p-4 ${bgColor} border ${borderColor}`}>
       <div className="flex items-start gap-3">
-        <span className="text-xl shrink-0">{icon}</span>
+        <span className="text-title shrink-0">{icon}</span>
         <div className="flex-1">
           <h4 className={`font-semibold ${textColor} mb-1`}>
             Fatigue Alert: {muscleName}
           </h4>
-          <p className="text-sm text-surface-400 mb-3">
+          <p className="text-body text-ink-2 mb-3">
             {alert.message}
           </p>
-          <p className="text-sm text-surface-300 mb-4">
+          <p className="text-body text-ink-2 mb-4">
             {alert.suggestion}
           </p>
 
@@ -57,24 +57,24 @@ export function FatigueAlertBanner({
                 onClick={onReduceVolume}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg ${
                   isAlert
-                    ? 'bg-danger-500 hover:bg-danger-600 text-white'
-                    : 'bg-warning-500 hover:bg-warning-600 text-surface-900'
+                    ? 'bg-status-bad hover:bg-status-bad text-white'
+                    : 'bg-status-warn hover:bg-status-warn text-card'
                 } transition-colors`}
               >
-                Reduce Volume
+                Reduce volume
               </button>
             )}
             {onPlanDeload && (
               <button
                 onClick={onPlanDeload}
-                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-surface-700 hover:bg-surface-600 text-surface-200 transition-colors"
+                className="px-3 py-1.5 text-body font-medium rounded-lg bg-sep hover:bg-sep text-ink transition-colors"
               >
-                Plan Deload
+                Plan deload
               </button>
             )}
             <button
               onClick={handleDismiss}
-              className="px-3 py-1.5 text-sm font-medium rounded-lg text-surface-400 hover:text-surface-200 transition-colors"
+              className="px-3 py-1.5 text-body font-medium rounded-lg text-ink-2 hover:text-ink transition-colors"
             >
               Dismiss
             </button>
@@ -118,7 +118,7 @@ export function FatigueAlertList({ alerts, onDismissAll }: FatigueAlertListProps
             alerts.forEach(handleDismiss);
             onDismissAll();
           }}
-          className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
+          className="text-caption text-ink-3 hover:text-ink-2 transition-colors"
         >
           Dismiss all alerts
         </button>

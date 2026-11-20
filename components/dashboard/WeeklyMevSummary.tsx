@@ -34,17 +34,17 @@ export function WeeklyMevSummary() {
   return (
     <Card id="weekly-mev" className="p-4 mb-6 scroll-mt-4">
       <div className="flex items-center justify-between mb-1">
-        <h3 className="font-semibold text-surface-100">This Week vs MEV</h3>
-        <span className="text-sm text-surface-300">
+        <h3 className="font-semibold text-ink">This week vs MEV</h3>
+        <span className="text-body text-ink-2">
           {/* Effective Volume (RIR-weighted) is the primary number; the raw
               set count rides secondary so the user still sees work done. */}
-          <span className="font-semibold text-surface-100">
+          <span className="font-semibold text-ink">
             {formatEffectiveVolume(tiles.totalEffectiveSets)} effective
           </span>
-          <span className="text-surface-500"> · {tiles.totalSets} total sets</span>
+          <span className="text-ink-3"> · {tiles.totalSets} total sets</span>
         </span>
       </div>
-      <p className={`text-xs mb-3 ${tiles.lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
+      <p className={`text-xs mb-3 ${tiles.lowCount > 0 ? 'text-status-warn' : 'text-status-ok'}`}>
         {tiles.lowCount > 0
           ? `${tiles.lowCount} muscle${tiles.lowCount === 1 ? '' : 's'} below minimum effective volume (rolling 7 days)`
           : 'All muscles at or above minimum effective volume (rolling 7 days)'}
@@ -54,10 +54,10 @@ export function WeeklyMevSummary() {
           {below.map((row) => (
             <span
               key={row.muscle}
-              className="inline-flex items-center gap-1 rounded-full bg-warning-500/10 border border-warning-500/20 px-2 py-0.5 text-[11px] text-warning-300"
+              className="inline-flex items-center gap-1 rounded-full bg-status-warn/10 border border-status-warn/20 px-2 py-0.5 text-caption text-status-warn"
             >
               {row.displayName}
-              <span className="text-warning-400/70">
+              <span className="text-status-warn/70">
                 {formatEffectiveVolume(row.effectiveSets)} eff · {row.sets} sets · {groupZoneBandLabel(row.band)}
               </span>
             </span>

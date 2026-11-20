@@ -43,22 +43,22 @@ export default function HistoryCalendar({
   ];
 
   return (
-    <div className="bg-surface-900 border border-surface-800 rounded-xl p-4">
+    <div className="bg-card rounded-card p-4 shadow-card">
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={() => onMonthChange(new Date(year, monthIdx - 1, 1))}
           aria-label="Previous month"
-          className="w-11 h-11 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+          className="w-11 h-11 flex items-center justify-center rounded-lg text-ink-2 hover:bg-fill hover:text-ink transition-colors"
         >
           <IconChevronLeft size={20} />
         </button>
-        <span className="text-sm font-semibold text-surface-100">
+        <span className="text-body font-semibold text-ink">
           {month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </span>
         <button
           onClick={() => onMonthChange(new Date(year, monthIdx + 1, 1))}
           aria-label="Next month"
-          className="w-11 h-11 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+          className="w-11 h-11 flex items-center justify-center rounded-lg text-ink-2 hover:bg-fill hover:text-ink transition-colors"
         >
           <IconChevronRight size={20} />
         </button>
@@ -66,7 +66,7 @@ export default function HistoryCalendar({
 
       <div className="grid grid-cols-7 gap-1 text-center">
         {WEEKDAYS.map((d, i) => (
-          <span key={`${d}-${i}`} className="text-[10px] uppercase text-surface-500 py-1">
+          <span key={`${d}-${i}`} className="text-caption text-ink-3 py-1">
             {d}
           </span>
         ))}
@@ -81,17 +81,17 @@ export default function HistoryCalendar({
               aria-pressed={selectedDay === day}
               className={`relative h-11 rounded-lg text-sm tabular-nums transition-colors ${
                 selectedDay === day
-                  ? 'bg-primary-500 text-white font-semibold'
+                  ? 'bg-action text-on-action font-semibold'
                   : day === today
-                    ? 'border border-primary-500/50 text-surface-100 hover:bg-surface-800'
-                    : 'text-surface-300 hover:bg-surface-800'
+                    ? 'border border-action/50 text-ink hover:bg-fill'
+                    : 'text-ink-2 hover:bg-fill'
               }`}
             >
               {parseInt(day.slice(-2), 10)}
               {dotDates.has(day) && (
                 <span
                   className={`absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${
-                    selectedDay === day ? 'bg-white' : 'bg-success-400'
+                    selectedDay === day ? 'bg-white' : 'bg-status-ok'
                   }`}
                   aria-hidden="true"
                 />

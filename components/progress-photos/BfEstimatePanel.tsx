@@ -86,19 +86,19 @@ export function BfEstimatePanel({ photo, signedUrl, onEstimated }: BfEstimatePan
   };
 
   return (
-    <div className="rounded-lg bg-surface-800/60 border border-surface-700 p-3 space-y-2">
+    <div className="rounded-lg bg-fill/60 border border-sep p-3 space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-surface-500">
+          <p className="text-caption font-medium text-ink-3">
             AI body fat estimate
           </p>
           {hasEstimate ? (
-            <p className="text-lg font-semibold text-surface-100">
+            <p className="text-headline font-semibold text-ink">
               {low}–{high}%
-              <span className="ml-2 text-xs font-normal text-surface-500">estimated</span>
+              <span className="ml-2 text-caption font-normal text-ink-3">estimated</span>
             </p>
           ) : (
-            <p className="text-sm text-surface-400">
+            <p className="text-body text-ink-2">
               Get a rough body fat range from this photo.
             </p>
           )}
@@ -112,16 +112,16 @@ export function BfEstimatePanel({ photo, signedUrl, onEstimated }: BfEstimatePan
           {isEstimating ? 'Estimating…' : hasEstimate ? 'Re-estimate' : 'Estimate'}
         </Button>
       </div>
-      {result?.rationale && <p className="text-xs text-surface-400">{result.rationale}</p>}
+      {result?.rationale && <p className="text-caption text-ink-2">{result.rationale}</p>}
       {result && (
-        <p className="text-xs text-surface-500">
+        <p className="text-caption text-ink-3">
           {result.dexaCalibrated
             ? 'Calibrated against your DEXA scan history.'
             : 'Add a DEXA scan to calibrate future estimates to your body.'}
         </p>
       )}
-      {error && <p className="text-xs text-red-400">{error}</p>}
-      <p className="text-[11px] text-surface-600">
+      {error && <p className="text-caption text-status-bad">{error}</p>}
+      <p className="text-caption text-ink-3">
         Visual estimates carry a few points of error either way — trust the trend, not the number.
       </p>
     </div>

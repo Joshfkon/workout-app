@@ -71,20 +71,20 @@ const COMPARISON_BUCKETS: {
   {
     status: 'lower',
     label: 'Lower than avg',
-    valueClass: 'text-primary-400',
-    activeClass: 'ring-1 ring-primary-500/60 bg-primary-500/10',
+    valueClass: 'text-action',
+    activeClass: 'ring-1 ring-action/60 bg-action/10',
   },
   {
     status: 'average',
     label: 'At average',
-    valueClass: 'text-success-400',
-    activeClass: 'ring-1 ring-success-500/60 bg-success-500/10',
+    valueClass: 'text-status-ok',
+    activeClass: 'ring-1 ring-status-ok/60 bg-status-ok/10',
   },
   {
     status: 'higher',
     label: 'Higher than avg',
-    valueClass: 'text-warning-400',
-    activeClass: 'ring-1 ring-warning-500/60 bg-warning-500/10',
+    valueClass: 'text-status-warn',
+    activeClass: 'ring-1 ring-status-warn/60 bg-status-warn/10',
   },
 ];
 
@@ -103,12 +103,12 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
 
   return (
     <Card className="p-4 mt-4">
-      <h4 className="font-medium text-surface-200 mb-3">Research Comparison</h4>
-      <p className="text-sm text-surface-400 mb-3">
+      <h4 className="font-medium text-ink mb-3">Research comparison</h4>
+      <p className="text-body text-ink-2 mb-3">
         Your personalized volume recommendations compared to research averages.
         Tap a category to see which muscles and why:
       </p>
-      <div className="grid grid-cols-3 gap-2 text-sm">
+      <div className="grid grid-cols-3 gap-2 text-body">
         {COMPARISON_BUCKETS.map(({ status, label, valueClass, activeClass }) => (
           <button
             key={status}
@@ -116,10 +116,10 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
             aria-expanded={openBucket === status}
             data-testid={`research-comparison-${status}`}
             className={`text-center p-2 rounded transition-colors ${
-              openBucket === status ? activeClass : 'bg-surface-800/50 hover:bg-surface-800'
+              openBucket === status ? activeClass : 'bg-fill/50 hover:bg-fill'
             }`}
           >
-            <p className="text-surface-500 text-xs">{label}</p>
+            <p className="text-ink-3 text-caption">{label}</p>
             <p className={`${valueClass} font-medium`}>
               {comparison[status].length} muscle{comparison[status].length === 1 ? '' : 's'}
             </p>
@@ -130,23 +130,23 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
       {openBucket && (
         <div className="mt-3 space-y-2" data-testid="research-comparison-detail">
           {openEntries.length === 0 ? (
-            <p className="text-sm text-surface-500 text-center py-2">
+            <p className="text-body text-ink-3 text-center py-2">
               No muscles in this category right now.
             </p>
           ) : (
             openEntries.map((entry) => (
-              <div key={entry.muscle} className="p-3 bg-surface-800/50 rounded-lg">
+              <div key={entry.muscle} className="p-3 bg-fill/50 rounded-lg">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-surface-200">
+                  <span className="text-body font-medium text-ink">
                     {muscleDisplayName(entry.muscle)}
                   </span>
                   <span
                     className={`text-xs font-medium ${
                       entry.status === 'average'
-                        ? 'text-success-400'
+                        ? 'text-status-ok'
                         : entry.percentDiff > 0
-                          ? 'text-warning-400'
-                          : 'text-primary-400'
+                          ? 'text-status-warn'
+                          : 'text-action'
                     }`}
                   >
                     {entry.status === 'average'
@@ -154,13 +154,13 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
                       : `${entry.percentDiff > 0 ? '+' : ''}${entry.percentDiff}% vs research`}
                   </span>
                 </div>
-                <p className="text-xs text-surface-400 mt-1">
+                <p className="text-caption text-ink-2 mt-1">
                   You: {entry.personalMev}&ndash;{entry.personalMrv} sets/wk
-                  <span className="text-surface-600"> &middot; </span>
+                  <span className="text-ink-3"> &middot; </span>
                   Research: {entry.researchMev}&ndash;{entry.researchMrv} sets/wk
                 </p>
                 {entry.reasons.map((reason) => (
-                  <p key={reason} className="text-xs text-surface-500 mt-0.5">
+                  <p key={reason} className="text-caption text-ink-3 mt-0.5">
                     {reason}
                   </p>
                 ))}
@@ -172,7 +172,7 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
 
       <Link
         href="/dashboard/learn/adaptive-volume"
-        className="block mt-3 text-xs text-primary-400 hover:text-primary-300 text-center transition-colors"
+        className="block mt-3 text-caption text-action text-center transition-colors"
       >
         Learn how we calculate this {'\u2192'}
       </Link>
@@ -273,11 +273,11 @@ export default function VolumeProfilePage() {
     return (
       <div className="max-w-3xl mx-auto pb-12">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-surface-800 rounded w-1/2" />
-          <div className="h-4 bg-surface-800 rounded w-2/3" />
+          <div className="h-8 bg-fill rounded w-1/2" />
+          <div className="h-4 bg-fill rounded w-2/3" />
           <div className="space-y-4">
             {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="h-16 bg-surface-800 rounded-lg" />
+              <div key={i} className="h-16 bg-fill rounded-lg" />
             ))}
           </div>
         </div>
@@ -289,8 +289,8 @@ export default function VolumeProfilePage() {
     <div className="max-w-3xl mx-auto pb-12">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-surface-100 mb-2">Your Volume Tolerance</h1>
-        <p className="text-surface-400">
+        <h1 className="text-large-title text-ink mb-2">Your volume tolerance</h1>
+        <p className="text-ink-2">
           {confidenceSummary.mesocycles === 0
             ? 'Using research-based defaults. Train for 3+ weeks to personalize.'
             : `Based on ${confidenceSummary.mesocycles} mesocycle${confidenceSummary.mesocycles > 1 ? 's' : ''} of data`}
@@ -306,8 +306,8 @@ export default function VolumeProfilePage() {
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-sm text-surface-400">Confidence Level</span>
-            <h3 className="text-lg font-semibold text-surface-100 capitalize">
+            <span className="text-body text-ink-2">Confidence level</span>
+            <h3 className="text-headline font-semibold text-ink capitalize">
               {confidenceSummary.level}
             </h3>
           </div>
@@ -317,8 +317,8 @@ export default function VolumeProfilePage() {
                 key={level}
                 className={`w-8 h-2 rounded-full ${
                   idx <= ['low', 'medium', 'high'].indexOf(confidenceSummary.level)
-                    ? 'bg-primary-500'
-                    : 'bg-surface-700'
+                    ? 'bg-action'
+                    : 'bg-sep'
                 }`}
               />
             ))}
@@ -347,10 +347,10 @@ export default function VolumeProfilePage() {
           Tapping a muscle scrolls to its bar row. */}
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-surface-100">Body Map</h3>
+          <h3 className="font-semibold text-ink">Body map</h3>
           <button
             onClick={() => setMapCollapsed(!mapCollapsed)}
-            className="text-xs font-medium text-surface-500 hover:text-surface-300 transition-colors"
+            className="text-caption font-medium text-ink-3 hover:text-ink-2 transition-colors"
             data-testid="volume-map-toggle"
             aria-expanded={!mapCollapsed}
           >
@@ -379,9 +379,9 @@ export default function VolumeProfilePage() {
           muscles; lagging (below-MEV) fine muscles surface automatically. */}
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-surface-100">This Week&apos;s Volume</h3>
-          <div className="flex items-center gap-2 text-xs text-surface-500">
-            <span className="w-3 h-3 rounded bg-success-500/20 border border-success-500/40" />
+          <h3 className="font-semibold text-ink">This week&apos;s volume</h3>
+          <div className="flex items-center gap-2 text-caption text-ink-3">
+            <span className="w-3 h-3 rounded bg-status-ok/20 border border-status-ok/40" />
             <span>MEV–MRV zone</span>
           </div>
         </div>
@@ -438,7 +438,7 @@ export default function VolumeProfilePage() {
               );
             }}
             testIdPrefix="volume-row"
-            rowClassName="py-3 border-b border-surface-800 last:border-b-0"
+            rowClassName="py-3 border-b border-sep last:border-b-0"
           />
         </div>
       </Card>
@@ -455,19 +455,19 @@ export default function VolumeProfilePage() {
 
       {/* Recent Mesocycle Review Link */}
       {latestAnalysis && (
-        <Card className="p-4 mt-6 bg-gradient-to-r from-purple-500/10 to-primary-500/10 border-purple-500/20">
+        <Card className="p-4 mt-6">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-medium text-surface-200">Latest Mesocycle Review</h4>
-              <p className="text-sm text-surface-500">
+              <h4 className="font-medium text-ink">Latest mesocycle review</h4>
+              <p className="text-body text-ink-3">
                 See detailed analysis and recommendations
               </p>
             </div>
             <Link
               href="/dashboard/volume/review"
-              className="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-200 font-medium rounded-lg transition-colors"
+              className="px-4 py-2 bg-action-tint text-action font-semibold rounded-button transition-colors"
             >
-              View Review
+              View review
             </Link>
           </div>
         </Card>
@@ -477,7 +477,7 @@ export default function VolumeProfilePage() {
       <div className="mt-8 text-center">
         <Link
           href="/dashboard/learn/adaptive-volume"
-          className="text-sm text-surface-400 hover:text-surface-200 transition-colors"
+          className="text-body text-ink-2 hover:text-ink transition-colors"
         >
           How we learn your recovery capacity {'\u2192'}
         </Link>

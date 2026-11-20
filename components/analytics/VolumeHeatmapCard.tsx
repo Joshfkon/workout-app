@@ -57,12 +57,12 @@ export function VolumeHeatmapCard() {
   return (
     <Card className="p-4 mb-6" data-testid="volume-heatmap-card">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h3 className="font-semibold text-surface-100">Volume Heatmap</h3>
+        <h3 className="font-semibold text-ink">Volume heatmap</h3>
         <HeatmapTimeframeChips value={timeframe} onChange={setTimeframe} />
       </div>
 
       <p
-        className={`mt-1 text-xs text-surface-500 ${isPlaceholderData ? 'animate-pulse' : ''}`}
+        className={`mt-1 text-xs text-ink-3 ${isPlaceholderData ? 'animate-pulse' : ''}`}
         data-testid="heatmap-caption"
       >
         {heatmapCaption(timeframe, heatmap)}
@@ -70,9 +70,9 @@ export function VolumeHeatmapCard() {
 
       {isLoading && !heatmap ? (
         // Cold start only — revisits and timeframe switches paint cached data.
-        <div className="h-64 mt-3 animate-pulse rounded-lg bg-surface-800" data-testid="heatmap-loading" />
+        <div className="h-64 mt-3 animate-pulse rounded-lg bg-fill" data-testid="heatmap-loading" />
       ) : !hasAnyVolume ? (
-        <p className="py-10 text-center text-sm text-surface-500" data-testid="heatmap-empty">
+        <p className="py-10 text-center text-body text-ink-3" data-testid="heatmap-empty">
           No completed workouts in this period yet.
         </p>
       ) : (
@@ -93,22 +93,22 @@ export function VolumeHeatmapCard() {
           {selectedRow ? (
             <HeatmapMuscleDetail row={selectedRow} />
           ) : (
-            <p className="mt-2 text-[11px] text-surface-600">
+            <p className="mt-2 text-caption text-ink-3">
               Tap a muscle for its average, zone and total.
             </p>
           )}
 
           {underVolume.length > 0 && (
-            <div className="mt-2 rounded-lg bg-surface-800/60 px-3 py-2" data-testid="heatmap-under-volume">
-              <p className="text-[11px] uppercase tracking-wide text-surface-500">
+            <div className="mt-2 rounded-lg bg-fill/60 px-3 py-2" data-testid="heatmap-under-volume">
+              <p className="text-caption text-ink-3">
                 Not getting enough to grow
               </p>
-              <p className="text-xs text-surface-300 mt-0.5">
+              <p className="text-caption text-ink-2 mt-0.5">
                 {underVolume.map((row, i) => (
                   <span key={row.muscle}>
-                    {i > 0 && <span className="text-surface-500">, </span>}
+                    {i > 0 && <span className="text-ink-3">, </span>}
                     {row.displayName}
-                    <span className="text-surface-500">
+                    <span className="text-ink-3">
                       {' '}({formatHeatmapSets(row.avgWeeklySets)}/{row.band.mev})
                     </span>
                   </span>

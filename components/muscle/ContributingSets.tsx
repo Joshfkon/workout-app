@@ -75,24 +75,24 @@ export function ContributingSets({
     (ex) => Math.round(ex.effective * 10) !== Math.round(ex.sets * 10)
   );
   return (
-    <div className="rounded-lg bg-surface-800/40 px-2.5 py-2" data-testid={`${testIdPrefix}-${muscle}`}>
-      <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">
+    <div className="rounded-lg bg-fill/40 px-2.5 py-2" data-testid={`${testIdPrefix}-${muscle}`}>
+      <p className="text-caption text-ink-3 mb-1">
         {scopeLabel ? `${scopeLabel} · ` : ''}Counted sets · last 7 days · effective (RIR-weighted)
       </p>
       <ul className="space-y-0.5">
         {exercises.map((ex) => (
-          <li key={ex.id} className="flex items-baseline justify-between gap-2 text-xs">
+          <li key={ex.id} className="flex items-baseline justify-between gap-2 text-caption">
             {/* Only the NAME truncates. The badge is a fixed-width chip: with
                 `truncate` on the shared parent it was the tail of the line and
                 clipped to "SECOND…" whenever the name was long, turning the
                 one word that explains the halved credit into noise. */}
             <span className="flex items-baseline gap-1.5 min-w-0">
-              <span className="text-surface-300 truncate">{ex.name}</span>
+              <span className="text-ink-2 truncate">{ex.name}</span>
               {/* Indirect-only credit (no primary-tag share): this exercise is
                   here purely via a secondary-muscle tag — say so inline. */}
               {ex.direct === 0 && (
                 <span
-                  className="flex-shrink-0 rounded bg-surface-700/60 px-1 py-px text-[9px] uppercase tracking-wide text-surface-400"
+                  className="flex-shrink-0 rounded bg-sep/60 px-1 py-px text-[9px] text-ink-2"
                   data-testid={`${testIdPrefix}-secondary-${ex.id}`}
                 >
                   secondary
@@ -100,8 +100,8 @@ export function ContributingSets({
               )}
             </span>
             <span className="tabular-nums flex-shrink-0">
-              <span className="text-surface-300">{formatEffectiveVolume(ex.effective)} eff</span>
-              <span className="text-surface-500">
+              <span className="text-ink-2">{formatEffectiveVolume(ex.effective)} eff</span>
+              <span className="text-ink-3">
                 {' '}
                 · {formatPerformedToCredited(ex.performedSets, ex.sets)}
               </span>
@@ -119,7 +119,7 @@ export function ContributingSets({
           were never meant to add up. */}
       {groupScope && (
         <p
-          className="mt-1 text-[10px] leading-relaxed text-surface-600"
+          className="mt-1 text-caption leading-relaxed text-ink-3"
           data-testid={`${testIdPrefix}-group-dedup-note-${muscle}`}
         >
           A set counts once for the group even when it works more than one of
@@ -128,7 +128,7 @@ export function ContributingSets({
         </p>
       )}
       {(hasFractional || hasDownWeighted) && (
-        <p className="mt-1 text-[10px] leading-relaxed text-surface-600">
+        <p className="mt-1 text-caption leading-relaxed text-ink-3">
           {hasFractional && (
             <>
               Partial counts are shared credit — ½ per set for secondary-muscle

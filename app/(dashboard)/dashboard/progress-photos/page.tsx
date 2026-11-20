@@ -179,19 +179,19 @@ export default function ProgressPhotosPage() {
       {/* Back link */}
       <Link
         href="/dashboard/analytics"
-        className="text-sm text-surface-400 hover:text-surface-200 inline-flex items-center gap-1"
+        className="text-body text-ink-2 hover:text-ink inline-flex items-center gap-1"
       >
         ← Back to Progress
       </Link>
 
       {/* Header with mobile-friendly action buttons */}
       <PageHeader
-        title="Progress Photos"
+        title="Progress photos"
         subtitle="Track your transformation over time"
         actions={
           <>
             <Button onClick={() => setIsAddOpen(true)} size="sm">
-              Add Photo
+              Add photo
             </Button>
             {photos.length >= 2 && (
               <Button variant="secondary" size="sm" onClick={() => setIsCompareOpen(true)}>
@@ -210,9 +210,9 @@ export default function ProgressPhotosPage() {
       {/* Empty state */}
       {photos.length === 0 && (
         <Card className="text-center py-12">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">
             <svg
-              className="w-8 h-8 text-surface-500"
+              className="w-8 h-8 text-ink-3"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -231,13 +231,13 @@ export default function ProgressPhotosPage() {
               />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-surface-200">No progress photos yet</h2>
-          <p className="text-surface-500 mt-2 max-w-md mx-auto">
+          <h2 className="text-headline font-semibold text-ink">No progress photos yet</h2>
+          <p className="text-ink-3 mt-2 max-w-md mx-auto">
             Photos are the most honest progress tracker there is. Take them in
             consistent lighting and poses, and future you will thank you.
           </p>
           <Button className="mt-6" onClick={() => setIsAddOpen(true)}>
-            Add Your First Photo
+            Add your first photo
           </Button>
         </Card>
       )}
@@ -253,7 +253,7 @@ export default function ProgressPhotosPage() {
                 onClick={() => setViewingPhoto(photo)}
                 className="text-left group"
               >
-                <div className="aspect-[3/4] rounded-lg overflow-hidden bg-surface-800 ring-1 ring-surface-700 group-hover:ring-primary-500 transition-shadow">
+                <div className="aspect-[3/4] rounded-lg overflow-hidden bg-fill ring-1 ring-sep group-hover:ring-action transition-shadow">
                   {url ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
@@ -264,14 +264,14 @@ export default function ProgressPhotosPage() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-6 h-6 border-2 border-sep border-t-transparent rounded-full animate-spin" />
                     </div>
                   )}
                 </div>
                 <div className="mt-1.5 px-0.5">
-                  <p className="text-sm text-surface-200">{formatDate(photo.photoDate)}</p>
+                  <p className="text-body text-ink">{formatDate(photo.photoDate)}</p>
                   {(photo.weightKg != null || photo.bodyFatPercent != null) && (
-                    <p className="text-xs text-surface-500">
+                    <p className="text-caption text-ink-3">
                       {[
                         photo.weightKg != null ? displayWeight(photo.weightKg) : null,
                         photo.bodyFatPercent != null ? `${photo.bodyFatPercent}% BF` : null,

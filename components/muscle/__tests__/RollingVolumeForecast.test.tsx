@@ -42,7 +42,7 @@ describe('RollingVolumeForecast', () => {
     // Day +7: everything aged out -> empty track, not a zone color.
     expect(
       screen.getByTestId(`volume-forecast-bar-biceps-${FORECAST_HORIZON_DAYS}`).firstChild
-    ).toHaveClass('bg-surface-800');
+    ).toHaveClass('bg-fill');
   });
 
   it('captions the day the count falls below the zone floor', () => {
