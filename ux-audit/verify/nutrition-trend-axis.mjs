@@ -144,7 +144,7 @@ async function run() {
   });
 
   // ---- Insights tab: Nutrition Trends ----
-  await page.goto(`${BASE}/dashboard/nutrition?tab=insights`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/dashboard/nutrition/trends`, { waitUntil: 'domcontentloaded' });
   assert(!page.url().includes('/login'), 'not redirected to /login (auth bypass works)');
   await page.getByText('Nutrition Trends').first().waitFor({ state: 'visible', timeout: 20000 });
   await page.waitForTimeout(800);
@@ -178,7 +178,7 @@ async function run() {
   }
 
   // ---- Weight sub-tab chart ----
-  await page.goto(`${BASE}/dashboard/nutrition?tab=weight`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/dashboard/nutrition/trends`, { waitUntil: 'domcontentloaded' });
   await page.getByText('Weight Trend').first().waitFor({ state: 'visible', timeout: 20000 });
   await page.locator('.recharts-xAxis .recharts-cartesian-axis-tick-value').first().waitFor({ state: 'visible', timeout: 20000 });
   await page.waitForTimeout(600);
