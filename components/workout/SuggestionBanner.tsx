@@ -127,17 +127,17 @@ export function SuggestionBanner({
   return (
     <div
       className={`flex items-start gap-2 rounded-lg px-3 py-2 transition-colors ${
-        showWarning ? 'bg-amber-500/10' : 'bg-primary-500/10'
+        showWarning ? 'bg-amber-500/10' : 'bg-action/10'
       }`}
     >
       {showWarning ? (
         <IconAlertTriangle
           size={16}
-          className="text-amber-400 flex-shrink-0 mt-0.5"
+          className="text-status-warn flex-shrink-0 mt-0.5"
           aria-hidden="true"
         />
       ) : (
-        <IconSparkles size={16} className="text-primary-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <IconSparkles size={16} className="text-action flex-shrink-0 mt-0.5" aria-hidden="true" />
       )}
       {/* Suggestion copy and effort warning stacked in ONE grid cell: the
           banner's height is the max of both from the first render, so the
@@ -147,7 +147,7 @@ export function SuggestionBanner({
           visible layer is exposed to assistive tech. */}
       <div className="flex-1 min-w-0 grid">
         <p
-          className={`col-start-1 row-start-1 text-[12px] leading-snug text-primary-400 ${
+          className={`col-start-1 row-start-1 text-[12px] leading-snug text-action ${
             showWarning ? 'invisible' : ''
           }`}
           aria-hidden={showWarning}
@@ -164,7 +164,7 @@ export function SuggestionBanner({
             </span>
           )}
           {roleTag ? (
-            <span className="ml-1.5 rounded bg-primary-500/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-primary-300">
+            <span className="ml-1.5 rounded bg-action/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-action">
               {roleTag}
             </span>
           ) : null}
@@ -175,7 +175,7 @@ export function SuggestionBanner({
             data-testid={showWarning ? 'effort-warning' : undefined}
             aria-hidden={!showWarning}
             aria-live="polite"
-            className={`col-start-1 row-start-1 text-[12px] leading-snug font-medium text-amber-400 ${
+            className={`col-start-1 row-start-1 text-[12px] leading-snug font-medium text-status-warn ${
               showWarning ? '' : 'invisible'
             }`}
           >
@@ -187,8 +187,8 @@ export function SuggestionBanner({
         onClick={() => setShowInfo(true)}
         className={`flex-shrink-0 p-0.5 transition-colors ${
           showWarning
-            ? 'text-amber-400/70 hover:text-amber-300'
-            : 'text-primary-400/70 hover:text-primary-300'
+            ? 'text-status-warn/70 hover:text-status-warn'
+            : 'text-action/70 hover:text-action'
         }`}
         aria-label="How this suggestion works"
       >
@@ -205,7 +205,7 @@ export function SuggestionBanner({
             ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
             : explanation
           ).map((line, i) => (
-            <li key={i} className="flex items-start gap-2 text-[13px] text-surface-300">
+            <li key={i} className="flex items-start gap-2 text-[13px] text-ink">
               <span className="mt-1.5 w-1 h-1 rounded-full bg-primary-400 flex-shrink-0" aria-hidden="true" />
               {line}
             </li>

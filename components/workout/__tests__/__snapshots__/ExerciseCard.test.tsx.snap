@@ -3,10 +3,10 @@
 exports[`ExerciseCard Snapshot Tests renders active state with logger row and suggestion banner 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-float relative overflow-hidden transition-all ring-2 ring-primary-500/50"
+    class="rounded-card text-ink bg-card shadow-float relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -15,7 +15,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -29,7 +29,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Chest
@@ -37,13 +37,13 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </p>
       </button>
       <p
-        class="mt-1 text-[11px] text-surface-500"
+        class="mt-1 text-[11px] text-ink-2"
         data-testid="session-volume-line"
       >
         Projected volume
          
         <span
-          class="text-surface-300"
+          class="text-ink"
         >
           1,800
            
@@ -58,11 +58,11 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         class="space-y-2 pt-1"
       >
         <div
-          class="flex items-start gap-2 rounded-lg px-3 py-2 transition-colors bg-primary-500/10"
+          class="flex items-start gap-2 rounded-lg px-3 py-2 transition-colors bg-action/10"
         >
           <svg
             aria-hidden="true"
-            class="tabler-icon tabler-icon-sparkles text-primary-400 flex-shrink-0 mt-0.5"
+            class="tabler-icon tabler-icon-sparkles text-action flex-shrink-0 mt-0.5"
             fill="none"
             height="16"
             stroke="currentColor"
@@ -83,7 +83,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             <p
               aria-hidden="false"
               aria-live="polite"
-              class="col-start-1 row-start-1 text-[12px] leading-snug text-primary-400 "
+              class="col-start-1 row-start-1 text-[12px] leading-snug text-action "
             >
               <span
                 class="font-medium"
@@ -101,7 +101,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           </div>
           <button
             aria-label="How this suggestion works"
-            class="flex-shrink-0 p-0.5 transition-colors text-primary-400/70 hover:text-primary-300"
+            class="flex-shrink-0 p-0.5 transition-colors text-action/70 hover:text-action"
           >
             <svg
               class="tabler-icon tabler-icon-info-circle "
@@ -129,28 +129,28 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </div>
         <p
           aria-hidden="true"
-          class="px-1 text-[11px] leading-4 h-4 truncate text-primary-300 invisible"
+          class="px-1 text-[11px] leading-4 h-4 truncate text-action invisible"
           data-testid="weight-edit-recompute-note"
         />
         <div
           aria-label="Set 1 logger"
-          class="rounded-lg border border-primary-500/40 p-2.5 space-y-2"
+          class="rounded-card bg-action-tint p-3 space-y-2.5"
           role="group"
         >
           <div
             class="flex items-center gap-1.5"
           >
             <span
-              class="w-3 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center"
+              class="w-4 flex-shrink-0 text-body font-semibold text-ink text-center"
             >
               1
             </span>
             <div
-              class="flex-1 flex items-center gap-0.5 min-w-0"
+              class="flex-1 flex items-center min-w-0 rounded-xl bg-card"
             >
               <button
                 aria-label="Decrease weight"
-                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[56px] flex items-center justify-center rounded-xl text-action active:bg-fill transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -172,23 +172,23 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
               <button
                 aria-label="Weight: 60 kg. Tap to type"
-                class="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
+                class="w-full min-w-0 min-h-[56px] flex flex-col items-center justify-center leading-tight"
                 type="button"
               >
                 <span
-                  class="font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                  class="text-[22px] font-bold tabular-nums text-ink whitespace-nowrap"
                 >
                   60
                 </span>
                 <span
-                  class="text-[10px] uppercase tracking-wide text-surface-500"
+                  class="text-caption text-ink-2"
                 >
                   kg
                 </span>
               </button>
               <button
                 aria-label="Increase weight"
-                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[56px] flex items-center justify-center rounded-xl text-action active:bg-fill transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -213,11 +213,11 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
             </div>
             <div
-              class="flex-1 flex items-center gap-0.5 min-w-0"
+              class="flex-1 flex items-center min-w-0 rounded-xl bg-card"
             >
               <button
                 aria-label="Decrease reps"
-                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[56px] flex items-center justify-center rounded-xl text-action active:bg-fill transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -239,23 +239,23 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
               <button
                 aria-label="Reps: 10 reps. Tap to type"
-                class="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
+                class="w-full min-w-0 min-h-[56px] flex flex-col items-center justify-center leading-tight"
                 type="button"
               >
                 <span
-                  class="font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                  class="text-[22px] font-bold tabular-nums text-ink whitespace-nowrap"
                 >
                   10
                 </span>
                 <span
-                  class="text-[10px] uppercase tracking-wide text-surface-500"
+                  class="text-caption text-ink-2"
                 >
                   reps
                 </span>
               </button>
               <button
                 aria-label="Increase reps"
-                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[56px] flex items-center justify-center rounded-xl text-action active:bg-fill transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -280,13 +280,21 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
             </div>
           </div>
+          <p
+            class="pl-1 text-caption text-ink-2"
+            id="effort-q-1"
+          >
+            How many more could you have done?
+          </p>
           <div
-            class="flex items-stretch gap-2"
+            aria-labelledby="effort-q-1"
+            class="flex items-stretch gap-1.5"
+            role="group"
           >
             <button
               aria-label="4+ reps in reserve (cruise)"
               aria-pressed="false"
-              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
               type="button"
             >
               <span
@@ -295,7 +303,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 4+
               </span>
               <span
-                class="text-[10px] leading-tight text-surface-500"
+                class="text-[10px] leading-tight text-ink-2"
               >
                 cruise
               </span>
@@ -303,7 +311,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             <button
               aria-label="3 reps in reserve (easy)"
               aria-pressed="false"
-              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
               type="button"
             >
               <span
@@ -312,7 +320,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 3
               </span>
               <span
-                class="text-[10px] leading-tight text-surface-500"
+                class="text-[10px] leading-tight text-ink-2"
               >
                 easy
               </span>
@@ -320,7 +328,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             <button
               aria-label="2 reps in reserve (good)"
               aria-pressed="true"
-              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-primary-500 text-white"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-action text-on-action"
               type="button"
             >
               <span
@@ -329,7 +337,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 2
               </span>
               <span
-                class="text-[10px] leading-tight text-white/80"
+                class="text-[10px] leading-tight opacity-80"
               >
                 good
               </span>
@@ -337,7 +345,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             <button
               aria-label="1 reps in reserve (hard)"
               aria-pressed="false"
-              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
               type="button"
             >
               <span
@@ -346,7 +354,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 1
               </span>
               <span
-                class="text-[10px] leading-tight text-surface-500"
+                class="text-[10px] leading-tight text-ink-2"
               >
                 hard
               </span>
@@ -354,7 +362,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             <button
               aria-label="0 reps in reserve (maxed)"
               aria-pressed="false"
-              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
               type="button"
             >
               <span
@@ -363,14 +371,14 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 0
               </span>
               <span
-                class="text-[10px] leading-tight text-surface-500"
+                class="text-[10px] leading-tight text-ink-2"
               >
                 maxed
               </span>
             </button>
             <button
               aria-label="Set type: normal (tap to change)"
-              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800"
+              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-action bg-card hover:bg-fill"
               title="Normal set"
               type="button"
             >
@@ -396,7 +404,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             </button>
             <button
               aria-label="Add set feedback"
-              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800"
+              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-action bg-card hover:bg-fill"
               type="button"
             >
               <svg
@@ -430,7 +438,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             </button>
           </div>
           <button
-            class="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-xl min-h-[52px] text-base font-semibold transition-colors disabled:opacity-40"
+            class="w-full bg-action text-on-action rounded-button min-h-[52px] text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-40"
             type="button"
           >
             Log set
@@ -438,7 +446,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </div>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -465,7 +473,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -500,7 +508,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
       />
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -520,7 +528,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -544,10 +552,10 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -572,10 +580,10 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
 exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -584,7 +592,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Pull-ups
           </button>
@@ -598,7 +606,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Back
@@ -634,7 +642,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -660,7 +668,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -686,7 +694,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -713,7 +721,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -733,7 +741,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -757,10 +765,10 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -785,10 +793,10 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
 exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -797,7 +805,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -811,7 +819,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Chest
@@ -823,7 +831,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -850,7 +858,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -877,7 +885,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -905,7 +913,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
       </div>
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -925,7 +933,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -949,10 +957,10 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -977,10 +985,10 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
 exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -989,7 +997,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1003,7 +1011,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1015,7 +1023,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1042,7 +1050,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1069,7 +1077,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1097,7 +1105,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -1117,7 +1125,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -1141,10 +1149,10 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1169,10 +1177,10 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -1181,7 +1189,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1195,7 +1203,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1203,20 +1211,20 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         </p>
       </button>
       <p
-        class="mt-1 text-[11px] text-surface-500"
+        class="mt-1 text-[11px] text-ink-2"
         data-testid="session-volume-line"
       >
         Volume
          
         <span
-          class="text-surface-300"
+          class="text-ink"
         >
           1,900
            
           kg
         </span>
         <span
-          class="text-surface-600"
+          class="text-ink-3"
         >
            · 
         </span>
@@ -1238,7 +1246,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         >
           <svg
             aria-hidden="true"
-            class="tabler-icon tabler-icon-check text-success-400 flex-shrink-0"
+            class="tabler-icon tabler-icon-check text-status-ok flex-shrink-0"
             fill="none"
             height="16"
             stroke="currentColor"
@@ -1254,7 +1262,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             />
           </svg>
           <span
-            class="text-[13px] text-surface-300 truncate"
+            class="text-body font-semibold text-ink truncate tabular-nums"
           >
             Set 
             1
@@ -1266,13 +1274,17 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             10
           </span>
           <span
-            class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
+            class="ml-auto flex-shrink-0 text-[11px] text-ink-2"
           >
-            3
-             RIR
+            <span
+              title="3 reps in reserve"
+            >
+              3
+               left
+            </span>
              · 
             <span
-              class="text-surface-400"
+              class="text-ink-2"
               title="3 RIR — counts as 0.6× toward weekly volume; push closer to failure for full credit"
             >
               effective
@@ -1289,7 +1301,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         >
           <svg
             aria-hidden="true"
-            class="tabler-icon tabler-icon-check text-success-400 flex-shrink-0"
+            class="tabler-icon tabler-icon-check text-status-ok flex-shrink-0"
             fill="none"
             height="16"
             stroke="currentColor"
@@ -1305,7 +1317,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             />
           </svg>
           <span
-            class="text-[13px] text-surface-300 truncate"
+            class="text-body font-semibold text-ink truncate tabular-nums"
           >
             Set 
             2
@@ -1317,15 +1329,19 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             9
           </span>
           <span
-            class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
+            class="ml-auto flex-shrink-0 text-[11px] text-ink-2"
           >
-            2
-             RIR
+            <span
+              title="2 reps in reserve"
+            >
+              2
+               left
+            </span>
           </span>
         </div>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1353,7 +1369,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -1373,7 +1389,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -1397,10 +1413,10 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1425,10 +1441,10 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -1437,7 +1453,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1450,7 +1466,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         class="mt-1 flex items-center justify-between w-full gap-2 text-left"
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1460,7 +1476,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         </p>
         <svg
           aria-hidden="true"
-          class="tabler-icon tabler-icon-chevron-down flex-shrink-0 text-surface-500 transition-transform "
+          class="tabler-icon tabler-icon-chevron-down flex-shrink-0 text-ink-2 transition-transform "
           fill="none"
           height="14"
           stroke="currentColor"
@@ -1481,7 +1497,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1508,7 +1524,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1535,7 +1551,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1563,7 +1579,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -1583,7 +1599,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -1607,10 +1623,10 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1635,10 +1651,10 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -1647,7 +1663,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1661,7 +1677,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1673,7 +1689,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1700,7 +1716,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1727,7 +1743,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1755,7 +1771,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
       </div>
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -1775,7 +1791,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -1799,10 +1815,10 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1827,10 +1843,10 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
 exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
 <div>
   <div
-    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all"
   >
     <div
-      class="p-4 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-card z-10"
     >
       <div
         class="flex items-center gap-2"
@@ -1839,7 +1855,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1853,7 +1869,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
       >
         <button
           aria-haspopup="dialog"
-          class="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20 transition-colors"
+          class="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-status-warn hover:bg-warning-500/20 transition-colors"
         >
           Plateau
         </button>
@@ -1863,7 +1879,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
+          class="min-w-0 text-[11px] text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1875,7 +1891,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1902,7 +1918,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1929,7 +1945,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1957,7 +1973,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800"
+      class="border-t border-sep"
     >
       <div
         class="divide-y divide-surface-800"
@@ -1977,7 +1993,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-surface-400"
+                  class="text-sm text-ink-2"
                 >
                   Form Cues & Tips
                 </span>
@@ -2001,10 +2017,10 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
       </div>
     </div>
     <div
-      class="border-t border-surface-800 p-4"
+      class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"

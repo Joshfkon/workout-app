@@ -81,6 +81,21 @@ describe('RestTimer', () => {
       expect(onAddTime).toHaveBeenCalledWith(15);
     });
 
+    it('calls onAddTime(-15) when −15s is clicked', () => {
+      const onAddTime = jest.fn();
+      render(<RestTimer {...defaultProps} onAddTime={onAddTime} />);
+
+      fireEvent.click(screen.getByRole('button', { name: '15 seconds less rest' }));
+
+      expect(onAddTime).toHaveBeenCalledWith(-15);
+    });
+
+    it('hides −15s once rest is done (nothing left to take off)', () => {
+      render(<RestTimer {...defaultProps} seconds={0} isFinished={true} />);
+      expect(screen.queryByRole('button', { name: '15 seconds less rest' })).not.toBeInTheDocument();
+      expect(screen.getByText('+15s')).toBeInTheDocument();
+    });
+
     it('calls onSkip when Skip is clicked', () => {
       const onSkip = jest.fn();
       render(<RestTimer {...defaultProps} onSkip={onSkip} />);
@@ -131,11 +146,12 @@ describe('RestTimer', () => {
   });
 
   describe('structure', () => {
-    it('renders as a single slim bar with both action buttons', () => {
+    it('renders as one card with −15s, +15s and Skip', () => {
       render(<RestTimer {...defaultProps} />);
-      // Two action buttons + the rest-rationale info tooltip trigger.
+      // Three action buttons + the rest-rationale info tooltip trigger.
       const buttons = screen.getAllByRole('button');
-      expect(buttons).toHaveLength(3);
+      expect(buttons).toHaveLength(4);
+      expect(screen.getByText('−15s')).toBeInTheDocument();
       expect(screen.getByText('+15s')).toBeInTheDocument();
       expect(screen.getByText('Skip')).toBeInTheDocument();
       expect(
@@ -145,7 +161,7 @@ describe('RestTimer', () => {
 
     it('uses the success color for the finished state', () => {
       render(<RestTimer {...defaultProps} seconds={0} isFinished={true} />);
-      expect(screen.getByText('Done').className).toContain('success');
+      expect(screen.getByText('Done').className).toContain('status-ok');
     });
   });
 });

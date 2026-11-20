@@ -37,37 +37,37 @@ export const InlineRestTimerBar = memo(function InlineRestTimerBar({
   
   if (isSkipped && restedSeconds > 0) {
     displayText = `Rested for ${formatDuration(restedSeconds)}`;
-    textColor = 'text-primary-400';
-    borderColor = 'border-primary-400';
-    bgColor = 'bg-primary-500/10';
+    textColor = 'text-ink-2';
+    borderColor = 'border-transparent';
+    bgColor = 'bg-fill';
   } else if (isFinished) {
-    displayText = 'REST COMPLETE!';
-    textColor = 'text-success-400';
-    borderColor = 'border-success-500';
-    bgColor = 'bg-success-500/20';
+    displayText = 'Rest complete';
+    textColor = 'text-status-ok';
+    borderColor = 'border-transparent';
+    bgColor = 'bg-status-ok-tint';
   } else {
     displayText = formatDuration(seconds);
-    textColor = 'text-primary-400';
-    borderColor = 'border-primary-400';
-    bgColor = 'bg-primary-500/10';
+    textColor = 'text-action';
+    borderColor = 'border-transparent';
+    bgColor = 'bg-action-tint';
   }
 
   const timerContent = (
     <div
       onClick={onShowControls}
-      className={`relative h-10 rounded-lg overflow-hidden border-2 cursor-pointer transition-opacity hover:opacity-80 ${borderColor} ${bgColor}`}
+      className={`relative h-10 rounded-input overflow-hidden border cursor-pointer transition-opacity hover:opacity-80 ${borderColor} ${bgColor}`}
     >
       {/* Progress fill */}
       <div
         className={`absolute inset-y-0 left-0 transition-all duration-1000 ease-linear ${
-          isFinished ? 'bg-success-500/40' : isSkipped ? 'bg-primary-500/30' : 'bg-primary-500/30'
+          isFinished ? 'bg-status-ok/20' : isSkipped ? 'bg-transparent' : 'bg-action/15'
         }`}
         style={{ width: `${progressPercent}%` }}
       />
 
       {/* Timer display */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`font-mono text-lg font-semibold ${textColor}`}>
+        <span className={`text-subhead font-semibold tabular-nums ${textColor}`}>
           {displayText}
         </span>
       </div>
