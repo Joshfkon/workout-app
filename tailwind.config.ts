@@ -85,6 +85,39 @@ const config: Config = {
           500: '#f97316',
           600: '#ea580c',
         },
+        // ── Design system (2026 redesign) ──────────────────────────────
+        // Theme-aware via the --ht-* variables in app/globals.css; values
+        // and contrast checks live in lib/design/tokens.ts. New UI uses
+        // ONLY these. The primary/accent/surface ramps stay until every
+        // screen has moved over (accent-* is the old purple — don't use).
+        canvas: 'rgb(var(--ht-bg) / <alpha-value>)',
+        card: 'rgb(var(--ht-card) / <alpha-value>)',
+        fill: 'rgb(var(--ht-fill) / <alpha-value>)',
+        sep: 'rgb(var(--ht-sep) / <alpha-value>)',
+        ink: {
+          DEFAULT: 'rgb(var(--ht-ink) / <alpha-value>)',
+          2: 'rgb(var(--ht-ink-2) / <alpha-value>)',
+          3: 'rgb(var(--ht-ink-3) / <alpha-value>)',
+        },
+        action: {
+          DEFAULT: 'rgb(var(--ht-action) / <alpha-value>)',
+          tint: 'var(--ht-action-tint)',
+        },
+        'on-action': 'rgb(var(--ht-on-action) / <alpha-value>)',
+        status: {
+          ok: 'rgb(var(--ht-ok) / <alpha-value>)',
+          'ok-tint': 'var(--ht-ok-tint)',
+          warn: 'rgb(var(--ht-warn) / <alpha-value>)',
+          'warn-tint': 'var(--ht-warn-tint)',
+          bad: 'rgb(var(--ht-bad) / <alpha-value>)',
+          'bad-tint': 'var(--ht-bad-tint)',
+        },
+        macro: {
+          protein: 'rgb(var(--ht-protein) / <alpha-value>)',
+          carbs: 'rgb(var(--ht-carbs) / <alpha-value>)',
+          fat: 'rgb(var(--ht-fat) / <alpha-value>)',
+        },
+        scrim: 'var(--ht-scrim)',
         // Meal-section accent identities (theme-aware via CSS vars in
         // globals.css — 400-weight on dark, 600-weight on light).
         meal: {
@@ -93,6 +126,26 @@ const config: Config = {
           dinner: 'rgb(var(--meal-dinner) / <alpha-value>)',
           snack: 'rgb(var(--meal-snack) / <alpha-value>)',
         },
+      },
+      // Design-system type scale: sentence case, one scale everywhere.
+      fontSize: {
+        display: ['40px', { lineHeight: '44px', fontWeight: '700', letterSpacing: '-0.02em' }],
+        'large-title': ['32px', { lineHeight: '38px', fontWeight: '700', letterSpacing: '-0.02em' }],
+        title: ['22px', { lineHeight: '28px', fontWeight: '700', letterSpacing: '-0.01em' }],
+        headline: ['17px', { lineHeight: '22px', fontWeight: '600' }],
+        body: ['15px', { lineHeight: '20px' }],
+        subhead: ['13px', { lineHeight: '18px' }],
+        caption: ['12px', { lineHeight: '16px', fontWeight: '500' }],
+      },
+      borderRadius: {
+        input: '8px',
+        button: '14px',
+        card: '16px',
+        sheet: '24px',
+      },
+      boxShadow: {
+        card: 'var(--ht-shadow-card)',
+        float: 'var(--ht-shadow-float)',
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
@@ -106,6 +159,10 @@ const config: Config = {
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
         // Indeterminate bar shown while a tab's page is on its way.
         'nav-progress': 'navProgress 1s ease-in-out infinite',
+        // Bottom sheet in/out (iOS-like spring-ish curve in, quick out).
+        'sheet-up': 'sheetUp 0.34s cubic-bezier(0.32, 0.72, 0, 1)',
+        'sheet-down': 'sheetDown 0.2s ease-in forwards',
+        'fade-out': 'fadeOut 0.2s ease-in forwards',
       },
       keyframes: {
         fadeIn: {
@@ -123,6 +180,18 @@ const config: Config = {
         scaleIn: {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        sheetUp: {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+        sheetDown: {
+          '0%': { transform: 'translateY(0)' },
+          '100%': { transform: 'translateY(100%)' },
+        },
+        fadeOut: {
+          '0%': { opacity: '1' },
+          '100%': { opacity: '0' },
         },
         navProgress: {
           '0%': { transform: 'translateX(-100%)' },

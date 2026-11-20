@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useRef, memo, useCallback, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { memo, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
-import { useRegisterOverlay } from '@/hooks/useOverlayRegistry';
+import { Sheet } from './Sheet';
 
 export interface ModalProps {
   isOpen: boolean;
@@ -12,10 +10,17 @@ export interface ModalProps {
   title?: string;
   description?: string;
   children: ReactNode;
+  /** Width on screens wider than a phone; on phones every modal is a full-width bottom sheet. */
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   showCloseButton?: boolean;
 }
 
+/**
+ * The app's dialog. Renders as a bottom sheet on phones (slides up, grabber,
+ * swipe down to close) and a centred card on wider screens — see `Sheet`.
+ * The props are unchanged from the old centred modal, so every existing
+ * caller picks up the sheet without changes.
+ */
 export const Modal = memo(function Modal({
   isOpen,
   onClose,
@@ -25,181 +30,20 @@ export const Modal = memo(function Modal({
   size = 'md',
   showCloseButton = true,
 }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const { inset: keyboardInset, scrollContainerRef } =
-    useKeyboardInset<HTMLDivElement>(isOpen);
-  // Tell app chrome (the resume-workout pill) to stand down while we're up —
-  // it's fixed at the layout root and would otherwise paint over our fields.
-  useRegisterOverlay(isOpen);
-
-  // Close on escape key and prevent body scroll
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-
-    // Prevent body scroll and touch scrolling
-    const preventScroll = (e: TouchEvent) => {
-      // Allow the touch if it happens inside a scrollable element within the
-      // modal content; block everything else (overlay, body) so the page
-      // behind the modal doesn't scroll on iOS.
-      const content = contentRef.current;
-      // Range sliders (and other drag-based inputs) rely on touchmove for
-      // their drag gesture — preventDefault here would make them undraggable.
-      const target = e.target as HTMLElement | null;
-      if (
-        content?.contains(target) &&
-        target?.closest('input[type="range"], [data-allow-touch-move]')
-      ) {
-        return;
-      }
-      let el = target;
-      while (el && content?.contains(el)) {
-        const { overflowY } = window.getComputedStyle(el);
-        const scrollable =
-          (overflowY === 'auto' || overflowY === 'scroll') &&
-          el.scrollHeight > el.clientHeight;
-        if (scrollable) return;
-        el = el.parentElement;
-      }
-      e.preventDefault();
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll
-      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-      document.body.style.overflow = 'hidden';
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
-      // Prevent touch scrolling on overlay
-      document.addEventListener('touchmove', preventScroll, { passive: false });
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.removeEventListener('touchmove', preventScroll);
-      document.body.style.overflow = '';
-      document.body.style.paddingRight = '';
-    };
-  }, [isOpen, onClose]);
-
-  // Close on overlay click - memoized to prevent re-creation
-  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) {
-      onClose();
-    }
-  }, [onClose]);
-
-  // Prevent scroll events from propagating to body
-  const handleContentClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-  }, []);
-
-  // Prevent touch events from propagating to body
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    e.stopPropagation();
-  }, []);
-
-  const sizes = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    xl: 'max-w-xl',
-    full: 'max-w-4xl',
-  };
-
-  if (!isOpen) return null;
-
-  const modalContent = (
-    <div
-      ref={overlayRef}
-      onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
-      style={{
-        // Re-center the modal in the space above the on-screen keyboard.
-        // Safe-area stays additive with the keyboard inset, never replaced.
-        paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`,
-      }}
+  return (
+    <Sheet
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      description={description}
+      size={size}
+      showCloseButton={showCloseButton}
+      closeLabel="Close modal"
+      titleId="modal-title"
     >
-      <div
-        ref={contentRef}
-        onClick={handleContentClick}
-        onTouchStart={handleTouchStart}
-        className={cn(
-          'w-full bg-surface-900 border border-surface-800 rounded-xl shadow-xl animate-scale-in flex flex-col',
-          sizes[size]
-        )}
-        style={{
-          // Cap the box to the space the keyboard leaves so lower fields
-          // stay reachable by scrolling the content area.
-          maxHeight: `calc(100vh - 2rem - ${keyboardInset}px)`,
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
-      >
-        {/* Header - sticky so close button is always visible */}
-        {(title || showCloseButton) && (
-          <div className="flex items-start justify-between p-4 border-b border-surface-800 flex-shrink-0 bg-surface-900 sticky top-0 z-10">
-            <div>
-              {title && (
-                <h2
-                  id="modal-title"
-                  className="text-lg font-semibold text-surface-100"
-                >
-                  {title}
-                </h2>
-              )}
-              {description && (
-                <p className="mt-1 text-sm text-surface-400">{description}</p>
-              )}
-            </div>
-            {showCloseButton && (
-              <button
-                onClick={onClose}
-                className="p-1 text-surface-400 hover:text-surface-200 transition-colors rounded-lg hover:bg-surface-800 flex-shrink-0"
-                aria-label="Close modal"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Content - scrollable area; focused fields are scrolled into view
-            above the keyboard via useKeyboardInset */}
-        <div
-          ref={scrollContainerRef}
-          className="p-4 overflow-y-auto overscroll-contain flex-1 min-h-0"
-          onTouchStart={handleTouchStart}
-          onClick={handleContentClick}
-        >
-          {children}
-        </div>
-      </div>
-    </div>
+      {children}
+    </Sheet>
   );
-
-  // Use portal to render at document root
-  if (typeof window !== 'undefined') {
-    return createPortal(modalContent, document.body);
-  }
-
-  return null;
 });
 
 // Modal sub-components for structured content
@@ -213,7 +57,7 @@ export const ModalFooter = memo(function ModalFooter({
   return (
     <div
       className={cn(
-        'flex items-center justify-end gap-3 pt-4 mt-4 border-t border-surface-800',
+        'flex items-center justify-end gap-3 pt-4 mt-4 border-t border-sep',
         className
       )}
     >
@@ -221,4 +65,3 @@ export const ModalFooter = memo(function ModalFooter({
     </div>
   );
 });
-

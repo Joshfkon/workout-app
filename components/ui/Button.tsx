@@ -4,10 +4,35 @@ import { forwardRef, memo, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
+  /**
+   * Design system:
+   * - primary: one per screen, the main action (filled accent)
+   * - secondary: tinted accent
+   * - tertiary: accent text only
+   * - destructive: red text on a red tint
+   * Kept for existing callers: ghost (quiet neutral text), outline (neutral
+   * fill — outlines are gone from the system), danger (= destructive).
+   */
+  variant?: 'primary' | 'secondary' | 'tertiary' | 'destructive' | 'ghost' | 'danger' | 'outline';
+  /** sm 32px pill · md 44px · lg 50px (full-width primary actions). */
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
 }
+
+const VARIANTS = {
+  primary: 'bg-action text-on-action hover:brightness-110 active:brightness-95 focus-visible:ring-action',
+  secondary: 'bg-action-tint text-action hover:brightness-110 active:brightness-95 focus-visible:ring-action',
+  tertiary: 'bg-transparent text-action hover:bg-action-tint focus-visible:ring-action',
+  destructive: 'bg-status-bad-tint text-status-bad hover:brightness-110 focus-visible:ring-status-bad',
+  ghost: 'bg-transparent text-ink-2 hover:bg-fill hover:text-ink focus-visible:ring-action',
+  outline: 'bg-fill text-ink hover:brightness-110 focus-visible:ring-action',
+} as const;
+
+const SIZES = {
+  sm: 'h-8 px-3 rounded-full text-subhead font-semibold gap-1.5',
+  md: 'min-h-[44px] px-4 rounded-button text-body font-semibold gap-2',
+  lg: 'min-h-[50px] px-5 rounded-button text-headline gap-2',
+} as const;
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
@@ -22,51 +47,18 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
-    const baseStyles = `
-      inline-flex items-center justify-center font-medium transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface-950
-      disabled:opacity-50 disabled:cursor-not-allowed
-      rounded-lg
-    `;
-
-    const variants = {
-      primary: `
-        bg-primary-600 text-white 
-        hover:bg-primary-500 active:bg-primary-700
-        focus:ring-primary-500
-      `,
-      secondary: `
-        bg-surface-800 text-surface-100 border border-surface-700
-        hover:bg-surface-700 active:bg-surface-800
-        focus:ring-surface-500
-      `,
-      ghost: `
-        bg-transparent text-surface-300
-        hover:bg-surface-800 hover:text-surface-100
-        focus:ring-surface-500
-      `,
-      danger: `
-        bg-danger-600 text-white
-        hover:bg-danger-500 active:bg-danger-700
-        focus:ring-danger-500
-      `,
-      outline: `
-        bg-transparent border border-surface-600 text-surface-200
-        hover:bg-surface-800 hover:border-surface-500
-        focus:ring-primary-500
-      `,
-    };
-
-    const sizes = {
-      sm: 'px-3 py-1.5 text-sm gap-1.5',
-      md: 'px-4 py-2.5 min-h-[44px] text-sm gap-2',
-      lg: 'px-6 py-3 min-h-[48px] text-base gap-2',
-    };
-
+    const resolved = variant === 'danger' ? 'destructive' : variant;
     return (
       <button
         ref={ref}
-        className={cn(baseStyles, variants[variant], sizes[size], className)}
+        className={cn(
+          'inline-flex items-center justify-center whitespace-nowrap transition-[filter,background-color,color] duration-150',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+          VARIANTS[resolved],
+          SIZES[size],
+          className
+        )}
         disabled={disabled || isLoading}
         {...props}
       >
@@ -76,15 +68,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path
               className="opacity-75"
               fill="currentColor"
@@ -104,4 +90,3 @@ const MemoizedButton = memo(Button);
 MemoizedButton.displayName = 'Button';
 
 export { MemoizedButton as Button };
-

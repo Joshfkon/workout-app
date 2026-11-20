@@ -3,7 +3,7 @@
 exports[`ExerciseCard Snapshot Tests renders active state with logger row and suggestion banner 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 shadow-lg shadow-black/20 relative overflow-hidden transition-all ring-2 ring-primary-500/50"
+    class="rounded-card text-ink bg-card shadow-float relative overflow-hidden transition-all ring-2 ring-primary-500/50"
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"
@@ -572,7 +572,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
 exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"
@@ -785,7 +785,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
 exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"
@@ -977,7 +977,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
 exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"
@@ -1169,7 +1169,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"
@@ -1425,7 +1425,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"
@@ -1635,7 +1635,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"
@@ -1827,7 +1827,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
 exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
+    class="rounded-card text-ink bg-card shadow-card relative overflow-hidden transition-all "
   >
     <div
       class="p-4 sticky top-0 bg-surface-900 z-10"

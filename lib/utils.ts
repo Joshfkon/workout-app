@@ -1,6 +1,6 @@
 import { getSetReps, type ModalitySource } from '@/services/shared/setModality';
 import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
 import {
   rirToRpe as rirToRpeDiscrete,
   rpeToRir as rpeToRirDiscrete,
@@ -13,7 +13,21 @@ import { now as clockNow } from '@/lib/clock';
  * Utility for merging class names conditionally.
  * tailwind-merge resolves conflicting utilities (later classes win), so
  * `cn('p-4', className)` lets callers deterministically override defaults.
+ *
+ * Taught the design system's custom scale names (tailwind.config.ts) —
+ * without this, tailwind-merge reads `text-body` as a text *colour* and
+ * silently drops it when merged with `text-ink`.
  */
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': [{ text: ['display', 'large-title', 'title', 'headline', 'body', 'subhead', 'caption'] }],
+      rounded: [{ rounded: ['input', 'button', 'card', 'sheet'] }],
+      shadow: [{ shadow: ['card', 'float'] }],
+    },
+  },
+});
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

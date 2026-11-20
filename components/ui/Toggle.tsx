@@ -43,9 +43,9 @@ const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
         className={`
           relative inline-flex items-center shrink-0 cursor-pointer rounded-full
           transition-colors duration-200 ease-in-out
-          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2 focus-visible:ring-offset-card
           ${track}
-          ${checked ? 'bg-primary-500' : 'bg-surface-600'}
+          ${checked ? 'bg-action' : 'bg-ink-3/40'}
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
           ${className}
         `}

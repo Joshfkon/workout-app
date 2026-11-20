@@ -54,6 +54,38 @@
   --meal-lunch: 96 165 250;     /* blue-400 */
   --meal-dinner: 167 139 250;   /* violet-400 */
   --meal-snack: 45 212 191;     /* teal-400 */
+
+  /* ================================================
+     DESIGN SYSTEM TOKENS (2026 redesign) — dark values.
+     Semantic names, exposed to Tailwind as bg-canvas, bg-card, bg-fill,
+     border-sep, text-ink / text-ink-2 / text-ink-3, bg-action,
+     text-on-action, bg-action-tint, text-status-ok|warn|bad (+ -tint),
+     text-macro-protein|carbs|fat. RGB channels so opacity modifiers work.
+     Source of truth for values + contrast checks: lib/design/tokens.ts
+     (its test fails if this file drifts from it).
+     ================================================ */
+  --ht-bg: 11 11 13;
+  --ht-card: 26 26 30;
+  --ht-fill: 42 42 48;
+  --ht-sep: 47 47 53;
+  --ht-ink: 244 244 245;
+  --ht-ink-2: 169 169 178;
+  --ht-ink-3: 142 142 152;
+  --ht-action: 56 189 248;
+  --ht-on-action: 6 36 54;
+  --ht-ok: 74 222 128;
+  --ht-warn: 250 204 21;
+  --ht-bad: 248 113 113;
+  --ht-protein: 45 212 191;
+  --ht-carbs: 251 146 60;
+  --ht-fat: 167 139 250;
+  --ht-action-tint: rgb(56 189 248 / 0.14);
+  --ht-ok-tint: rgb(74 222 128 / 0.12);
+  --ht-warn-tint: rgb(250 204 21 / 0.12);
+  --ht-bad-tint: rgb(248 113 113 / 0.12);
+  --ht-scrim: rgb(0 0 0 / 0.55);
+  --ht-shadow-card: none;
+  --ht-shadow-float: 0 8px 30px rgb(0 0 0 / 0.6);
 }
 
 /* Light theme — opt-in via data-theme="light" on <html>. Inverts the surface ramp
@@ -92,6 +124,30 @@
   --meal-lunch: 37 99 235;      /* blue-600 */
   --meal-dinner: 124 58 237;    /* violet-600 */
   --meal-snack: 13 148 136;     /* teal-600 */
+
+  /* Design system tokens — light values (see the dark block above). */
+  --ht-bg: 242 242 247;
+  --ht-card: 255 255 255;
+  --ht-fill: 233 233 239;
+  --ht-sep: 220 220 226;
+  --ht-ink: 17 17 20;
+  --ht-ink-2: 82 82 92;
+  --ht-ink-3: 107 107 118;
+  --ht-action: 3 105 161;
+  --ht-on-action: 255 255 255;
+  --ht-ok: 19 117 55;
+  --ht-warn: 146 88 6;
+  --ht-bad: 185 28 28;
+  --ht-protein: 15 118 110;
+  --ht-carbs: 194 65 12;
+  --ht-fat: 124 58 237;
+  --ht-action-tint: rgb(3 105 161 / 0.10);
+  --ht-ok-tint: rgb(21 128 61 / 0.10);
+  --ht-warn-tint: rgb(202 138 4 / 0.13);
+  --ht-bad-tint: rgb(185 28 28 / 0.08);
+  --ht-scrim: rgb(0 0 0 / 0.28);
+  --ht-shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.04);
+  --ht-shadow-float: 0 8px 30px rgb(0 0 0 / 0.14);
 }
 
 @layer base {

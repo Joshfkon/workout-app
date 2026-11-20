@@ -41,3 +41,12 @@ export { PageHeader, type PageHeaderProps } from './PageHeader';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { LoadingState, type LoadingStateProps } from './LoadingState';
 export { SectionLabel, type SectionLabelProps } from './SectionLabel';
+
+// Design system (2026 redesign)
+export { Sheet, type SheetProps, type SheetSize } from './Sheet';
+export { ListGroup, ListRow, type ListGroupProps, type ListRowProps } from './ListRow';
+export { StatTile, type StatTileProps, type StatTone } from './StatTile';
+export { Chip, type ChipProps } from './Chip';
+export { SegmentedControl, type SegmentedControlProps, type SegmentOption } from './SegmentedControl';
+export { ProgressRing, type ProgressRingProps } from './ProgressRing';
+export { Sparkline, type SparklineProps } from './Sparkline';
