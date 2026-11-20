@@ -47,11 +47,13 @@ export interface MuscleGroupFeedbackModalProps {
   message: string;
 }
 
-const chipBase =
-  'px-2.5 py-1.5 rounded-full text-[12px] font-medium border transition-colors whitespace-nowrap';
-const chipIdle =
-  'bg-surface-800 border-surface-700 text-surface-300 active:bg-surface-700';
-const chipSelected = 'bg-primary-500/20 border-primary-500/60 text-primary-300';
+// Segmented controls (design system): one track per question, the picked
+// answer lifts onto a card-coloured pill.
+const segTrack = 'flex flex-1 min-w-0 rounded-[10px] bg-fill p-0.5';
+const segBase =
+  'flex-1 min-w-0 min-h-[34px] rounded-[8px] px-1 text-subhead leading-tight text-ink transition-colors';
+const segIdle = 'font-medium';
+const segSelected = 'bg-card font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]';
 
 export function MuscleGroupFeedbackModal({
   isOpen,
@@ -85,61 +87,65 @@ export function MuscleGroupFeedbackModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="md" showCloseButton={false}>
       <div data-testid="muscle-feedback-modal">
-        <h3 className="text-lg font-semibold text-surface-100">Finish Workout?</h3>
-        <p className="text-sm text-surface-400 mt-1">{message}</p>
+        {/* Title kept as "Finish Workout?" (tests and muscle memory); sheet
+            styling comes from Modal → Sheet. */}
+        <h3 className="text-title text-ink">Finish Workout?</h3>
+        <p className="text-subhead text-ink-2 mt-1">{message}</p>
 
         {muscles.length > 0 && (
-          <div className="mt-4 space-y-3">
-            <p className="text-xs text-surface-500">
-              How did each muscle feel? Tunes next week&apos;s sets — skip anything
-              you&apos;re unsure about.
-            </p>
+          <div className="mt-5 space-y-3">
+            <div>
+              <p className="text-body font-semibold text-ink">How did each muscle feel?</p>
+              <p className="text-subhead text-ink-2">
+                Optional. Tunes next week&apos;s sets — skip anything you&apos;re unsure about.
+              </p>
+            </div>
             {muscles.map((muscle) => {
               const current = ratings[muscle];
               return (
                 <div
                   key={muscle}
-                  className="rounded-lg bg-surface-800/50 border border-surface-800 px-2.5 py-2 space-y-1.5"
+                  className="rounded-card bg-canvas px-3.5 py-3 space-y-2.5"
                   data-testid={`muscle-feedback-${muscle}`}
                 >
-                  <div className="text-[13px] font-medium text-surface-200">
+                  <div className="text-body font-semibold text-ink">
                     {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[12px] text-surface-400 flex-shrink-0 w-[68px]">
-                      Pump:
-                    </span>
-                    {PUMP_CHIPS.map((chip) => (
-                      <button
-                        key={chip.value}
-                        type="button"
-                        onClick={() => setRating(muscle, { pump: chip.value })}
-                        className={`${chipBase} ${
-                          current?.pump === chip.value ? chipSelected : chipIdle
-                        }`}
-                        data-testid={`finish-pump-${muscle}-${chip.value}`}
-                      >
-                        {chip.bar} {chip.label}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    <span className="w-[72px] flex-shrink-0 text-caption text-ink-2">Pump</span>
+                    <div className={segTrack} role="radiogroup" aria-label={`Pump for ${STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}`}>
+                      {PUMP_CHIPS.map((chip) => (
+                        <button
+                          key={chip.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={current?.pump === chip.value}
+                          onClick={() => setRating(muscle, { pump: chip.value })}
+                          className={`${segBase} ${current?.pump === chip.value ? segSelected : segIdle}`}
+                          data-testid={`finish-pump-${muscle}-${chip.value}`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[12px] text-surface-400 flex-shrink-0 w-[68px]">
-                      Workload:
-                    </span>
-                    {WORKLOAD_CHIPS.map((chip) => (
-                      <button
-                        key={chip.value}
-                        type="button"
-                        onClick={() => setRating(muscle, { workload: chip.value })}
-                        className={`${chipBase} ${
-                          current?.workload === chip.value ? chipSelected : chipIdle
-                        }`}
-                        data-testid={`finish-workload-${muscle}-${chip.value}`}
-                      >
-                        {chip.label}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    <span className="w-[72px] flex-shrink-0 text-caption text-ink-2">Workload</span>
+                    <div className={segTrack} role="radiogroup" aria-label={`Workload for ${STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}`}>
+                      {WORKLOAD_CHIPS.map((chip) => (
+                        <button
+                          key={chip.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={current?.workload === chip.value}
+                          onClick={() => setRating(muscle, { workload: chip.value })}
+                          className={`${segBase} ${current?.workload === chip.value ? segSelected : segIdle}`}
+                          data-testid={`finish-workload-${muscle}-${chip.value}`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -147,17 +153,18 @@ export function MuscleGroupFeedbackModal({
           </div>
         )}
 
-        <div className="flex gap-3 w-full mt-5">
-          <Button variant="secondary" className="flex-1" onClick={onClose}>
-            Keep Training
-          </Button>
+        <div className="mt-6 flex flex-col gap-1">
           <Button
             variant="primary"
-            className="flex-1"
+            size="lg"
+            className="w-full"
             onClick={handleConfirm}
             data-testid="muscle-feedback-finish"
           >
             Finish
+          </Button>
+          <Button variant="tertiary" className="w-full" onClick={onClose}>
+            Keep Training
           </Button>
         </div>
       </div>

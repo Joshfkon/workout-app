@@ -3312,7 +3312,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               </span>
             )}
             {block.supersetGroupId && (
-              <span className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-cyan-500/20 text-cyan-400">
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-action-tint text-action">
                 SS{block.supersetOrder}
               </span>
             )}
@@ -4092,7 +4092,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   isDeleteRevealed
                     ? 'bg-card'
                     : isDropsetSet
-                    ? 'bg-purple-500/5 rounded-lg'
+                    ? 'bg-action/5 rounded-lg'
                     : ''
                 } ${onSetEdit ? 'cursor-pointer hover:bg-fill/30 rounded-lg' : ''}`}
                 onClick={() => {
@@ -4138,7 +4138,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <IconCheck size={16} className="text-status-ok flex-shrink-0" aria-hidden="true" />
                 )}
                 {isDropsetSet && (
-                  <span className="text-[11px] text-purple-400 flex-shrink-0">drop</span>
+                  <span className="text-[11px] text-action flex-shrink-0">drop</span>
                 )}
                 <span className="text-body font-semibold text-ink truncate tabular-nums">
                   Set {set.setNumber} · {set.bodyweightData?.modification === 'none' ? 'BW ' : ''}
@@ -4263,7 +4263,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                pendingSetsCount === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
                 <button
                   onClick={() => startDropset(set)}
-                  className="w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                  className="w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 text-sm text-action hover:brightness-110 hover:bg-action/10 rounded-lg transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -4321,8 +4321,8 @@ export const ExerciseCard = memo(function ExerciseCard({
 
         {/* Manual dropset entry */}
         {isActive && dropsetMode && !pendingDropset && (
-          <div className="flex items-center gap-2 rounded-lg bg-purple-500/20 border-l-2 border-purple-500 px-2 py-1.5">
-            <span className="text-xs font-medium text-purple-400 flex-shrink-0">Drop</span>
+          <div className="flex items-center gap-2 rounded-lg bg-action-tint px-2 py-1.5">
+            <span className="text-xs font-medium text-action flex-shrink-0">Drop</span>
             <input
               type="number"
               inputMode="decimal"
@@ -4330,7 +4330,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               id="dropset-weight-input"
               step="0.5"
               aria-label="Dropset weight"
-              className="w-20 px-1 py-1.5 bg-card border border-purple-500/50 rounded text-center font-mono text-ink text-sm"
+              className="w-20 px-1 py-1.5 bg-card border border-action/50 rounded text-center font-mono text-ink text-sm"
               autoFocus
             />
             <input
@@ -4341,7 +4341,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               id="dropset-reps-input"
               placeholder="?"
               aria-label="Dropset reps"
-              className="w-14 px-1 py-1.5 bg-card border border-purple-500/50 rounded text-center font-mono text-ink text-sm placeholder-surface-500"
+              className="w-14 px-1 py-1.5 bg-card border border-action/50 rounded text-center font-mono text-ink text-sm placeholder-ink-3"
             />
             <div className="ml-auto flex gap-1">
               <button
@@ -4365,7 +4365,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   }
                 }}
                 aria-label="Log dropset"
-                className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 transition-colors text-white"
+                className="p-2 rounded-lg bg-action hover:brightness-110 transition-colors text-on-action"
               >
                 <IconCheck size={16} />
               </button>
