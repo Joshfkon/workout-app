@@ -132,14 +132,14 @@ function DiscomfortSummaryRow({
 }) {
   const severityInfo = getSeverityInfo(discomfort.severity);
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-surface-800/70 border border-surface-700 px-2.5 py-1.5 text-[12px]">
+    <div className="flex items-center gap-2 rounded-lg bg-fill border border-sep px-2.5 py-1.5 text-[12px]">
       <span className={severityInfo.color}>
         {getBodyPartDisplayName(discomfort.bodyPart)} — {severityInfo.label}
       </span>
       <button
         type="button"
         onClick={onRemove}
-        className="ml-auto text-surface-500 hover:text-surface-300"
+        className="ml-auto text-ink-2 hover:text-ink"
         aria-label="Remove discomfort"
       >
         Remove
@@ -411,7 +411,7 @@ export function SetLoggerRow({
   // Gym-proof tap targets (P0-4): every interactive control in this row is
   // ≥44px in both axes, with the primary input row at 52px tall.
   const stepperButtonClass =
-    'min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30';
+    'min-w-[44px] min-h-[56px] flex items-center justify-center rounded-xl text-action active:bg-fill transition-colors disabled:opacity-30';
 
   const renderValue = (
     field: 'weight' | 'reps',
@@ -441,7 +441,7 @@ export function SetLoggerRow({
           min="0"
           step={field === 'weight' ? '0.5' : '1'}
           aria-label={ariaLabel}
-          className="w-full min-w-0 px-1 min-h-[52px] bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-[15px] text-surface-100 focus:outline-none"
+          className="w-full min-w-0 px-1 min-h-[56px] bg-card border border-action rounded-xl text-center text-[22px] font-bold tabular-nums text-ink focus:outline-none"
         />
       );
     }
@@ -451,11 +451,11 @@ export function SetLoggerRow({
         onClick={() => setEditingField(field)}
         disabled={disabled}
         aria-label={`${ariaLabel}: ${displayText}${unitText ? ` ${unitText}` : ''}. Tap to type`}
-        className="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
+        className="w-full min-w-0 min-h-[56px] flex flex-col items-center justify-center leading-tight"
       >
-        <span className="font-mono text-[15px] text-surface-100 whitespace-nowrap">{displayText}</span>
+        <span className="text-[22px] font-bold tabular-nums text-ink whitespace-nowrap">{displayText}</span>
         {unitText && (
-          <span className="text-[10px] uppercase tracking-wide text-surface-500">{unitText}</span>
+          <span className="text-caption text-ink-2">{unitText}</span>
         )}
       </button>
     );
@@ -463,20 +463,20 @@ export function SetLoggerRow({
 
   return (
     <div
-      className="rounded-lg border border-primary-500/40 p-2.5 space-y-2"
+      className="rounded-card bg-action-tint p-3 space-y-2.5"
       role="group"
       aria-label={`Set ${setNumber} logger`}
     >
       {/* Row 0: set label + plate calculator affordance (P1-5, mockup 02) */}
       {onPlateCalculatorOpen && (
         <div className="flex items-center justify-between -mb-1">
-          <span className="text-[11px] text-surface-500">Set {setNumber}</span>
+          <span className="text-body font-semibold text-ink">Set {setNumber}</span>
           <button
             type="button"
             onClick={onPlateCalculatorOpen}
             disabled={disabled}
             aria-label="Open plate calculator"
-            className="min-h-[44px] -my-2.5 px-2 inline-flex items-center gap-1 text-[12px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+            className="min-h-[44px] -my-2.5 px-2 inline-flex items-center gap-1 text-subhead font-semibold text-action transition-colors"
           >
             <IconBarbell size={14} aria-hidden="true" />
             Plates
@@ -487,19 +487,19 @@ export function SetLoggerRow({
       {/* Row 1: set number, weight stepper, reps stepper */}
       <div className="flex items-center gap-1.5">
         {!onPlateCalculatorOpen && (
-          <span className="w-3 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center">
+          <span className="w-4 flex-shrink-0 text-body font-semibold text-ink text-center">
             {setNumber}
           </span>
         )}
 
         {/* Weight */}
         {isPlainBodyweight ? (
-          <div className="flex-1 flex items-center justify-center py-2 text-sm font-mono text-surface-300">
-            <span className="text-surface-500 mr-1">BW</span>
+          <div className="flex-1 flex items-center justify-center min-h-[56px] rounded-xl bg-card text-body font-semibold tabular-nums text-ink">
+            <span className="text-ink-2 mr-1">BW</span>
             {userBodyweightKg ? `${convertWeightForDisplay(userBodyweightKg, unit)} ${unitLabel}` : ''}
           </div>
         ) : (
-          <div className="flex-1 flex items-center gap-0.5 min-w-0">
+          <div className="flex-1 flex items-center min-w-0 rounded-xl bg-card">
             <button
               type="button"
               onClick={() => stepWeight(-1)}
@@ -530,7 +530,7 @@ export function SetLoggerRow({
         )}
 
         {/* Reps / seconds */}
-        <div className="flex-1 flex items-center gap-0.5 min-w-0">
+        <div className="flex-1 flex items-center min-w-0 rounded-xl bg-card">
           <button
             type="button"
             onClick={() => stepReps(-1)}
@@ -548,10 +548,10 @@ export function SetLoggerRow({
               aria-label={`Starting in ${holdTimer.countdownRemaining} seconds`}
               data-testid="hold-countdown"
             >
-              <span className="font-mono text-[22px] font-semibold text-primary-400 whitespace-nowrap tabular-nums">
+              <span className="text-[22px] font-bold text-action whitespace-nowrap tabular-nums">
                 {holdTimer.countdownRemaining}
               </span>
-              <span className="text-[10px] uppercase tracking-wide text-surface-500">
+              <span className="text-caption text-ink-2">
                 get set
               </span>
             </div>
@@ -562,11 +562,11 @@ export function SetLoggerRow({
               aria-live="polite"
               aria-label={`Holding: ${holdTimer.elapsed} seconds`}
             >
-              <span className="font-mono text-[15px] text-primary-400 whitespace-nowrap">
+              <span className="text-[22px] font-bold tabular-nums text-action whitespace-nowrap">
                 {holdTimer.elapsed}s
               </span>
               {holdTargetSeconds ? (
-                <span className="text-[10px] uppercase tracking-wide text-surface-500">
+                <span className="text-caption text-ink-2">
                   of {holdTargetSeconds}s
                 </span>
               ) : null}
@@ -613,15 +613,15 @@ export function SetLoggerRow({
             }
             className={`relative flex-1 min-h-[44px] rounded-lg overflow-hidden flex items-center justify-center gap-2 text-[13px] font-semibold transition-colors ${
               holdTimer.isRunning || holdTimer.isCountingDown
-                ? 'bg-primary-500/20 text-primary-300 border border-primary-500/50'
-                : 'bg-surface-800/50 text-surface-200 hover:bg-surface-800 border border-surface-700'
+                ? 'bg-action text-on-action'
+                : 'bg-card text-action'
             } disabled:opacity-30`}
           >
             {/* Progress toward the target while running */}
             {holdTimer.isRunning && holdTargetSeconds ? (
               <span
                 className={`absolute inset-y-0 left-0 opacity-25 transition-all duration-200 ${
-                  holdTimer.hasReachedTarget ? 'bg-success-500' : 'bg-primary-500'
+                  holdTimer.hasReachedTarget ? 'bg-status-ok' : 'bg-action'
                 }`}
                 style={{ width: `${Math.min(100, holdTimer.progressPercent)}%` }}
                 aria-hidden="true"
@@ -650,7 +650,7 @@ export function SetLoggerRow({
               onClick={() => holdTimer.startNow()}
               disabled={disabled}
               aria-label="Start hold now"
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 transition-colors disabled:opacity-30"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-fill text-ink hover:text-ink transition-colors disabled:opacity-30"
             >
               <IconPlayerPlayFilled size={16} />
             </button>
@@ -664,7 +664,7 @@ export function SetLoggerRow({
               }}
               disabled={disabled}
               aria-label="Reset hold timer"
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-fill text-ink-2 hover:text-ink transition-colors disabled:opacity-30"
             >
               <IconRotate size={16} />
             </button>
@@ -681,7 +681,7 @@ export function SetLoggerRow({
           <span
             aria-live="polite"
             className={`text-[12px] leading-snug ${
-              effortCheck.predictedRir <= 0 ? 'text-amber-400' : 'text-surface-400'
+              effortCheck.predictedRir <= 0 ? 'text-status-warn' : 'text-ink-2'
             }`}
           >
             {effortCheck.predictedRir < 0
@@ -690,24 +690,28 @@ export function SetLoggerRow({
                 } past your max`
               : // A forecast for the entered weight, not the chip below (which is
                 // how the set actually felt) — say so, or the two read as a clash.
-                `At this weight: likely ${
+                `At this weight: about ${effortCheck.predictedRir} more in the tank (${
                   RIR_LABELS[clampToChip(effortCheck.predictedRir)]
-                } (~${effortCheck.predictedRir} RIR)`}
+                })`}
             {effortCheck.softened ? ' · rough estimate' : ''}
           </span>
           <button
             type="button"
             onClick={() => setShowPredictionInfo(true)}
             aria-label="How this RIR prediction works"
-            className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center flex-shrink-0 text-surface-500 hover:text-surface-300 transition-colors"
+            className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center flex-shrink-0 text-ink-2 hover:text-ink transition-colors"
           >
             <IconInfoCircle size={16} />
           </button>
         </div>
       )}
 
-      {/* Row 2: RIR chips (labeled, full-width) + set type + feedback sheet trigger */}
-      <div className="flex items-stretch gap-2">
+      {/* Row 2: effort chips (labeled, full-width) + set type + feedback sheet
+          trigger. Asked in plain words; "RIR" stays in the accessible names. */}
+      <p className="pl-1 text-caption text-ink-2" id={`effort-q-${setNumber}`}>
+        How many more could you have done?
+      </p>
+      <div className="flex items-stretch gap-1.5" role="group" aria-labelledby={`effort-q-${setNumber}`}>
         {RIR_CHIPS.map((chip) => (
           <button
             key={chip}
@@ -726,7 +730,7 @@ export function SetLoggerRow({
             }`}
           >
             <span className="text-[16px] font-semibold leading-tight">{RIR_CHIP_TEXT[chip]}</span>
-            <span className={`text-[10px] leading-tight ${selectedRir === chip ? 'text-white/80' : 'text-surface-500'}`}>
+            <span className={`text-[10px] leading-tight ${selectedRir === chip ? 'opacity-80' : 'text-ink-2'}`}>
               {RIR_LABELS[chip]}
             </span>
           </button>
@@ -738,15 +742,15 @@ export function SetLoggerRow({
           aria-label={selectedSetType === 'normal' ? 'Set type: normal (tap to change)' : `Set type: ${selectedSetType}`}
           className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
             selectedSetType !== 'normal'
-              ? 'text-primary-400 bg-primary-500/10 border border-primary-500/40'
-              : 'text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800'
+              ? 'text-on-action bg-action'
+              : 'text-action bg-card hover:bg-fill'
           }`}
           title={selectedSetType === 'normal' ? 'Normal set' : selectedSetType.replace('_', '-')}
         >
           <IconRepeat size={20} />
           {selectedSetType !== 'normal' && (
             <span
-              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary-400"
+              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-on-action"
               aria-hidden="true"
             />
           )}
@@ -758,15 +762,15 @@ export function SetLoggerRow({
           aria-label="Add set feedback"
           className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
             discomfort
-              ? 'text-danger-400 bg-danger-500/10'
-              : 'text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800'
+              ? 'text-status-bad bg-status-bad-tint'
+              : 'text-action bg-card hover:bg-fill'
           }`}
         >
           <IconMessagePlus size={20} />
           {hasSheetFeedback && (
             <span
               className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
-                discomfort ? 'bg-danger-400' : 'bg-primary-400'
+                discomfort ? 'bg-status-bad' : 'bg-action'
               }`}
               aria-hidden="true"
             />
@@ -777,13 +781,13 @@ export function SetLoggerRow({
       {/* Sensor RIR: a note on a prefilled chip, or an offer when the lifter
           had already picked one. */}
       {rirFromSensor && (
-        <p className="pl-1 text-[11px] text-surface-500" data-testid="sensor-rir-note">
+        <p className="pl-1 text-caption text-ink-2" data-testid="sensor-rir-note">
           {RIR_CHIP_TEXT[selectedRir]} RIR estimated from bar speed · tap a chip to change
         </p>
       )}
       {sensorRirOffer !== null && (
         <div
-          className="flex items-center justify-between gap-2 px-1 text-xs text-surface-300"
+          className="flex items-center justify-between gap-2 px-1 text-subhead text-ink"
           data-testid="sensor-rir-offer"
         >
           <span>Bar speed suggests {RIR_CHIP_TEXT[sensorRirOffer]} RIR.</span>
@@ -795,7 +799,7 @@ export function SetLoggerRow({
                 setRirFromSensor(true);
                 setSensorRirOffer(null);
               }}
-              className="font-medium text-primary-400 hover:text-primary-300"
+              className="font-semibold text-action"
               data-testid="sensor-rir-offer-use"
             >
               Use {RIR_CHIP_TEXT[sensorRirOffer]}
@@ -803,7 +807,7 @@ export function SetLoggerRow({
             <button
               type="button"
               onClick={() => setSensorRirOffer(null)}
-              className="text-surface-500 hover:text-surface-300"
+              className="text-ink-2 hover:text-ink"
               aria-label="Keep my RIR"
             >
               Keep mine
@@ -817,7 +821,7 @@ export function SetLoggerRow({
         type="button"
         onClick={handleLog}
         disabled={!canLog}
-        className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-xl min-h-[52px] text-base font-semibold transition-colors disabled:opacity-40"
+        className="w-full bg-action text-on-action rounded-button min-h-[52px] text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-40"
       >
         Log set
       </button>
@@ -841,7 +845,7 @@ export function SetLoggerRow({
               exercise pain-pattern notices exactly as before. Collapsed behind
               a small neutral row (nothing is wrong, so no warning styling). */}
           <div className="space-y-2">
-            <span className="block text-sm font-medium text-surface-300">Injury / discomfort</span>
+            <span className="block text-sm font-medium text-ink">Injury / discomfort</span>
             {discomfort ? (
               <DiscomfortSummaryRow
                 discomfort={discomfort}
@@ -861,7 +865,7 @@ export function SetLoggerRow({
                 onClick={() => setShowSheetDiscomfortPicker(true)}
                 disabled={disabled}
                 data-testid="joint-pain-trigger"
-                className="w-full min-h-[44px] flex items-center gap-1.5 rounded-lg bg-surface-800/50 hover:bg-surface-800 px-3 text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
+                className="w-full min-h-[44px] flex items-center gap-1.5 rounded-lg bg-fill hover:brightness-110 px-3 text-[13px] text-ink-2 hover:text-ink transition-colors"
               >
                 <IconPlus size={14} aria-hidden="true" />
                 Log injury or discomfort (optional)
@@ -884,11 +888,11 @@ export function SetLoggerRow({
               setShowFeedbackSheet(false);
               setShowSheetDiscomfortPicker(false);
             }}
-            className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
+            className="w-full bg-action text-on-action rounded-button min-h-[44px] text-body font-semibold transition-colors"
           >
             Done
           </button>
-          <p className="text-[11px] text-surface-500 text-center">
+          <p className="text-[11px] text-ink-2 text-center">
             All optional — feedback is saved with the set when you tap Log set.
           </p>
         </div>
@@ -901,7 +905,7 @@ export function SetLoggerRow({
         title="Set type"
       >
         <div className="space-y-3">
-          <p className="text-[13px] text-surface-400">
+          <p className="text-[13px] text-ink-2">
             Mark advanced training techniques so they don&apos;t contaminate progression estimates.
           </p>
           {(['normal', 'rest_pause', 'myorep', 'dropset'] as const).map((type) => {
@@ -935,16 +939,16 @@ export function SetLoggerRow({
                 disabled={disabled}
                 className={`w-full min-h-[44px] flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
                   selectedSetType === type
-                    ? 'bg-primary-500/20 border border-primary-500/50'
-                    : 'bg-surface-800/50 hover:bg-surface-800 border border-surface-700'
+                    ? 'bg-action-tint border border-action/50'
+                    : 'bg-fill hover:brightness-110 border border-sep'
                 }`}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-surface-100">{label.name}</div>
-                  <div className="text-[12px] text-surface-400 mt-0.5">{label.desc}</div>
+                  <div className="text-[14px] font-medium text-ink">{label.name}</div>
+                  <div className="text-[12px] text-ink-2 mt-0.5">{label.desc}</div>
                 </div>
                 {selectedSetType === type && (
-                  <span className="text-primary-400 text-[12px] font-medium mt-0.5">✓</span>
+                  <span className="text-action text-[12px] font-medium mt-0.5">✓</span>
                 )}
               </button>
             );
@@ -964,16 +968,16 @@ export function SetLoggerRow({
         >
           <ul className="space-y-2.5" data-testid="predicted-rir-reasoning">
             {effortCheck.reasoning.map((line, i) => (
-              <li key={i} className="flex items-start gap-2 text-[13px] text-surface-300">
+              <li key={i} className="flex items-start gap-2 text-[13px] text-ink">
                 <span
-                  className="mt-1.5 w-1 h-1 rounded-full bg-primary-400 flex-shrink-0"
+                  className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0"
                   aria-hidden="true"
                 />
                 {line}
               </li>
             ))}
           </ul>
-          <p className="mt-4 text-[11px] text-surface-500">
+          <p className="mt-4 text-[11px] text-ink-2">
             The prediction updates live as you change the weight or reps, and it uses the same
             math as the set suggestion above — it can be off on any given day, so trust how the
             set actually feels.

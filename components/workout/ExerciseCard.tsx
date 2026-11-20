@@ -65,6 +65,7 @@ import { SuggestionBanner } from './SuggestionBanner';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
 import { velocityTargetFit, type VelocityTargetFit } from '@/services/shared/motion/setSummary';
+import { getSetReps, getSetDuration } from '@/services/shared/setModality';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
@@ -72,9 +73,9 @@ const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps
 
 // Logged-set tint from motion capture: velocity loss vs the target RIR.
 const MOTION_FIT_TEXT: Record<VelocityTargetFit, string> = {
-  'on-target': 'text-success-400',
-  easier: 'text-surface-400',
-  harder: 'text-warning-400',
+  'on-target': 'text-status-ok',
+  easier: 'text-ink-2',
+  harder: 'text-status-warn',
 };
 const MOTION_FIT_BAR: Record<Exclude<VelocityTargetFit, 'easier'>, string> = {
   'on-target': 'bg-success-400',
@@ -2319,13 +2320,13 @@ export const ExerciseCard = memo(function ExerciseCard({
   // easy=muted, junk=warning, excessive=danger.
   const qualityTextClass = (quality: SetQualityDisplay) => {
     switch (quality) {
-      case 'stimulative': return 'text-success-400';
+      case 'stimulative': return 'text-status-ok';
       case 'maxed': return 'text-orange-400';
-      case 'effective': return 'text-surface-400';
-      case 'easy': return 'text-surface-500';
-      case 'junk': return 'text-warning-400';
-      case 'excessive': return 'text-danger-400';
-      default: return 'text-surface-500';
+      case 'effective': return 'text-ink-2';
+      case 'easy': return 'text-ink-2';
+      case 'junk': return 'text-status-warn';
+      case 'excessive': return 'text-status-bad';
+      default: return 'text-ink-2';
     }
   };
 
@@ -3141,16 +3142,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     <Card
       variant={isActive ? 'elevated' : 'default'}
       padding="none"
-      className={`relative overflow-hidden transition-all ${
-        isActive ? 'ring-2 ring-primary-500/50' : ''
-      }`}
+      className="relative overflow-hidden transition-all"
     >
       {/* Header — single title row: grip · name · (i) · ⋮ · chevron. The old
           grade/caution pills line and muscle/last-session meta line moved into
           the exercise info view (the (i) / name tap target); position and set
           count render there too. Conditional status pills (plateau/pace/SS)
           keep their own line below only when one exists. */}
-      <div className="p-4 sticky top-0 bg-surface-900 z-10">
+      <div className="p-4 sticky top-0 bg-card z-10">
         <div className="flex items-center gap-2">
           {/* Drag grip — long press to reorder. Visual icon is compact but the
               hit area stays ≥44×44 via min sizes, pulled back with negative
@@ -3159,7 +3158,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             <div
               data-drag-handle
               aria-label="Hold to reorder exercise"
-              className="-my-2.5 -ml-3 flex min-h-[44px] min-w-[44px] flex-shrink-0 cursor-grab touch-none items-center justify-center text-surface-500 active:cursor-grabbing"
+              className="-my-2.5 -ml-3 flex min-h-[44px] min-w-[44px] flex-shrink-0 cursor-grab touch-none items-center justify-center text-ink-2 active:cursor-grabbing"
               onTouchStart={(e) => {
                 e.stopPropagation();
                 onDragHandleStart(listIndex, e.touches[0].clientY);
@@ -3189,7 +3188,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           <div className="flex min-w-0 flex-1 items-center">
             <button
               onClick={onExerciseNameClick}
-              className="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+              className="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
             >
               {exercise.name}
             </button>
@@ -3200,8 +3199,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 data-testid="exercise-info-trigger"
                 className={`-my-2.5 flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center transition-colors ${
                   isCautionedExercise
-                    ? 'text-amber-400 hover:text-amber-300'
-                    : 'text-surface-500 hover:text-surface-300'
+                    ? 'text-status-warn hover:text-status-warn'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 <IconInfoCircle size={16} aria-hidden="true" />
@@ -3234,7 +3233,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   e.stopPropagation();
                   onToggleCollapse(block.id);
                 }}
-                className="-my-2.5 -mr-2 flex min-h-[44px] min-w-[40px] items-center justify-center text-surface-400 hover:text-surface-200 transition-colors"
+                className="-my-2.5 -mr-2 flex min-h-[44px] min-w-[40px] items-center justify-center text-ink-2 hover:text-ink transition-colors"
                 aria-label="Collapse exercise"
               >
                 <IconChevronDown size={20} className="rotate-180" aria-hidden="true" />
@@ -3252,7 +3251,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {!repTotalMode && plateau && (
               <button
                 onClick={() => setShowPlateauSheet(true)}
-                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20 transition-colors"
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-status-warn hover:bg-warning-500/20 transition-colors"
                 aria-haspopup="dialog"
               >
                 Plateau
@@ -3267,7 +3266,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   progressionInsight.pace === 'ahead'
                     ? 'bg-emerald-500/10 text-emerald-400'
                     : progressionInsight.pace === 'on_track'
-                      ? 'bg-surface-700/60 text-surface-300'
+                      ? 'bg-fill/60 text-ink'
                       : 'bg-orange-500/10 text-orange-400'
                 }`}
                 title={progressionTitle}
@@ -3287,7 +3286,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 its own claim — never disguised as a constraint rationale. */}
             {progressionStall && (
               <span
-                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400"
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-status-warn"
                 data-testid="progression-stall-pill"
                 title={
                   progressionStall.kind === 'target_stall'
@@ -3327,7 +3326,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           disabled={!exerciseHistory}
           className="mt-1 flex items-center justify-between w-full gap-2 text-left"
         >
-          <p className="min-w-0 text-[11px] text-surface-500 truncate">
+          <p className="min-w-0 text-[11px] text-ink-2 truncate">
             <span>{formatMuscleName(exercise.primaryMuscle)}</span>
             {isBodyweightExercise && ' · bodyweight'}
             {lastSessionMeta && <> · {lastSessionMeta}</>}
@@ -3335,7 +3334,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           {exerciseHistory && (
             <IconChevronDown
               size={14}
-              className={`flex-shrink-0 text-surface-500 transition-transform ${showHistory ? 'rotate-180' : ''}`}
+              className={`flex-shrink-0 text-ink-2 transition-transform ${showHistory ? 'rotate-180' : ''}`}
               aria-hidden="true"
             />
           )}
@@ -3346,16 +3345,16 @@ export const ExerciseCard = memo(function ExerciseCard({
             numbers. Shown once there's something concrete: a logged set, or
             the active card's live plan. */}
         {sessionVolume && sessionVolume.projected > 0 && (isActive || completedSets.length > 0) && (
-          <p className="mt-1 text-[11px] text-surface-500" data-testid="session-volume-line">
+          <p className="mt-1 text-[11px] text-ink-2" data-testid="session-volume-line">
             {completedSets.length > 0 ? (
               <>
                 Volume{' '}
-                <span className="text-surface-300">
+                <span className="text-ink">
                   {sessionVolume.current.toLocaleString('en-US')} {weightLabel}
                 </span>
                 {pendingSetsCount > 0 && sessionVolume.projected > sessionVolume.current && (
                   <>
-                    <span className="text-surface-600"> · </span>
+                    <span className="text-ink-3"> · </span>
                     {sessionVolume.projected.toLocaleString('en-US')} {weightLabel} projected
                   </>
                 )}
@@ -3363,7 +3362,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             ) : (
               <>
                 Projected volume{' '}
-                <span className="text-surface-300">
+                <span className="text-ink">
                   {sessionVolume.projected.toLocaleString('en-US')} {weightLabel}
                 </span>
               </>
@@ -3374,7 +3373,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         {/* Enhanced mode: the joint-stress RIR floor is constraining this
             exercise below what the raised landmarks would allow */}
         {connectiveTissueCapBinds && (
-          <p className="mt-1.5 text-[11px] text-warning-400/90">
+          <p className="mt-1.5 text-[11px] text-status-warn/90">
             {CONNECTIVE_TISSUE_CAP_NOTE}
           </p>
         )}
@@ -3385,7 +3384,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             persists it and the mode control appears in place. */}
         {isBodyweightExercise && !isPureBodyweight && !userBodyweightKg && isActive && (
           <div className="mt-2" data-testid="bw-mode-needs-weigh-in">
-            <p className="text-[11px] text-surface-500">
+            <p className="text-[11px] text-ink-2">
               Log your bodyweight to unlock weighted and assisted sets.
             </p>
             {onBodyweightLogged ? (
@@ -3408,18 +3407,18 @@ export const ExerciseCard = memo(function ExerciseCard({
                   }}
                   placeholder={weightLabel}
                   aria-label={`Bodyweight in ${weightLabel}`}
-                  className="w-24 px-2 py-1.5 font-mono text-sm bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder:text-surface-600 focus:border-primary-500 focus:outline-none"
+                  className="w-24 px-2 py-1.5 font-mono text-sm bg-card border border-sep rounded-lg text-ink placeholder:text-ink-3 focus:border-action focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={bwEntrySaving || !bwEntryInput.trim()}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-surface-800 text-surface-200 hover:bg-surface-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-fill text-ink hover:bg-fill disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {bwEntrySaving ? 'Saving…' : 'Log bodyweight'}
                 </button>
               </form>
             ) : (
-              <p className="mt-1 text-[11px] text-surface-500">
+              <p className="mt-1 text-[11px] text-ink-2">
                 Use the Body tab or the pre-workout check-in.
               </p>
             )}
@@ -3452,34 +3451,34 @@ export const ExerciseCard = memo(function ExerciseCard({
 
         {/* Expanded history detail (behind the meta-line expandable) */}
         {exerciseHistory && showHistory && (
-          <div className="mt-3 pt-3 border-t border-surface-800">
+          <div className="mt-3 pt-3 border-t border-sep">
             <div className="space-y-3">
               {/* Estimated 1RM + session count. rep_total exercises show the
                   model instead — no e1RM is computed or displayed for them. */}
               {repTotalMode ? (
-                <p className="text-xs text-surface-400">
-                  Progression <span className="text-surface-200">rep total</span>
-                  <span className="text-surface-600"> · </span>
+                <p className="text-xs text-ink-2">
+                  Progression <span className="text-ink">rep total</span>
+                  <span className="text-ink-3"> · </span>
                   {exerciseHistory.totalSessions} session{exerciseHistory.totalSessions === 1 ? '' : 's'}
                 </p>
               ) : exerciseHistory.estimatedE1RM > 0 && (
-                <p className="text-xs text-surface-400">
+                <p className="text-xs text-ink-2">
                   Estimated 1RM{' '}
-                  <span className="text-surface-200">
+                  <span className="text-ink">
                     {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
                   </span>
-                  <span className="text-surface-600"> · </span>
+                  <span className="text-ink-3"> · </span>
                   {exerciseHistory.totalSessions} session{exerciseHistory.totalSessions === 1 ? '' : 's'}
                 </p>
               )}
               {/* Last workout */}
               {exerciseHistory.lastWorkoutSets.length > 0 && (
-                <div className="p-3 bg-surface-800/50 rounded-lg">
+                <div className="p-3 bg-fill/50 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+                    <span className="text-xs font-medium text-ink-2 uppercase tracking-wider">
                       Last Workout
                     </span>
-                    <span className="text-xs text-surface-500" data-testid="last-workout-when">
+                    <span className="text-xs text-ink-2" data-testid="last-workout-when">
                       {new Date(
                         // Same instant the time of day comes from, so the day
                         // and the clock can never disagree across a midnight
@@ -3498,7 +3497,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     {exerciseHistory.lastWorkoutSets.map((set, idx) => (
                       <span
                         key={idx}
-                        className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
+                        className="px-2 py-1 bg-fill rounded text-xs text-ink"
                         title={
                           [
                             set.bw && set.bw.modification !== 'none'
@@ -3521,14 +3520,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                         }
                       >
                         {historySetWeightLabel(set)} × {set.reps}{isDurationBased ? 's' : ''}
-                        {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
+                        {set.rpe && <span className="text-ink-2"> @{set.rpe}</span>}
                       </span>
                     ))}
                   </div>
                   {lastSessionVolume != null && (
-                    <p className="mt-2 text-xs text-surface-400">
+                    <p className="mt-2 text-xs text-ink-2">
                       Total volume{' '}
-                      <span className="text-surface-200">
+                      <span className="text-ink">
                         {lastSessionVolume.toLocaleString('en-US')} {weightLabel}
                       </span>
                     </p>
@@ -3537,17 +3536,17 @@ export const ExerciseCard = memo(function ExerciseCard({
                       the context behind those numbers. Silent for users who
                       don't log sleep (see sleepLoggingActive). */}
                   {lastWorkoutSleep ? (
-                    <p className="mt-1 text-xs text-surface-400" data-testid="last-workout-sleep">
+                    <p className="mt-1 text-xs text-ink-2" data-testid="last-workout-sleep">
                       Slept{' '}
-                      <span className="text-surface-200">
+                      <span className="text-ink">
                         {formatSleepHours(lastWorkoutSleep.hours)}
                       </span>
-                      <span className="text-surface-500">
+                      <span className="text-ink-2">
                         {' '}· {SLEEP_QUALITY_LABELS[lastWorkoutSleep.quality].toLowerCase()} quality
                       </span>
                     </p>
                   ) : sleepLoggingActive ? (
-                    <p className="mt-1 text-xs text-surface-500" data-testid="last-workout-sleep">
+                    <p className="mt-1 text-xs text-ink-2" data-testid="last-workout-sleep">
                       Sleep not logged that night
                     </p>
                   ) : null}
@@ -3575,17 +3574,17 @@ export const ExerciseCard = memo(function ExerciseCard({
           empty space (no-silent-failures rule) */}
       {isActive && warmupDecision && warmupDecision.sets.length === 0 && (
         <div
-          className="border-b border-surface-800 px-3 py-2 flex items-start gap-2"
+          className="border-b border-sep px-3 py-2 flex items-start gap-2"
           data-testid="warmup-decision-none"
         >
-          <span className="text-success-400 text-xs mt-0.5">✓</span>
-          <span className="text-xs text-surface-400">{warmupDecision.reason}</span>
+          <span className="text-status-ok text-xs mt-0.5">✓</span>
+          <span className="text-xs text-ink-2">{warmupDecision.reason}</span>
         </div>
       )}
 
       {/* Warmup sets - keep in separate table for now (legacy) */}
       {isActive && warmupRows.rows.length > 0 && warmupWorkingWeightKg > 0 && (
-        <div className="border-b border-surface-800">
+        <div className="border-b border-sep">
           {/* Collapsible header. A div with role="button" (not a real <button>)
               because the info tooltip nested inside renders its own button —
               nested buttons are invalid HTML. */}
@@ -3600,26 +3599,26 @@ export const ExerciseCard = memo(function ExerciseCard({
               }
             }}
             aria-expanded={isWarmupExpanded}
-            className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors cursor-pointer"
+            className="w-full flex items-center justify-between p-3 hover:bg-fill/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                   completedWarmups.size === warmupRows.rows.length
-                    ? 'bg-success-500/20 text-success-400'
-                    : 'bg-amber-500/20 text-amber-400'
+                    ? 'bg-success-500/20 text-status-ok'
+                    : 'bg-amber-500/20 text-status-warn'
                 }`}
               >
                 {completedWarmups.size === warmupRows.rows.length ? '✓' : completedWarmups.size}
               </div>
-              <span className="text-sm font-medium text-surface-200">
+              <span className="text-sm font-medium text-ink">
                 {warmupDecision?.kind === 'targeted_ramp'
                   ? 'Ramp Set'
                   : warmupDecision?.kind === 'partial_protocol'
                     ? 'Warmup (shortened)'
                     : 'Warmup Protocol'}
               </span>
-              <span className="text-xs text-surface-500">
+              <span className="text-xs text-ink-2">
                 ({completedWarmups.size}/{warmupRows.rows.length})
               </span>
               {/* Why-warmup rationale — stop propagation so opening the
@@ -3632,7 +3631,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               </span>
             </div>
             <svg
-              className={`w-4 h-4 text-surface-400 transition-transform ${
+              className={`w-4 h-4 text-ink-2 transition-transform ${
                 isWarmupExpanded ? 'rotate-180' : ''
               }`}
               fill="none"
@@ -3650,20 +3649,20 @@ export const ExerciseCard = memo(function ExerciseCard({
                   ramp set) exist */}
               {warmupDecision && (
                 <p
-                  className="px-3 pb-2 text-xs text-surface-400"
+                  className="px-3 pb-2 text-xs text-ink-2"
                   data-testid="warmup-decision-reason"
                 >
                   {warmupDecision.reason}
                 </p>
               )}
               <table className="w-full text-sm">
-                <thead className="bg-surface-800/50">
+                <thead className="bg-fill/50">
                   <tr>
-                    <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
-                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                    <th className="px-1 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
-                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
-                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Purpose</th>
+                    <th className="px-1.5 py-2 text-left text-ink-2 font-medium">Set</th>
+                    <th className="px-1 py-2 text-center text-ink-2 font-medium">Weight</th>
+                    <th className="px-1 py-2 text-center text-ink-2 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
+                    <th className="px-1 py-2 text-center text-ink-2 font-medium">Form</th>
+                    <th className="px-1 py-2 text-center text-ink-2 font-medium">Purpose</th>
                     <th className="px-1 py-2 w-10"></th>
                   </tr>
                 </thead>
@@ -3680,7 +3679,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       key={`warmup-${warmup.setNumber}`}
                       className={`${isWarmupCompleted ? 'bg-amber-500/5' : 'bg-amber-500/10'}`}
                     >
-                      <td className="px-1.5 py-2 text-amber-400 font-medium text-xs">
+                      <td className="px-1.5 py-2 text-status-warn font-medium text-xs">
                         W{warmup.setNumber}
                       </td>
                       <td className="px-1 py-2 text-center">
@@ -3712,7 +3711,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               }
                             }}
                             autoFocus
-                            className="w-16 px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
+                            className="w-16 px-1 py-0.5 text-center font-mono text-sm bg-card border border-amber-500 rounded text-ink"
                           />
                         ) : row.editable ? (
                           <button
@@ -3727,14 +3726,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                                   }`
                                 : undefined
                             }
-                            className="font-mono text-surface-300 hover:text-amber-400 transition-colors"
+                            className="font-mono text-ink hover:text-status-warn transition-colors"
                           >
                             {displayWarmupWeight}
-                            {hasCustomWeight && <span className="text-amber-400 text-xs ml-1">*</span>}
+                            {hasCustomWeight && <span className="text-status-warn text-xs ml-1">*</span>}
                           </button>
                         ) : (
                           <span
-                            className="font-mono text-surface-300"
+                            className="font-mono text-ink"
                             title={`${displayWeight(row.effectiveKg, true)} ${weightLabel} total`}
                           >
                             {displayWarmupWeight}
@@ -3752,21 +3751,21 @@ export const ExerciseCard = memo(function ExerciseCard({
                               type="button"
                               onClick={() => onPlateCalculatorOpen(row.effectiveKg)}
                               aria-label={`Open plate calculator for warmup set ${warmup.setNumber}`}
-                              className="min-h-[44px] min-w-[40px] -my-2.5 px-1 inline-flex items-center justify-center text-surface-500 hover:text-primary-400 transition-colors"
+                              className="min-h-[44px] min-w-[40px] -my-2.5 px-1 inline-flex items-center justify-center text-ink-2 hover:text-action transition-colors"
                             >
                               <IconBarbell size={13} aria-hidden="true" />
                             </button>
                           )}
                         </div>
                       </td>
-                      <td className="px-1 py-2 text-center font-mono text-surface-300">
+                      <td className="px-1 py-2 text-center font-mono text-ink">
                         {warmup.targetReps}
                       </td>
-                      <td className="px-1 py-2 text-center text-surface-500 text-xs">—</td>
+                      <td className="px-1 py-2 text-center text-ink-2 text-xs">—</td>
                       <td className="px-1 py-2 text-center">
-                        <span className="text-xs text-amber-400/70">{warmup.purpose}</span>
+                        <span className="text-xs text-status-warn/70">{warmup.purpose}</span>
                         {warmup.reason && (
-                          <div className="text-[10px] text-amber-400/50 leading-tight">
+                          <div className="text-[10px] text-status-warn/50 leading-tight">
                             {warmup.reason}
                           </div>
                         )}
@@ -3786,13 +3785,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                               ? `Mark warmup set ${warmup.setNumber} incomplete`
                               : `Complete warmup set ${warmup.setNumber}`
                           }
-                          className="p-1.5 rounded-lg transition-colors hover:bg-surface-800/50"
+                          className="p-1.5 rounded-lg transition-colors hover:bg-fill/50"
                         >
                           <span
                             className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                               isWarmupCompleted
                                 ? 'bg-amber-500 border-amber-500'
-                                : 'border-surface-600'
+                                : 'border-sep'
                             }`}
                           >
                             {isWarmupCompleted && (
@@ -3807,10 +3806,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                   );
                 })}
                 {warmupRows.anyFloored && (
-                  <tr className="bg-surface-800/30">
+                  <tr className="bg-fill/30">
                     <td colSpan={6} className="px-3 py-1.5">
                       <p
-                        className="text-[11px] text-surface-500 leading-snug"
+                        className="text-[11px] text-ink-2 leading-snug"
                         data-testid="warmup-bodyweight-floor-note"
                       >
                         Your bodyweight is the lightest this movement goes
@@ -3825,11 +3824,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </tr>
                 )}
                 {completedWarmups.size < warmupRows.rows.length && (
-                  <tr className="bg-surface-800/30">
+                  <tr className="bg-fill/30">
                     <td colSpan={6} className="px-3 py-1.5 text-center">
                       <button
                         onClick={() => completeAllWarmupsInStore(warmupStoreKey, warmupRows.rows.map(r => r.warmup.setNumber))}
-                        className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
+                        className="text-xs text-ink-2 hover:text-ink-2 transition-colors"
                       >
                         Skip warmup (already warm)
                       </button>
@@ -3849,7 +3848,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             dismissible, non-blocking. Links to the swap picker's Similar tab. */}
         {painNotice && (
           <div
-            className="flex items-start gap-2 rounded-lg bg-warning-500/10 border border-warning-500/30 px-2.5 py-2 text-[12px] text-warning-300"
+            className="flex items-start gap-2 rounded-lg bg-warning-500/10 border border-warning-500/30 px-2.5 py-2 text-[12px] text-status-warn"
             data-testid="pain-pattern-notice"
           >
             <span className="flex-1">
@@ -3869,7 +3868,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               type="button"
               onClick={onPainNoticeDismiss}
               aria-label="Dismiss pain notice"
-              className="text-warning-400/70 hover:text-warning-300 flex-shrink-0 px-1"
+              className="text-status-warn/70 hover:text-status-warn flex-shrink-0 px-1"
             >
               ✕
             </button>
@@ -3899,12 +3898,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         {/* Muscle readiness status — shows all involved muscles (primary + secondaries)
             that have recent training and aren't fully recovered. */}
         {muscleReadiness && muscleReadiness.length > 0 && (
-          <div className="px-3 py-2 text-[13px] text-surface-300 border-l-2 border-surface-700 bg-surface-900/50">
+          <div className="px-3 py-2 text-[13px] text-ink border-l-2 border-sep bg-card/50">
             <span className="font-medium">Recovery:</span>{' '}
             {muscleReadiness.map((mr, i) => (
               <span key={mr.muscle}>
                 {i > 0 && ' · '}
-                {mr.displayName}: <span className={mr.status === 'fatigued' ? 'text-amber-400' : 'text-green-400'}>{mr.status}</span>
+                {mr.displayName}: <span className={mr.status === 'fatigued' ? 'text-status-warn' : 'text-status-ok'}>{mr.status}</span>
               </span>
             ))}
           </div>
@@ -3945,10 +3944,10 @@ export const ExerciseCard = memo(function ExerciseCard({
           // Editing: standard sets get inline weight/reps inputs + RIR chips
           if (editingSetId === set.id) {
             return (
-              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5 space-y-2">
+              <div key={set.id} className="rounded-lg bg-action/10 px-2 py-1.5 space-y-2">
                 {/* Row 1: Set number + input fields (weight/reps) */}
                 <div className="flex items-center gap-2">
-                  <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
+                  <span className="w-6 flex-shrink-0 text-[12px] font-medium text-ink text-center">
                     {set.setNumber}
                   </span>
                   <input
@@ -3960,10 +3959,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onKeyDown={handleEditKeyDown}
                     step="0.5"
                     aria-label="Edit weight"
-                    className="flex-1 min-w-0 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    className="flex-1 min-w-0 px-1 py-1.5 bg-card border border-sep rounded text-center font-mono text-ink text-sm"
                     autoFocus
                   />
-                  <span className="text-[11px] text-surface-500">×</span>
+                  <span className="text-[11px] text-ink-2">×</span>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -3973,7 +3972,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onFocus={(e) => e.target.select()}
                     onKeyDown={handleEditKeyDown}
                     aria-label="Edit reps"
-                    className="w-16 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    className="w-16 px-1 py-1.5 bg-card border border-sep rounded text-center font-mono text-ink text-sm"
                   />
                 </div>
 
@@ -3982,14 +3981,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <button
                     onClick={saveEdit}
                     aria-label="Save set edit"
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-success-400 hover:bg-success-500/20 rounded-lg"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-status-ok hover:bg-success-500/20 rounded-lg"
                   >
                     <IconCheck size={16} />
                   </button>
                   <button
                     onClick={cancelEditing}
                     aria-label="Cancel set edit"
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-surface-400 hover:bg-surface-700 rounded-lg"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-ink-2 hover:bg-fill rounded-lg"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -4002,7 +4001,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onSetDelete(set.id);
                       }}
                       aria-label="Delete set"
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-danger-400 hover:bg-danger-500/10 rounded-lg"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-status-bad hover:bg-danger-500/10 rounded-lg"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -4013,7 +4012,7 @@ export const ExerciseCard = memo(function ExerciseCard({
 
                 {/* Row 3: RIR chips */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-surface-400">RIR</span>
+                  <span className="text-[11px] font-medium text-ink-2">RIR</span>
                   {EDIT_RIR_OPTIONS.map((option) => {
                     const isSelected = editRir === option.value;
                     return (
@@ -4025,8 +4024,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                         aria-pressed={isSelected}
                         className={`min-h-[44px] px-2.5 py-2 rounded-full border text-[12px] font-medium transition-colors ${
                           isSelected
-                            ? 'bg-primary-500 border-primary-500 text-white'
-                            : 'bg-surface-900 border-surface-600 text-surface-300 hover:bg-surface-700'
+                            ? 'bg-action border-action text-on-action'
+                            : 'bg-card border-sep text-ink hover:bg-fill'
                         }`}
                       >
                         {option.label}
@@ -4091,11 +4090,11 @@ export const ExerciseCard = memo(function ExerciseCard({
               <div
                 className={`flex items-center gap-2 px-1 py-2 ${
                   isDeleteRevealed
-                    ? 'bg-surface-900'
+                    ? 'bg-card'
                     : isDropsetSet
                     ? 'bg-purple-500/5 rounded-lg'
                     : ''
-                } ${onSetEdit ? 'cursor-pointer hover:bg-surface-800/30 rounded-lg' : ''}`}
+                } ${onSetEdit ? 'cursor-pointer hover:bg-fill/30 rounded-lg' : ''}`}
                 onClick={() => {
                   // Ignore the synthetic click some browsers fire after a swipe
                   if (justSwipedRef.current) {
@@ -4117,43 +4116,54 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {/* Write-status glyph (P0-2): saved ✓ / saving spinner / queued ⏸ */}
                 {setSyncStatus?.[set.id] === 'saving' ? (
                   <span
-                    className="w-3.5 h-3.5 flex-shrink-0 rounded-full border-2 border-surface-600 border-t-surface-300 animate-spin"
+                    className="w-3.5 h-3.5 flex-shrink-0 rounded-full border-2 border-sep border-t-ink-2 animate-spin"
                     role="status"
                     aria-label="Saving set"
                   />
                 ) : setSyncStatus?.[set.id] === 'queued' ? (
                   <IconCloudPause
                     size={16}
-                    className="text-warning-400 flex-shrink-0"
+                    className="text-status-warn flex-shrink-0"
                     role="status"
                     aria-label="Queued — will sync when online"
                   />
                 ) : setSyncStatus?.[set.id] === 'failed' ? (
                   <IconAlertTriangle
                     size={16}
-                    className="text-danger-400 flex-shrink-0"
+                    className="text-status-bad flex-shrink-0"
                     role="status"
                     aria-label="Not saved to your account — kept on this phone"
                   />
                 ) : (
-                  <IconCheck size={16} className="text-success-400 flex-shrink-0" aria-hidden="true" />
+                  <IconCheck size={16} className="text-status-ok flex-shrink-0" aria-hidden="true" />
                 )}
                 {isDropsetSet && (
                   <span className="text-[11px] text-purple-400 flex-shrink-0">drop</span>
                 )}
-                <span className="text-[13px] text-surface-300 truncate">
+                <span className="text-body font-semibold text-ink truncate tabular-nums">
                   Set {set.setNumber} · {set.bodyweightData?.modification === 'none' ? 'BW ' : ''}
                   {completedWeight} {weightLabel} × {set.reps}
                   {isDurationBased ? 's' : ''}
                 </span>
-                <span className="ml-auto flex-shrink-0 text-[11px] text-surface-500">
+                {previousSets[setIndex] && !isDropsetSet && (
+                  <span
+                    className="flex-shrink-0 text-subhead text-ink-2 tabular-nums"
+                    data-testid={`set-last-time-${set.setNumber}`}
+                  >
+                    {/* Modality-aware: a timed exercise's last set is seconds, not reps. */}
+                    last {displayWeight(previousSets[setIndex].weightKg, true)} ×{' '}
+                    {getSetReps(previousSets[setIndex], exercise) ??
+                      `${getSetDuration(previousSets[setIndex], exercise)}s`}
+                  </span>
+                )}
+                <span className="ml-auto flex-shrink-0 text-[11px] text-ink-2">
                   {setSyncStatus?.[set.id] === 'queued' && (
-                    <span className="text-warning-400 mr-1.5">queued</span>
+                    <span className="text-status-warn mr-1.5">queued</span>
                   )}
                   {setSyncStatus?.[set.id] === 'failed' && (
-                    <span className="text-danger-400 mr-1.5">not synced</span>
+                    <span className="text-status-bad mr-1.5">not synced</span>
                   )}
-                  {rirValue} RIR
+                  <span title={`${rirValue} reps in reserve`}>{rirValue} left</span>
                   {/* "stimulative" is the expected case — only say otherwise. */}
                   {qualityDisplay !== 'stimulative' && (
                     <>
@@ -4192,8 +4202,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       motionFit
                         ? MOTION_FIT_TEXT[motionFit]
                         : motionSets[set.id].tone === 'raw'
-                          ? 'text-surface-600'
-                          : 'text-surface-500'
+                          ? 'text-ink-3'
+                          : 'text-ink-2'
                     }`}
                   >
                     <IconActivity size={15} />
@@ -4210,8 +4220,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                     data-testid={`set-joint-pain-${set.setNumber}`}
                     className={`flex-shrink-0 min-w-[44px] min-h-[44px] -my-1 flex items-center justify-center rounded-lg transition-colors ${
                       set.feedback?.discomfort
-                        ? 'text-danger-400'
-                        : 'text-surface-600 hover:text-surface-300'
+                        ? 'text-status-bad'
+                        : 'text-ink-3 hover:text-ink'
                     }`}
                   >
                     <IconBone size={15} />
@@ -4239,7 +4249,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   className="-mt-1.5 block w-full pl-7 pr-2 pb-1 text-left"
                   data-testid={`set-motion-cue-${set.setNumber}`}
                 >
-                  <span className="block max-w-[45ch] truncate text-[11px] leading-4 text-surface-500">
+                  <span className="block max-w-[45ch] truncate text-[11px] leading-4 text-ink-2">
                     {motionSets[set.id].cue}
                   </span>
                 </button>
@@ -4293,8 +4303,10 @@ export const ExerciseCard = memo(function ExerciseCard({
           />
         )}
 
-        {/* Inline Rest Timer */}
-        {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
+        {/* "Rested for m:ss" after a skipped rest. The live countdown lives in
+            the floating rest card at the bottom of the screen (one timer, not
+            two), so the in-card bar only keeps this record. */}
+        {isActive && timerIsSkipped && timerRestedSeconds > 0 && !pendingDropset && (
           <InlineRestTimerBar
             seconds={timerSeconds}
             initialSeconds={timerInitialSeconds}
@@ -4318,7 +4330,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               id="dropset-weight-input"
               step="0.5"
               aria-label="Dropset weight"
-              className="w-20 px-1 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
+              className="w-20 px-1 py-1.5 bg-card border border-purple-500/50 rounded text-center font-mono text-ink text-sm"
               autoFocus
             />
             <input
@@ -4329,7 +4341,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               id="dropset-reps-input"
               placeholder="?"
               aria-label="Dropset reps"
-              className="w-14 px-1 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm placeholder-surface-500"
+              className="w-14 px-1 py-1.5 bg-card border border-purple-500/50 rounded text-center font-mono text-ink text-sm placeholder-surface-500"
             />
             <div className="ml-auto flex gap-1">
               <button
@@ -4360,9 +4372,9 @@ export const ExerciseCard = memo(function ExerciseCard({
               <button
                 onClick={cancelDropset}
                 aria-label="Cancel dropset"
-                className="p-2 rounded-lg bg-surface-700 hover:bg-surface-600 transition-colors"
+                className="p-2 rounded-lg bg-fill hover:bg-surface-600 transition-colors"
               >
-                <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -4537,7 +4549,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <p
                 data-testid="weight-edit-recompute-note"
                 aria-hidden={!weightEditNote}
-                className={`px-1 text-[11px] leading-4 h-4 truncate text-primary-300 ${
+                className={`px-1 text-[11px] leading-4 h-4 truncate text-action ${
                   weightEditNote ? '' : 'invisible'
                 }`}
               >
@@ -4586,7 +4598,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               />
               {sensorRepOffer !== null && (
                 <div
-                  className="flex items-center justify-between gap-2 px-1 text-xs text-surface-300"
+                  className="flex items-center justify-between gap-2 px-1 text-xs text-ink"
                   data-testid="motion-rep-offer"
                 >
                   <span>Sensor counted {sensorRepOffer}. Use this?</span>
@@ -4594,7 +4606,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <button
                       type="button"
                       onClick={() => applySensorReps(sensorRepOffer)}
-                      className="font-medium text-primary-400 hover:text-primary-300"
+                      className="font-medium text-action hover:text-action"
                       data-testid="motion-rep-offer-use"
                     >
                       Use {sensorRepOffer}
@@ -4602,7 +4614,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <button
                       type="button"
                       onClick={() => setSensorRepOffer(null)}
-                      className="text-surface-500 hover:text-surface-300"
+                      className="text-ink-2 hover:text-ink"
                       aria-label="Keep my rep count"
                     >
                       Keep mine
@@ -4629,7 +4641,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           return (
             <div
               key={`pending-${pendingSetNumber}`}
-              className="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+              className="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
             >
               <span className="w-4 flex-shrink-0 text-center">{pendingSetNumber}</span>
               <span className="text-surface-700" aria-hidden="true">|</span>
@@ -4651,7 +4663,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             <button
               onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
               disabled={Number(block.targetSets) >= 10}
-              className="w-full py-2.5 rounded-lg border border-dashed border-surface-700 text-sm text-surface-400 hover:text-surface-200 hover:border-surface-500 transition-colors disabled:opacity-30"
+              className="w-full py-2.5 rounded-lg border border-dashed border-sep text-sm text-ink-2 hover:text-ink hover:border-surface-500 transition-colors disabled:opacity-30"
             >
               + Add set
             </button>
@@ -4661,7 +4673,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <button
                 onClick={() => onTargetSetsChange(Math.max(1, (Number(block.targetSets) || 1) - 1))}
                 disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
-                className="text-surface-500 hover:text-surface-300 transition-colors disabled:opacity-30"
+                className="text-ink-2 hover:text-ink transition-colors disabled:opacity-30"
               >
                 − Remove set
               </button>
@@ -4669,7 +4681,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {onBlockNoteUpdate && (
               <button
                 onClick={() => setIsEditingNote(true)}
-                className="text-surface-500 hover:text-surface-300 transition-colors"
+                className="text-ink-2 hover:text-ink transition-colors"
               >
                 Notes
               </button>
@@ -4680,12 +4692,12 @@ export const ExerciseCard = memo(function ExerciseCard({
 
       {/* Form cues accordion */}
       {exercise.formCues.length > 0 && (
-        <div className="border-t border-surface-800">
+        <div className="border-t border-sep">
           <Accordion>
             <AccordionItem id="form-cues">
               <div className="px-4">
                 <AccordionTrigger id="form-cues">
-                  <span className="text-sm text-surface-400">Form Cues & Tips</span>
+                  <span className="text-sm text-ink-2">Form Cues & Tips</span>
                 </AccordionTrigger>
                 <AccordionContent id="form-cues">
                   <div className="space-y-3">
@@ -4701,11 +4713,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                       
                       return (
                         <div className="mb-3">
-                          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+                          <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
                             Exercise Demo
                           </p>
                           {isVideo && (
-                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                            <div className="relative rounded-lg overflow-hidden bg-card border border-sep">
                               <video
                                 src={demoGifUrl}
                                 className="w-full h-auto max-h-48 object-contain"
@@ -4723,7 +4735,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                             </div>
                           )}
                           {isImage && (
-                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                            <div className="relative rounded-lg overflow-hidden bg-card border border-sep">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={demoGifUrl}
@@ -4738,7 +4750,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                             </div>
                           )}
                           {youtubeVideoId && (
-                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700 aspect-video">
+                            <div className="relative rounded-lg overflow-hidden bg-card border border-sep aspect-video">
                               <iframe
                                 src={`https://www.youtube.com/embed/${youtubeVideoId}?rel=0`}
                                 title={`${exercise.name} form video`}
@@ -4752,13 +4764,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                       );
                     })()}
                     <div>
-                      <h4 className="text-xs font-medium text-surface-300 uppercase tracking-wide mb-1">
+                      <h4 className="text-xs font-medium text-ink uppercase tracking-wide mb-1">
                         Key Cues
                       </h4>
                       <ul className="space-y-1">
                         {exercise.formCues.map((cue, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-surface-400">
-                            <span className="text-primary-400 mt-1">•</span>
+                          <li key={i} className="flex items-start gap-2 text-sm text-ink-2">
+                            <span className="text-action mt-1">•</span>
                             {cue}
                           </li>
                         ))}
@@ -4766,12 +4778,12 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </div>
                     {exercise.commonMistakes.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-medium text-surface-300 uppercase tracking-wide mb-1">
+                        <h4 className="text-xs font-medium text-ink uppercase tracking-wide mb-1">
                           Common Mistakes
                         </h4>
                         <ul className="space-y-1">
                           {exercise.commonMistakes.map((mistake, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-danger-400/80">
+                            <li key={i} className="flex items-start gap-2 text-sm text-status-bad/80">
                               <span className="mt-1">✗</span>
                               {mistake}
                             </li>
@@ -4780,8 +4792,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       </div>
                     )}
                     {exercise.setupNote && (
-                      <div className="pt-2 border-t border-surface-800">
-                        <p className="text-xs text-surface-500">
+                      <div className="pt-2 border-t border-sep">
+                        <p className="text-xs text-ink-2">
                           <span className="font-medium">Setup:</span> {exercise.setupNote}
                         </p>
                       </div>
@@ -4795,17 +4807,17 @@ export const ExerciseCard = memo(function ExerciseCard({
       )}
 
       {/* Exercise Notes Section */}
-      <div className="border-t border-surface-800 p-4">
+      <div className="border-t border-sep p-4">
         {isEditingNote ? (
           <div className="space-y-2">
-            <label className="text-xs font-medium text-surface-400 uppercase tracking-wide">
+            <label className="text-xs font-medium text-ink-2 uppercase tracking-wide">
               Notes
             </label>
             <textarea
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
               placeholder="Add notes for this exercise (e.g., form reminders, weight adjustments, how it felt...)"
-              className="w-full px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink placeholder:text-ink-2 focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent resize-none"
               rows={3}
               autoFocus
             />
@@ -4815,7 +4827,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   setNoteText(block.note || '');
                   setIsEditingNote(false);
                 }}
-                className="px-3 py-1.5 text-sm text-surface-400 hover:text-surface-200 transition-colors"
+                className="px-3 py-1.5 text-sm text-ink-2 hover:text-ink transition-colors"
               >
                 Cancel
               </button>
@@ -4825,7 +4837,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   onBlockNoteUpdate?.(newNote);
                   setIsEditingNote(false);
                 }}
-                className="px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
+                className="px-3 py-1.5 text-sm bg-action text-on-action hover:brightness-110 rounded-lg transition-colors"
               >
                 Save
               </button>
@@ -4837,12 +4849,12 @@ export const ExerciseCard = memo(function ExerciseCard({
             className="w-full text-left group"
           >
             <div className="flex items-start gap-2">
-              <svg className="w-4 h-4 text-surface-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4 text-ink-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               <div className="flex-1">
-                <p className="text-sm text-surface-300 whitespace-pre-wrap">{block.note}</p>
-                <span className="text-xs text-surface-500 group-hover:text-primary-400 transition-colors">
+                <p className="text-sm text-ink whitespace-pre-wrap">{block.note}</p>
+                <span className="text-xs text-ink-2 group-hover:text-action transition-colors">
                   Click to edit
                 </span>
               </div>
@@ -4851,7 +4863,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         ) : (
           <button
             onClick={() => setIsEditingNote(true)}
-            className="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+            className="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -4867,7 +4879,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           <div className="absolute inset-0 bg-black/70" />
           <div
             ref={swapSheetRef}
-            className="relative w-full max-w-lg bg-surface-900 rounded-t-2xl sm:rounded-xl shadow-2xl border border-surface-700 overflow-hidden flex flex-col"
+            className="relative w-full max-w-lg bg-card rounded-t-2xl sm:rounded-xl shadow-2xl border border-sep overflow-hidden flex flex-col"
             style={{
               // Keep the sheet (and its search field) above the on-screen
               // keyboard; safe-area stays additive with the keyboard inset.
@@ -4878,20 +4890,20 @@ export const ExerciseCard = memo(function ExerciseCard({
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-4 border-b border-surface-700">
+            <div className="p-4 border-b border-sep">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">Swap Exercise</h3>
+                <h3 className="text-headline text-ink">Swap Exercise</h3>
                 <button
                   onClick={() => setShowSwapModal(false)}
-                  className="p-1 text-surface-400 hover:text-surface-200 transition-colors"
+                  className="p-1 text-ink-2 hover:text-ink transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              <p className="text-sm text-surface-400 mt-1">
-                Replace <span className="text-surface-200 font-medium">{exercise.name}</span>
+              <p className="text-sm text-ink-2 mt-1">
+                Replace <span className="text-ink font-medium">{exercise.name}</span>
               </p>
               
               {/* Tabs */}
@@ -4900,8 +4912,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   onClick={() => setSwapTab('similar')}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                     swapTab === 'similar'
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                      ? 'bg-action text-on-action'
+                      : 'bg-fill text-ink-2 hover:bg-fill'
                   }`}
                 >
                   Similar ({similarExercises.length})
@@ -4910,8 +4922,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   onClick={() => setSwapTab('browse')}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                     swapTab === 'browse'
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                      ? 'bg-action text-on-action'
+                      : 'bg-fill text-ink-2 hover:bg-fill'
                   }`}
                 >
                   Browse All
@@ -4921,7 +4933,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             
             {/* Search & Filter (only for Browse tab) */}
             {swapTab === 'browse' && (
-              <div className="p-3 border-b border-surface-700 space-y-2">
+              <div className="p-3 border-b border-sep space-y-2">
                 <Input
                   placeholder="Search exercises..."
                   value={swapSearch}
@@ -4932,8 +4944,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onClick={() => setSwapMuscleFilter('')}
                     className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                       !swapMuscleFilter
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                        ? 'bg-action text-on-action'
+                        : 'bg-fill text-ink-2 hover:bg-fill'
                     }`}
                   >
                     All
@@ -4944,8 +4956,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       onClick={() => setSwapMuscleFilter(muscle)}
                       className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap capitalize transition-colors ${
                         swapMuscleFilter === muscle
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2 hover:bg-fill'
                       }`}
                     >
                       {muscle}
@@ -4968,11 +4980,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                         : 'bg-warning-500/10 border border-warning-500/20'
                     }`}>
                       {safeAlternatives.length > 0 ? (
-                        <p className="text-xs text-success-400">
+                        <p className="text-xs text-status-ok">
                           ✓ <span className="font-medium">{safeAlternatives.length} safe alternative{safeAlternatives.length !== 1 ? 's' : ''}</span> found that won&apos;t aggravate your injury
                         </p>
                       ) : (
-                        <p className="text-xs text-warning-400">
+                        <p className="text-xs text-status-warn">
                           ⚠️ <span className="font-medium">No safe alternatives found</span> - all similar exercises may aggravate your injury. Consider skipping this exercise.
                         </p>
                       )}
@@ -4991,34 +5003,34 @@ export const ExerciseCard = memo(function ExerciseCard({
                       className={`w-full p-3 text-left rounded-lg transition-colors flex items-center gap-3 ${
                         injuryRisk.isRisky 
                           ? 'hover:bg-danger-500/10 opacity-60' 
-                          : 'hover:bg-surface-800'
+                          : 'hover:bg-fill'
                       }`}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className={`font-medium truncate ${injuryRisk.isRisky ? 'text-surface-400' : 'text-surface-100'}`}>
+                          <p className={`font-medium truncate ${injuryRisk.isRisky ? 'text-ink-2' : 'text-ink'}`}>
                             {alt.name}
                           </p>
                           {injuryRisk.isRisky && (
                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
                               injuryRisk.severity === 3 
-                                ? 'bg-danger-500/20 text-danger-400' 
-                                : 'bg-warning-500/20 text-warning-400'
+                                ? 'bg-danger-500/20 text-status-bad' 
+                                : 'bg-warning-500/20 text-status-warn'
                             }`}>
                               ⚠️ {injuryRisk.severity === 3 ? 'Risky' : 'Caution'}
                             </span>
                           )}
                           {!injuryRisk.isRisky && hasInjuries && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-success-500/20 text-success-400 flex-shrink-0">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-success-500/20 text-status-ok flex-shrink-0">
                               ✓ Safe
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-surface-500 capitalize">
+                        <p className="text-xs text-ink-2 capitalize">
                           {formatMuscleName(alt.primaryMuscle)} • {alt.mechanic}
                         </p>
                         {injuryRisk.isRisky && injuryRisk.reasons.length > 0 && (
-                          <p className="text-[10px] text-danger-400/70 mt-0.5">
+                          <p className="text-[10px] text-status-bad/70 mt-0.5">
                             {injuryRisk.reasons[0]}
                           </p>
                         )}
@@ -5026,14 +5038,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div 
                           className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            score >= 80 ? 'bg-success-500/20 text-success-400' :
-                            score >= 60 ? 'bg-warning-500/20 text-warning-400' :
-                            'bg-surface-700 text-surface-400'
+                            score >= 80 ? 'bg-success-500/20 text-status-ok' :
+                            score >= 60 ? 'bg-warning-500/20 text-status-warn' :
+                            'bg-fill text-ink-2'
                           }`}
                         >
                           {score}%
                         </div>
-                        <svg className="w-4 h-4 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </div>
@@ -5041,10 +5053,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                   ))}
                   {similarExercises.length === 0 && (
                     <div className="p-8 text-center">
-                      <p className="text-surface-500">No similar exercises found</p>
+                      <p className="text-ink-2">No similar exercises found</p>
                       <button
                         onClick={() => setSwapTab('browse')}
-                        className="mt-2 text-primary-400 text-sm hover:underline"
+                        className="mt-2 text-action text-sm hover:underline"
                       >
                         Browse all exercises →
                       </button>
@@ -5057,7 +5069,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {/* Injury warning in browse tab */}
                   {hasInjuries && (
                     <div className="mb-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-                      <p className="text-xs text-warning-400">
+                      <p className="text-xs text-status-warn">
                         ⚠️ Exercises marked with warnings may aggravate your injury
                       </p>
                     </div>
@@ -5082,41 +5094,41 @@ export const ExerciseCard = memo(function ExerciseCard({
                           className={`w-full p-3 text-left rounded-lg transition-colors flex items-center gap-3 ${
                             altInjuryRisk.isRisky
                               ? 'hover:bg-danger-500/10 opacity-60'
-                              : 'hover:bg-surface-800'
+                              : 'hover:bg-fill'
                           }`}
                         >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className={`font-medium truncate ${altInjuryRisk.isRisky ? 'text-surface-400' : 'text-surface-100'}`}>
+                              <p className={`font-medium truncate ${altInjuryRisk.isRisky ? 'text-ink-2' : 'text-ink'}`}>
                                 {alt.name}
                               </p>
                               {isFrequent && (
-                                <span className="text-xs text-amber-400" title={`Used ${usageCount} times recently`}>
+                                <span className="text-xs text-status-warn" title={`Used ${usageCount} times recently`}>
                                   ★
                                 </span>
                               )}
                               {altInjuryRisk.isRisky && (
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
                                   altInjuryRisk.severity === 3 
-                                    ? 'bg-danger-500/20 text-danger-400' 
-                                    : 'bg-warning-500/20 text-warning-400'
+                                    ? 'bg-danger-500/20 text-status-bad' 
+                                    : 'bg-warning-500/20 text-status-warn'
                                 }`}>
                                   ⚠️
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-surface-500 capitalize">
+                            <p className="text-xs text-ink-2 capitalize">
                               {exercisePrimaryMuscle(alt)} • {alt.mechanic}
                             </p>
                           </div>
-                          <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="w-4 h-4 text-ink-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </button>
                       );
                     })}
                   {swapBrowseResults.length === 0 && (
-                    <p className="p-8 text-center text-surface-500" data-testid="swap-browse-empty">
+                    <p className="p-8 text-center text-ink-2" data-testid="swap-browse-empty">
                       {swapSearch || swapMuscleFilter ? 'No matching exercises found' : 'No exercises available'}
                     </p>
                   )}
@@ -5126,13 +5138,13 @@ export const ExerciseCard = memo(function ExerciseCard({
             
             {/* Footer: swap to a brand-new custom exercise (opens creation flow) */}
             {onCreateCustomSwap && (
-              <div className="p-3 border-t border-surface-700 bg-surface-800/50">
+              <div className="p-3 border-t border-sep bg-fill/50">
                 <button
                   onClick={() => {
                     setShowSwapModal(false);
                     onCreateCustomSwap(swapSearch.trim() || undefined);
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-primary-400 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-fill hover:bg-surface-600 text-action text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -5144,7 +5156,7 @@ export const ExerciseCard = memo(function ExerciseCard({
 
             {/* Footer with Skip option */}
             {hasInjuries && onExerciseDelete && (
-              <div className="p-3 border-t border-surface-700 bg-surface-800/50">
+              <div className="p-3 border-t border-sep bg-fill/50">
                 <button
                   onClick={() => {
                     if (onExerciseDelete) {
@@ -5152,14 +5164,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                       setShowSwapModal(false);
                     }
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-surface-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-fill hover:bg-surface-600 text-ink text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                   Skip this exercise (due to injury)
                 </button>
-                <p className="text-[10px] text-surface-500 text-center mt-1.5">
+                <p className="text-[10px] text-ink-2 text-center mt-1.5">
                   This will remove the exercise from today&apos;s workout
                 </p>
               </div>
@@ -5176,7 +5188,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           title="Plateau detected"
         >
           <div className="space-y-4">
-            <p className="text-[13px] text-surface-400">
+            <p className="text-[13px] text-ink-2">
               No meaningful progress on {exercise.name} for{' '}
               {plateau.weeksSinceProgress >= 1
                 ? `${plateau.weeksSinceProgress} week${plateau.weeksSinceProgress === 1 ? '' : 's'}`
@@ -5185,7 +5197,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             </p>
             <ul className="space-y-2">
               {plateau.suggestions.map((suggestion, i) => (
-                <li key={i} className="flex items-start gap-2 text-[13px] text-surface-300">
+                <li key={i} className="flex items-start gap-2 text-[13px] text-ink">
                   <span className="mt-1.5 w-1 h-1 rounded-full bg-warning-400 flex-shrink-0" aria-hidden="true" />
                   {suggestion}
                 </li>
@@ -5223,7 +5235,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     }
                     setShowPlateauSheet(false);
                   }}
-                  className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
+                  className="w-full bg-action text-on-action hover:brightness-110 rounded-lg py-2.5 text-sm font-medium transition-colors"
                 >
                   Try {plateauRepRange[0]}–{plateauRepRange[1]} reps
                 </button>
@@ -5234,7 +5246,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     setShowPlateauSheet(false);
                     setShowSwapModal(true);
                   }}
-                  className="w-full bg-surface-800 hover:bg-surface-700 text-surface-200 rounded-lg py-2.5 text-sm font-medium transition-colors"
+                  className="w-full bg-fill hover:bg-fill text-ink rounded-lg py-2.5 text-sm font-medium transition-colors"
                 >
                   Swap exercise
                 </button>
@@ -5247,42 +5259,42 @@ export const ExerciseCard = memo(function ExerciseCard({
       {/* RPE Guide Modal */}
       {showRpeGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowRpeGuide(false)}>
-          <div className="bg-surface-900 border border-surface-700 rounded-xl p-4 max-w-sm mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card border border-sep rounded-xl p-4 max-w-sm mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-surface-100">RPE Guide</h3>
+              <h3 className="text-lg font-bold text-ink">RPE Guide</h3>
               <button 
                 onClick={() => setShowRpeGuide(false)}
-                className="p-1 text-surface-400 hover:text-surface-200"
+                className="p-1 text-ink-2 hover:text-ink"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <p className="text-sm text-surface-400 mb-4">Rate of Perceived Exertion - how hard was the set?</p>
+            <p className="text-sm text-ink-2 mb-4">Rate of Perceived Exertion - how hard was the set?</p>
             <div className="space-y-2">
-              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
-                <span className="font-mono font-bold text-danger-400">RPE 10</span>
-                <span className="text-sm text-surface-300">Max effort - 0 reps left</span>
+              <div className="flex justify-between items-center p-2 bg-fill rounded-lg">
+                <span className="font-mono font-bold text-status-bad">RPE 10</span>
+                <span className="text-sm text-ink">Max effort - 0 reps left</span>
               </div>
-              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
-                <span className="font-mono font-bold text-warning-400">RPE 9</span>
-                <span className="text-sm text-surface-300">Very hard - 1 rep left</span>
+              <div className="flex justify-between items-center p-2 bg-fill rounded-lg">
+                <span className="font-mono font-bold text-status-warn">RPE 9</span>
+                <span className="text-sm text-ink">Very hard - 1 rep left</span>
               </div>
-              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
-                <span className="font-mono font-bold text-primary-400">RPE 8</span>
-                <span className="text-sm text-surface-300">Hard - 2 reps left</span>
+              <div className="flex justify-between items-center p-2 bg-fill rounded-lg">
+                <span className="font-mono font-bold text-action">RPE 8</span>
+                <span className="text-sm text-ink">Hard - 2 reps left</span>
               </div>
-              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
-                <span className="font-mono font-bold text-success-400">RPE 7</span>
-                <span className="text-sm text-surface-300">Moderate - 3 reps left</span>
+              <div className="flex justify-between items-center p-2 bg-fill rounded-lg">
+                <span className="font-mono font-bold text-status-ok">RPE 7</span>
+                <span className="text-sm text-ink">Moderate - 3 reps left</span>
               </div>
-              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
-                <span className="font-mono font-bold text-surface-400">RPE 6</span>
-                <span className="text-sm text-surface-300">Easy - 4+ reps left</span>
+              <div className="flex justify-between items-center p-2 bg-fill rounded-lg">
+                <span className="font-mono font-bold text-ink-2">RPE 6</span>
+                <span className="text-sm text-ink">Easy - 4+ reps left</span>
               </div>
             </div>
-            <p className="text-xs text-surface-500 mt-4 text-center">
+            <p className="text-xs text-ink-2 mt-4 text-center">
               Target RPE 7-8 for most working sets
             </p>
           </div>

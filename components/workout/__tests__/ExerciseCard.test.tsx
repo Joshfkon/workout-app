@@ -766,7 +766,7 @@ describe('ExerciseCard', () => {
           onExerciseNameClick={jest.fn()}
         />
       );
-      expect(screen.getByTestId('exercise-info-trigger').className).toContain('text-amber-400');
+      expect(screen.getByTestId('exercise-info-trigger').className).toContain('text-status-warn');
 
       rerender(
         <ExerciseCard
@@ -777,8 +777,8 @@ describe('ExerciseCard', () => {
         />
       );
       const trigger = screen.getByTestId('exercise-info-trigger');
-      expect(trigger.className).not.toContain('text-amber-400');
-      expect(trigger.className).toContain('text-surface-500');
+      expect(trigger.className).not.toContain('text-status-warn');
+      expect(trigger.className).toContain('text-ink-2');
     });
   });
 
@@ -1619,8 +1619,28 @@ describe('ExerciseCard', () => {
       expect(screen.getByText(/Set 1 · 100 kg × 10/)).toBeInTheDocument();
       // rpeToRir(8) = 2. "stimulative" is the expected case, so it is not
       // printed — only other buckets are.
-      expect(screen.getByText(/^2 RIR$/)).toBeInTheDocument();
+      expect(screen.getByText(/^2 left$/)).toBeInTheDocument();
       expect(screen.queryByText('stimulative')).not.toBeInTheDocument();
+    });
+
+    it('shows last session’s matching set next to each completed set', () => {
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8, quality: 'stimulative' }),
+        createMockSetLog({ id: 'set-2', setNumber: 2, weightKg: 100, reps: 9, rpe: 8, quality: 'stimulative' }),
+      ];
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={sets}
+          isActive={true}
+          previousSets={[{ weightKg: 95, reps: 10 }]}
+        />
+      );
+
+      expect(screen.getByTestId('set-last-time-1')).toHaveTextContent('last 95 × 10');
+      // No matching set last time → nothing printed for set 2.
+      expect(screen.queryByTestId('set-last-time-2')).not.toBeInTheDocument();
     });
 
     it('prints the quality bucket when it is not the expected "stimulative"', () => {
@@ -1649,7 +1669,7 @@ describe('ExerciseCard', () => {
 
       render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
 
-      expect(screen.getByText(/3 RIR ·/)).toBeInTheDocument();
+      expect(screen.getByText(/^3 left$/)).toBeInTheDocument();
     });
 
     it('labels a 0 RIR set "maxed" — never "effective" (full-credit display bucket)', () => {
@@ -1667,7 +1687,7 @@ describe('ExerciseCard', () => {
 
       render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
 
-      expect(screen.getByText(/0 RIR ·/)).toBeInTheDocument();
+      expect(screen.getByText(/^0 left$/)).toBeInTheDocument();
       // The completed-line tag ("maxed" also appears as a RIR chip label, so
       // target the tag via its credit tooltip)
       const tag = screen.getByTitle(/full stimulus credit/);
@@ -1972,7 +1992,7 @@ describe('ExerciseCard', () => {
   });
 
   describe('Rest Timer Integration', () => {
-    it('renders the inline timer while active and resting', () => {
+    it('leaves the live countdown to the floating rest card (no second timer in the card)', () => {
       render(
         <ExerciseCard
           {...defaultProps}
@@ -1981,6 +2001,23 @@ describe('ExerciseCard', () => {
           timerSeconds={120}
           timerInitialSeconds={180}
           timerIsRunning={true}
+        />
+      );
+
+      expect(screen.queryByTestId('inline-rest-timer')).not.toBeInTheDocument();
+    });
+
+    it('keeps "Rested for" in the card after a skipped rest', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          showRestTimer={false}
+          timerIsSkipped={true}
+          timerRestedSeconds={84}
+          timerSeconds={0}
+          timerInitialSeconds={180}
+          timerIsRunning={false}
         />
       );
 
@@ -2876,7 +2913,7 @@ describe('ExerciseCard — motion capture integration', () => {
       <ExerciseCard {...base} sets={logged} motionSets={row('hard')} renderMotionSheet={renderMotionSheet} />
     );
     expect(screen.getByTestId('set-motion-icon-1')).toHaveAttribute('data-fit', 'on-target');
-    expect(screen.getByTestId('set-motion-icon-1')).toHaveClass('text-success-400');
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveClass('text-status-ok');
     expect(screen.getByTestId('set-motion-fit-bar-1')).toHaveClass('bg-success-400');
     expect(screen.getByTestId('set-motion-icon-1')).toHaveAccessibleName(
       'Coach feedback for set 1 (slowed about as much as the target)'
@@ -2899,7 +2936,7 @@ describe('ExerciseCard — motion capture integration', () => {
 
     rerender(<ExerciseCard {...base} sets={logged} motionSets={row(null, 'low')} renderMotionSheet={renderMotionSheet} />);
     expect(screen.getByTestId('set-motion-icon-1')).not.toHaveAttribute('data-fit');
-    expect(screen.getByTestId('set-motion-icon-1')).toHaveClass('text-surface-500');
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveClass('text-ink-2');
     expect(screen.queryByTestId('set-motion-fit-bar-1')).not.toBeInTheDocument();
   });
 
