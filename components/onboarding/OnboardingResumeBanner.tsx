@@ -86,19 +86,19 @@ export function OnboardingResumeBanner() {
   const progressPercentage = getStepProgressPercentage(currentStep);
   const nextStepLabel = currentStep 
     ? STEP_LABELS[currentStep] 
-    : 'Get Started';
+    : 'Get started';
 
   return (
     <div className="fixed bottom-20 left-0 right-0 z-40 px-4 lg:left-64 lg:bottom-4 animate-slide-up">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl shadow-2xl overflow-hidden">
+        <div className="bg-action rounded-xl shadow-2xl overflow-hidden">
           <div className="p-4 sm:p-6">
             <div className="flex items-start gap-4">
               {/* Icon */}
               <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                <div className="w-12 h-12 bg-on-action/15 rounded-xl flex items-center justify-center backdrop-blur-sm">
                   <svg 
-                    className="w-6 h-6 text-white" 
+                    className="w-6 h-6 text-on-action" 
                     fill="none" 
                     viewBox="0 0 24 24" 
                     stroke="currentColor"
@@ -117,10 +117,10 @@ export function OnboardingResumeBanner() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
-                    <h3 className="text-lg font-semibold text-white">
-                      Complete Your Setup
+                    <h3 className="text-headline font-semibold text-on-action">
+                      Complete your setup
                     </h3>
-                    <p className="text-sm text-white/90 mt-0.5">
+                    <p className="text-body text-on-action/90 mt-0.5">
                       You&apos;re {progressPercentage}% done! Let&apos;s finish setting up your profile.
                     </p>
                   </div>
@@ -132,7 +132,7 @@ export function OnboardingResumeBanner() {
                     aria-label="Dismiss"
                   >
                     <svg 
-                      className="w-5 h-5 text-white/80" 
+                      className="w-5 h-5 text-on-action/80" 
                       fill="none" 
                       viewBox="0 0 24 24" 
                       stroke="currentColor"
@@ -149,7 +149,7 @@ export function OnboardingResumeBanner() {
 
                 {/* Progress bar */}
                 <div className="mb-3">
-                  <div className="h-2 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+                  <div className="h-2 bg-on-action/15 rounded-full overflow-hidden backdrop-blur-sm">
                     <div 
                       className="h-full bg-white transition-all duration-500"
                       style={{ width: `${progressPercentage}%` }}
@@ -160,9 +160,9 @@ export function OnboardingResumeBanner() {
                 {/* CTA */}
                 <button
                   onClick={handleResume}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-white text-primary-600 rounded-lg font-medium hover:bg-white/90 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white text-action rounded-lg font-medium hover:bg-white/90 transition-colors"
                 >
-                  Continue Setup
+                  Continue setup
                   <svg 
                     className="w-4 h-4" 
                     fill="none" 

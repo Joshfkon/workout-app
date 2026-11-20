@@ -56,7 +56,7 @@ export function AddToHomescreenGuide({
   if (!pwaContext || !instructions) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -104,24 +104,24 @@ function NativeInstallPrompt({
   return (
     <div className="max-w-md mx-auto space-y-6 animate-fade-in">
       <div className="text-center">
-        <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg shadow-primary-500/20">
-          <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-action flex items-center justify-center shadow-lg shadow-action/20">
+          <svg className="w-10 h-10 text-on-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-surface-100 mb-2">Install HyperTrack</h1>
-        <p className="text-surface-400">
+        <h1 className="text-title font-bold text-ink mb-2">Install HyperTrack</h1>
+        <p className="text-ink-2">
           Add to your homescreen for quick access and the best experience
         </p>
       </div>
 
       {/* Benefits */}
-      <Card className="bg-surface-800/50">
+      <Card className="bg-fill/50">
         <CardContent className="p-4">
           <ul className="space-y-2">
             {installBenefits.slice(0, 2).map((benefit, i) => (
-              <li key={i} className="flex items-center gap-3 text-sm text-surface-300">
-                <svg className="w-5 h-5 text-success-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <li key={i} className="flex items-center gap-3 text-body text-ink-2">
+                <svg className="w-5 h-5 text-status-ok flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 {benefit}
@@ -148,11 +148,11 @@ function NativeInstallPrompt({
       <div className="flex gap-3">
         {showSkipOption && (
           <Button onClick={onSkip} variant="ghost" className="flex-1">
-            Maybe Later
+            Maybe later
           </Button>
         )}
         <Button onClick={onShowManual} variant="outline" className="flex-1">
-          Show Steps
+          Show steps
         </Button>
       </div>
     </div>
@@ -180,20 +180,20 @@ function ManualInstallInstructions({
   return (
     <div className="max-w-md mx-auto space-y-6 animate-fade-in">
       <div className="text-center">
-        <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg shadow-primary-500/20">
-          <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-action flex items-center justify-center shadow-lg shadow-action/20">
+          <svg className="w-10 h-10 text-on-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-surface-100 mb-2">Install HyperTrack</h1>
-        <p className="text-surface-400">
+        <h1 className="text-title font-bold text-ink mb-2">Install HyperTrack</h1>
+        <p className="text-ink-2">
           Add to your homescreen for the best experience
         </p>
       </div>
 
       {/* Platform indicator */}
       <div className="flex justify-center">
-        <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full text-xs text-surface-400">
+        <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-fill rounded-full text-caption text-ink-2">
           <PlatformIcon platform={platform} />
           {getPlatformName(platform, browser)}
         </span>
@@ -211,22 +211,22 @@ function ManualInstallInstructions({
                 transition={{ delay: index * 0.1 }}
                 className={`flex gap-4 p-3 rounded-lg transition-colors ${
                   currentStep === index
-                    ? 'bg-primary-500/10 border border-primary-500/30'
-                    : 'hover:bg-surface-800/50'
+                    ? 'bg-action/10 border border-action/30'
+                    : 'hover:bg-fill/50'
                 }`}
                 onClick={() => setCurrentStep(index)}
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                   currentStep === index
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-surface-800 text-surface-400'
+                    ? 'bg-action text-on-action'
+                    : 'bg-fill text-ink-2'
                 }`}>
                   {step.stepNumber}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-surface-200">{step.text}</p>
+                  <p className="font-medium text-ink">{step.text}</p>
                   {step.subtext && (
-                    <p className="text-sm text-surface-500 mt-0.5">{step.subtext}</p>
+                    <p className="text-body text-ink-3 mt-0.5">{step.subtext}</p>
                   )}
                 </div>
                 <StepIcon icon={step.icon} isActive={currentStep === index} />
@@ -242,16 +242,16 @@ function ManualInstallInstructions({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="mt-6 p-4 bg-surface-800/50 rounded-lg"
+                  className="mt-6 p-4 bg-fill/50 rounded-lg"
                 >
-                  <div className="flex items-center justify-center gap-2 text-surface-400">
+                  <div className="flex items-center justify-center gap-2 text-ink-2">
                     <motion.div
                       animate={{ y: [0, 5, 0] }}
                       transition={{ repeat: Infinity, duration: 1.5 }}
                     >
                       <ShareIcon />
                     </motion.div>
-                    <span className="text-sm">Look for this icon at the bottom</span>
+                    <span className="text-body">Look for this icon at the bottom</span>
                   </div>
                 </motion.div>
               )}
@@ -266,16 +266,16 @@ function ManualInstallInstructions({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="mt-6 p-4 bg-surface-800/50 rounded-lg"
+                  className="mt-6 p-4 bg-fill/50 rounded-lg"
                 >
-                  <div className="flex items-center justify-center gap-2 text-surface-400">
+                  <div className="flex items-center justify-center gap-2 text-ink-2">
                     <motion.div
                       animate={{ rotate: [0, 10, -10, 0] }}
                       transition={{ repeat: Infinity, duration: 2 }}
                     >
                       <MoreVerticalIcon />
                     </motion.div>
-                    <span className="text-sm">Tap the menu in the top right</span>
+                    <span className="text-body">Tap the menu in the top right</span>
                   </div>
                 </motion.div>
               )}
@@ -287,8 +287,8 @@ function ManualInstallInstructions({
       {/* Benefits reminder */}
       <div className="flex flex-wrap justify-center gap-2">
         {installBenefits.slice(0, 2).map((benefit, i) => (
-          <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-surface-800/50 rounded text-xs text-surface-400">
-            <svg className="w-3 h-3 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-fill/50 rounded text-caption text-ink-2">
+            <svg className="w-3 h-3 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             {benefit}
@@ -300,7 +300,7 @@ function ManualInstallInstructions({
       <div className="flex gap-3">
         {showSkipOption && (
           <Button onClick={onSkip} variant="ghost" className="flex-1">
-            Maybe Later
+            Maybe later
           </Button>
         )}
         <Button onClick={onDone} className="flex-1">
@@ -350,7 +350,7 @@ function getPlatformName(platform: string, browser: string): string {
 }
 
 function StepIcon({ icon, isActive }: { icon: string; isActive: boolean }) {
-  const className = `w-5 h-5 ${isActive ? 'text-primary-400' : 'text-surface-500'}`;
+  const className = `w-5 h-5 ${isActive ? 'text-action' : 'text-ink-3'}`;
 
   switch (icon) {
     case 'share':

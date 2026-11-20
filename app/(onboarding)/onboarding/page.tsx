@@ -1,5 +1,6 @@
 'use client';
 
+import { IconApple, IconBarbell, IconChartLine, IconRuler2, IconSparkles, IconWorld } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -32,10 +33,10 @@ const feetInchesToInches = (feet: number, inches: number) => {
 // Body fat visual reference with clickable values
 const BODY_FAT_OPTIONS = {
   male: [
-    { value: 9, label: '9%', description: 'Hard Abs' },
-    { value: 12, label: '12%', description: 'Faint Abs' },
-    { value: 15, label: '15%', description: 'Flat Stomach' },
-    { value: 20, label: '20%', description: 'Soft Everything' },
+    { value: 9, label: '9%', description: 'Hard abs' },
+    { value: 12, label: '12%', description: 'Faint abs' },
+    { value: 15, label: '15%', description: 'Flat stomach' },
+    { value: 20, label: '20%', description: 'Soft everything' },
   ],
   female: [
     { value: 16, label: '16%', description: 'Very lean, visible abs' },
@@ -273,49 +274,49 @@ export default function OnboardingBodyCompPage() {
             <div key={s} className="flex items-center">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                 s === 1 
-                  ? 'bg-primary-500 text-white' 
-                  : 'bg-surface-800 text-surface-500'
+                  ? 'bg-action text-on-action' 
+                  : 'bg-fill text-ink-3'
               }`}>
                 {s}
               </div>
               {s < 4 && (
-                <div className="w-12 h-0.5 bg-surface-800" />
+                <div className="w-12 h-0.5 bg-fill" />
               )}
             </div>
           ))}
         </div>
         
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-surface-100 mb-2">Welcome to HyperTrack!</h1>
-          <p className="text-surface-400 mb-6">
+          <h1 className="text-large-title font-bold text-ink mb-2">Welcome to HyperTrack!</h1>
+          <p className="text-ink-2 mb-6">
             Your AI-powered hypertrophy training and nutrition companion.
           </p>
           
           {/* Feature highlights */}
           <div className="grid grid-cols-2 gap-3 mb-6 text-left">
-            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
-              <span className="text-lg">🏋️</span>
-              <p className="text-sm font-medium text-surface-200 mt-1">Smart Workouts</p>
-              <p className="text-xs text-surface-500">AI mesocycle planning</p>
+            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
+              <IconBarbell size={20} className="text-action" aria-hidden="true" />
+              <p className="text-body font-medium text-ink mt-1">Smart workouts</p>
+              <p className="text-caption text-ink-3">AI mesocycle planning</p>
             </div>
-            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
-              <span className="text-lg">🍎</span>
-              <p className="text-sm font-medium text-surface-200 mt-1">Nutrition Tracking</p>
-              <p className="text-xs text-surface-500">300K+ food database</p>
+            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
+              <IconApple size={20} className="text-action" aria-hidden="true" />
+              <p className="text-body font-medium text-ink mt-1">Nutrition tracking</p>
+              <p className="text-caption text-ink-3">300K+ food database</p>
             </div>
-            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
-              <span className="text-lg">🤖</span>
-              <p className="text-sm font-medium text-surface-200 mt-1">AI Coaching</p>
-              <p className="text-xs text-surface-500">Personalized advice</p>
+            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
+              <IconSparkles size={20} className="text-action" aria-hidden="true" />
+              <p className="text-body font-medium text-ink mt-1">AI coaching</p>
+              <p className="text-caption text-ink-3">Personalized advice</p>
             </div>
-            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
-              <span className="text-lg">📊</span>
-              <p className="text-sm font-medium text-surface-200 mt-1">Body Analytics</p>
-              <p className="text-xs text-surface-500">DEXA & FFMI tracking</p>
+            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
+              <IconChartLine size={20} className="text-action" aria-hidden="true" />
+              <p className="text-body font-medium text-ink mt-1">Body analytics</p>
+              <p className="text-caption text-ink-3">DEXA & FFMI tracking</p>
             </div>
           </div>
           
-          <p className="text-surface-400">
+          <p className="text-ink-2">
             First, which measurement system do you prefer?
           </p>
         </div>
@@ -327,14 +328,14 @@ export default function OnboardingBodyCompPage() {
                 onClick={() => setSelectedUnits('lb')}
                 className={`p-6 rounded-xl border-2 transition-all ${
                   selectedUnits === 'lb'
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                    ? 'border-action bg-action/10'
+                    : 'border-sep hover:border-sep bg-fill/50'
                 }`}
               >
                 <div className="text-center">
-                  <div className="text-4xl mb-2">🇺🇸</div>
-                  <div className="text-xl font-bold text-surface-100">Imperial</div>
-                  <div className="text-sm text-surface-400 mt-1">lbs, inches</div>
+                  <IconRuler2 size={36} className="mx-auto mb-2 text-action" aria-hidden="true" />
+                  <div className="text-title font-bold text-ink">Imperial</div>
+                  <div className="text-body text-ink-2 mt-1">lbs, inches</div>
                 </div>
               </button>
               
@@ -342,19 +343,19 @@ export default function OnboardingBodyCompPage() {
                 onClick={() => setSelectedUnits('kg')}
                 className={`p-6 rounded-xl border-2 transition-all ${
                   selectedUnits === 'kg'
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                    ? 'border-action bg-action/10'
+                    : 'border-sep hover:border-sep bg-fill/50'
                 }`}
               >
                 <div className="text-center">
-                  <div className="text-4xl mb-2">🌍</div>
-                  <div className="text-xl font-bold text-surface-100">Metric</div>
-                  <div className="text-sm text-surface-400 mt-1">kg, cm</div>
+                  <IconWorld size={36} className="mx-auto mb-2 text-action" aria-hidden="true" />
+                  <div className="text-title font-bold text-ink">Metric</div>
+                  <div className="text-body text-ink-2 mt-1">kg, cm</div>
                 </div>
               </button>
             </div>
             
-            <p className="text-xs text-surface-500 text-center mt-4">
+            <p className="text-caption text-ink-3 text-center mt-4">
               You can change this anytime in Settings
             </p>
           </CardContent>
@@ -396,28 +397,28 @@ export default function OnboardingBodyCompPage() {
             <div key={s} className="flex items-center">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                 s <= 2
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-800 text-surface-500'
+                  ? 'bg-action text-on-action'
+                  : 'bg-fill text-ink-3'
               }`}>
                 {s}
               </div>
               {s < 4 && (
-                <div className={`w-12 h-0.5 ${s < 2 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+                <div className={`w-12 h-0.5 ${s < 2 ? 'bg-action' : 'bg-fill'}`} />
               )}
             </div>
           ))}
         </div>
 
         <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-surface-100 mb-2">What&apos;s your goal right now?</h1>
-          <p className="text-surface-400">
+          <h1 className="text-large-title font-bold text-ink mb-2">What&apos;s your goal right now?</h1>
+          <p className="text-ink-2">
             This sets your training phase — it shapes your program&apos;s volume, rep ranges, and nutrition targets.
           </p>
         </div>
 
         {recommended && (
-          <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-            <p className="text-sm text-primary-300">
+          <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
+            <p className="text-body text-action">
               At ~{bf.toFixed(0)}% body fat, {recommended === 'cut'
                 ? 'a cut is a strong starting point — you’ll keep your muscle while improving your muscle-to-fat ratio.'
                 : 'you’re lean enough to bulk effectively — extra calories will go toward muscle, not fat.'}
@@ -436,25 +437,25 @@ export default function OnboardingBodyCompPage() {
                 aria-pressed={isSelected}
                 className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
                   isSelected
-                    ? 'bg-primary-500/10 border-primary-500'
-                    : 'bg-surface-900 border-surface-800 hover:border-surface-700'
+                    ? 'bg-action/10 border-action'
+                    : 'bg-card border-sep hover:border-sep'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-surface-100">{option.label}</span>
+                  <span className="font-semibold text-ink">{option.label}</span>
                   {recommended === option.value && (
-                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-success-500/10 text-success-400">
+                    <span className="text-caption font-medium px-2 py-0.5 rounded-full bg-status-ok/10 text-status-ok">
                       Recommended
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-surface-400 mt-1">{option.description}</p>
+                <p className="text-body text-ink-2 mt-1">{option.description}</p>
               </button>
             );
           })}
         </div>
 
-        <p className="text-xs text-surface-500 text-center">
+        <p className="text-caption text-ink-3 text-center">
           You can change this anytime from the phase chip on your dashboard.
         </p>
 
@@ -468,7 +469,7 @@ export default function OnboardingBodyCompPage() {
             disabled={isLoading}
             isLoading={isLoading}
           >
-            Continue to Strength Testing
+            Continue to strength testing
             <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
@@ -486,21 +487,21 @@ export default function OnboardingBodyCompPage() {
           <div key={s} className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
               s <= 2 
-                ? 'bg-primary-500 text-white' 
-                : 'bg-surface-800 text-surface-500'
+                ? 'bg-action text-on-action' 
+                : 'bg-fill text-ink-3'
             }`}>
               {s}
             </div>
             {s < 4 && (
-              <div className={`w-12 h-0.5 ${s < 2 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+              <div className={`w-12 h-0.5 ${s < 2 ? 'bg-action' : 'bg-fill'}`} />
             )}
           </div>
         ))}
       </div>
       
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-surface-100 mb-2">Body Composition</h1>
-        <p className="text-surface-400">
+        <h1 className="text-large-title font-bold text-ink mb-2">Body composition</h1>
+        <p className="text-ink-2">
           Let&apos;s understand your body composition to personalize your training.
         </p>
       </div>
@@ -515,17 +516,17 @@ export default function OnboardingBodyCompPage() {
       
       {/* DEXA data notice */}
       {existingDexa && !useDexa && (
-        <Card className="bg-primary-500/10 border-primary-500/30">
+        <Card className="bg-action/10 border-action/30">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-primary-400">DEXA Scan Data Found!</p>
-                <p className="text-sm text-surface-400">
+                <p className="font-medium text-action">DEXA Scan Data Found!</p>
+                <p className="text-body text-ink-2">
                   We found your DEXA scan: {existingDexa.weight_kg}kg, {existingDexa.body_fat_percent.toFixed(1)}% body fat
                 </p>
               </div>
               <Button variant="primary" size="sm" onClick={handleUseDexa}>
-                Use DEXA Data
+                Use DEXA data
               </Button>
             </div>
           </CardContent>
@@ -536,7 +537,7 @@ export default function OnboardingBodyCompPage() {
         {/* Input form */}
         <Card>
           <CardHeader>
-            <CardTitle>Body Composition</CardTitle>
+            <CardTitle>Body composition</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <Select
@@ -552,7 +553,7 @@ export default function OnboardingBodyCompPage() {
             
             {units === 'lb' ? (
               <div>
-                <label className="block text-sm font-medium text-surface-200 mb-2">Height</label>
+                <label className="block text-body font-medium text-ink mb-2">Height</label>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <Input
@@ -563,7 +564,7 @@ export default function OnboardingBodyCompPage() {
                       min={3}
                       max={8}
                     />
-                    <span className="text-xs text-surface-500 mt-1 block text-center">feet</span>
+                    <span className="text-caption text-ink-3 mt-1 block text-center">feet</span>
                   </div>
                   <div className="flex-1">
                     <Input
@@ -574,7 +575,7 @@ export default function OnboardingBodyCompPage() {
                       min={0}
                       max={11}
                     />
-                    <span className="text-xs text-surface-500 mt-1 block text-center">inches</span>
+                    <span className="text-caption text-ink-3 mt-1 block text-center">inches</span>
                   </div>
                 </div>
               </div>
@@ -610,7 +611,7 @@ export default function OnboardingBodyCompPage() {
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <Input
-                    label="Body Fat %"
+                    label="Body fat %"
                     type="number"
                     value={useDexa && existingDexa ? String(existingDexa.body_fat_percent) : bodyFatPercent}
                     onChange={(e) => {
@@ -633,15 +634,15 @@ export default function OnboardingBodyCompPage() {
                     onClick={() => setShowBodyFatGuide(!showBodyFatGuide)}
                     className="mb-1"
                   >
-                    {showBodyFatGuide ? 'Hide Guide' : '📷 Visual Guide'}
+                    {showBodyFatGuide ? 'Hide guide' : 'Visual guide'}
                   </Button>
                 )}
               </div>
               
               {/* Body fat visual guide */}
               {!useDexa && showBodyFatGuide && (
-                <div className="mt-3 p-4 bg-surface-800/50 rounded-lg border border-surface-700">
-                  <p className="text-sm font-medium text-surface-200 mb-3">
+                <div className="mt-3 p-4 bg-fill/50 rounded-lg border border-sep">
+                  <p className="text-body font-medium text-ink mb-3">
                     Tap a body fat level that looks closest to you ({sex === 'male' ? 'Male' : 'Female'}):
                   </p>
                   
@@ -671,12 +672,12 @@ export default function OnboardingBodyCompPage() {
                             }}
                             className={`p-2 rounded-lg text-center transition-all ${
                               bodyFatPercent === String(option.value)
-                                ? 'bg-primary-500 text-white'
-                                : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
+                                ? 'bg-action text-on-action'
+                                : 'bg-sep hover:bg-sep text-ink'
                             }`}
                           >
-                            <p className="text-lg font-bold">{option.label}</p>
-                            <p className="text-xs opacity-75">{option.description}</p>
+                            <p className="text-headline font-bold">{option.label}</p>
+                            <p className="text-caption opacity-75">{option.description}</p>
                           </button>
                         ))}
                       </div>
@@ -707,19 +708,19 @@ export default function OnboardingBodyCompPage() {
                             }}
                             className={`p-2 rounded-lg text-center transition-all ${
                               bodyFatPercent === String(option.value)
-                                ? 'bg-primary-500 text-white'
-                                : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
+                                ? 'bg-action text-on-action'
+                                : 'bg-sep hover:bg-sep text-ink'
                             }`}
                           >
-                            <p className="text-lg font-bold">{option.label}</p>
-                            <p className="text-xs opacity-75">{option.description}</p>
+                            <p className="text-headline font-bold">{option.label}</p>
+                            <p className="text-caption opacity-75">{option.description}</p>
                           </button>
                         ))}
                       </div>
                     </>
                   )}
                   
-                  <p className="text-xs text-surface-500 mt-3 text-center">
+                  <p className="text-caption text-ink-3 mt-3 text-center">
                     Don&apos;t worry about being exact — an estimate is fine!
                   </p>
                 </div>
@@ -731,51 +732,51 @@ export default function OnboardingBodyCompPage() {
         {/* Results preview */}
         <Card>
           <CardHeader>
-            <CardTitle>Your Metrics</CardTitle>
+            <CardTitle>Your metrics</CardTitle>
           </CardHeader>
           <CardContent>
             {bodyComp ? (
               <div className="space-y-6">
                 {/* FFMI display */}
-                <div className="text-center p-6 bg-surface-800/50 rounded-xl">
-                  <p className="text-sm text-surface-500 mb-1">
+                <div className="text-center p-6 bg-fill/50 rounded-xl">
+                  <p className="text-body text-ink-3 mb-1">
                     <ExplainedTerm term="FFMI" />
                   </p>
-                  <p className="text-5xl font-bold text-surface-100 mb-2">{bodyComp.ffmi.toFixed(1)}</p>
+                  <p className="text-5xl font-bold text-ink mb-2">{bodyComp.ffmi.toFixed(1)}</p>
                   <p className={`text-sm font-medium capitalize ${
-                    bodyComp.ffmiBracket === 'elite' ? 'text-accent-400' :
-                    bodyComp.ffmiBracket === 'excellent' ? 'text-primary-400' :
-                    bodyComp.ffmiBracket === 'above_average' ? 'text-success-400' :
+                    bodyComp.ffmiBracket === 'elite' ? 'text-action' :
+                    bodyComp.ffmiBracket === 'excellent' ? 'text-action' :
+                    bodyComp.ffmiBracket === 'above_average' ? 'text-status-ok' :
                     bodyComp.ffmiBracket === 'average' ? 'text-info-400' :
-                    'text-surface-400'
+                    'text-ink-2'
                   }`}>
                     {bodyComp.ffmiBracket.replace('_', ' ')}
                   </p>
                 </div>
                 
                 {/* Assessment with beginner-friendly context */}
-                <div className="p-3 bg-surface-800/30 rounded-lg border border-surface-700">
-                  <p className="text-sm text-surface-300 mb-2">
+                <div className="p-3 bg-fill/30 rounded-lg border border-sep">
+                  <p className="text-body text-ink-2 mb-2">
                     {bodyComp.ffmiAssessment}
                   </p>
-                  <p className="text-xs text-surface-500">
+                  <p className="text-caption text-ink-3">
                     This helps us understand your current muscle development and set realistic goals.
                   </p>
                 </div>
                 
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-surface-800/50 rounded-lg text-center">
-                    <p className="text-xs text-surface-500">Lean Mass</p>
-                    <p className="text-lg font-semibold text-surface-200">
+                  <div className="p-3 bg-fill/50 rounded-lg text-center">
+                    <p className="text-caption text-ink-3">Lean mass</p>
+                    <p className="text-headline font-semibold text-ink">
                       {units === 'lb' 
                         ? `${kgToLbs(bodyComp.leanMassKg).toFixed(1)} lbs`
                         : `${bodyComp.leanMassKg.toFixed(1)} kg`}
                     </p>
                   </div>
-                  <div className="p-3 bg-surface-800/50 rounded-lg text-center">
-                    <p className="text-xs text-surface-500">Fat Mass</p>
-                    <p className="text-lg font-semibold text-surface-200">
+                  <div className="p-3 bg-fill/50 rounded-lg text-center">
+                    <p className="text-caption text-ink-3">Fat mass</p>
+                    <p className="text-headline font-semibold text-ink">
                       {(() => {
                         const totalWeight = useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg();
                         const fatMass = totalWeight - bodyComp.leanMassKg;
@@ -789,10 +790,10 @@ export default function OnboardingBodyCompPage() {
                 
                 {/* FFMI scale */}
                 <div className="space-y-2">
-                  <p className="text-xs text-surface-500">FFMI Scale ({sex === 'male' ? 'Men' : 'Women'})</p>
-                  <div className="h-3 bg-surface-800 rounded-full overflow-hidden relative">
+                  <p className="text-caption text-ink-3">FFMI Scale ({sex === 'male' ? 'Men' : 'Women'})</p>
+                  <div className="h-3 bg-fill rounded-full overflow-hidden relative">
                     <div 
-                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-surface-600 via-success-500 to-accent-500"
+                      className="absolute top-0 left-0 h-full bg-sep "
                       style={{ width: '100%' }}
                     />
                     {/* Marker */}
@@ -804,7 +805,7 @@ export default function OnboardingBodyCompPage() {
                       }}
                     />
                   </div>
-                  <div className="flex justify-between text-xs text-surface-500">
+                  <div className="flex justify-between text-caption text-ink-3">
                     <span>15</span>
                     <span>18</span>
                     <span>21</span>
@@ -814,8 +815,8 @@ export default function OnboardingBodyCompPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center py-12 text-surface-500">
-                <svg className="w-12 h-12 mx-auto mb-3 text-surface-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="text-center py-12 text-ink-3">
+                <svg className="w-12 h-12 mx-auto mb-3 text-ink-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 <p>Enter your measurements to see your metrics</p>
@@ -828,7 +829,7 @@ export default function OnboardingBodyCompPage() {
       {/* Continue button */}
       <div className="flex flex-col items-end gap-2 pt-4">
         {missingBodyComp.length > 0 && (
-          <p className="text-xs text-surface-400 text-right" data-testid="body-comp-missing">
+          <p className="text-caption text-ink-2 text-right" data-testid="body-comp-missing">
             Add your {missingBodyComp.join(', ').replace(/, ([^,]*)$/, ' and $1')} to continue.
             {missingBodyComp.includes('body-fat estimate') &&
               ' Not sure of your body fat? Tap Visual Guide and pick the closest look.'}

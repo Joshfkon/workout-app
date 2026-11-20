@@ -217,7 +217,7 @@ function ProfileSetupContent() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -232,10 +232,10 @@ function ProfileSetupContent() {
           <div key={step} className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
               step <= 4
-                ? 'bg-primary-500 text-white'
+                ? 'bg-action text-on-action'
                 : step === 5
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-800 text-surface-500'
+                  ? 'bg-action text-on-action'
+                  : 'bg-fill text-ink-3'
             }`}>
               {step < 5 ? (
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -246,23 +246,23 @@ function ProfileSetupContent() {
               )}
             </div>
             {step < 5 && (
-              <div className={`w-12 h-0.5 ${step < 5 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+              <div className={`w-12 h-0.5 ${step < 5 ? 'bg-action' : 'bg-fill'}`} />
             )}
           </div>
         ))}
       </div>
 
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-surface-100 mb-2">Set Up Your Profile</h1>
-        <p className="text-surface-400">
+        <h1 className="text-large-title font-bold text-ink mb-2">Set up your profile</h1>
+        <p className="text-ink-2">
           Customize your profile to connect with other lifters
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Profile Details</CardTitle>
-          <p className="text-surface-400 text-sm mt-1">
+          <CardTitle>Profile details</CardTitle>
+          <p className="text-ink-2 text-body mt-1">
             {hasAnonymousUsername
               ? "We've created a temporary username for you. Personalize it below!"
               : "Update your profile information"}
@@ -279,14 +279,14 @@ function ProfileSetupContent() {
                 onChange={(e) => handleUsernameChange(e.target.value)}
                 placeholder="your_username"
                 error={usernameError || undefined}
-                leftIcon={<span className="text-surface-500">@</span>}
+                leftIcon={<span className="text-ink-3">@</span>}
                 rightIcon={
                   checkingUsername ? (
-                    <div className="animate-spin h-4 w-4 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+                    <div className="animate-spin h-4 w-4 border-2 border-ink-3 border-t-action rounded-full" />
                   ) : usernameAvailable === true ? (
-                    <span className="text-success-500">&#10003;</span>
+                    <span className="text-status-ok">&#10003;</span>
                   ) : usernameAvailable === false ? (
-                    <span className="text-danger-500">&#10007;</span>
+                    <span className="text-status-bad">&#10007;</span>
                   ) : null
                 }
                 hint="3-30 characters, letters, numbers, and underscores only"
@@ -295,14 +295,14 @@ function ProfileSetupContent() {
               {/* Suggestions - show if they have an anonymous username or no username entered */}
               {suggestions.length > 0 && (hasAnonymousUsername || !username) && (
                 <div className="mt-3">
-                  <p className="text-xs text-surface-400 mb-2">Suggestions:</p>
+                  <p className="text-caption text-ink-2 mb-2">Suggestions:</p>
                   <div className="flex flex-wrap gap-2">
                     {suggestions.map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion)}
-                        className="px-3 py-1 text-sm bg-surface-800 hover:bg-surface-700 text-surface-300 rounded-full transition-colors"
+                        className="px-3 py-1 text-body bg-fill hover:bg-sep text-ink-2 rounded-full transition-colors"
                       >
                         @{suggestion}
                       </button>
@@ -314,16 +314,16 @@ function ProfileSetupContent() {
 
             {/* Display Name */}
             <Input
-              label="Display Name"
+              label="Display name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Your Name"
+              placeholder="Your name"
               hint="Optional - shown on your profile"
             />
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-medium text-surface-200 mb-1.5">
+              <label className="block text-body font-medium text-ink mb-1.5">
                 Bio
               </label>
               <textarea
@@ -331,19 +331,19 @@ function ProfileSetupContent() {
                 onChange={(e) => setBio(e.target.value.slice(0, 500))}
                 placeholder="Tell others about yourself..."
                 rows={3}
-                className="w-full rounded-lg bg-surface-800 border border-surface-700 px-4 py-2.5
-                  text-surface-100 placeholder:text-surface-500
-                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                className="w-full rounded-lg bg-fill border border-sep px-4 py-2.5
+                  text-ink placeholder:text-ink-3
+                  focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent
                   transition-all duration-200 resize-none"
               />
-              <p className="mt-1 text-xs text-surface-500 text-right">
+              <p className="mt-1 text-caption text-ink-3 text-right">
                 {bio.length}/500
               </p>
             </div>
 
             {/* Training Experience */}
             <Select
-              label="Training Experience"
+              label="Training experience"
               value={trainingExperience}
               onChange={(e) => setTrainingExperience(e.target.value as TrainingExperience | '')}
               placeholder="Select your experience level"
@@ -372,7 +372,7 @@ function ProfileSetupContent() {
                 className="flex-1"
                 onClick={handleSkip}
               >
-                Skip for Now
+                Skip for now
               </Button>
               <Button
                 type="submit"
@@ -381,11 +381,11 @@ function ProfileSetupContent() {
                 disabled={!username || !usernameAvailable || saving}
                 isLoading={saving}
               >
-                Save & Continue
+                Save & continue
               </Button>
             </div>
 
-            <p className="text-xs text-surface-500 text-center">
+            <p className="text-caption text-ink-3 text-center">
               You can update these settings anytime in your profile
             </p>
           </form>
@@ -399,7 +399,7 @@ export default function ProfileSetupPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     }>
       <ProfileSetupContent />

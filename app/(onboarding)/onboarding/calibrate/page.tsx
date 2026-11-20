@@ -25,7 +25,7 @@ function PercentileBar({ percentile, label }: { percentile: number; label: strin
   
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-surface-400">
+      <div className="flex justify-between text-caption text-ink-2">
         <span>{label}</span>
         <span>{percentile}th</span>
       </div>
@@ -315,7 +315,7 @@ function CalibrateContent() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -333,7 +333,7 @@ function CalibrateContent() {
       <Modal
         isOpen={showRPEModal}
         onClose={handleRPETutorialComplete}
-        title="Understanding Effort Levels"
+        title="Understanding effort levels"
         size="lg"
         showCloseButton={false}
       >
@@ -350,8 +350,8 @@ function CalibrateContent() {
           <div key={step} className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
               step <= 3 
-                ? 'bg-primary-500 text-white' 
-                : 'bg-surface-800 text-surface-500'
+                ? 'bg-action text-on-action' 
+                : 'bg-fill text-ink-3'
             }`}>
               {step < 3 ? (
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -360,7 +360,7 @@ function CalibrateContent() {
               ) : step}
             </div>
             {step < 4 && (
-              <div className={`w-12 h-0.5 ${step < 3 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+              <div className={`w-12 h-0.5 ${step < 3 ? 'bg-action' : 'bg-fill'}`} />
             )}
           </div>
         ))}
@@ -378,18 +378,18 @@ function CalibrateContent() {
 
       {/* Test progress */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-surface-200">
+        <h2 className="text-headline font-semibold text-ink">
           {isComplete ? 'All Tests Complete!' : `Testing: ${currentBenchmark?.name}`}
         </h2>
-        <span className="text-sm text-surface-400">
+        <span className="text-body text-ink-2">
           {completedResults.length} / {orderedBenchmarks.length} complete
         </span>
       </div>
       
       {/* Progress bar */}
-      <div className="h-2 bg-surface-800 rounded-full overflow-hidden mb-8">
+      <div className="h-2 bg-fill rounded-full overflow-hidden mb-8">
         <div 
-          className="h-full bg-primary-500 transition-all duration-300"
+          className="h-full bg-action transition-all duration-300"
           style={{ width: `${(completedResults.length / orderedBenchmarks.length) * 100}%` }}
         />
       </div>
@@ -397,15 +397,15 @@ function CalibrateContent() {
       {isComplete ? (
         // Completion summary
         <div className="space-y-6">
-          <Card className="bg-success-500/10 border-success-500/30">
+          <Card className="bg-status-ok/10 border-status-ok/30">
             <CardContent className="p-6 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success-500/20 flex items-center justify-center">
-                <svg className="w-8 h-8 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-status-ok/20 flex items-center justify-center">
+                <svg className="w-8 h-8 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-surface-100 mb-2">Testing Complete!</h2>
-              <p className="text-surface-400">
+              <h2 className="text-title font-bold text-ink mb-2">Testing Complete!</h2>
+              <p className="text-ink-2">
                 You&apos;ve tested {completedResults.length} lifts. Let&apos;s see your strength profile.
               </p>
             </CardContent>
@@ -414,12 +414,12 @@ function CalibrateContent() {
           {/* Quick results summary */}
           <div className="grid gap-3">
             {completedResults.map((result) => (
-              <Card key={result.benchmarkId} className="bg-surface-900">
+              <Card key={result.benchmarkId} className="bg-card">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-surface-200">{result.lift}</p>
-                      <p className="text-sm text-surface-500">
+                      <p className="font-medium text-ink">{result.lift}</p>
+                      <p className="text-body text-ink-3">
                         {displayWeight(result.testedWeight)} {weightUnit} × {result.testedReps} = {displayWeight(result.estimated1RM)} {weightUnit} E1RM
                       </p>
                     </div>
@@ -438,7 +438,7 @@ function CalibrateContent() {
               onClick={handleFinish}
               isLoading={isSaving}
             >
-              View My Strength Profile
+              View my strength profile
               <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
@@ -457,20 +457,20 @@ function CalibrateContent() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-surface-400">{currentBenchmark.description}</p>
+              <p className="text-ink-2">{currentBenchmark.description}</p>
               
               {/* Testing protocol */}
-              <div className="p-4 bg-surface-800/50 rounded-lg">
-                <h4 className="font-medium text-surface-200 mb-2">Testing Protocol</h4>
-                <p className="text-sm text-surface-400 whitespace-pre-line">
+              <div className="p-4 bg-fill/50 rounded-lg">
+                <h4 className="font-medium text-ink mb-2">Testing protocol</h4>
+                <p className="text-body text-ink-2 whitespace-pre-line">
                   {currentBenchmark.testingProtocol.instructions}
                 </p>
               </div>
               
               {/* Warmup protocol */}
               <div>
-                <h4 className="font-medium text-surface-200 mb-2">Warmup Sets</h4>
-                <p className="text-xs text-surface-500 mb-2">
+                <h4 className="font-medium text-ink mb-2">Warmup sets</h4>
+                <p className="text-caption text-ink-3 mb-2">
                   Based on suggested working weight of ~{getSuggestedWeight()} {weightUnit}
                 </p>
                 <div className="space-y-2">
@@ -478,11 +478,11 @@ function CalibrateContent() {
                     const increment = units === 'lb' ? 5 : 2.5;
                     const warmupWeight = Math.round(getSuggestedWeight() * warmup.percentOfWorking / increment) * increment;
                     return (
-                      <div key={i} className="flex items-center justify-between p-2 bg-surface-800 rounded text-sm">
-                        <span className="text-surface-300">
+                      <div key={i} className="flex items-center justify-between p-2 bg-fill rounded text-body">
+                        <span className="text-ink-2">
                           Set {i + 1}: {warmupWeight > 0 ? `${warmupWeight} ${weightUnit}` : 'Bar only'} × {warmup.reps}
                         </span>
-                        <span className="text-surface-500">Rest {warmup.rest}s</span>
+                        <span className="text-ink-3">Rest {warmup.rest}s</span>
                       </div>
                     );
                   })}
@@ -491,9 +491,9 @@ function CalibrateContent() {
               
               {/* Safety warnings */}
               {currentBenchmark.testingProtocol.safetyWarnings.length > 0 && (
-                <div className="p-3 bg-warning-500/10 border border-warning-500/30 rounded-lg">
-                  <h4 className="font-medium text-warning-400 mb-1">⚠️ Safety Notes</h4>
-                  <ul className="text-sm text-surface-400 space-y-1">
+                <div className="p-3 bg-status-warn/10 border border-status-warn/30 rounded-lg">
+                  <h4 className="font-medium text-status-warn mb-1">Safety notes</h4>
+                  <ul className="text-body text-ink-2 space-y-1">
                     {currentBenchmark.testingProtocol.safetyWarnings.map((warning, i) => (
                       <li key={i}>• {warning}</li>
                     ))}
@@ -506,13 +506,13 @@ function CalibrateContent() {
           {/* Input panel */}
           <Card>
             <CardHeader>
-              <CardTitle>Record Your Result</CardTitle>
+              <CardTitle>Record your result</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {currentBenchmark.id === 'pullup' ? (
                 // Pull-up specific input
                 <Input
-                  label="Total Reps Completed"
+                  label="Total reps completed"
                   type="number"
                   value={reps}
                   onChange={(e) => setReps(e.target.value)}
@@ -536,7 +536,7 @@ function CalibrateContent() {
                   />
                   
                   <Input
-                    label="Reps Completed"
+                    label="Reps completed"
                     type="number"
                     value={reps}
                     onChange={(e) => setReps(e.target.value)}
@@ -546,7 +546,7 @@ function CalibrateContent() {
                   />
                   
                   <div>
-                    <label className="block text-sm font-medium text-surface-300 mb-2">
+                    <label className="block text-body font-medium text-ink-2 mb-2">
                       RPE (Rate of Perceived Exertion)
                     </label>
                     <div className="grid grid-cols-5 gap-2">
@@ -557,12 +557,12 @@ function CalibrateContent() {
                           onClick={() => setRpe(String(val))}
                           className={`p-3 rounded-lg text-center transition-colors ${
                             rpe === String(val)
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                              ? 'bg-action text-on-action'
+                              : 'bg-fill text-ink-2 hover:bg-sep'
                           }`}
                         >
-                          <span className="block text-lg font-bold">{val}</span>
-                          <span className="text-xs">
+                          <span className="block text-headline font-bold">{val}</span>
+                          <span className="text-caption">
                             {val === 6 && '4+ left'}
                             {val === 7 && '3 left'}
                             {val === 8 && '2 left'}
@@ -578,12 +578,12 @@ function CalibrateContent() {
               
               {/* Result preview */}
               {currentResult && (
-                <div className="p-4 bg-surface-800/50 rounded-xl space-y-4 mt-6">
+                <div className="p-4 bg-fill/50 rounded-xl space-y-4 mt-6">
                   <div className="text-center">
-                    <p className="text-sm text-surface-500">
+                    <p className="text-body text-ink-3">
                       <ExplainedTerm term="E1RM" />
                     </p>
-                    <p className="text-4xl font-bold text-surface-100">
+                    <p className="text-4xl font-bold text-ink">
                       {currentBenchmark.id === 'pullup'
                         ? `${currentResult.testedReps} reps`
                         : `${displayWeight(currentResult.estimated1RM)} ${weightUnit}`}
@@ -597,27 +597,27 @@ function CalibrateContent() {
                   </div>
 
                   {/* Percentile explanation */}
-                  <div className="text-center text-xs text-surface-400 border-t border-surface-700 pt-3">
+                  <div className="text-center text-caption text-ink-2 border-t border-sep pt-3">
                     <ExplainedTerm term="PERCENTILE" /> rankings show how you compare to others
                   </div>
 
                   <div className="space-y-3">
                     <PercentileBar
                       percentile={currentResult.percentileScore.vsGeneralPopulation}
-                      label="vs General Population"
+                      label="vs general population"
                     />
                     <PercentileBar
                       percentile={currentResult.percentileScore.vsTrainedPopulation}
-                      label="vs Trained Lifters"
+                      label="vs trained lifters"
                     />
                     <PercentileBar
                       percentile={currentResult.percentileScore.vsBodyComposition}
-                      label="vs Similar Body Comp"
+                      label="vs similar body comp"
                     />
                   </div>
 
                   {/* Interpretation helper */}
-                  <p className="text-xs text-surface-500 text-center pt-2">
+                  <p className="text-caption text-ink-3 text-center pt-2">
                     {currentResult.percentileScore.vsTrainedPopulation >= 75
                       ? "Great! You're stronger than most trained lifters."
                       : currentResult.percentileScore.vsTrainedPopulation >= 50
@@ -636,14 +636,14 @@ function CalibrateContent() {
               >
                 {currentIndex < orderedBenchmarks.length - 1 ? (
                   <>
-                    Save & Next Exercise
+                    Save & next exercise
                     <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
                   </>
                 ) : (
                   <>
-                    Save & Finish
+                    Save & finish
                     <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
@@ -680,7 +680,7 @@ function CalibrateContent() {
             <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
             </svg>
-            Back to Selection
+            Back to selection
           </Button>
         </div>
       )}
@@ -692,7 +692,7 @@ export default function CalibratePage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     }>
       <CalibrateContent />

@@ -81,15 +81,15 @@ function EnhancedModeContent() {
           <div
             key={step}
             className={`w-2 h-2 rounded-full ${
-              step <= 5 ? 'bg-primary-500' : 'bg-surface-700'
+              step <= 5 ? 'bg-action' : 'bg-sep'
             }`}
           />
         ))}
       </div>
 
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-surface-100">Enhanced Athlete Mode</h1>
-        <p className="mt-2 text-surface-400 max-w-md mx-auto">
+        <h1 className="text-title font-bold text-ink">Enhanced athlete mode</h1>
+        <p className="mt-2 text-ink-2 max-w-md mx-auto">
           PEDs significantly increase recovery capacity. HyperTrack raises your volume
           ceiling accordingly. Joint-stress limits stay unchanged to protect connective
           tissue. You can change this anytime in Settings.
@@ -100,8 +100,8 @@ function EnhancedModeContent() {
         <CardContent>
           <div className="flex items-center justify-between gap-4 py-2">
             <div>
-              <p className="text-sm font-medium text-surface-100">I use performance enhancing drugs</p>
-              <p className="text-xs text-surface-500 mt-0.5">
+              <p className="text-body font-medium text-ink">I use performance enhancing drugs</p>
+              <p className="text-caption text-ink-3 mt-0.5">
                 Off by default. This only affects training volume programming.
               </p>
             </div>
@@ -110,7 +110,7 @@ function EnhancedModeContent() {
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-danger-400 text-center">{error}</p>}
+      {error && <p className="text-body text-status-bad text-center">{error}</p>}
 
       <div className="flex flex-col gap-3">
         <Button onClick={handleContinue} isLoading={saving} className="w-full">
@@ -119,7 +119,7 @@ function EnhancedModeContent() {
         <button
           onClick={goToNextStep}
           disabled={saving}
-          className="text-sm text-surface-500 hover:text-surface-300 transition-colors"
+          className="text-body text-ink-3 hover:text-ink-2 transition-colors"
         >
           Skip for now
         </button>
@@ -133,7 +133,7 @@ export default function EnhancedModePage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center min-h-[400px]">
-          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >
