@@ -5,8 +5,9 @@
 
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
-import { LiftDetailScreen, bestPoint } from '../LiftDetailScreen';
+import { LiftDetailScreen, bestPoint, plateauLine } from '../LiftDetailScreen';
 import type { LiftTrend, LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import type { PlateauDetectionResult } from '@/services/plateauDetector';
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ back: jest.fn(), push: jest.fn() }) }));
 jest.mock('@/hooks/useUserPreferences', () => ({
@@ -34,7 +35,22 @@ const bench: LiftTrend = {
   lowConfidence: false,
   calibrationReason: null,
   excludedDates: ['2026-10-11'],
+  plateau: null,
 } as LiftTrend;
+
+const plateau: PlateauDetectionResult = {
+  isPlateaued: true,
+  isCalibrating: false,
+  calibrationReason: null,
+  weeksSinceProgress: 4,
+  lastProgressDate: '2026-10-04',
+  currentE1RM: 107.5,
+  recentPeakE1RM: 112.5,
+  segmentBestE1RM: 112.5,
+  peakE1RM: 112.5,
+  discontinuityDate: null,
+  suggestions: [],
+};
 
 const summary = {
   lifts: [bench],
@@ -91,5 +107,42 @@ describe('LiftDetailScreen', () => {
     mockQuery = { data: undefined, isPending: true };
     render(<LiftDetailScreen seriesKey="bench" />);
     expect(screen.queryByTestId('lift-missing')).not.toBeInTheDocument();
+  });
+
+  it('shows no plateau section for a lift that is progressing', () => {
+    mockQuery = { data: summary, isPending: false };
+    render(<LiftDetailScreen seriesKey="bench" />);
+    expect(screen.queryByTestId('lift-plateau')).not.toBeInTheDocument();
+  });
+
+  it("shows a stalled lift's verdict and every idea, without a tap", () => {
+    const stalled = {
+      ...bench,
+      direction: 'flat',
+      plateau: { ...plateau, suggestions: ['Swap to a close-grip variation for 4 weeks.', 'Add a back-off set.'] },
+    } as LiftTrend;
+    mockQuery = { data: { ...summary, lifts: [stalled] }, isPending: false };
+    render(<LiftDetailScreen seriesKey="bench" />);
+
+    const section = screen.getByTestId('lift-plateau');
+    expect(section).toHaveTextContent('This lift has stalled');
+    expect(section).toHaveTextContent('Flat for 4 weeks · 5.0 kg below your recent best');
+    expect(within(section).getByText('Swap to a close-grip variation for 4 weeks.')).toBeInTheDocument();
+    expect(within(section).getByText('Add a back-off set.')).toBeInTheDocument();
+  });
+
+  it('hides a stall verdict while the lift is calibrating', () => {
+    const calibrating = { ...bench, lowConfidence: true, plateau } as LiftTrend;
+    mockQuery = { data: { ...summary, lifts: [calibrating] }, isPending: false };
+    render(<LiftDetailScreen seriesKey="bench" />);
+    expect(screen.queryByTestId('lift-plateau')).not.toBeInTheDocument();
+  });
+});
+
+describe('plateauLine', () => {
+  it('drops the gap when the lift sits at its recent best', () => {
+    expect(plateauLine({ ...plateau, weeksSinceProgress: 1, currentE1RM: 110, recentPeakE1RM: 110 }, 'kg')).toBe(
+      'Flat for 1 week'
+    );
   });
 });
