@@ -80,7 +80,7 @@ function bodyCompArrow(
   if (ratePerMonth < -threshold) {
     return { icon: '↓', color: risingIsGood ? 'text-danger-400' : 'text-success-400' };
   }
-  return { icon: '→', color: 'text-surface-400' };
+  return { icon: '→', color: 'text-ink-2' };
 }
 
 /** Tiny trend line for the Weight tile (last ~30 days, display unit). */
@@ -97,7 +97,7 @@ function Sparkline({ values }: { values: number[] }) {
     })
     .join(' ');
   return (
-    <svg viewBox="0 0 100 26" className="w-full h-6 mt-1.5 text-primary-400" preserveAspectRatio="none" aria-hidden="true">
+    <svg viewBox="0 0 100 26" className="w-full h-6 mt-1.5 text-action" preserveAspectRatio="none" aria-hidden="true">
       <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
@@ -156,7 +156,7 @@ export function MetricTileGrid({
       ? 'text-warning-400'
       : kcalVerdict.tone === 'orange'
         ? 'text-orange-400'
-        : 'text-surface-500';
+        : 'text-ink-2';
 
   // Lifts sub-line: "3 flat · 2 down · Bench stalled 3 wks" (zero parts omitted).
   const liftParts: string[] = [];
@@ -187,11 +187,11 @@ export function MetricTileGrid({
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {nutritionTargets && (
         <MetricTile icon={IconApple} label="Nutrition" href="/dashboard/nutrition">
-          <div className="text-xl font-semibold text-surface-100">
+          <div className="text-xl font-semibold text-ink">
             {kcalLeft >= 0 ? (
               <>
                 {kcalLeft.toLocaleString()}
-                <span className="text-sm text-surface-500 font-normal"> left</span>
+                <span className="text-sm text-ink-2 font-normal"> left</span>
               </>
             ) : (
               <>
@@ -200,9 +200,9 @@ export function MetricTileGrid({
               </>
             )}
           </div>
-          <div className="h-1 bg-surface-800 rounded-full mt-2 overflow-hidden">
+          <div className="h-1 bg-fill rounded-full mt-2 overflow-hidden">
             <div
-              className="h-full bg-primary-500"
+              className="h-full bg-action"
               style={{ width: `${Math.min(100, (nutritionTotals.calories / Math.max(1, nutritionTargets.calories)) * 100)}%` }}
             />
           </div>
@@ -218,12 +218,12 @@ export function MetricTileGrid({
           {confidentLifts > 0 ? (
             <div className="text-xl font-semibold text-success-400">
               {liftTrends.rising} rising
-              <span className="text-sm text-surface-500 font-normal"> of {confidentLifts}</span>
+              <span className="text-sm text-ink-2 font-normal"> of {confidentLifts}</span>
             </div>
           ) : (
-            <div className="text-xl font-semibold text-surface-100">
+            <div className="text-xl font-semibold text-ink">
               Learning
-              <span className="text-sm text-surface-500 font-normal"> your lifts</span>
+              <span className="text-sm text-ink-2 font-normal"> your lifts</span>
             </div>
           )}
           <div className="flex gap-1 mt-2" aria-hidden="true">
@@ -234,16 +234,16 @@ export function MetricTileGrid({
                 title={`${lift.name}${lift.locationLabel ? ` (${lift.locationLabel})` : ''}: ${lift.lowConfidence ? 'rebuilding (low confidence)' : lift.direction}`}
                 className={`h-1.5 flex-1 rounded-full ${
                   lift.lowConfidence
-                    ? 'bg-surface-700'
-                    : lift.direction === 'rising' ? 'bg-success-500' : lift.direction === 'down' ? 'bg-danger-500' : 'bg-surface-600'
+                    ? 'bg-fill'
+                    : lift.direction === 'rising' ? 'bg-success-500' : lift.direction === 'down' ? 'bg-danger-500' : 'bg-ink-3/50'
                 }`}
               />
             ))}
           </div>
           {confidentLifts > 0 && liftParts.length > 0 ? (
-            <div className="text-[11px] text-surface-500 mt-1.5 truncate">{liftParts.join(' · ')}</div>
+            <div className="text-[11px] text-ink-2 mt-1.5 truncate">{liftParts.join(' · ')}</div>
           ) : confidentLifts === 0 ? (
-            <div className="text-[11px] text-surface-500 mt-1.5 truncate">trends appear after 2–3 sessions</div>
+            <div className="text-[11px] text-ink-2 mt-1.5 truncate">trends appear after 2–3 sessions</div>
           ) : null}
         </MetricTile>
       )}
@@ -254,14 +254,14 @@ export function MetricTileGrid({
           href="/dashboard/volume"
           accent={volume.lowCount > 0 ? 'warning' : undefined}
         >
-          <div className="text-xl font-semibold text-surface-100">
+          <div className="text-xl font-semibold text-ink">
             {/* Effective Volume (RIR-weighted) primary; raw count secondary. */}
             {formatEffectiveVolume(volume.totalEffectiveSets)}
-            <span className="text-sm text-surface-500 font-normal">
+            <span className="text-sm text-ink-2 font-normal">
               {' '}effective / {volume.totalSets} sets
             </span>
           </div>
-          <div className="h-1 bg-surface-800 rounded-full mt-2 overflow-hidden">
+          <div className="h-1 bg-fill rounded-full mt-2 overflow-hidden">
             <div
               className={`h-full ${volume.lowCount > 0 ? 'bg-warning-500' : 'bg-success-500'}`}
               style={{ width: `${Math.min(100, (volume.totalSets / Math.max(1, volume.totalTarget)) * 100)}%` }}
@@ -285,22 +285,22 @@ export function MetricTileGrid({
             <button
               type="button"
               onClick={onLogWeight}
-              className="text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
+              className="text-xs font-medium text-action hover:text-primary-300 transition-colors"
             >
               + log
             </button>
           }
         >
-          <div className="text-xl font-semibold text-surface-100">
+          <div className="text-xl font-semibold text-ink">
             {getDisplayWeight(latestWeight.weight, latestWeight.unit as 'lb' | 'kg' | null, weightUnit).toFixed(1)}
-            <span className="text-sm text-surface-500 font-normal"> {weightUnit}</span>
+            <span className="text-sm text-ink-2 font-normal"> {weightUnit}</span>
           </div>
           <Sparkline values={sparkValues} />
           {weightRate && (
             <div className={`text-[11px] mt-1 ${rateOnTrack ? 'text-success-400' : 'text-warning-400'}`}>
               {signed(weightRate.perWeek)} {weightUnit}/wk
               {weightRate.target !== null && (
-                <span className="text-surface-500"> · target {signed(weightRate.target)}</span>
+                <span className="text-ink-2"> · target {signed(weightRate.target)}</span>
               )}
             </div>
           )}
@@ -319,20 +319,20 @@ export function MetricTileGrid({
             const ffmiArrow = bodyCompArrow(bodyComp.ffmiRatePerMonth, 0.05, true);
             return (
               <>
-                <div className="text-xl font-semibold text-surface-100">
+                <div className="text-xl font-semibold text-ink">
                   {bodyComp.bodyFatPercent.toFixed(1)}
-                  <span className="text-sm text-surface-500 font-normal">% BF</span>
+                  <span className="text-sm text-ink-2 font-normal">% BF</span>
                   <span className={`text-sm ml-1 ${bfArrow.color}`} aria-hidden="true">
                     {bfArrow.icon}
                   </span>
                 </div>
-                <div className="text-sm text-surface-300 mt-1.5">
+                <div className="text-sm text-ink mt-1.5">
                   FFMI {bodyComp.ffmi.toFixed(1)}
                   <span className={`ml-1 ${ffmiArrow.color}`} aria-hidden="true">
                     {ffmiArrow.icon}
                   </span>
                 </div>
-                <div className="text-[11px] text-surface-500 mt-1.5">
+                <div className="text-[11px] text-ink-2 mt-1.5">
                   DEXA-anchored · {bodyComp.scanCount} scans
                 </div>
               </>

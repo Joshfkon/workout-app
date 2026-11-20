@@ -33,6 +33,11 @@ export interface SheetProps {
   ariaLabel?: string;
   /** Sticky footer (e.g. the primary action), kept above the home indicator. */
   footer?: ReactNode;
+  /**
+   * Grouped sheets (iOS "inset grouped") use the canvas grey so cards inside
+   * stand out; plain sheets use the card colour. Default false.
+   */
+  grouped?: boolean;
   'data-testid'?: string;
 }
 
@@ -80,8 +85,10 @@ export function Sheet({
   titleId,
   ariaLabel,
   footer,
+  grouped = false,
   'data-testid': testId,
 }: SheetProps) {
+  const surface = grouped ? 'bg-canvas' : 'bg-card';
   const generatedId = useId();
   const headingId = titleId ?? `sheet-title-${generatedId}`;
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -202,7 +209,8 @@ export function Sheet({
         aria-label={title ? undefined : ariaLabel}
         data-testid={testId}
         className={cn(
-          'relative flex w-full flex-col bg-card text-ink shadow-float',
+          'relative flex w-full flex-col text-ink shadow-float',
+          surface,
           'rounded-t-sheet sm:rounded-card',
           closing ? 'animate-sheet-down sm:animate-fade-out' : 'animate-sheet-up sm:animate-scale-in',
           SIZES[size]
@@ -218,7 +226,7 @@ export function Sheet({
       >
         <div className="flex-shrink-0">
           <div className="flex justify-center pt-2 sm:hidden" aria-hidden="true">
-            <span className="h-[5px] w-9 rounded-full bg-fill" />
+            <span className={cn('h-[5px] w-9 rounded-full', grouped ? 'bg-ink-3/40' : 'bg-fill')} />
           </div>
           {hasHeader && (
             <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-2 sm:pt-4">
@@ -256,7 +264,7 @@ export function Sheet({
 
         {footer && (
           <div
-            className="flex-shrink-0 border-t border-sep px-4 pt-3"
+            className={cn('flex-shrink-0 border-t border-sep px-4 pt-3', surface)}
             style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
           >
             {footer}

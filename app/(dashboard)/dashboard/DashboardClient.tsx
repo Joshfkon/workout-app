@@ -60,7 +60,8 @@ import {
   dismissStandaloneDeloadRecommendation,
   fetchStandaloneDeloadRecommendation,
 } from '@/lib/training/standaloneDeload';
-import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard, useHealthGlance } from '@/components/dashboard/home';
+import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard, useHealthGlance, TodayCard, TodaySheet, NudgeCard, pickHomeNudge } from '@/components/dashboard/home';
+import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
@@ -290,7 +291,7 @@ interface DashboardClientProps {
   initialData?: DashboardInitialData;
 }
 
-type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep' | 'bp';
+type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep' | 'bp' | 'today';
 
 export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
@@ -1520,13 +1521,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const cardioPrescription = nutritionTargets?.cardio_prescription;
   const showCardio = !!cardioPrescription?.needed;
 
-  // Contextual insight cards — each renders only when triggered.
-  const checkInPromptCard = userId && checkInStatus === 'missing' ? (
-    <div className="rounded-xl bg-surface-900 border border-surface-800 p-4 flex items-center justify-between gap-3">
-      <p className="text-[13px] text-surface-300">How are you feeling today?</p>
-      <Button size="sm" onClick={() => setActiveModal('checkin')}>Check in</Button>
-    </div>
-  ) : null;
+  // ── One nudge at a time (design system "one thing per card") ──────────
+  // Priority: an actionable deload decision, then today's check-in, then low
+  // weekly volume; the waist-pace check only gets the slot when nothing else
+  // wants it (it decides for itself whether it has anything to say).
+  const needsCheckIn = !!userId && checkInStatus === 'missing';
 
   // One-shot guidance shown after the user accepts a standalone light week —
   // without a program there is no week to transform, so the advice IS the
@@ -1540,82 +1539,55 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       'Go light and easy: about half the sets at noticeably lighter loads, focusing on smooth technique.',
   };
 
+  const reasonList = (reasons: string[]) =>
+    reasons.length > 0 ? (
+      <ul className="space-y-0.5">
+        {reasons.map((reason) => (
+          <li key={reason} className="text-subhead text-ink-2">
+            {reason}
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
   const mesoDeloadCard = deloadRecommendation && activeMesocycleId ? (
-    <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4">
-      <div className="flex items-start gap-3">
-        <IconAlertTriangle className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
-        <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-medium text-surface-100">
-            Fatigue is high — deload recommended
-          </p>
-          {deloadRecommendation.reasons.length > 0 && (
-            <ul className="mt-1.5 space-y-0.5">
-              {deloadRecommendation.reasons.map((reason) => (
-                <li key={reason} className="text-xs text-surface-400">
-                  {reason}
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="mt-3 flex items-center gap-2">
-            <Button size="sm" onClick={handleAcceptDeload} disabled={isResolvingDeload}>
-              Make next week a deload
-            </Button>
-            <Button size="sm" variant="ghost" onClick={handleDismissDeload} disabled={isResolvingDeload}>
-              Dismiss
-            </Button>
-          </div>
-        </div>
+    <NudgeCard tone="warn" title="Fatigue is high" body="A deload week is recommended">
+      {reasonList(deloadRecommendation.reasons)}
+      <div className="mt-3 flex items-center gap-2">
+        <Button size="sm" onClick={handleAcceptDeload} disabled={isResolvingDeload}>
+          Make next week a deload
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleDismissDeload} disabled={isResolvingDeload}>
+          Dismiss
+        </Button>
       </div>
-    </div>
+    </NudgeCard>
   ) : null;
 
   // Standalone variant (no active mesocycle): same fatigue signals, framed as
   // "take a light week" since there is no program week to regenerate.
   const standaloneDeloadCard =
     !activeMesocycleId && standaloneDeload && userId ? (
-      <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4">
-        <div className="flex items-start gap-3">
-          <IconAlertTriangle className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-medium text-surface-100">
-              Fatigue is high — time for a light week
-            </p>
-            {standaloneDeload.reasons.length > 0 && (
-              <ul className="mt-1.5 space-y-0.5">
-                {standaloneDeload.reasons.map((reason) => (
-                  <li key={reason} className="text-xs text-surface-400">
-                    {reason}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-3 flex items-center gap-2">
-              <Button size="sm" onClick={handleAcceptLightWeek} disabled={isResolvingDeload}>
-                Plan a light week
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleDismissStandaloneDeload}
-                disabled={isResolvingDeload}
-              >
-                Dismiss
-              </Button>
-            </div>
-          </div>
+      <NudgeCard tone="warn" title="Fatigue is high" body="Time for a light week">
+        {reasonList(standaloneDeload.reasons)}
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" onClick={handleAcceptLightWeek} disabled={isResolvingDeload}>
+            Plan a light week
+          </Button>
+          <Button size="sm" variant="ghost" onClick={handleDismissStandaloneDeload} disabled={isResolvingDeload}>
+            Dismiss
+          </Button>
         </div>
-      </div>
+      </NudgeCard>
     ) : null;
 
   const lightWeekPlannedCard =
     !activeMesocycleId && !standaloneDeload && plannedLightWeekType ? (
-      <div className="rounded-xl bg-success-500/10 border border-success-500/20 p-4">
-        <p className="text-[15px] font-medium text-surface-100">Light week planned</p>
-        <p className="mt-1 text-xs text-surface-400">
-          {lightWeekGuidance[plannedLightWeekType]} Your fatigue check-ins restart afterward.
-        </p>
-      </div>
+      <NudgeCard
+        tone="ok"
+        title="Light week planned"
+        body={`${lightWeekGuidance[plannedLightWeekType]} Your fatigue check-ins restart afterward.`}
+      />
     ) : null;
 
   const deloadCard = mesoDeloadCard ?? standaloneDeloadCard ?? lightWeekPlannedCard;
@@ -1643,10 +1615,59 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     />
   ) : null;
 
-  const hasInsightCards = !!(checkInPromptCard || deloadCard || atrophyCard);
+  const nudge = pickHomeNudge({
+    deload: !!deloadCard,
+    checkin: needsCheckIn,
+    volume: !!(rampBanner || atrophyCard),
+    waist: !!userId,
+  });
+  const openToday = () => setActiveModal('today');
+  const volumeNudgeBody = rampBanner
+    ? `Week ${planMesocycle?.currentWeek}: expected this early`
+    : 'Add sets where you’re short';
+
+  const nudgeCard =
+    nudge === 'deload' ? (
+      deloadCard
+    ) : nudge === 'checkin' ? (
+      <NudgeCard
+        title="How are you feeling today?"
+        body="A quick check-in tunes today’s suggestions"
+        action={
+          <Button size="sm" variant="secondary" onClick={() => setActiveModal('checkin')}>
+            Check in
+          </Button>
+        }
+      />
+    ) : nudge === 'volume' ? (
+      <NudgeCard
+        tone="warn"
+        title={`${belowMevCount} muscle${belowMevCount === 1 ? '' : 's'} under your weekly minimum`}
+        body={volumeNudgeBody}
+        action={
+          <Button size="sm" variant="secondary" onClick={openToday}>
+            See
+          </Button>
+        }
+      />
+    ) : nudge === 'waist' && userId ? (
+      // Bulk pace check — self-hides unless the waist trend is fat-dominant
+      // for the current gain rate (once/week, dismissible).
+      <WaistPaceCheckCard
+        userId={userId}
+        weightHistory={weightHistory}
+        weightRate={weightRate}
+        weightUnit={weightUnit}
+        phase={normalizedGoal}
+      />
+    ) : null;
+
+  const kcalVerdict = effectiveTargets
+    ? intakePaceVerdict(nutritionTotals.calories, effectiveTargets.calories, undefined, normalizedGoal, eatingWindow)
+    : null;
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Greeting (client-only — see clientNow above — to avoid SSR hydration mismatch) */}
       {clientNow && (
         <GlanceHeader
@@ -1662,12 +1683,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
       {/* Error starting workout */}
       {startWorkoutError && (
-        <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+        <div className="rounded-card bg-status-bad-tint px-4 py-3 text-subhead text-status-bad">
           {startWorkoutError}
         </div>
       )}
 
-      {/* "Next up" hero — pending workout first, otherwise the next meal */}
+      {/* 1. "Next up" hero — pending workout first, otherwise the next meal */}
       <TodayHeroCard
         workout={heroWorkout}
         scheduled={heroScheduled}
@@ -1683,60 +1704,68 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         isStarting={isStartingWorkout}
       />
 
-      {/* Glance metric grid: Nutrition · Lifts · Weekly volume · Weight */}
-      <MetricTileGrid
+      {/* 2. Today: Eat · Recovery · This week (depth one tap away) */}
+      <TodayCard
         nutritionTotals={nutritionTotals}
         nutritionTargets={effectiveTargets}
+        kcalPace={kcalVerdict && !kcalVerdict.suppressed ? kcalVerdict.status : null}
+        lastNight={lastNight}
+        stepsToday={healthGlance?.stepsToday ?? null}
+        hrvDeltaPct={healthGlance?.hrv?.deltaPct ?? null}
+        readiness={checkInStatus === 'done' ? checkInReadiness : null}
         liftTrends={liftTrends}
         volume={glanceVolume}
         latestWeight={latestWeight}
-        weightUnit={weightUnit}
-        weightHistory={weightHistory}
         weightRate={weightRate}
-        bodyComp={initialData?.bodyCompGlance ?? null}
-        sleep={{ entries: sleepEntries, lastNight, sevenDayAvgHours }}
-        onLogSleep={userId && !healthConnected ? () => setActiveModal('sleep') : undefined}
-        onLogWeight={() => setActiveModal('weight')}
-        phase={normalizedGoal}
-        eatingWindow={eatingWindow}
+        weightUnit={weightUnit}
+        onOpenDetails={openToday}
       />
 
-      {/* Health: connect Apple Health / a wearable, then sleep · steps · HRV */}
-      {userId && (
-        <HealthGlanceCard lastNight={lastNight} onLogSleep={() => setActiveModal('sleep')} />
-      )}
+      {/* 3. At most one nudge */}
+      {nudgeCard}
 
-      {/* Early-week volume ramp insight (links to the volume page) */}
-      {rampBanner}
-
-      {/* Contextual insight cards — render only when triggered */}
-      {hasInsightCards && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {checkInPromptCard}
-          {deloadCard}
-          {atrophyCard}
-        </div>
-      )}
-
-      {/* Bulk pace check — self-hides unless the waist trend is fat-dominant
-          for the current gain rate (once/week, dismissible). */}
-      {userId && (
-        <WaistPaceCheckCard
-          userId={userId}
-          weightHistory={weightHistory}
-          weightRate={weightRate}
-          weightUnit={weightUnit}
-          phase={normalizedGoal}
-        />
-      )}
-
-      {/* Quick log row — each button opens a modal */}
+      {/* 4. Quick log chips — each opens a sheet */}
       <QuickLogRow
         onLogWeight={() => setActiveModal('weight')}
         onLogWater={userId ? () => setActiveModal('water') : undefined}
         onLogFood={() => setActiveModal('food')}
+        onLogSleep={userId ? () => setActiveModal('sleep') : undefined}
         onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
         onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
+      />
+
+      {/* Today sheet: the tiles, Apple Health and weekly-set detail that used
+          to stack on Home, one tap from the Today card. */}
+      <TodaySheet
+        isOpen={activeModal === 'today'}
+        onClose={() => setActiveModal(null)}
+        recovery={
+          userId ? (
+            <HealthGlanceCard lastNight={lastNight} onLogSleep={() => setActiveModal('sleep')} />
+          ) : null
+        }
+        week={
+          <>
+            <MetricTileGrid
+              nutritionTotals={nutritionTotals}
+              nutritionTargets={effectiveTargets}
+              liftTrends={liftTrends}
+              volume={glanceVolume}
+              latestWeight={latestWeight}
+              weightUnit={weightUnit}
+              weightHistory={weightHistory}
+              weightRate={weightRate}
+              bodyComp={initialData?.bodyCompGlance ?? null}
+              sleep={{ entries: sleepEntries, lastNight, sevenDayAvgHours }}
+              onLogSleep={userId && !healthConnected ? () => setActiveModal('sleep') : undefined}
+              onLogWeight={() => setActiveModal('weight')}
+              phase={normalizedGoal}
+              eatingWindow={eatingWindow}
+            />
+            {rampBanner}
+            {atrophyCard}
+          </>
+        }
       />
 
       {/* Quick-log modals (content lazy-loads on first open) */}

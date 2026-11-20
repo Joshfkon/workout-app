@@ -22,11 +22,11 @@ interface MetricTileProps {
 
 /** Shared shell for the dashboard glance tiles: bordered card + icon label row. */
 export function MetricTile({ icon: TileIcon, label, href, onClick, action, accent, children }: MetricTileProps) {
-  const borderClass = accent === 'warning' ? 'border-warning-500/40' : 'border-surface-800';
+  const borderClass = accent === 'warning' ? 'border-status-warn/40' : 'border-transparent';
   const inner = (
     <>
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5 text-xs text-surface-500">
+        <div className="flex items-center gap-1.5 text-xs text-ink-2">
           <TileIcon size={14} aria-hidden="true" /> {label}
         </div>
         {action && href ? (
@@ -49,7 +49,7 @@ export function MetricTile({ icon: TileIcon, label, href, onClick, action, accen
 
   if (href) {
     return (
-      <Link href={href} className={`block bg-surface-900 border ${borderClass} rounded-xl p-3 hover:bg-surface-800/50 transition-colors`}>
+      <Link href={href} className={`block bg-card shadow-card border ${borderClass} rounded-card p-3 active:bg-fill transition-colors`}>
         {inner}
       </Link>
     );
@@ -60,7 +60,7 @@ export function MetricTile({ icon: TileIcon, label, href, onClick, action, accen
       <button
         type="button"
         onClick={onClick}
-        className={`block w-full text-left bg-surface-900 border ${borderClass} rounded-xl p-3 hover:bg-surface-800/50 transition-colors`}
+        className={`block w-full text-left bg-card shadow-card border ${borderClass} rounded-card p-3 active:bg-fill transition-colors`}
       >
         {inner}
       </button>
@@ -68,7 +68,7 @@ export function MetricTile({ icon: TileIcon, label, href, onClick, action, accen
   }
 
   return (
-    <div className={`bg-surface-900 border ${borderClass} rounded-xl p-3`}>
+    <div className={`bg-card shadow-card border ${borderClass} rounded-card p-3`}>
       {inner}
     </div>
   );

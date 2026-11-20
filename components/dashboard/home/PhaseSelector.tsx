@@ -14,19 +14,19 @@ const PHASE_META: Record<
 > = {
   cut: {
     label: 'Cutting',
-    chipClasses: 'bg-warning-500/10 text-warning-400',
+    chipClasses: 'bg-status-warn-tint text-status-warn',
     selectedClasses: 'border-warning-500/60 bg-warning-500/10',
     description: 'Lose fat while holding on to muscle. Calorie deficit.',
   },
   maintenance: {
     label: 'Maintaining',
-    chipClasses: 'bg-surface-800 text-surface-300',
+    chipClasses: 'bg-fill text-ink-2',
     selectedClasses: 'border-surface-400/60 bg-surface-800',
     description: 'Hold steady or recomp. Eat around maintenance.',
   },
   bulk: {
     label: 'Bulking',
-    chipClasses: 'bg-success-500/10 text-success-400',
+    chipClasses: 'bg-status-ok-tint text-status-ok',
     selectedClasses: 'border-success-500/60 bg-success-500/10',
     description: 'Build muscle. Calorie surplus.',
   },
@@ -110,7 +110,7 @@ export function PhaseSelector({ phase, onPhaseChanged, offerPlanRebuild = true }
         type="button"
         onClick={openModal}
         aria-label={`Current phase: ${meta.label}. Tap to change.`}
-        className={`rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap transition-opacity hover:opacity-80 ${meta.chipClasses}`}
+        className={`rounded-full px-2 py-0.5 text-caption font-semibold whitespace-nowrap transition-opacity hover:opacity-80 ${meta.chipClasses}`}
       >
         {meta.label}
       </button>
