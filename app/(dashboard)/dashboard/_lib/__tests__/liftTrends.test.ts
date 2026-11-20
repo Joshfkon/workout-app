@@ -110,6 +110,11 @@ describe('computeLiftTrends', () => {
       // History is oldest-first
       const dates = lift.history.map((h) => h.date);
       expect([...dates].sort()).toEqual(dates);
+      // Each point carries the top set its e1RM came from (the lift screen's "Best sets").
+      for (const point of lift.history) {
+        expect(point.topSetWeightKg).toBeGreaterThan(0);
+        expect(point.topSetReps).toBeGreaterThan(0);
+      }
     }
     expect(summary.windowDays).toBe(84);
   });

@@ -39,6 +39,10 @@ export interface LiftTrendPoint {
   date: string;
   /** Estimated 1RM of the session's top set, in kg. */
   e1rmKg: number;
+  /** The top set itself (the one `e1rmKg` came from): load in kg… */
+  topSetWeightKg: number;
+  /** …and reps, as logged. */
+  topSetReps: number;
 }
 
 export interface LiftTrend {
@@ -414,6 +418,8 @@ export function computeLiftTrends(
       history: sorted.map((s) => ({
         date: s.sessionDate,
         e1rmKg: Math.round(s.estimatedE1RM * 10) / 10,
+        topSetWeightKg: s.topSetWeightKg,
+        topSetReps: s.topSetReps,
       })),
       lowConfidence,
       calibrationReason: lowConfidence ? calibrationReason : null,
