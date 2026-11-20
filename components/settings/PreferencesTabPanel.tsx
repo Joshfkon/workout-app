@@ -4,6 +4,7 @@ import type { WeightUnit } from '@/types/schema';
 import { Card, CardHeader, CardTitle, CardContent, Select, Slider, Toggle, Button } from '@/components/ui';
 import { EatingWindowSettings } from '@/components/settings/EatingWindowSettings';
 import { BloodPressureSettings } from '@/components/settings/BloodPressureSettings';
+import { MealReminderSettings } from '@/components/settings/MealReminderSettings';
 import { EducationPreferencesCard } from '@/components/settings/EducationPreferencesCard';
 
 interface PreferencesTabPanelProps {
@@ -162,12 +163,13 @@ export function PreferencesTabPanel({
       {/* Health reminders (blood pressure daily nudge — opt-in) */}
       <Card>
         <CardHeader>
-          <CardTitle>Health Reminders</CardTitle>
+          <CardTitle>Reminders</CardTitle>
           <p className="text-sm text-surface-400 mt-1">
-            Optional daily reminders to track health metrics
+            Optional nudges to log meals and health metrics
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
+          <MealReminderSettings />
           <BloodPressureSettings />
         </CardContent>
       </Card>
