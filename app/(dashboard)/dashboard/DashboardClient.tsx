@@ -62,6 +62,7 @@ import {
 } from '@/lib/training/standaloneDeload';
 import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard, useHealthGlance, TodayCard, TodaySheet, NudgeCard, pickHomeNudge } from '@/components/dashboard/home';
 import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
+import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
@@ -1702,6 +1703,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         coachLine={coachLine}
         onStartWorkout={handleStartWorkout}
         isStarting={isStartingWorkout}
+        freestyleActions={isFreestyle ? <FreestyleStartActions userId={userId} /> : undefined}
       />
 
       {/* 2. Today: Eat · Recovery · This week (depth one tap away) */}

@@ -295,6 +295,24 @@ describe('TodayHeroCard — freestyle training style', () => {
     expect(screen.queryByText(/what's a mesocycle/i)).not.toBeInTheDocument();
   });
 
+  it('renders the caller-supplied secondary starts in place of the Train link', () => {
+    render(
+      <TodayHeroCard
+        workout={null}
+        hasPlan={false}
+        freestyle
+        mesocycleName={null}
+        freestyleActions={<button type="button">Repeat Pull</button>}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Start workout' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Repeat Pull' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Repeat or get a suggestion' })
+    ).not.toBeInTheDocument();
+  });
+
   it("shows today's freestyle workout while it is in progress", () => {
     render(
       <TodayHeroCard

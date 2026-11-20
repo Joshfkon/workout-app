@@ -64,6 +64,12 @@ interface TodayHeroCardProps {
   onStartWorkout?: () => void;
   /** True while starting a workout. */
   isStarting?: boolean;
+  /**
+   * Freestyle "Ready to train?" secondary starts under Start workout
+   * (FreestyleStartActions: Repeat last · Suggest one). Omit to fall back to
+   * a single link to the Train tab.
+   */
+  freestyleActions?: ReactNode;
 }
 
 /**
@@ -155,6 +161,7 @@ export function TodayHeroCard({
   coachLine,
   onStartWorkout,
   isStarting = false,
+  freestyleActions,
 }: TodayHeroCardProps) {
   // Pending workout — the primary recommendation when the user hasn't trained yet.
   if (workout && workout.state !== 'completed') {
@@ -281,15 +288,18 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
           <p className="text-subhead text-ink-2 mt-1 mb-4">
             Start empty and add exercises as you go, or repeat a past workout or take a suggestion.
           </p>
-          {/* One tap straight into an empty workout; the Train tab keeps
-              every other way to start (repeat a previous one, AI suggestion). */}
+          {/* One tap straight into an empty workout. The secondary starts
+              (repeat last / suggest one) come from the caller, which owns the
+              data; without them, the Train tab link keeps those paths. */}
           <StartWorkoutButton />
-          <Link
-            href="/dashboard/train"
-            className="mt-2.5 flex w-full min-h-[44px] items-center justify-center rounded-button bg-action-tint text-action text-body font-semibold transition-[filter] hover:brightness-110"
-          >
-            Repeat or get a suggestion
-          </Link>
+          {freestyleActions ?? (
+            <Link
+              href="/dashboard/train"
+              className="mt-2.5 flex w-full min-h-[44px] items-center justify-center rounded-button bg-action-tint text-action text-body font-semibold transition-[filter] hover:brightness-110"
+            >
+              Repeat or get a suggestion
+            </Link>
+          )}
         </div>
       </div>
     );
