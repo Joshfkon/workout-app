@@ -42,6 +42,7 @@ describe('computeLiftTrends', () => {
     expect(summary.lifts[0]).toMatchObject({ name: 'Bench Press', direction: 'rising' });
     expect(summary.rising).toBe(1);
     expect(summary.stalled).toBeNull();
+    expect(summary.lifts[0].plateau).toBeNull();
   });
 
   it('flags a flat lift on a bulk as stalled with weeks since progress', () => {
@@ -59,6 +60,10 @@ describe('computeLiftTrends', () => {
     expect(summary.stalled).not.toBeNull();
     expect(summary.stalled!.name).toBe('Bench Press');
     expect(summary.stalled!.weeks).toBeGreaterThanOrEqual(1);
+    // The same verdict is kept on the lift, with its ideas, for the lift screen.
+    expect(summary.lifts[0].plateau).not.toBeNull();
+    expect(summary.lifts[0].plateau!.isPlateaued).toBe(true);
+    expect(summary.lifts[0].plateau!.suggestions.length).toBeGreaterThan(0);
   });
 
   it('skips lifts with fewer than 3 sessions and orders rising before down', () => {

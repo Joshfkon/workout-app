@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { IconChevronLeft, IconInfoCircle } from '@tabler/icons-react';
+import { IconAlertTriangle, IconBulb, IconChevronLeft, IconInfoCircle } from '@tabler/icons-react';
 import { ListGroup, PageSkeleton, Sparkline } from '@/components/ui';
 import { formatWeight } from '@/lib/utils';
 import { formatLoad } from '@/lib/mcp/summaries';
 import { useLiftTrends } from '@/hooks/useLiftTrends';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { LiftTrend, LiftTrendPoint } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import type { PlateauDetectionResult } from '@/services/plateauDetector';
 import { historyHref, shortDay, signedPct, statusOf } from './liftTrendFormat';
 
 const PROGRESS_HREF = '/dashboard/analytics';
@@ -31,6 +32,43 @@ export function bestPoint(lift: Pick<LiftTrend, 'history' | 'excludedDates'>): L
     if (!best || p.e1rmKg > best.e1rmKg) best = p;
   }
   return best;
+}
+
+/**
+ * "Flat for 4 weeks · 5.0 lbs below your recent best" — the plateau verdict
+ * in words. The gap is against the RECENT peak (the detector's window), and
+ * only shown when it is visibly non-zero.
+ */
+export function plateauLine(plateau: PlateauDetectionResult, units: 'lb' | 'kg'): string {
+  const weeks = Math.max(1, Math.round(plateau.weeksSinceProgress));
+  const head = `Flat for ${weeks} week${weeks === 1 ? '' : 's'}`;
+  const gapKg = plateau.recentPeakE1RM - plateau.currentE1RM;
+  const gapDisplay = units === 'lb' ? gapKg * 2.20462 : gapKg;
+  return gapDisplay >= 0.1 ? `${head} · ${formatWeight(gapKg, units)} below your recent best` : head;
+}
+
+function PlateauIdeas({ plateau, units }: { plateau: PlateauDetectionResult; units: 'lb' | 'kg' }) {
+  return (
+    <section className="space-y-2" data-testid="lift-plateau">
+      <div className="flex items-start gap-3 rounded-card bg-status-warn-tint p-4">
+        <IconAlertTriangle size={20} className="mt-0.5 flex-shrink-0 text-status-warn" aria-hidden="true" />
+        <div>
+          <p className="text-headline text-ink">This lift has stalled</p>
+          <p className="text-subhead text-ink-2">{plateauLine(plateau, units)}</p>
+        </div>
+      </div>
+      {plateau.suggestions.length > 0 && (
+        <ListGroup title="Ideas to get it moving">
+          {plateau.suggestions.map((idea) => (
+            <div key={idea} className="flex min-h-[48px] items-start gap-3 px-4 py-3 text-body text-ink">
+              <IconBulb size={18} className="mt-0.5 flex-shrink-0 text-action" aria-hidden="true" />
+              <span>{idea}</span>
+            </div>
+          ))}
+        </ListGroup>
+      )}
+    </section>
+  );
 }
 
 function BackBar({ title }: { title: string }) {
@@ -96,6 +134,9 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
   const best = bestPoint(lift);
+  // `?? null`: a summary persisted before lifts carried `plateau`. A
+  // calibrating lift never shows a stall verdict.
+  const plateau = lift.lowConfidence ? null : (lift.plateau ?? null);
   const title = lift.locationLabel ? `${lift.name} · ${lift.locationLabel}` : lift.name;
 
   return (
@@ -126,6 +167,8 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
           </div>
         )}
       </div>
+
+      {plateau && <PlateauIdeas plateau={plateau} units={units} />}
 
       <ListGroup title="Best sets">
         {[...points].reverse().map((p) => {

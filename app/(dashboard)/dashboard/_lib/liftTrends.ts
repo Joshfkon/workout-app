@@ -21,6 +21,7 @@ import {
   analyzeExerciseTrend,
   detectPlateau,
   MIN_SESSIONS_AFTER_DISCONTINUITY,
+  type PlateauDetectionResult,
   type PlateauGoal,
 } from '@/services/plateauDetector';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
@@ -88,6 +89,12 @@ export interface LiftTrend {
   excludedDates: string[];
   /** Session date the current calibration segment starts at, if any. */
   discontinuityDate: string | null;
+  /**
+   * The plateau verdict (with its suggestions) when this lift is stalled;
+   * null when it isn't, or while it is calibrating — the same detector run
+   * that feeds `stalled`, kept per lift for the lift's own screen.
+   */
+  plateau: PlateauDetectionResult | null;
 }
 
 export interface LiftTrendsSummary {
@@ -405,6 +412,26 @@ export function computeLiftTrends(
       calibrationReason = 'equipment_change';
     }
 
+    // A "stalled N wks" verdict across a program boundary is the same noise
+    // as the direction verdict — skip low-confidence lifts.
+    let plateau: PlateauDetectionResult | null = null;
+    if (!lowConfidence) {
+      const result = detectPlateau({
+        exerciseId,
+        snapshots: sorted,
+        referenceDate,
+        goal,
+        knownDiscontinuities,
+      });
+      if (result.isPlateaued) {
+        plateau = result;
+        const weeks = Math.max(1, Math.round(result.weeksSinceProgress));
+        if (!stalled || weeks > stalled.weeks) {
+          stalled = { name: displayName, weeks };
+        }
+      }
+    }
+
     lifts.push({
       exerciseId,
       seriesKey,
@@ -425,25 +452,8 @@ export function computeLiftTrends(
       calibrationReason: lowConfidence ? calibrationReason : null,
       excludedDates: trend.excludedDates ?? [],
       discontinuityDate: trend.discontinuityDate ?? null,
+      plateau,
     });
-
-    // A "stalled N wks" verdict across a program boundary is the same noise
-    // as the direction verdict — skip low-confidence lifts.
-    if (!lowConfidence) {
-      const plateau = detectPlateau({
-        exerciseId,
-        snapshots: sorted,
-        referenceDate,
-        goal,
-        knownDiscontinuities,
-      });
-      if (plateau.isPlateaued) {
-        const weeks = Math.max(1, Math.round(plateau.weeksSinceProgress));
-        if (!stalled || weeks > stalled.weeks) {
-          stalled = { name: displayName, weeks };
-        }
-      }
-    }
   }
 
   const order: Record<LiftDirection, number> = { rising: 0, flat: 1, down: 2 };
