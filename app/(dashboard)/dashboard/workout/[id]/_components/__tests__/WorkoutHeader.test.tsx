@@ -139,7 +139,7 @@ describe('WorkoutHeader timer pill', () => {
     expect(pill).toHaveAttribute('data-paused', 'true');
     expect(pill).toHaveAttribute('aria-pressed', 'true');
     expect(pill).toHaveTextContent('Paused · 5:13');
-    expect(pill.className).toContain('text-warning-400'); // amber
+    expect(pill.className).toContain('text-status-warn'); // amber
     expect(pill.querySelector('.tabler-icon-player-play')).toBeInTheDocument();
   });
 
@@ -260,7 +260,7 @@ describe('WorkoutHeader location chip', () => {
     const chip = screen.getByTestId('workout-location-chip');
     expect(chip).toHaveTextContent('Set location');
     expect(chip).toHaveAttribute('data-location-set', 'false');
-    expect(chip.className).toContain('text-warning-400');
+    expect(chip.className).toContain('text-status-warn');
   });
 
   it('lives on the progress row, not the starved meta line beside the timer', () => {

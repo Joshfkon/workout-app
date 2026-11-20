@@ -7347,17 +7347,17 @@ export default function WorkoutPage() {
       {/* Readiness modulation banner (Phase 1.3): eased targets today, with a
           session-local "Train as planned" override that zeroes the modulation */}
       {baseReadinessModulation?.banner && !readinessBannerDismissed && !readinessOverridden && (
-        <div className="flex items-center gap-3 bg-warning-500/10 text-warning-400 text-xs px-4 py-2 rounded-lg -mt-2">
+        <div className="flex items-center gap-3 bg-status-warn-tint text-status-warn text-subhead px-4 py-2.5 rounded-card -mt-2">
           <span className="flex-1">{baseReadinessModulation.banner}</span>
           <button
             onClick={() => setReadinessOverridden(true)}
-            className="flex-shrink-0 font-medium underline underline-offset-2 hover:text-warning-300 transition-colors"
+            className="flex-shrink-0 font-semibold underline underline-offset-2"
           >
             Train as planned
           </button>
           <button
             onClick={() => setReadinessBannerDismissed(true)}
-            className="flex-shrink-0 p-0.5 hover:text-warning-300 transition-colors"
+            className="flex-shrink-0 p-0.5"
             aria-label="Dismiss"
           >
             <IconX size={14} />
@@ -7367,7 +7367,10 @@ export default function WorkoutPage() {
 
       {/* Weekly volume strip: per-muscle rolling-7-day sets (incl. this session)
           vs the MEV–MRV band, for the muscles this workout trains. Tapping a
-          chip opens the full "What to train" volume + recovery sheet. */}
+          chip opens the full "What to train" volume + recovery sheet. Hidden
+          on an empty workout, where the empty state's "Muscle readiness" and
+          "Sets this week" rows open the same sheet (show less up front). */}
+      {workoutBodyView !== 'empty' && (
       <WorkoutVolumeStrip
         rows={weeklyVolumeRows}
         isLoading={weeklyVolumeLoading}
@@ -7385,6 +7388,7 @@ export default function WorkoutPage() {
           handleOpenAddExercise();
         }}
       />
+      )}
 
       {/* First workout guidance */}
       {isFirstWorkout && showBeginnerTips && (
@@ -7393,7 +7397,7 @@ export default function WorkoutPage() {
             <p className="font-medium mb-2">Welcome to your first workout!</p>
             <ul className="space-y-1 text-sm text-primary-800 dark:text-primary-200">
               <li>• <strong>Log each set</strong> - Enter weight and reps after completing a set</li>
-              <li>• <strong>Rate difficulty</strong> - RIR (Reps In Reserve) tells us how hard the set was</li>
+              <li>• <strong>Rate difficulty</strong> - tell us how many more reps you could have done</li>
               <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
               <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
             </ul>
@@ -7519,8 +7523,7 @@ export default function WorkoutPage() {
               quickAddExercises={quickAddExercises}
               onAddExercise={handleAddExercise}
               disabled={isAddingExercise || isCopyingLastWorkout}
-              defaultExpanded
-              title="This week · volume & recovery"
+              onOpenDetail={() => setShowMuscleReadinessSheet(true)}
             />
           }
         />
@@ -8217,7 +8220,10 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {/* Finish workout button at bottom */}
+      {/* Finish workout button at bottom — not on an empty workout, where the
+          empty-state card already leads with Add exercise and Finish lives in
+          the header. */}
+      {blocks.length > 0 && (
       <Card className="text-center py-6 mt-8">
         <p className={durationEstimate.remainingSets > 0 ? 'text-surface-400' : 'text-surface-400 mb-4'}>
           {blocks.length === 0
@@ -8243,6 +8249,7 @@ export default function WorkoutPage() {
           </Button>
         </div>
       </Card>
+      )}
 
       {/* Bottom chrome stack: a single fixed, safe-area-aware column that owns
           the bottom band so its layers stack instead of colliding. The

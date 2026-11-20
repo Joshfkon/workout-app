@@ -1,16 +1,17 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { IconBarbell, IconPlus } from '@tabler/icons-react';
 
 /**
  * EmptyWorkoutStart — what fills the exercise-list slot of the active workout
- * page while the session has no exercises.
+ * page while the session has no exercises (design system "Workout · empty").
  *
- * Layout, top to bottom: the "Add exercise" call to action (always above the
- * fold), then the readiness slot (weekly volume per muscle + recovery, with
- * readiness-ranked Quick Add chips), then the secondary starts (copy last
- * workout, build a plan). The page unmounts this as soon as the first block
- * lands, so the normal exercise list takes its place.
+ * Top to bottom: one card with the next action — "Add exercise", then
+ * "Repeat last workout", then a quiet "Build a plan for me" link — and below
+ * it the readiness slot ("Fresh today" chips ranked by recovery, plus rows
+ * that open the full readiness / weekly-sets sheet). The page unmounts this as
+ * soon as the first block lands, so the normal exercise list takes its place.
  *
  * The readiness body is passed in as a slot so the page can keep lazy-loading
  * it (it pulls in the readiness hook + assembly, which the workout screen's
@@ -22,7 +23,7 @@ interface EmptyWorkoutStartProps {
   isCopyingLastWorkout: boolean;
   onBuildPlan: () => void;
   disabled?: boolean;
-  /** Weekly volume + readiness body (EmptyWorkoutReadiness, lazy-loaded). */
+  /** Fresh-today chips + readiness rows (EmptyWorkoutReadiness, lazy-loaded). */
   readiness: ReactNode;
 }
 
@@ -36,41 +37,48 @@ export function EmptyWorkoutStart({
 }: EmptyWorkoutStartProps) {
   return (
     <div data-testid="empty-workout-start">
-      <button
-        type="button"
-        onClick={onAddExercise}
-        disabled={disabled}
-        className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-lg font-semibold shadow-lg shadow-purple-500/25 hover:from-purple-400 hover:to-indigo-500 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center gap-2.5"
-        data-testid="empty-add-exercises"
-      >
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-        </svg>
-        Add exercise
-      </button>
-
-      <div className="mt-2 flex items-center justify-center gap-4 text-sm font-medium">
-        <button
-          type="button"
-          onClick={onCopyLastWorkout}
-          disabled={disabled}
-          className="py-2 text-surface-400 hover:text-surface-200 disabled:opacity-50 transition-colors"
-          data-testid="empty-copy-last"
+      <div className="flex flex-col items-center rounded-card bg-card px-5 pt-6 pb-5 text-center shadow-card">
+        <span
+          className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-action-tint text-action"
+          aria-hidden="true"
         >
-          {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout'}
-        </button>
-        <span className="text-surface-700" aria-hidden>
-          ·
+          <IconBarbell size={28} />
         </span>
-        <button
-          type="button"
-          onClick={onBuildPlan}
-          disabled={disabled}
-          className="py-2 text-surface-400 hover:text-surface-200 disabled:opacity-50 transition-colors"
-          data-testid="empty-build-plan"
-        >
-          Build a plan for me
-        </button>
+        <h2 className="text-title text-ink">Add your first exercise</h2>
+        <p className="mt-1 max-w-[260px] text-subhead text-ink-2">
+          Pick as you go, or repeat something you&apos;ve done before.
+        </p>
+
+        <div className="mt-5 flex w-full flex-col gap-2.5">
+          <button
+            type="button"
+            onClick={onAddExercise}
+            disabled={disabled}
+            className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-button bg-action text-headline text-on-action transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-60"
+            data-testid="empty-add-exercises"
+          >
+            <IconPlus size={20} aria-hidden="true" />
+            Add exercise
+          </button>
+          <button
+            type="button"
+            onClick={onCopyLastWorkout}
+            disabled={disabled}
+            className="flex min-h-[50px] w-full items-center justify-center rounded-button bg-action-tint text-headline text-action transition-[filter] hover:brightness-110 disabled:opacity-60"
+            data-testid="empty-copy-last"
+          >
+            {isCopyingLastWorkout ? 'Copying last workout…' : 'Repeat last workout'}
+          </button>
+          <button
+            type="button"
+            onClick={onBuildPlan}
+            disabled={disabled}
+            className="mt-1 py-1.5 text-body font-medium text-action disabled:opacity-50"
+            data-testid="empty-build-plan"
+          >
+            Build a plan for me
+          </button>
+        </div>
       </div>
 
       {readiness}
