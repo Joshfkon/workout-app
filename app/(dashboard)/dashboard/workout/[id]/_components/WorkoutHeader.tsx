@@ -113,9 +113,9 @@ export interface WorkoutHeaderProps {
 }
 
 const SEGMENT_CLASS: Record<ExerciseSegmentStatus, string> = {
-  completed: 'bg-success-500',
-  active: 'bg-primary-500',
-  pending: 'bg-surface-800',
+  completed: 'bg-status-ok',
+  active: 'bg-action',
+  pending: 'bg-fill',
 };
 
 // Above this many exercises, individual dashes stop reading as progress —
@@ -153,7 +153,7 @@ export function WorkoutHeader({
   onMinimize,
 }: WorkoutHeaderProps) {
   const menuItemClass =
-    'w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left';
+    'w-full flex items-center gap-2.5 px-3.5 min-h-[44px] text-body text-ink hover:bg-fill active:bg-fill transition-colors text-left';
 
   const useSegments = exerciseTotal <= MAX_SEGMENTED_EXERCISES;
   const completedCount = segments.filter((s) => s === 'completed').length;
@@ -167,7 +167,7 @@ export function WorkoutHeader({
     // Solid background (not backdrop-filter) prevents jitter during Safari toolbar animation.
     <div
       data-testid="workout-header"
-      className="sticky top-0 z-30 bg-surface-950 py-3 -mx-4 px-4"
+      className="sticky top-0 z-30 bg-canvas py-3 -mx-4 px-4"
     >
       {/* Top row: back · name + count · timer pill · Finish · menu */}
       <div className="flex items-center gap-2.5">
@@ -176,17 +176,21 @@ export function WorkoutHeader({
           onClick={onMinimize}
           aria-label="Minimize workout"
           title="Minimize workout"
-          className="w-11 h-11 -ml-2 flex-shrink-0 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+          className="w-11 h-11 -ml-2 flex-shrink-0 flex items-center justify-center rounded-full text-ink-2 hover:bg-fill hover:text-ink transition-colors"
         >
           <IconChevronLeft size={22} stroke={2.25} />
         </button>
 
         {/* Left: name + position meta */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-surface-100 truncate leading-5">{workoutName}</p>
+          <p className="text-headline text-ink truncate">{workoutName}</p>
           <div className="flex items-center gap-1 min-w-0 h-[17px]">
-            <p className="text-[11px] text-surface-500 truncate tabular-nums leading-[17px]">
-              {exerciseTotal > 0 ? `exercise ${exerciseNumber} of ${exerciseTotal}` : 'no exercises yet'}
+            <p className="text-caption text-ink-2 truncate tabular-nums leading-[17px]">
+              {exerciseTotal > 0
+                ? `exercise ${exerciseNumber} of ${exerciseTotal}`
+                : startedAt && !timerStarted
+                  ? 'Timer starts with set 1'
+                  : 'no exercises yet'}
               {remainingDurationLabel && (
                 <>
                   <span aria-hidden="true"> · </span>
@@ -210,11 +214,13 @@ export function WorkoutHeader({
         {startedAt && !timerStarted && (
           <div
             data-testid="workout-timer-pill-idle"
-            className="inline-flex items-center gap-1.5 flex-shrink-0 min-h-[44px] px-3 rounded-full border border-surface-800 bg-surface-900/60 text-xs font-medium text-surface-500"
+            className="inline-flex items-center justify-center flex-shrink-0 w-11 h-11 rounded-full text-ink-3"
             title="Timer starts with your first warmup or working set"
           >
-            <IconClock size={16} stroke={2} />
-            <span>starts with warmup or set</span>
+            {/* Icon only, so the workout name keeps its room on a phone; the
+                meta line under the name says the same in words. */}
+            <IconClock size={20} stroke={2} aria-hidden="true" />
+            <span className="sr-only">Timer starts with warmup or set</span>
           </div>
         )}
         {startedAt && timerStarted && (
@@ -225,8 +231,8 @@ export function WorkoutHeader({
             aria-pressed={workoutTimer.isPaused}
             className={`inline-flex items-center gap-1.5 flex-shrink-0 min-h-[44px] px-3 rounded-full border text-sm font-medium tabular-nums transition-colors ${
               workoutTimer.isPaused
-                ? 'bg-warning-500/20 border-warning-500/50 text-warning-400 hover:bg-warning-500/30'
-                : 'bg-surface-800/70 border-surface-700 text-surface-200 hover:bg-surface-700 hover:border-surface-600'
+                ? 'bg-status-warn-tint border-transparent text-status-warn'
+                : 'bg-card border-transparent shadow-card text-ink hover:bg-fill'
             }`}
             title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
             aria-label={
@@ -256,7 +262,7 @@ export function WorkoutHeader({
                   data-testid="workout-timer-pill-remaining"
                   title={remainingDurationHint}
                   className={`text-[10px] font-normal ${
-                    workoutTimer.isPaused ? 'text-warning-400/80' : 'text-surface-400'
+                    workoutTimer.isPaused ? 'text-status-warn' : 'text-ink-2'
                   }`}
                 >
                   ~{remainingDurationLabel} left
@@ -270,17 +276,17 @@ export function WorkoutHeader({
         <div className="flex items-center gap-2.5 flex-shrink-0">
           <button
             onClick={onFinishWorkout}
-            className="px-4 min-h-[44px] rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-400 active:bg-primary-600 transition-colors"
+            className="px-4 min-h-[44px] rounded-full bg-action-tint text-action text-body font-semibold transition-[filter] hover:brightness-110"
           >
             Finish
           </button>
           <div className="relative">
             <button
               onClick={onToggleToolsMenu}
-              className={`w-11 h-11 flex items-center justify-center rounded-lg transition-colors ${
+              className={`w-11 h-11 flex items-center justify-center rounded-full transition-colors ${
                 injuryCount > 0
-                  ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
-                  : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
+                  ? 'bg-status-warn-tint text-status-warn'
+                  : 'text-ink-2 hover:bg-fill hover:text-ink'
               }`}
               title="More actions"
               aria-label="More actions"
@@ -293,7 +299,7 @@ export function WorkoutHeader({
               <>
                 <div className="fixed inset-0 z-10" onClick={onCloseToolsMenu} />
                 <div
-                  className="absolute right-0 top-full mt-1 z-20 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1"
+                  className="absolute right-0 top-full mt-1 z-20 w-60 overflow-hidden bg-card border border-sep rounded-card shadow-float py-1"
                   role="menu"
                 >
                   <button
@@ -301,7 +307,7 @@ export function WorkoutHeader({
                     className={menuItemClass}
                     role="menuitem"
                   >
-                    <IconPlus size={16} className="text-surface-400" />
+                    <IconPlus size={16} className="text-ink-2" />
                     Add exercise
                   </button>
                   <button
@@ -310,9 +316,9 @@ export function WorkoutHeader({
                     role="menuitem"
                   >
                     {allCollapsed ? (
-                      <IconChevronsDown size={16} className="text-surface-400" />
+                      <IconChevronsDown size={16} className="text-ink-2" />
                     ) : (
-                      <IconChevronsUp size={16} className="text-surface-400" />
+                      <IconChevronsUp size={16} className="text-ink-2" />
                     )}
                     {allCollapsed ? 'Expand all' : 'Collapse all'}
                   </button>
@@ -323,7 +329,7 @@ export function WorkoutHeader({
                   >
                     <IconBandage
                       size={16}
-                      className={injuryCount > 0 ? 'text-warning-400' : 'text-surface-400'}
+                      className={injuryCount > 0 ? 'text-status-warn' : 'text-ink-2'}
                     />
                     {injuryCount > 0 ? `Injuries (${injuryCount})` : 'Hurt?'}
                   </button>
@@ -332,7 +338,7 @@ export function WorkoutHeader({
                     className={menuItemClass}
                     role="menuitem"
                   >
-                    <IconActivity size={16} className="text-surface-400" />
+                    <IconActivity size={16} className="text-ink-2" />
                     Readiness
                   </button>
                   <button
@@ -341,7 +347,7 @@ export function WorkoutHeader({
                     role="menuitem"
                     data-testid="readiness-sheet-trigger"
                   >
-                    <IconGauge size={16} className="text-surface-400" />
+                    <IconGauge size={16} className="text-ink-2" />
                     What to train
                   </button>
                   <button
@@ -349,7 +355,7 @@ export function WorkoutHeader({
                     className={menuItemClass}
                     role="menuitem"
                   >
-                    <IconBarbell size={16} className="text-surface-400" />
+                    <IconBarbell size={16} className="text-ink-2" />
                     Plate calculator
                   </button>
                   <button
@@ -358,7 +364,7 @@ export function WorkoutHeader({
                     role="menuitem"
                     data-testid="workout-location-menu-item"
                   >
-                    <IconMapPin size={16} className="text-surface-400" />
+                    <IconMapPin size={16} className="text-ink-2" />
                     {locationName ? `Location: ${locationName}` : 'Set location'}
                   </button>
                   <button
@@ -369,7 +375,7 @@ export function WorkoutHeader({
                   >
                     <IconMoon
                       size={16}
-                      className={isDeload ? 'text-primary-400' : 'text-surface-400'}
+                      className={isDeload ? 'text-action' : 'text-ink-2'}
                     />
                     {isDeload ? 'Deload session ✓' : 'Mark as deload'}
                   </button>
@@ -379,13 +385,13 @@ export function WorkoutHeader({
                     role="menuitem"
                     data-testid="save-as-template-trigger"
                   >
-                    <IconTemplate size={16} className="text-surface-400" />
+                    <IconTemplate size={16} className="text-ink-2" />
                     Save as template
                   </button>
-                  <div className="my-1 border-t border-surface-700" />
+                  <div className="my-1 border-t border-sep" />
                   <button
                     onClick={() => { onCancelWorkout(); onCloseToolsMenu(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger-400 hover:bg-surface-700 transition-colors text-left"
+                    className="w-full flex items-center gap-2.5 px-3.5 min-h-[44px] text-body text-status-bad hover:bg-fill transition-colors text-left"
                     role="menuitem"
                   >
                     <IconX size={16} />
@@ -429,13 +435,13 @@ export function WorkoutHeader({
           ) : (
             <div
               data-testid="workout-progress-bar"
-              className="flex-1 min-w-0 h-1.5 rounded-full bg-surface-800 overflow-hidden"
+              className="flex-1 min-w-0 h-1.5 rounded-full bg-fill overflow-hidden"
               role="img"
               aria-label={`Progress: ${completedCount} of ${exerciseTotal} exercises complete`}
             >
               <div
                 data-testid="workout-progress-bar-fill"
-                className="h-full rounded-full bg-success-500 transition-[width] duration-300"
+                className="h-full rounded-full bg-status-ok transition-[width] duration-300"
                 style={{ width: `${fillPct}%` }}
               />
             </div>
@@ -457,8 +463,8 @@ export function WorkoutHeader({
           }
           className={`flex flex-shrink-0 max-w-[65%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
             locationName
-              ? 'border-surface-700 bg-surface-800/70 text-surface-300 hover:bg-surface-700 hover:text-surface-100'
-              : 'border-warning-500/50 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20'
+              ? 'border-transparent bg-card shadow-card text-ink-2 hover:text-ink'
+              : 'border-transparent bg-status-warn-tint text-status-warn'
           }`}
         >
           <IconMapPin size={13} stroke={2} className="flex-shrink-0" aria-hidden="true" />

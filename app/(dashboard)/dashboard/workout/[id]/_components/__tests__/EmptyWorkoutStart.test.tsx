@@ -1,7 +1,8 @@
 /**
  * The empty workout page: an empty session renders the normal workout page
- * with EmptyWorkoutStart in the exercise-list slot (weekly volume + recovery
- * per muscle, open on arrival), the opt-in plan builder's "Build manually"
+ * with EmptyWorkoutStart in the exercise-list slot (Add exercise first, then
+ * "Fresh today" chips and two rows — Muscle readiness · Sets this week — that
+ * open the full readiness sheet), the opt-in plan builder's "Build manually"
  * returns there, and the first added exercise replaces it with the list.
  *
  * The workout page itself is too large to mount in a unit test, so `Body`
@@ -109,6 +110,7 @@ afterEach(() => jest.useRealTimers());
 function Body({ initialMode = 'manual' as EmptySetupMode }) {
   const [blocks, setBlocks] = useState<AvailableExercise[]>([]);
   const [mode, setMode] = useState<EmptySetupMode>(initialMode);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const view = resolveWorkoutBodyView(blocks.length, mode);
   const addExercise = (ex: AvailableExercise) => setBlocks((b) => [...b, ex]);
 
@@ -138,12 +140,12 @@ function Body({ initialMode = 'manual' as EmptySetupMode }) {
             <EmptyWorkoutReadiness
               quickAddExercises={QUICK_ADD}
               onAddExercise={addExercise}
-              defaultExpanded
-              title="This week · volume & recovery"
+              onOpenDetail={() => setSheetOpen(true)}
             />
           }
         />
       )}
+      {sheetOpen && <div data-testid="readiness-sheet-open" />}
       <ul data-testid="exercise-list">
         {blocks.map((b) => (
           <li key={b.id}>{b.name}</li>
@@ -168,25 +170,28 @@ describe('resolveWorkoutBodyView', () => {
 });
 
 describe('empty workout page', () => {
-  it('shows weekly volume and recovery per muscle without a tap', async () => {
+  it('leads with Add exercise and summarises readiness and weekly sets in two rows', async () => {
     render(<Body />, { wrapper });
 
     expect(screen.getByTestId('empty-workout-start')).toBeInTheDocument();
     expect(screen.getByTestId('empty-add-exercises')).toHaveTextContent('Add exercise');
-    expect(screen.getByTestId('readiness-inline-toggle')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('empty-copy-last')).toHaveTextContent('Repeat last workout');
 
-    // Weekly sets per muscle + recovery state, straight from history.
-    await waitFor(() => expect(screen.getByTestId('readiness-sets-quads')).toHaveTextContent('8'));
-    expect(screen.getByTestId('readiness-badge-quads')).toHaveTextContent('Fatigued');
-    expect(screen.getByTestId('readiness-sets-calves')).toHaveTextContent('2');
-    expect(screen.getByTestId('readiness-badge-chest')).toHaveTextContent('No recent data');
+    // Counts come straight from history (quads fatigued, chest no data, calves behind).
+    const readinessRow = await screen.findByRole('button', { name: /Muscle readiness/ });
+    await waitFor(() => expect(readinessRow).toHaveTextContent(/recovering/));
+    expect(readinessRow).toHaveTextContent(/fresh/);
+    expect(readinessRow).toHaveTextContent(/no data/);
+    expect(screen.getByRole('button', { name: /Sets this week/ })).toHaveTextContent(/under the weekly minimum/);
+
+    // The 14-muscle body isn't on the page until asked for.
+    expect(screen.queryByTestId('readiness-sets-quads')).not.toBeInTheDocument();
   });
 
-  it('the volume summary can be collapsed', async () => {
+  it('opens the full readiness sheet from either row', async () => {
     render(<Body />, { wrapper });
-    await screen.findByTestId('readiness-sets-quads');
-    await userEvent.click(screen.getByTestId('readiness-inline-toggle'));
-    expect(screen.queryByTestId('readiness-sets-quads')).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: /Sets this week/ }));
+    expect(screen.getByTestId('readiness-sheet-open')).toBeInTheDocument();
   });
 
   it('gives way to the exercise list once an exercise is added (Add exercise)', async () => {
@@ -194,13 +199,13 @@ describe('empty workout page', () => {
     await userEvent.click(screen.getByTestId('empty-add-exercises'));
 
     expect(screen.queryByTestId('empty-workout-start')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('readiness-inline')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('readiness-rows')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('exercise-list')).getByText('Bench Press')).toBeInTheDocument();
   });
 
   it('gives way to the exercise list once an exercise is added (Quick Add chip)', async () => {
     render(<Body />, { wrapper });
-    await userEvent.click(await screen.findByRole('button', { name: '+ Calf Raise' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Calf Raise' }));
 
     expect(screen.queryByTestId('empty-workout-start')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('exercise-list')).getByText('Calf Raise')).toBeInTheDocument();

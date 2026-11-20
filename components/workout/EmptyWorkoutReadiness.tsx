@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { IconPlus } from '@tabler/icons-react';
+import { Chip, ListGroup, ListRow } from '@/components/ui';
 import { MuscleReadinessContent } from './MuscleReadinessSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
@@ -38,6 +40,28 @@ interface EmptyWorkoutReadinessProps {
   defaultExpanded?: boolean;
   /** Toggle label. */
   title?: string;
+  /**
+   * Design-system layout for the empty workout page: "Fresh today" chips,
+   * then two rows (Muscle readiness · Sets this week) that open the full
+   * readiness sheet via this callback, instead of the inline body. Omit to
+   * keep the inline, collapsible body (the plan builder uses that).
+   */
+  onOpenDetail?: () => void;
+}
+
+/** "8 fresh · 4 recovering · 2 no data" style counts from the readiness rows. */
+export function summarizeReadiness(rows: ReadonlyArray<{ readiness: string; volumeGap: number }>) {
+  let fresh = 0;
+  let recovering = 0;
+  let unknown = 0;
+  let behind = 0;
+  for (const row of rows) {
+    if (row.readiness === 'fresh') fresh += 1;
+    else if (row.readiness === 'unknown') unknown += 1;
+    else recovering += 1; // recovering or fatigued
+    if (row.volumeGap > 0) behind += 1;
+  }
+  return { fresh, recovering, unknown, behind };
 }
 
 export function EmptyWorkoutReadiness({
@@ -46,6 +70,7 @@ export function EmptyWorkoutReadiness({
   disabled = false,
   defaultExpanded = false,
   title = "Today's readiness",
+  onOpenDetail,
 }: EmptyWorkoutReadinessProps) {
   // Stamp the clock once so every muscle is evaluated against the same instant.
   const [now] = useState(() => new Date());
@@ -96,6 +121,65 @@ export function EmptyWorkoutReadiness({
       .sort((a, b) => b.score - a.score || a.index - b.index)
       .map((entry) => entry.exercise);
   }, [quickAddExercises, scoreByMuscle]);
+
+  if (onOpenDetail) {
+    const s = summarizeReadiness(rows);
+    const dot = (cls: string) => <span className={`h-2 w-2 flex-shrink-0 rounded-full ${cls}`} aria-hidden="true" />;
+    return (
+      <div className="mt-6 space-y-6" data-testid="readiness-rows">
+        {sortedChips.length > 0 && (
+          <section aria-labelledby="fresh-today">
+            <div className="mx-1 mb-2 flex items-baseline justify-between">
+              <h2 id="fresh-today" className="text-headline text-ink">Fresh today</h2>
+              <span className="text-subhead text-ink-2">Ranked by recovery</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {sortedChips.map((exercise) => (
+                <Chip
+                  key={exercise.id}
+                  onClick={() => onAddExercise(exercise)}
+                  disabled={disabled}
+                  icon={<IconPlus size={16} />}
+                >
+                  {exercise.name}
+                </Chip>
+              ))}
+            </div>
+          </section>
+        )}
+        <ListGroup>
+          <ListRow
+            title="Muscle readiness"
+            subtitle={
+              isLoading ? (
+                'Checking recovery…'
+              ) : (
+                <span className="flex flex-wrap gap-x-3">
+                  <span className="inline-flex items-center gap-1.5">{dot('bg-status-ok')}{s.fresh} fresh</span>
+                  <span className="inline-flex items-center gap-1.5">{dot('bg-status-warn')}{s.recovering} recovering</span>
+                  {s.unknown > 0 && (
+                    <span className="inline-flex items-center gap-1.5">{dot('bg-ink-3')}{s.unknown} no data</span>
+                  )}
+                </span>
+              )
+            }
+            onClick={onOpenDetail}
+          />
+          <ListRow
+            title="Sets this week"
+            subtitle={
+              isLoading
+                ? 'Counting sets…'
+                : s.behind > 0
+                  ? `${s.behind} muscle${s.behind === 1 ? '' : 's'} under the weekly minimum`
+                  : 'Every muscle at its weekly minimum'
+            }
+            onClick={onOpenDetail}
+          />
+        </ListGroup>
+      </div>
+    );
+  }
 
   return (
     <>
