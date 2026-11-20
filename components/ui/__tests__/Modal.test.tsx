@@ -74,31 +74,31 @@ describe('Modal', () => {
   it('applies small size', () => {
     render(<Modal {...defaultProps} size="sm" />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveClass('max-w-sm');
+    expect(dialog).toHaveClass('sm:max-w-sm');
   });
 
   it('applies medium size by default', () => {
     render(<Modal {...defaultProps} />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveClass('max-w-md');
+    expect(dialog).toHaveClass('sm:max-w-md');
   });
 
   it('applies large size', () => {
     render(<Modal {...defaultProps} size="lg" />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveClass('max-w-lg');
+    expect(dialog).toHaveClass('sm:max-w-lg');
   });
 
   it('applies xl size', () => {
     render(<Modal {...defaultProps} size="xl" />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveClass('max-w-xl');
+    expect(dialog).toHaveClass('sm:max-w-xl');
   });
 
   it('applies full size', () => {
     render(<Modal {...defaultProps} size="full" />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveClass('max-w-4xl');
+    expect(dialog).toHaveClass('sm:max-w-4xl');
   });
 
   // ============================================

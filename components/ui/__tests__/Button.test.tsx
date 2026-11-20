@@ -21,9 +21,9 @@ describe('Button', () => {
     const button = screen.getByRole('button');
 
     // Default variant is primary
-    expect(button).toHaveClass('bg-primary-600');
+    expect(button).toHaveClass('bg-action');
     // Default size is md
-    expect(button).toHaveClass('px-4', 'py-2.5');
+    expect(button).toHaveClass('min-h-[44px]', 'px-4');
   });
 
   // ============================================
@@ -33,13 +33,13 @@ describe('Button', () => {
   it('applies primary variant styles', () => {
     render(<Button variant="primary">Primary</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('bg-primary-600');
+    expect(button).toHaveClass('bg-action');
   });
 
   it('applies secondary variant styles', () => {
     render(<Button variant="secondary">Secondary</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('bg-surface-800');
+    expect(button).toHaveClass('bg-action-tint');
   });
 
   it('applies ghost variant styles', () => {
@@ -51,13 +51,13 @@ describe('Button', () => {
   it('applies danger variant styles', () => {
     render(<Button variant="danger">Danger</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('bg-danger-600');
+    expect(button).toHaveClass('bg-status-bad-tint');
   });
 
   it('applies outline variant styles', () => {
     render(<Button variant="outline">Outline</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('border-surface-600');
+    expect(button).toHaveClass('bg-fill');
   });
 
   // ============================================
@@ -67,19 +67,19 @@ describe('Button', () => {
   it('applies small size styles', () => {
     render(<Button size="sm">Small</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('px-3', 'py-1.5');
+    expect(button).toHaveClass('h-8', 'px-3');
   });
 
   it('applies medium size styles', () => {
     render(<Button size="md">Medium</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('px-4', 'py-2.5');
+    expect(button).toHaveClass('min-h-[44px]', 'px-4');
   });
 
   it('applies large size styles', () => {
     render(<Button size="lg">Large</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('px-6', 'py-3');
+    expect(button).toHaveClass('min-h-[50px]', 'px-5');
   });
 
   // ============================================
@@ -186,7 +186,7 @@ describe('Button', () => {
   it('has accessible focus styles', () => {
     render(<Button>Focusable</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('focus:ring-2');
+    expect(button).toHaveClass('focus-visible:ring-2');
   });
 
   it('is keyboard accessible', () => {

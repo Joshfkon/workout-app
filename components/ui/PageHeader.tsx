@@ -22,9 +22,9 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
   return (
     <div className={cn('flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4', className)}>
       <div className="flex-1">
-        <h1 className="text-2xl font-bold text-surface-100">{title}</h1>
+        <h1 className="text-large-title text-ink">{title}</h1>
         {subtitle && (
-          <p className="text-surface-400 mt-1">{subtitle}</p>
+          <p className="text-subhead text-ink-2 mt-1">{subtitle}</p>
         )}
       </div>
       {actions && (

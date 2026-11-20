@@ -12,10 +12,11 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, variant = 'default', padding = 'md', children, ...props }, ref) => {
     const variants = {
-      default: 'bg-surface-900 border border-surface-800',
-      elevated: 'bg-surface-900 border border-surface-800 shadow-lg shadow-black/20',
-      bordered: 'bg-transparent border border-surface-700',
-      ghost: 'bg-surface-900/50',
+      // One card style (design system): fill only, soft shadow in light mode.
+      default: 'bg-card shadow-card',
+      elevated: 'bg-card shadow-float',
+      bordered: 'bg-card border border-sep',
+      ghost: 'bg-fill/50',
     };
 
     const paddings = {
@@ -26,7 +27,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     return (
       <div
         ref={ref}
-        className={cn('rounded-xl', variants[variant], paddings[padding], className)}
+        className={cn('rounded-card text-ink', variants[variant], paddings[padding], className)}
         {...props}
       >
         {children}
@@ -59,7 +60,7 @@ const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingEleme
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn('text-[15px] font-medium text-surface-100', className)}
+      className={cn('text-headline text-ink', className)}
       {...props}
     />
   )
@@ -73,7 +74,7 @@ const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLPara
   ({ className, ...props }, ref) => (
     <p
       ref={ref}
-      className={cn('text-sm text-surface-400', className)}
+      className={cn('text-subhead text-ink-2', className)}
       {...props}
     />
   )

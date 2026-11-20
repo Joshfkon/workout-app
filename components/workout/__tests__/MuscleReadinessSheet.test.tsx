@@ -146,7 +146,7 @@ describe('MuscleReadinessSheet', () => {
   });
 
   it('ranks a Fresh, under-volume muscle above a Fatigued, under-volume muscle', async () => {
-    const { container } = render(
+    const { baseElement: container } = render(
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
       { wrapper }
     );
@@ -210,7 +210,7 @@ describe('MuscleReadinessSheet', () => {
       },
     ];
 
-    const { container } = render(
+    const { baseElement: container } = render(
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
       { wrapper }
     );
@@ -273,7 +273,7 @@ describe('MuscleReadinessSheet', () => {
   });
 
   it('toggles the body map between recovery and volume painting, remembered per session', async () => {
-    const { container, unmount } = render(
+    const { baseElement: container, unmount } = render(
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
       { wrapper }
     );
