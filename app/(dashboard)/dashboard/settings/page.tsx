@@ -4,7 +4,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
-import { LoadingState, PageHeader } from '@/components/ui';
+import { LoadingState, PageHeader, SegmentedControl } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 const SETTINGS_KEY = ['settings', 'user'] as const;
@@ -38,44 +38,11 @@ const lbsToKg = (lbs: number) => lbs / 2.20462;
 
 type SettingsTab = 'profile' | 'training' | 'preferences' | 'account';
 
-const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-  {
-    id: 'profile',
-    label: 'Profile',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'training',
-    label: 'Training',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-      </svg>
-    ),
-  },
-  {
-    id: 'preferences',
-    label: 'Preferences',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'account',
-    label: 'Account',
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'training', label: 'Training' },
+  { id: 'preferences', label: 'Preferences' },
+  { id: 'account', label: 'Account' },
 ];
 
 export default function SettingsPage() {
@@ -527,8 +494,8 @@ export default function SettingsPage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6" data-testid="settings-load-error">
         <PageHeader title="Settings" subtitle="Customize your training preferences and account" />
-        <div className="p-4 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400">
-          <p className="text-sm">
+        <div className="p-4 rounded-lg bg-status-bad/10 border border-status-bad/20 text-status-bad">
+          <p className="text-body">
             We couldn&apos;t load your settings. Nothing has been changed — check your connection
             and try again.
           </p>
@@ -536,7 +503,7 @@ export default function SettingsPage() {
             type="button"
             onClick={() => void settingsQuery.refetch()}
             disabled={settingsQuery.isFetching}
-            className="mt-3 px-4 py-2 rounded-lg bg-surface-800 text-surface-100 text-sm font-medium hover:bg-surface-700 disabled:opacity-50"
+            className="mt-3 px-4 py-2 rounded-lg bg-fill text-ink text-body font-medium hover:bg-sep disabled:opacity-50"
           >
             {settingsQuery.isFetching ? 'Retrying…' : 'Try again'}
           </button>
@@ -552,29 +519,18 @@ export default function SettingsPage() {
         subtitle="Customize your training preferences and account"
       />
 
-      {/* Tab Navigation - Improved mobile UX */}
-      <div className="flex gap-1 p-1 bg-surface-800/50 rounded-lg overflow-x-auto scrollbar-thin scrollbar-thumb-surface-600 scrollbar-track-transparent">
-        {SETTINGS_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === tab.id
-                ? 'bg-primary-500 text-white shadow-lg'
-                : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700/50'
-            }`}
-          >
-            <span className="hidden sm:inline">{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label="Settings sections"
+        options={SETTINGS_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
+        value={activeTab}
+        onChange={setActiveTab}
+      />
 
       {saveMessage && (
-        <div className={`p-4 rounded-lg ${
+        <div className={`p-4 rounded-card text-body ${
           saveMessage.type === 'success'
-            ? 'bg-success-500/10 border border-success-500/20 text-success-400'
-            : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+            ? 'bg-status-ok-tint text-status-ok'
+            : 'bg-status-bad-tint text-status-bad'
         }`}>
           {saveMessage.text}
         </div>

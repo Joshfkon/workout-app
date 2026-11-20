@@ -53,15 +53,15 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="inline-flex rounded-lg bg-surface-800 p-1 gap-1" role="group" aria-label="Theme">
+    <div className="flex w-full rounded-[10px] bg-fill p-0.5" role="group" aria-label="Theme">
       {OPTIONS.map(({ value, label, icon }) => (
         <button
           key={value}
           onClick={() => setTheme(value)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+          className={`flex flex-1 h-8 items-center justify-center gap-1.5 rounded-[8px] text-subhead transition-colors ${
             theme === value
-              ? 'bg-surface-600 text-surface-50'
-              : 'text-surface-400 hover:text-surface-200'
+              ? 'bg-card font-semibold text-ink shadow-[0_1px_3px_rgb(0_0_0/0.14)]'
+              : 'font-medium text-ink-2 hover:text-ink'
           }`}
           aria-pressed={theme === value}
         >
@@ -78,15 +78,15 @@ export function ThemeToggleCompact() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="inline-flex rounded-lg bg-surface-800/80 p-0.5 gap-0.5" role="group" aria-label="Theme">
+    <div className="inline-flex rounded-lg bg-fill/80 p-0.5 gap-0.5" role="group" aria-label="Theme">
       {OPTIONS.map(({ value, icon, title }) => (
         <button
           key={value}
           onClick={() => setTheme(value)}
           className={`p-1.5 rounded-md transition-colors ${
             theme === value
-              ? 'bg-surface-600 text-surface-50'
-              : 'text-surface-400 hover:text-surface-200'
+              ? 'bg-sep text-ink'
+              : 'text-ink-2 hover:text-ink'
           }`}
           aria-pressed={theme === value}
           aria-label={title}

@@ -610,24 +610,24 @@ export function ImportExportSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
-            Import & Export
+            Import & export
           </CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
+          <p className="text-body text-ink-2 mt-1">
             Transfer your data to and from other fitness apps
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Tab Navigation */}
-          <div className="flex gap-2 border-b border-surface-700 pb-2">
+          <div className="flex gap-2 border-b border-sep pb-2">
             <button
               onClick={() => { setActiveTab('import'); setPreviewData(null); setResult(null); }}
               className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
                 activeTab === 'import'
-                  ? 'bg-surface-800 text-primary-400 border-b-2 border-primary-500'
-                  : 'text-surface-400 hover:text-surface-200'
+                  ? 'bg-fill text-action border-b-2 border-action'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               Import
@@ -636,8 +636,8 @@ export function ImportExportSettings() {
               onClick={() => { setActiveTab('export'); setPreviewData(null); setResult(null); }}
               className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
                 activeTab === 'export'
-                  ? 'bg-surface-800 text-primary-400 border-b-2 border-primary-500'
-                  : 'text-surface-400 hover:text-surface-200'
+                  ? 'bg-fill text-action border-b-2 border-action'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               Export
@@ -652,42 +652,42 @@ export function ImportExportSettings() {
                   onClick={() => { setImportSource('strong'); setPreviewData(null); setResult(null); }}
                   className={`p-4 rounded-xl border-2 transition-all text-left ${
                     importSource === 'strong'
-                      ? 'border-primary-500 bg-primary-500/10'
-                      : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                      ? 'border-action bg-action/10'
+                      : 'border-sep hover:border-sep bg-fill/50'
                   }`}
                 >
-                  <div className="text-2xl mb-1">💪</div>
-                  <h3 className="font-bold text-surface-100">Strong App</h3>
-                  <p className="text-xs text-surface-400">Import workout history</p>
+                  <div className="text-title mb-1">💪</div>
+                  <h3 className="font-bold text-ink">Strong App</h3>
+                  <p className="text-caption text-ink-2">Import workout history</p>
                 </button>
 
                 <button
                   onClick={() => { setImportSource('loseit'); setPreviewData(null); setResult(null); }}
                   className={`p-4 rounded-xl border-2 transition-all text-left ${
                     importSource === 'loseit'
-                      ? 'border-primary-500 bg-primary-500/10'
-                      : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                      ? 'border-action bg-action/10'
+                      : 'border-sep hover:border-sep bg-fill/50'
                   }`}
                 >
-                  <div className="text-2xl mb-1">🍎</div>
-                  <h3 className="font-bold text-surface-100">LoseIt</h3>
-                  <p className="text-xs text-surface-400">Import food logs</p>
+                  <div className="text-title mb-1">🍎</div>
+                  <h3 className="font-bold text-ink">LoseIt</h3>
+                  <p className="text-caption text-ink-2">Import food logs</p>
                 </button>
               </div>
 
               {/* Import Instructions */}
               {importSource && (
                 <div className="space-y-3">
-                  <div className="p-3 bg-surface-800/50 rounded-lg">
-                    <h4 className="font-medium text-surface-200 text-sm mb-2">How to export from {importSource === 'strong' ? 'Strong' : 'LoseIt'}:</h4>
+                  <div className="p-3 bg-fill/50 rounded-lg">
+                    <h4 className="font-medium text-ink text-body mb-2">How to export from {importSource === 'strong' ? 'Strong' : 'LoseIt'}:</h4>
                     {importSource === 'strong' ? (
-                      <ol className="text-xs text-surface-400 space-y-1 list-decimal list-inside">
+                      <ol className="text-caption text-ink-2 space-y-1 list-decimal list-inside">
                         <li>Open Strong app → Settings → Export Data</li>
                         <li>Choose &quot;CSV&quot; format</li>
                         <li>Save and upload the file below</li>
                       </ol>
                     ) : (
-                      <ol className="text-xs text-surface-400 space-y-1 list-decimal list-inside">
+                      <ol className="text-caption text-ink-2 space-y-1 list-decimal list-inside">
                         <li>Log into LoseIt on the web (loseit.com)</li>
                         <li>Go to Settings → My Account → Export Data</li>
                         <li>Download and upload the CSV below</li>
@@ -695,7 +695,7 @@ export function ImportExportSettings() {
                     )}
                   </div>
 
-                  <div className="border-2 border-dashed border-surface-700 rounded-lg p-6 text-center">
+                  <div className="border-2 border-dashed border-sep rounded-lg p-6 text-center">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -703,10 +703,10 @@ export function ImportExportSettings() {
                       onChange={handleFileSelect}
                       className="hidden"
                     />
-                    <div className="text-3xl mb-2">📄</div>
-                    <p className="text-surface-300 text-sm mb-2">Drop your CSV file here or</p>
+                    <div className="text-large-title mb-2">📄</div>
+                    <p className="text-ink-2 text-body mb-2">Drop your CSV file here or</p>
                     <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
-                      {isProcessing ? 'Processing...' : 'Select File'}
+                      {isProcessing ? 'Processing...' : 'Select file'}
                     </Button>
                   </div>
                 </div>
@@ -716,27 +716,27 @@ export function ImportExportSettings() {
               {previewData && previewData.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-surface-200">Preview ({previewData.length} items)</span>
-                    <Badge variant="warning">Ready to Import</Badge>
+                    <span className="text-body font-medium text-ink">Preview ({previewData.length} items)</span>
+                    <Badge variant="warning">Ready to import</Badge>
                   </div>
                   <div className="max-h-48 overflow-y-auto space-y-2">
                     {importSource === 'strong' ? (
                       (previewData as ParsedStrongWorkout[]).slice(0, 5).map((workout, idx) => (
-                        <div key={idx} className="p-2 bg-surface-800/50 rounded-lg text-sm">
-                          <p className="font-medium text-surface-200">{workout.workoutName}</p>
-                          <p className="text-xs text-surface-500">{workout.date} • {workout.exercises.length} exercises</p>
+                        <div key={idx} className="p-2 bg-fill/50 rounded-lg text-body">
+                          <p className="font-medium text-ink">{workout.workoutName}</p>
+                          <p className="text-caption text-ink-3">{workout.date} • {workout.exercises.length} exercises</p>
                         </div>
                       ))
                     ) : (
                       (previewData as ParsedLoseItEntry[]).slice(0, 5).map((entry, idx) => (
-                        <div key={idx} className="p-2 bg-surface-800/50 rounded-lg text-sm">
-                          <p className="font-medium text-surface-200">{entry.name}</p>
-                          <p className="text-xs text-surface-500">{entry.date} • {entry.calories} cal</p>
+                        <div key={idx} className="p-2 bg-fill/50 rounded-lg text-body">
+                          <p className="font-medium text-ink">{entry.name}</p>
+                          <p className="text-caption text-ink-3">{entry.date} • {entry.calories} cal</p>
                         </div>
                       ))
                     )}
                     {previewData.length > 5 && (
-                      <p className="text-center text-xs text-surface-500 py-1">
+                      <p className="text-center text-caption text-ink-3 py-1">
                         ...and {previewData.length - 5} more
                       </p>
                     )}
@@ -744,18 +744,18 @@ export function ImportExportSettings() {
 
                   {/* Progress Bar */}
                   {importProgress && (
-                    <div className="p-3 bg-surface-800 rounded-lg border border-surface-700">
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-surface-300">Importing...</span>
-                        <span className="text-surface-400">{importProgress.current} / {importProgress.total}</span>
+                    <div className="p-3 bg-fill rounded-lg border border-sep">
+                      <div className="flex justify-between text-caption mb-1">
+                        <span className="text-ink-2">Importing...</span>
+                        <span className="text-ink-2">{importProgress.current} / {importProgress.total}</span>
                       </div>
-                      <div className="w-full bg-surface-700 rounded-full h-2 overflow-hidden">
+                      <div className="w-full bg-sep rounded-full h-2 overflow-hidden">
                         <div
-                          className="bg-gradient-to-r from-primary-500 to-primary-400 h-full rounded-full transition-all duration-300"
+                          className="bg-action h-full rounded-full transition-all duration-300"
                           style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
                         />
                       </div>
-                      <p className="text-xs text-surface-500 mt-1 truncate">{importProgress.currentItem}</p>
+                      <p className="text-caption text-ink-3 mt-1 truncate">{importProgress.currentItem}</p>
                     </div>
                   )}
 
@@ -774,18 +774,18 @@ export function ImportExportSettings() {
 
               {/* Result */}
               {result && (
-                <div className={`p-3 rounded-lg ${result.success ? 'bg-success-500/10 border border-success-500/20' : 'bg-danger-500/10 border border-danger-500/20'}`}>
+                <div className={`p-3 rounded-lg ${result.success ? 'bg-status-ok/10 border border-status-ok/20' : 'bg-status-bad/10 border border-status-bad/20'}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">{result.success ? '✅' : '❌'}</span>
+                    <span className="text-title">{result.success ? '✅' : '❌'}</span>
                     <div>
-                      <p className={`font-medium text-sm ${result.success ? 'text-success-400' : 'text-danger-400'}`}>
-                        {result.success ? 'Import Complete!' : 'Import Failed'}
+                      <p className={`font-medium text-sm ${result.success ? 'text-status-ok' : 'text-status-bad'}`}>
+                        {result.success ? 'Import complete' : 'Import failed'}
                       </p>
-                      <p className="text-xs text-surface-400">
+                      <p className="text-caption text-ink-2">
                         {result.imported} imported, {result.skipped} skipped
                       </p>
                       {(result.newExercises ?? 0) > 0 && (
-                        <p className="text-xs text-warning-400 mt-1">
+                        <p className="text-caption text-status-warn mt-1">
                           {result.newExercises} new custom exercise{result.newExercises === 1 ? '' : 's'} created
                           from this file — queued for AI muscle review on the Exercises page.
                         </p>
@@ -799,32 +799,32 @@ export function ImportExportSettings() {
 
           {activeTab === 'export' && (
             <div className="space-y-4">
-              <p className="text-sm text-surface-400">
+              <p className="text-body text-ink-2">
                 Download your data in formats compatible with other apps.
               </p>
 
               <div className="grid sm:grid-cols-2 gap-3">
-                <div className="p-4 bg-surface-800/50 rounded-xl border border-surface-700">
-                  <div className="text-2xl mb-1">💪</div>
-                  <h3 className="font-bold text-surface-100">Workout Data</h3>
-                  <p className="text-xs text-surface-400 mb-3">Strong-compatible format</p>
+                <div className="p-4 bg-fill/50 rounded-xl border border-sep">
+                  <div className="text-title mb-1">💪</div>
+                  <h3 className="font-bold text-ink">Workout data</h3>
+                  <p className="text-caption text-ink-2 mb-3">Strong-compatible format</p>
                   <Button size="sm" onClick={() => handleExport('strong')} isLoading={isProcessing} className="w-full">
                     Download CSV
                   </Button>
                 </div>
 
-                <div className="p-4 bg-surface-800/50 rounded-xl border border-surface-700">
-                  <div className="text-2xl mb-1">🍎</div>
-                  <h3 className="font-bold text-surface-100">Nutrition Data</h3>
-                  <p className="text-xs text-surface-400 mb-3">LoseIt-compatible format</p>
+                <div className="p-4 bg-fill/50 rounded-xl border border-sep">
+                  <div className="text-title mb-1">🍎</div>
+                  <h3 className="font-bold text-ink">Nutrition data</h3>
+                  <p className="text-caption text-ink-2 mb-3">LoseIt-compatible format</p>
                   <Button size="sm" onClick={() => handleExport('loseit')} isLoading={isProcessing} className="w-full">
                     Download CSV
                   </Button>
                 </div>
               </div>
 
-              <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-                <p className="text-xs text-primary-400">
+              <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
+                <p className="text-caption text-action">
                   💡 Tip: Export your data monthly to keep a local backup of your training history.
                 </p>
               </div>
@@ -834,24 +834,24 @@ export function ImportExportSettings() {
       </Card>
 
       {/* Data Maintenance */}
-      <Card className="border-surface-700">
+      <Card className="border-sep">
         <CardHeader>
-          <CardTitle className="text-sm">Data Maintenance</CardTitle>
+          <CardTitle className="text-body">Data maintenance</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {fixResult && (
             <div className={`p-3 rounded-lg text-sm ${
               fixResult.success
-                ? 'bg-success-500/10 border border-success-500/20 text-success-400'
-                : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+                ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
+                : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
             }`}>
               {fixResult.message}
             </div>
           )}
 
-          <div className="p-3 bg-surface-800 rounded-lg">
-            <h4 className="font-medium text-surface-200 text-sm mb-1">Fix Exercise Categories</h4>
-            <p className="text-xs text-surface-400 mb-2">
+          <div className="p-3 bg-fill rounded-lg">
+            <h4 className="font-medium text-ink text-body mb-1">Fix exercise categories</h4>
+            <p className="text-caption text-ink-2 mb-2">
               Re-categorize custom exercises that may have wrong muscle assignments.
             </p>
             <Button
@@ -860,17 +860,17 @@ export function ImportExportSettings() {
               onClick={handleFixExerciseCategories}
               disabled={isFixingCategories}
             >
-              {isFixingCategories ? 'Fixing...' : 'Fix Categories'}
+              {isFixingCategories ? 'Fixing...' : 'Fix categories'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* Danger Zone */}
-      <Card className="border-danger-500/30">
+      <Card className="border-status-bad/30">
         <CardHeader>
-          <CardTitle className="text-danger-400 text-sm">Danger Zone</CardTitle>
-          <p className="text-xs text-surface-400">
+          <CardTitle className="text-status-bad text-body">Danger zone</CardTitle>
+          <p className="text-caption text-ink-2">
             Permanently delete all your data. This cannot be undone!
           </p>
         </CardHeader>
@@ -878,8 +878,8 @@ export function ImportExportSettings() {
           {deleteResult && (
             <div className={`p-3 rounded-lg text-sm ${
               deleteResult.success
-                ? 'bg-success-500/10 border border-success-500/20 text-success-400'
-                : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+                ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
+                : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
             }`}>
               {deleteResult.success
                 ? `Successfully deleted ${deleteResult.count} items`
@@ -891,20 +891,20 @@ export function ImportExportSettings() {
             <Button
               variant="outline"
               size="sm"
-              className="border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+              className="border-status-bad/50 text-status-bad hover:bg-status-bad/10"
               onClick={() => { setDeleteType('workouts'); setShowDeleteConfirm(true); }}
               disabled={isDeleting}
             >
-              Delete All Workouts
+              Delete all workouts
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+              className="border-status-bad/50 text-status-bad hover:bg-status-bad/10"
               onClick={() => { setDeleteType('nutrition'); setShowDeleteConfirm(true); }}
               disabled={isDeleting}
             >
-              Delete All Nutrition
+              Delete all nutrition
             </Button>
           </div>
         </CardContent>
@@ -913,13 +913,13 @@ export function ImportExportSettings() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-surface-900 border border-surface-700 rounded-xl p-6 max-w-md mx-4 shadow-xl">
+          <div className="bg-card rounded-card p-6 max-w-md mx-4 shadow-xl">
             <div className="text-center">
               <div className="text-4xl mb-4">⚠️</div>
-              <h3 className="text-xl font-bold text-surface-100 mb-2">
-                Delete All {deleteType === 'workouts' ? 'Workout History' : 'Nutrition Logs'}?
+              <h3 className="text-title font-bold text-ink mb-2">
+                Delete all {deleteType === 'workouts' ? 'workout history' : 'nutrition logs'}?
               </h3>
-              <p className="text-surface-400 mb-6 text-sm">
+              <p className="text-ink-2 mb-6 text-body">
                 This will permanently delete <strong>all</strong> your {deleteType === 'workouts' ? 'workouts, exercises, and sets' : 'food logs'}.
                 This action cannot be undone.
               </p>
@@ -932,11 +932,11 @@ export function ImportExportSettings() {
                   Cancel
                 </Button>
                 <Button
-                  className="bg-danger-500 hover:bg-danger-600 text-white"
+                  className="bg-status-bad hover:bg-status-bad text-white"
                   onClick={() => deleteType && handleDeleteAll(deleteType)}
                   isLoading={isDeleting}
                 >
-                  Yes, Delete Everything
+                  Yes, delete everything
                 </Button>
               </div>
             </div>

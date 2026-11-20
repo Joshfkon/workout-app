@@ -102,26 +102,26 @@ export function EducationPreferencesCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
           </svg>
-          Education & Tips
+          Education & tips
         </CardTitle>
-        <p className="text-sm text-surface-400 mt-1">
+        <p className="text-body text-ink-2 mt-1">
           Control how the app explains features and terminology
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Experience Level Selection */}
-        <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700">
+        <div className="p-4 bg-fill/50 rounded-lg border border-sep">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-sm font-medium text-surface-200">Training Experience</p>
-              <p className="text-xs text-surface-500">Adjusts guidance level throughout the app</p>
+              <p className="text-body font-medium text-ink">Training experience</p>
+              <p className="text-caption text-ink-3">Adjusts guidance level throughout the app</p>
             </div>
             <button
               onClick={() => setShowExperienceDetails(!showExperienceDetails)}
-              className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+              className="text-caption text-action flex items-center gap-1"
             >
               {showExperienceDetails ? 'Hide' : 'What changes?'}
               <svg
@@ -136,7 +136,7 @@ export function EducationPreferencesCard() {
           </div>
 
           {isLoadingExperience ? (
-            <div className="h-12 bg-surface-700/50 rounded-lg animate-pulse" />
+            <div className="h-12 bg-sep/50 rounded-lg animate-pulse" />
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {(['novice', 'intermediate', 'advanced'] as Experience[]).map((level) => {
@@ -148,14 +148,14 @@ export function EducationPreferencesCard() {
                     onClick={() => handleExperienceChange(level)}
                     className={`p-3 rounded-lg text-center transition-all ${
                       isSelected
-                        ? 'bg-primary-500/20 border-2 border-primary-500'
-                        : 'bg-surface-700/50 border border-surface-600 hover:border-surface-500'
+                        ? 'bg-action/20 border-2 border-action'
+                        : 'bg-sep/50 border border-sep hover:border-ink-3'
                     }`}
                   >
-                    <p className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-surface-200'}`}>
+                    <p className={`text-sm font-medium ${isSelected ? 'text-action' : 'text-ink'}`}>
                       {info.label}
                     </p>
-                    <p className="text-xs text-surface-500 mt-0.5">{info.sublabel}</p>
+                    <p className="text-caption text-ink-3 mt-0.5">{info.sublabel}</p>
                   </button>
                 );
               })}
@@ -164,12 +164,12 @@ export function EducationPreferencesCard() {
 
           {/* Expandable details about what changes */}
           {showExperienceDetails && currentExperienceInfo && (
-            <div className="mt-4 pt-4 border-t border-surface-700">
-              <p className="text-sm text-surface-300 mb-2">{currentExperienceInfo.description}</p>
+            <div className="mt-4 pt-4 border-t border-sep">
+              <p className="text-body text-ink-2 mb-2">{currentExperienceInfo.description}</p>
               <ul className="space-y-1.5">
                 {currentExperienceInfo.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-xs text-surface-400">
-                    <svg className="w-3.5 h-3.5 text-primary-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <li key={idx} className="flex items-start gap-2 text-caption text-ink-2">
+                    <svg className="w-3.5 h-3.5 text-action mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     {feature}
@@ -182,8 +182,8 @@ export function EducationPreferencesCard() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-surface-200">Show Beginner Tips</p>
-            <p className="text-xs text-surface-500">Display helpful hints when you first use features</p>
+            <p className="text-body font-medium text-ink">Show beginner tips</p>
+            <p className="text-caption text-ink-3">Display helpful hints when you first use features</p>
           </div>
           <Toggle
             checked={showBeginnerTips}
@@ -193,8 +193,8 @@ export function EducationPreferencesCard() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-surface-200">Explain Science Terms</p>
-            <p className="text-xs text-surface-500">Show tooltips for terms like MEV, RIR, FFMI, etc.</p>
+            <p className="text-body font-medium text-ink">Explain science terms</p>
+            <p className="text-caption text-ink-3">Show tooltips for terms like MEV, RIR, FFMI, etc.</p>
           </div>
           <Toggle
             checked={explainScienceTerms}
@@ -203,11 +203,11 @@ export function EducationPreferencesCard() {
         </div>
 
         {dismissedHints.length > 0 && (
-          <div className="pt-4 border-t border-surface-700">
+          <div className="pt-4 border-t border-sep">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-surface-200">Reset Tips</p>
-                <p className="text-xs text-surface-500">
+                <p className="text-body font-medium text-ink">Reset tips</p>
+                <p className="text-caption text-ink-3">
                   You&apos;ve dismissed {dismissedHints.length} tips. Reset to see them again.
                 </p>
               </div>
@@ -234,7 +234,7 @@ export function EducationPreferencesCard() {
                   size="sm"
                   onClick={() => setShowResetConfirm(true)}
                 >
-                  Reset Tips
+                  Reset tips
                 </Button>
               )}
             </div>
@@ -242,24 +242,24 @@ export function EducationPreferencesCard() {
         )}
 
         {/* Glossary Link */}
-        <div className="pt-4 border-t border-surface-700">
+        <div className="pt-4 border-t border-sep">
           <Link
             href="/dashboard/glossary"
-            className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg hover:bg-surface-700/50 transition-colors group"
+            className="flex items-center justify-between p-3 bg-fill/50 rounded-lg hover:bg-sep/50 transition-colors group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary-500/10 flex items-center justify-center">
-                <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-8 h-8 rounded-lg bg-action/10 flex items-center justify-center">
+                <svg className="w-4 h-4 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-medium text-surface-200">Training Glossary</p>
-                <p className="text-xs text-surface-500">Look up any training term or concept</p>
+                <p className="text-body font-medium text-ink">Training glossary</p>
+                <p className="text-caption text-ink-3">Look up any training term or concept</p>
               </div>
             </div>
             <svg
-              className="w-5 h-5 text-surface-500 group-hover:text-primary-400 transition-colors"
+              className="w-5 h-5 text-ink-3 group-hover:text-action transition-colors"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -269,10 +269,10 @@ export function EducationPreferencesCard() {
           </Link>
         </div>
 
-        <div className="p-3 bg-surface-800/50 rounded-lg">
-          <p className="text-xs text-surface-400">
-            <span className="text-primary-400">Tip:</span> You can always learn more about training concepts
-            in the <Link href="/dashboard/learn" className="text-primary-400 hover:underline">Learn Hub</Link>.
+        <div className="p-3 bg-fill/50 rounded-lg">
+          <p className="text-caption text-ink-2">
+            <span className="text-action">Tip:</span> You can always learn more about training concepts
+            in the <Link href="/dashboard/learn" className="text-action hover:underline">Learn hub</Link>.
           </p>
         </div>
       </CardContent>

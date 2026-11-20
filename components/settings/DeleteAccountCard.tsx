@@ -48,21 +48,21 @@ export function DeleteAccountCard() {
 
   return (
     <>
-      <Card className="border-danger-500/30">
+      <Card className="border-status-bad/30">
         <CardHeader>
-          <CardTitle className="text-danger-400">Danger Zone</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
+          <CardTitle className="text-status-bad">Danger zone</CardTitle>
+          <p className="text-body text-ink-2 mt-1">
             Permanently delete your account and all associated data. This cannot be undone.
           </p>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between p-4 bg-danger-500/5 border border-danger-500/20 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-status-bad/5 border border-status-bad/20 rounded-lg">
             <div>
-              <p className="text-sm font-medium text-surface-200">Delete my account</p>
-              <p className="text-xs text-surface-500">Removes your profile, workouts, nutrition, and all other data</p>
+              <p className="text-body font-medium text-ink">Delete my account</p>
+              <p className="text-caption text-ink-3">Removes your profile, workouts, nutrition, and all other data</p>
             </div>
             <Button variant="danger" size="sm" onClick={() => setShowConfirm(true)}>
-              Delete Account
+              Delete account
             </Button>
           </div>
         </CardContent>
@@ -70,18 +70,18 @@ export function DeleteAccountCard() {
 
       <Modal isOpen={showConfirm} onClose={closeModal} title="Delete account?" size="md">
         <div className="space-y-4">
-          <p className="text-sm text-surface-300">
-            This will <strong className="text-danger-400">permanently delete</strong> your account and
+          <p className="text-body text-ink-2">
+            This will <strong className="text-status-bad">permanently delete</strong> your account and
             all of your data — workouts, history, body composition, nutrition, and settings. This action
             cannot be undone.
           </p>
-          <p className="text-xs text-surface-500">
+          <p className="text-caption text-ink-3">
             If you have a paid subscription, it is cancelled as part of deleting your account.
           </p>
 
           <div>
-            <label className="block text-sm text-surface-300 mb-1.5">
-              Type <span className="font-mono font-semibold text-surface-100">DELETE</span> to confirm
+            <label className="block text-body text-ink-2 mb-1.5">
+              Type <span className="font-mono font-semibold text-ink">DELETE</span> to confirm
             </label>
             <Input
               value={confirmText}
@@ -93,7 +93,7 @@ export function DeleteAccountCard() {
           </div>
 
           {error && (
-            <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg text-sm text-danger-400">
+            <div className="p-3 bg-status-bad/10 border border-status-bad/20 rounded-lg text-body text-status-bad">
               {error}
             </div>
           )}
@@ -108,7 +108,7 @@ export function DeleteAccountCard() {
               disabled={!canDelete || isDeleting}
               isLoading={isDeleting}
             >
-              Permanently Delete
+              Permanently delete
             </Button>
           </div>
         </div>

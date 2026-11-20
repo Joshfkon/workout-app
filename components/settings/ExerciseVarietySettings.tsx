@@ -44,7 +44,7 @@ const VARIETY_LEVELS: {
   },
   {
     value: 'high',
-    label: 'High Variety',
+    label: 'High variety',
     description: 'Rotate through 8-10+ exercises per muscle',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -143,9 +143,9 @@ export function ExerciseVarietySettings({
   if (isLoading) {
     return (
       <div className={`animate-pulse space-y-4 ${className}`}>
-        <div className="h-20 bg-surface-700/50 rounded-lg" />
-        <div className="h-20 bg-surface-700/50 rounded-lg" />
-        <div className="h-20 bg-surface-700/50 rounded-lg" />
+        <div className="h-20 bg-sep/50 rounded-lg" />
+        <div className="h-20 bg-sep/50 rounded-lg" />
+        <div className="h-20 bg-sep/50 rounded-lg" />
       </div>
     );
   }
@@ -154,8 +154,8 @@ export function ExerciseVarietySettings({
     <div className={`space-y-6 ${className}`}>
       {/* Variety Level Selection */}
       <div>
-        <label className="block text-sm font-medium text-surface-200 mb-3">
-          Exercise Variety Level
+        <label className="block text-body font-medium text-ink mb-3">
+          Exercise variety level
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {VARIETY_LEVELS.map((level) => (
@@ -164,36 +164,36 @@ export function ExerciseVarietySettings({
               onClick={() => handleVarietyLevelChange(level.value)}
               className={`p-4 rounded-lg border-2 transition-all text-left ${
                 varietyLevel === level.value
-                  ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-surface-700 bg-surface-800/50 hover:border-surface-600'
+                  ? 'border-action bg-action/10'
+                  : 'border-sep bg-fill/50 hover:border-sep'
               }`}
             >
               <div className="flex items-center gap-3 mb-2">
                 <div
                   className={`${
-                    varietyLevel === level.value ? 'text-primary-400' : 'text-surface-400'
+                    varietyLevel === level.value ? 'text-action' : 'text-ink-2'
                   }`}
                 >
                   {level.icon}
                 </div>
                 <span
                   className={`font-medium ${
-                    varietyLevel === level.value ? 'text-primary-400' : 'text-surface-200'
+                    varietyLevel === level.value ? 'text-action' : 'text-ink'
                   }`}
                 >
                   {level.label}
                 </span>
               </div>
-              <p className="text-xs text-surface-500">{level.description}</p>
+              <p className="text-caption text-ink-3">{level.description}</p>
             </button>
           ))}
         </div>
       </div>
 
       {/* Description of current selection */}
-      <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700">
+      <div className="p-4 bg-fill/50 rounded-lg border border-sep">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-primary-500/10 rounded-lg text-primary-400">
+          <div className="p-2 bg-action/10 rounded-lg text-action">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
@@ -204,8 +204,8 @@ export function ExerciseVarietySettings({
             </svg>
           </div>
           <div>
-            <p className="text-sm text-surface-300">{VARIETY_LEVEL_DEFAULTS[varietyLevel].description}</p>
-            <p className="text-xs text-surface-500 mt-1">
+            <p className="text-body text-ink-2">{VARIETY_LEVEL_DEFAULTS[varietyLevel].description}</p>
+            <p className="text-caption text-ink-3 mt-1">
               {varietyLevel === 'high' && (
                 <>
                   Great for targeting muscles from different angles and preventing adaptation plateaus.
@@ -232,7 +232,7 @@ export function ExerciseVarietySettings({
       {/* Advanced Settings Toggle */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 transition-colors"
+        className="flex items-center gap-2 text-body text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
@@ -242,16 +242,16 @@ export function ExerciseVarietySettings({
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
-        Advanced Settings
+        Advanced settings
       </button>
 
       {/* Advanced Settings */}
       {showAdvanced && (
-        <div className="space-y-6 p-4 bg-surface-800/30 rounded-lg border border-surface-700">
+        <div className="space-y-6 p-4 bg-fill/30 rounded-lg border border-sep">
           {/* Rotation Frequency */}
           <div>
             <Slider
-              label="Rotation Frequency"
+              label="Rotation frequency"
               min={0}
               max={5}
               step={1}
@@ -262,7 +262,7 @@ export function ExerciseVarietySettings({
               }}
               valueFormatter={(v) => (v === 0 ? 'No limit' : `${v} sessions`)}
             />
-            <p className="text-xs text-surface-500 mt-1">
+            <p className="text-caption text-ink-3 mt-1">
               How many sessions before the same exercise can be suggested again for a muscle group.
               Set to 0 for no restriction.
             </p>
@@ -271,7 +271,7 @@ export function ExerciseVarietySettings({
           {/* Min Pool Size */}
           <div>
             <Slider
-              label="Minimum Exercise Pool"
+              label="Minimum exercise pool"
               min={2}
               max={12}
               step={1}
@@ -282,7 +282,7 @@ export function ExerciseVarietySettings({
               }}
               valueFormatter={(v) => `${v} exercises`}
             />
-            <p className="text-xs text-surface-500 mt-1">
+            <p className="text-caption text-ink-3 mt-1">
               Minimum number of different exercises to rotate between for each muscle group.
             </p>
           </div>
@@ -290,8 +290,8 @@ export function ExerciseVarietySettings({
           {/* Prioritize Top Tier */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-surface-200">Prioritize Top-Tier Exercises</p>
-              <p className="text-xs text-surface-500">
+              <p className="text-body font-medium text-ink">Prioritize top-tier exercises</p>
+              <p className="text-caption text-ink-3">
                 Still prefer S/A-tier exercises when selecting from the variety pool
               </p>
             </div>
@@ -309,7 +309,7 @@ export function ExerciseVarietySettings({
       {/* Save Button */}
       <div className="flex justify-end">
         <Button onClick={handleSave} isLoading={isSaving} disabled={!hasChanges && !isSaving}>
-          {hasChanges ? 'Save Changes' : 'Saved'}
+          {hasChanges ? 'Save changes' : 'Saved'}
         </Button>
       </div>
     </div>

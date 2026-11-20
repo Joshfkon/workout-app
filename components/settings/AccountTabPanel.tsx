@@ -54,28 +54,28 @@ export function AccountTabPanel() {
       {/* MAINTENANCE & SETUP */}
       <Card>
         <CardHeader>
-          <CardTitle>Maintenance & Setup</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
+          <CardTitle>Maintenance & setup</CardTitle>
+          <p className="text-body text-ink-2 mt-1">
             Onboarding, calibration, and promo codes
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-fill/50 rounded-lg">
             <div>
-              <p className="text-sm font-medium text-surface-200">Setup Wizard</p>
-              <p className="text-xs text-surface-500">Re-run the onboarding process to update your profile</p>
+              <p className="text-body font-medium text-ink">Setup wizard</p>
+              <p className="text-caption text-ink-3">Re-run the onboarding process to update your profile</p>
             </div>
             <Link href="/onboarding">
               <Button variant="outline" size="sm">
-                Re-run Setup
+                Re-run setup
               </Button>
             </Link>
           </div>
           
-          <div className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-fill/50 rounded-lg">
             <div>
-              <p className="text-sm font-medium text-surface-200">Strength Calibration</p>
-              <p className="text-xs text-surface-500">Update your benchmark lifts for better weight recommendations</p>
+              <p className="text-body font-medium text-ink">Strength calibration</p>
+              <p className="text-caption text-ink-3">Update your benchmark lifts for better weight recommendations</p>
             </div>
             <Link href="/onboarding/calibrate">
               <Button variant="outline" size="sm">
@@ -85,9 +85,9 @@ export function AccountTabPanel() {
           </div>
 
           {/* Promo Code Redemption (standardized, no gradient) */}
-          <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700">
-            <p className="text-sm font-medium text-surface-200 mb-1">Redeem Promo Code</p>
-            <p className="text-xs text-surface-500 mb-3">Have a promo code? Enter it below to unlock premium features.</p>
+          <div className="p-4 bg-fill/50 rounded-lg border border-sep">
+            <p className="text-body font-medium text-ink mb-1">Redeem promo code</p>
+            <p className="text-caption text-ink-3 mb-3">Have a promo code? Enter it below to unlock premium features.</p>
 
             <div className="flex gap-2">
               <Input
@@ -109,8 +109,8 @@ export function AccountTabPanel() {
             {promoResult && (
               <div className={`mt-3 p-3 rounded-lg text-sm ${
                 promoResult.success
-                  ? 'bg-success-500/10 border border-success-500/20 text-success-400'
-                  : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+                  ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
+                  : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
               }`}>
                 {promoResult.message}
               </div>
@@ -120,17 +120,17 @@ export function AccountTabPanel() {
       </Card>
 
       {/* Legal - moved above danger zone for better separation */}
-      <div className="text-center text-xs text-surface-500 space-x-3 py-4">
-        <Link href="/privacy" className="hover:text-surface-300 underline">
-          Privacy Policy
+      <div className="text-center text-caption text-ink-3 space-x-3 py-4">
+        <Link href="/privacy" className="hover:text-ink-2 underline">
+          Privacy policy
         </Link>
-        <Link href="/terms" className="hover:text-surface-300 underline">
-          Terms of Service
+        <Link href="/terms" className="hover:text-ink-2 underline">
+          Terms of service
         </Link>
       </div>
 
       {/* DANGER ZONE - clearly separated at bottom */}
-      <div className="pt-4 border-t-2 border-danger-500/20">
+      <div className="pt-4 border-t-2 border-status-bad/20">
         <DeleteAccountCard />
       </div>
     </div>

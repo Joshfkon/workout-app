@@ -122,10 +122,10 @@ export function BloodPressureSettings() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="pr-4">
-          <p className="text-sm font-medium text-surface-200">
+          <p className="text-body font-medium text-ink">
             Daily blood pressure reminder
           </p>
-          <p className="text-xs text-surface-500">
+          <p className="text-caption text-ink-3">
             A gentle nudge to log a reading. Off by default.
           </p>
         </div>
@@ -138,7 +138,7 @@ export function BloodPressureSettings() {
 
       {prefs.enabled && (
         <div className="flex items-center justify-between pl-1">
-          <label htmlFor="bp-reminder-time" className="text-sm text-surface-300">
+          <label htmlFor="bp-reminder-time" className="text-body text-ink-2">
             Reminder time
           </label>
           <input
@@ -146,13 +146,13 @@ export function BloodPressureSettings() {
             type="time"
             value={prefs.time}
             onChange={(e) => handleTimeChange(e.target.value)}
-            className="rounded-lg bg-surface-800 border border-surface-700 px-3 py-1.5 text-sm text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="rounded-lg bg-fill border border-sep px-3 py-1.5 text-body text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent"
           />
         </div>
       )}
 
       {prefs.enabled && !isNativePlatform() && (
-        <p className="text-xs text-surface-500">
+        <p className="text-caption text-ink-3">
           Reminders are delivered in the HyperTrack mobile app. Your preference is
           saved and will apply there.
         </p>
