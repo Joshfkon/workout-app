@@ -292,7 +292,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             role="group"
           >
             <button
-              aria-label="4+ reps in reserve (cruise)"
+              aria-label="0 reps in reserve (maxed)"
               aria-pressed="false"
               class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
               type="button"
@@ -300,46 +300,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               <span
                 class="text-[16px] font-semibold leading-tight"
               >
-                4+
+                0
               </span>
               <span
                 class="text-[10px] leading-tight text-ink-2"
               >
-                cruise
-              </span>
-            </button>
-            <button
-              aria-label="3 reps in reserve (easy)"
-              aria-pressed="false"
-              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
-              type="button"
-            >
-              <span
-                class="text-[16px] font-semibold leading-tight"
-              >
-                3
-              </span>
-              <span
-                class="text-[10px] leading-tight text-ink-2"
-              >
-                easy
-              </span>
-            </button>
-            <button
-              aria-label="2 reps in reserve (good)"
-              aria-pressed="true"
-              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-action text-on-action"
-              type="button"
-            >
-              <span
-                class="text-[16px] font-semibold leading-tight"
-              >
-                2
-              </span>
-              <span
-                class="text-[10px] leading-tight opacity-80"
-              >
-                good
+                maxed
               </span>
             </button>
             <button
@@ -360,7 +326,24 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </span>
             </button>
             <button
-              aria-label="0 reps in reserve (maxed)"
+              aria-label="2 reps in reserve (good)"
+              aria-pressed="true"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-action text-on-action"
+              type="button"
+            >
+              <span
+                class="text-[16px] font-semibold leading-tight"
+              >
+                2
+              </span>
+              <span
+                class="text-[10px] leading-tight opacity-80"
+              >
+                good
+              </span>
+            </button>
+            <button
+              aria-label="3 reps in reserve (easy)"
               aria-pressed="false"
               class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
               type="button"
@@ -368,12 +351,29 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               <span
                 class="text-[16px] font-semibold leading-tight"
               >
-                0
+                3
               </span>
               <span
                 class="text-[10px] leading-tight text-ink-2"
               >
-                maxed
+                easy
+              </span>
+            </button>
+            <button
+              aria-label="4+ reps in reserve (cruise)"
+              aria-pressed="false"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-card text-ink hover:bg-fill"
+              type="button"
+            >
+              <span
+                class="text-[16px] font-semibold leading-tight"
+              >
+                4+
+              </span>
+              <span
+                class="text-[10px] leading-tight text-ink-2"
+              >
+                cruise
               </span>
             </button>
             <button

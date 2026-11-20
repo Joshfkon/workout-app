@@ -144,18 +144,18 @@ describe('SetLoggerRow feedback sheet', () => {
     );
   });
 
-  describe('RIR chip row (4+ through 0)', () => {
-    it('renders the five effort chips in order with a 4+ chip at the far left and no bone icon', () => {
+  describe('RIR chip row (0 through 4+)', () => {
+    it('renders the five effort chips in order with 0 at the far left, 4+ at the far right and no bone icon', () => {
       render(<SetLoggerRow {...defaultProps} />);
 
       const chips = [
-        screen.getByRole('button', { name: '4+ reps in reserve (cruise)' }),
-        screen.getByRole('button', { name: '3 reps in reserve (easy)' }),
-        screen.getByRole('button', { name: '2 reps in reserve (good)' }),
-        screen.getByRole('button', { name: '1 reps in reserve (hard)' }),
         screen.getByRole('button', { name: '0 reps in reserve (maxed)' }),
+        screen.getByRole('button', { name: '1 reps in reserve (hard)' }),
+        screen.getByRole('button', { name: '2 reps in reserve (good)' }),
+        screen.getByRole('button', { name: '3 reps in reserve (easy)' }),
+        screen.getByRole('button', { name: '4+ reps in reserve (cruise)' }),
       ];
-      // DOM order matches the visual order: 4+ leftmost, 0 rightmost.
+      // DOM order matches the visual order: 0 leftmost, 4+ rightmost.
       for (let i = 1; i < chips.length; i++) {
         expect(
           chips[i - 1].compareDocumentPosition(chips[i]) & Node.DOCUMENT_POSITION_FOLLOWING
