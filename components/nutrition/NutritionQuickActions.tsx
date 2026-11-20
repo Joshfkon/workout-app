@@ -24,13 +24,10 @@ function QuickAction({
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 rounded-xl border py-2.5 text-[11px] transition-colors ${
-        accent
-          ? 'border-primary-500/40 bg-primary-500/10 text-primary-400 hover:bg-primary-500/20'
-          : 'border-surface-800 bg-surface-900 text-surface-300 hover:bg-surface-800'
-      }`}
+      className="flex flex-col items-center gap-1.5 rounded-[14px] bg-card py-3 text-caption text-ink shadow-card transition-colors active:bg-fill"
+      data-accent={accent ? 'true' : undefined}
     >
-      <ActionIcon size={18} aria-hidden="true" />
+      <ActionIcon size={22} className="text-action" aria-hidden="true" />
       {label}
     </button>
   );

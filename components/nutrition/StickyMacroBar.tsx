@@ -12,14 +12,14 @@ interface StickyMacroBarProps {
 function MacroChip({ letter, dotClass, verdict }: { letter: string; dotClass: string; verdict: MacroVerdict }) {
   if (verdict.state === 'none') return null;
   return (
-    <span className="flex items-center gap-1 rounded-full border border-surface-800 bg-surface-900/80 px-2 py-0.5 text-[11px] tabular-nums">
+    <span className="flex items-center gap-1 rounded-full border border-sep bg-card/80 px-2 py-0.5 text-[11px] tabular-nums">
       <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
       {verdict.state === 'hit' ? (
-        <span className="text-success-400 font-medium">{letter} ✓</span>
+        <span className="text-status-ok font-medium">{letter} ✓</span>
       ) : verdict.state === 'over' ? (
-        <span className="text-danger-400 font-medium">{letter} +{verdict.grams}g</span>
+        <span className="text-status-bad font-medium">{letter} +{verdict.grams}g</span>
       ) : (
-        <span className="text-surface-300">{letter} {verdict.grams}g</span>
+        <span className="text-ink">{letter} {verdict.grams}g</span>
       )}
     </span>
   );
@@ -41,10 +41,10 @@ function MacroDetailRow({
   const pct = Math.min((value / target) * 100, 100);
   return (
     <div>
-      <div className="text-[11px] text-surface-500 mb-1">
+      <div className="text-[11px] text-ink-2 mb-1">
         {label} {Math.round(value)} / {target}g
       </div>
-      <div className="h-[3px] bg-surface-800 rounded-full overflow-hidden">
+      <div className="h-[3px] bg-fill rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${fillClass}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -94,7 +94,7 @@ export function StickyMacroBar({ summary, watchRef }: StickyMacroBarProps) {
   return (
     <div
       aria-hidden={!visible}
-      className={`fixed inset-x-0 top-0 !mt-0 z-20 lg:left-64 border-b border-surface-800 bg-surface-950 supports-[backdrop-filter]:bg-surface-950/85 supports-[backdrop-filter]:backdrop-blur-lg transition-transform duration-[250ms] ease-out motion-reduce:transition-none ${
+      className={`fixed inset-x-0 top-0 !mt-0 z-20 lg:left-64 border-b border-sep bg-surface-950 supports-[backdrop-filter]:bg-surface-950/85 supports-[backdrop-filter]:backdrop-blur-lg transition-transform duration-[250ms] ease-out motion-reduce:transition-none ${
         visible ? 'translate-y-0' : '-translate-y-full pointer-events-none'
       }`}
     >
@@ -108,7 +108,7 @@ export function StickyMacroBar({ summary, watchRef }: StickyMacroBarProps) {
             : `${remainingCalories} calories left. Tap for macro breakdown.`
         }
         tabIndex={visible ? 0 : -1}
-        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500/50"
+        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action"
       >
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           {/* Collapsed row: remaining kcal left, macro verdict chips right */}
@@ -118,24 +118,24 @@ export function StickyMacroBar({ summary, watchRef }: StickyMacroBarProps) {
             <div className="flex items-baseline gap-1.5 min-w-0">
               {overCalorieBudget ? (
                 <>
-                  <span className="text-[17px] font-bold text-danger-400 tabular-nums">
+                  <span className="text-[17px] font-bold text-status-bad tabular-nums">
                     −{Math.abs(remainingCalories).toLocaleString()}
                   </span>
-                  <span className="text-[11px] text-danger-400">over</span>
+                  <span className="text-[11px] text-status-bad">over</span>
                 </>
               ) : (
                 <>
-                  <span className="text-[17px] font-bold text-primary-400 tabular-nums">
+                  <span className="text-[17px] font-bold text-action tabular-nums">
                     {remainingCalories.toLocaleString()}
                   </span>
-                  <span className="text-[11px] text-surface-500">kcal left</span>
+                  <span className="text-[11px] text-ink-2">kcal left</span>
                 </>
               )}
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <MacroChip letter="P" dotClass="bg-success-500" verdict={summary.protein} />
-              <MacroChip letter="C" dotClass="bg-warning-500" verdict={summary.carbs} />
-              <MacroChip letter="F" dotClass="bg-danger-500" verdict={summary.fat} />
+              <MacroChip letter="P" dotClass="bg-macro-protein" verdict={summary.protein} />
+              <MacroChip letter="C" dotClass="bg-macro-carbs" verdict={summary.carbs} />
+              <MacroChip letter="F" dotClass="bg-macro-fat" verdict={summary.fat} />
             </div>
           </div>
 
@@ -148,18 +148,18 @@ export function StickyMacroBar({ summary, watchRef }: StickyMacroBarProps) {
             <div className="overflow-hidden">
               {/* pt-3 clears the floating mobile menu button (bottom edge ~56px) */}
               <div className="grid grid-cols-3 gap-2.5 pb-3 pt-3">
-                <MacroDetailRow label="Protein" value={totals.protein} target={summary.targetGrams.protein} fillClass="bg-success-500" />
-                <MacroDetailRow label="Carbs" value={totals.carbs} target={summary.targetGrams.carbs} fillClass="bg-warning-500" />
-                <MacroDetailRow label="Fat" value={totals.fat} target={summary.targetGrams.fat} fillClass="bg-danger-500" />
+                <MacroDetailRow label="Protein" value={totals.protein} target={summary.targetGrams.protein} fillClass="bg-macro-protein" />
+                <MacroDetailRow label="Carbs" value={totals.carbs} target={summary.targetGrams.carbs} fillClass="bg-macro-carbs" />
+                <MacroDetailRow label="Fat" value={totals.fat} target={summary.targetGrams.fat} fillClass="bg-macro-fat" />
               </div>
             </div>
           </div>
         </div>
 
         {/* 4px calorie progress bar along the bottom edge */}
-        <div className="h-1 bg-surface-800">
+        <div className="h-1 bg-fill">
           <div
-            className={`h-full ${overCalorieBudget ? 'bg-danger-500' : 'bg-primary-500'}`}
+            className={`h-full ${overCalorieBudget ? 'bg-status-bad' : 'bg-action'}`}
             style={{ width: `${caloriePct}%` }}
           />
         </div>

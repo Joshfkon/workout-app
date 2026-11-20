@@ -7,7 +7,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardContent, Button, PageSkeleton, SwipeableRow, ToastContainer, useToasts, EmptyState } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, PageSkeleton, SwipeableRow, ToastContainer, useToasts, EmptyState, Chip, ListGroup, ListRow } from '@/components/ui';
 import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
@@ -41,7 +41,6 @@ import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
 import type { LabelScanPrefill } from '@/components/nutrition/LabelScanner';
 import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
 import { FoodEmojiAvatar } from '@/components/nutrition/FoodEmoji';
-import { MEAL_ACCENTS } from '@/lib/nutrition/mealAccents';
 import { StickyMacroBar } from '@/components/nutrition/StickyMacroBar';
 import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
 import { ShareNutritionText } from '@/components/nutrition/ShareNutritionText';
@@ -94,10 +93,10 @@ import {
   IconChevronRight,
   IconCopy,
   IconDots,
+  IconPlus,
   IconScale,
   IconSettings,
   IconShoe,
-  IconToolsKitchen2,
   IconX,
 } from '@tabler/icons-react';
 
@@ -108,12 +107,6 @@ type NutritionTab = 'log' | 'weight' | 'insights';
 function parseNutritionTabParam(value: string | null): NutritionTab | null {
   return value === 'log' || value === 'weight' || value === 'insights' ? value : null;
 }
-
-const NUTRITION_TABS: { key: NutritionTab; label: string; icon: typeof IconScale }[] = [
-  { key: 'log', label: 'Food Log', icon: IconToolsKitchen2 },
-  { key: 'weight', label: 'Weight', icon: IconScale },
-  { key: 'insights', label: 'Insights', icon: IconChartLine },
-];
 
 const DEFAULT_MEAL_CONFIG: { type: MealType; label: string }[] = [
   { type: 'breakfast', label: 'Breakfast' },
@@ -203,18 +196,18 @@ type WeightChartRange = keyof typeof WEIGHT_CHART_RANGE_DAYS;
 function MacroNumbersSkeleton() {
   return (
     <div
-      className="rounded-2xl border border-surface-800 bg-surface-900 p-4 animate-pulse"
+      className="rounded-2xl border border-sep bg-card p-4 animate-pulse"
       aria-hidden="true"
     >
       <div className="mb-4 flex items-center justify-between">
-        <div className="h-6 w-24 rounded bg-surface-800" />
-        <div className="h-4 w-16 rounded bg-surface-800" />
+        <div className="h-6 w-24 rounded bg-fill" />
+        <div className="h-4 w-16 rounded bg-fill" />
       </div>
       <div className="grid grid-cols-4 gap-3">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="space-y-2 text-center">
-            <div className="mx-auto h-7 w-12 rounded bg-surface-800" />
-            <div className="mx-auto h-3 w-10 rounded bg-surface-800" />
+            <div className="mx-auto h-7 w-12 rounded bg-fill" />
+            <div className="mx-auto h-3 w-10 rounded bg-fill" />
           </div>
         ))}
       </div>
@@ -225,10 +218,10 @@ function MacroNumbersSkeleton() {
 /** Skeleton for a single meal section while a never-fetched day loads. */
 function MealSectionSkeleton() {
   return (
-    <div className="rounded-2xl border border-surface-800 bg-surface-900 p-4 animate-pulse">
+    <div className="rounded-2xl border border-sep bg-card p-4 animate-pulse">
       <div className="flex items-center justify-between">
-        <div className="h-4 w-28 rounded bg-surface-800" />
-        <div className="h-3 w-16 rounded bg-surface-800" />
+        <div className="h-4 w-28 rounded bg-fill" />
+        <div className="h-3 w-16 rounded bg-fill" />
       </div>
     </div>
   );
@@ -1677,7 +1670,7 @@ function NutritionPageContent() {
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="mt-4 text-surface-400">Loading...</p>
+          <p className="mt-4 text-ink-2">Loading...</p>
         </div>
       </div>
     );
@@ -1689,7 +1682,7 @@ function NutritionPageContent() {
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="mt-4 text-surface-400">Loading...</p>
+          <p className="mt-4 text-ink-2">Loading...</p>
         </div>
       </div>
     );
@@ -1732,11 +1725,11 @@ function NutritionPageContent() {
 
       {/* Macro Update Notification */}
       {macroUpdateNotification && (
-        <div className="bg-success-500/10 border border-success-500/20 rounded-lg p-3 flex items-center justify-between">
-          <span className="text-success-300 text-sm">{macroUpdateNotification}</span>
+        <div className="bg-status-ok-tint rounded-card px-4 py-3 flex items-center justify-between">
+          <span className="text-status-ok text-sm">{macroUpdateNotification}</span>
           <button
             onClick={() => setMacroUpdateNotification(null)}
-            className="text-success-400 hover:text-success-300"
+            className="text-status-ok hover:text-status-ok"
             aria-label="Dismiss notification"
           >
             <IconX size={16} aria-hidden="true" />
@@ -1744,20 +1737,35 @@ function NutritionPageContent() {
         </div>
       )}
 
+      {/* Weight & trends is a pushed view: back bar instead of the Eat header */}
+      {activeTab !== 'log' && (
+        <div className="flex items-center gap-1" data-testid="trends-nav">
+          <button
+            type="button"
+            onClick={() => handleTabChange('log')}
+            className="-ml-2 flex min-h-[44px] items-center gap-0.5 pr-2 text-body text-action"
+          >
+            <IconChevronLeft size={22} aria-hidden="true" />
+            Eat
+          </button>
+          <h1 className="flex-1 text-center text-headline text-ink pr-14">Weight &amp; trends</h1>
+        </div>
+      )}
+
       {/* Header: title left, date nav + settings right */}
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold text-surface-100">Eat</h1>
-        <div className="flex items-center gap-0.5">
+      <div className={activeTab === 'log' ? 'flex items-center justify-between gap-2' : 'hidden'}>
+        <h1 className="text-large-title text-ink">Eat</h1>
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => changeDate(-1)}
-            className="p-2 text-surface-400 hover:text-surface-100 transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink shadow-card"
             aria-label="Previous day"
           >
             <IconChevronLeft size={18} aria-hidden="true" />
           </button>
           <button
             onClick={() => setShowCalendar(true)}
-            className="min-w-[84px] rounded-lg py-1 text-center text-[13px] font-medium text-surface-100 transition-colors hover:bg-surface-800"
+            className="h-9 min-w-[72px] rounded-full bg-card px-3.5 text-center text-body font-semibold text-ink shadow-card"
             title="Open calendar"
             aria-label={`${dateDisplay} — open calendar`}
             suppressHydrationWarning
@@ -1767,7 +1775,7 @@ function NutritionPageContent() {
           <button
             onClick={() => changeDate(1)}
             disabled={isToday}
-            className="p-2 text-surface-400 hover:text-surface-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink shadow-card disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Next day"
           >
             <IconChevronRight size={18} aria-hidden="true" />
@@ -1794,7 +1802,7 @@ function NutritionPageContent() {
           <div className="relative">
             <button
               onClick={() => setShowSettingsMenu((open) => !open)}
-              className="p-2 text-surface-400 hover:text-surface-100 rounded-lg hover:bg-surface-800 transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink-2 shadow-card hover:text-ink"
               aria-label="Nutrition options"
             >
               <IconSettings size={18} aria-hidden="true" />
@@ -1802,7 +1810,7 @@ function NutritionPageContent() {
             {showSettingsMenu && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowSettingsMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-surface-800 bg-surface-900 py-1 shadow-xl">
+                <div className="absolute right-0 top-full mt-1 z-40 w-56 overflow-hidden rounded-card border border-sep bg-card py-1 shadow-float">
                   {[
                     { label: 'Calculate macros', action: () => setShowMacroCalculator(true) },
                     { label: nutritionTargets ? 'Edit targets' : 'Enter targets manually', action: () => setShowTargetsModal(true) },
@@ -1815,7 +1823,7 @@ function NutritionPageContent() {
                         setShowSettingsMenu(false);
                         item.action();
                       }}
-                      className="w-full px-3 py-2 text-left text-[13px] text-surface-200 hover:bg-surface-800 transition-colors"
+                      className="w-full min-h-[44px] px-3.5 text-left text-body text-ink hover:bg-fill transition-colors"
                     >
                       {item.label}
                     </button>
@@ -1827,59 +1835,9 @@ function NutritionPageContent() {
         </div>
       </div>
 
-      {/* Section tabs: Food Log / Weight / Insights */}
-      <div className="grid grid-cols-3 gap-1 rounded-xl border border-surface-800 bg-surface-900 p-1">
-        {NUTRITION_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => handleTabChange(tab.key)}
-            className={`relative flex items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'bg-surface-800 text-surface-100'
-                : 'text-surface-400 hover:text-surface-200'
-            }`}
-            aria-pressed={activeTab === tab.key}
-          >
-            <tab.icon size={15} aria-hidden="true" />
-            {tab.label}
-            {tab.key === 'weight' && !hasLoggedWeightToday && (
-              <span
-                className="absolute top-1.5 right-2 h-1.5 w-1.5 rounded-full bg-amber-400"
-                aria-hidden="true"
-                title="No weigh-in logged today"
-              />
-            )}
-          </button>
-        ))}
-      </div>
-
       {/* ---- Food Log tab ---- */}
       {/* Tabs hide via CSS (not unmount) so graphs/steps keep their state across switches */}
       <div className={activeTab === 'log' ? 'space-y-4' : 'hidden'}>
-
-      {/* One-tap weigh-in reminder (today only, until logged) */}
-      {isToday && !hasLoggedWeightToday && (
-        <button
-          onClick={() => setShowWeightLog(true)}
-          className="w-full flex items-center justify-between rounded-xl border border-surface-800 bg-surface-900 px-4 py-3 hover:bg-surface-800 transition-colors"
-        >
-          <span className="flex items-center gap-2.5">
-            <IconScale size={18} className="text-primary-400" aria-hidden="true" />
-            <span className="text-[13px] text-surface-200">Log today&apos;s weight</span>
-          </span>
-          <StyledButton
-            variant="primary"
-            size="sm"
-            className="rounded-full px-4 py-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowWeightLog(true);
-            }}
-          >
-            Log
-          </StyledButton>
-        </button>
-      )}
 
       {/* Condensed remaining-macros bar, slides in under the app header once
           the hero card scrolls away (overlays the meal list — no layout shift) */}
@@ -1902,7 +1860,7 @@ function NutritionPageContent() {
         )}
         {!isDaySwitching && stepAdjustment && (
           <p
-            className="mt-2 px-1 text-xs text-surface-400"
+            className="mt-2 px-1 text-subhead text-ink-2 tabular-nums"
             data-testid="step-adjustment-reason"
           >
             <IconShoe size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
@@ -1912,7 +1870,7 @@ function NutritionPageContent() {
             <button
               type="button"
               onClick={() => setShowActivitySettings(true)}
-              className="text-primary-400 underline-offset-2 hover:underline"
+              className="font-semibold text-action"
               data-testid="step-adjustment-settings-link"
             >
               Change
@@ -1920,11 +1878,11 @@ function NutritionPageContent() {
           </p>
         )}
         {!isDaySwitching && !stepAdjustment && dailySummary.hasTargets && (
-          <p className="mt-2 px-1 text-xs">
+          <p className="mt-2 px-1 text-subhead">
             <button
               type="button"
               onClick={() => setShowActivitySettings(true)}
-              className="text-surface-400 hover:text-primary-400"
+              className="text-ink-2 hover:text-action"
               data-testid="step-adjustment-settings-link"
             >
               <IconShoe size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
@@ -1946,17 +1904,18 @@ function NutritionPageContent() {
 
       {/* Frequent-food chips: one tap logs to the time-appropriate meal */}
       {frequentChips.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           {frequentChips.map((food) => (
-            <button
+            <Chip
               key={food.food_name}
               onClick={() => handleQuickLogFrequent(food)}
               title={toTitleCase(food.food_name)}
               aria-label={`Log ${toTitleCase(food.food_name)}`}
-              className="flex-shrink-0 max-w-[14rem] truncate rounded-full border border-surface-800 bg-surface-900 px-2.5 py-1 text-[11px] text-surface-300 hover:bg-surface-800 transition-colors"
+              icon={<IconPlus size={16} />}
+              className="max-w-[14rem]"
             >
-              + {toTitleCase(food.food_name)}
-            </button>
+              <span className="truncate">{toTitleCase(food.food_name)}</span>
+            </Chip>
           ))}
         </div>
       )}
@@ -1965,7 +1924,10 @@ function NutritionPageContent() {
       <div className="space-y-3">
         {isDaySwitching
           ? mealConfig.map((meal) => <MealSectionSkeleton key={meal.type} />)
-          : mealGroups.map((meal) => {
+          : (isToday
+              ? [...mealGroups].sort((a, b) => Number(b.type === timeMealType) - Number(a.type === timeMealType))
+              : mealGroups
+            ).map((meal) => {
           const mealCalories = Math.round(meal.entries.reduce((sum, e) => sum + (e.calories || 0), 0));
           const mealProtein = Math.round(meal.entries.reduce((sum, e) => sum + (e.protein || 0), 0));
           const mealCarbs = Math.round(meal.entries.reduce((sum, e) => sum + (e.carbs || 0), 0));
@@ -1978,30 +1940,30 @@ function NutritionPageContent() {
             <div
               key={meal.type}
               data-meal-section={meal.type}
-              className={`rounded-2xl border border-surface-800 bg-surface-900 p-4 border-l-2 ${MEAL_ACCENTS[meal.type].borderClass}`}
+              className="rounded-card bg-card p-4 shadow-card"
             >
               {/* Header: "{Meal}: {kcal} cals" + macro breakdown + overflow menu */}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="text-[15px] font-semibold text-surface-100 truncate">
+                  <h3 className="text-headline text-ink truncate">
                     {meal.label}
                     {hasEntries && (
-                      <span>: {mealCalories.toLocaleString()} cals</span>
+                      <span className="text-subhead font-normal text-ink-2 tabular-nums"> · {mealCalories.toLocaleString()} kcal</span>
                     )}
                   </h3>
-                  <p className="text-[12px] text-surface-500 mt-0.5">
+                  <p className="text-subhead text-ink-2 mt-0.5 tabular-nums">
                     {hasEntries
                       ? `${mealFat}g fat · ${mealCarbs}g carbs · ${mealProtein}g protein`
                       : perMealAvailable > 0
-                        ? `~${perMealAvailable.toLocaleString()} calories remaining for this meal`
-                        : 'Tap Add Food to log your first item'}
+                        ? `About ${perMealAvailable.toLocaleString()} kcal for this meal`
+                        : 'Nothing logged yet'}
                   </p>
                 </div>
                 {hasMenuActions && (
                   <div className="relative flex-shrink-0">
                     <button
                       onClick={() => setOpenMealMenu(openMealMenu === meal.type ? null : meal.type)}
-                      className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-800 transition-colors"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-ink-2 hover:bg-fill hover:text-ink"
                       aria-label={`${meal.label} options`}
                     >
                       <IconDots size={18} aria-hidden="true" />
@@ -2009,14 +1971,14 @@ function NutritionPageContent() {
                     {openMealMenu === meal.type && (
                       <>
                         <div className="fixed inset-0 z-30" onClick={() => setOpenMealMenu(null)} />
-                        <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-surface-800 bg-surface-900 py-1 shadow-xl">
+                        <div className="absolute right-0 top-full mt-1 z-40 w-56 overflow-hidden rounded-card border border-sep bg-card py-1 shadow-float">
                           {hasEntries && (
                             <button
                               onClick={() => {
                                 setOpenMealMenu(null);
                                 void handleSaveMealAsSaved(meal);
                               }}
-                              className="w-full px-3 py-2 flex items-center gap-2 text-left text-[13px] text-surface-200 hover:bg-surface-800 transition-colors"
+                              className="w-full min-h-[44px] px-3.5 flex items-center gap-2 text-left text-body text-ink hover:bg-fill transition-colors"
                             >
                               <IconBookmarkPlus size={15} aria-hidden="true" />
                               Save as meal
@@ -2028,7 +1990,7 @@ function NutritionPageContent() {
                                 setOpenMealMenu(null);
                                 void handleCopyYesterday(meal.type);
                               }}
-                              className="w-full px-3 py-2 flex items-center gap-2 text-left text-[13px] text-surface-200 hover:bg-surface-800 transition-colors"
+                              className="w-full min-h-[44px] px-3.5 flex items-center gap-2 text-left text-body text-ink hover:bg-fill transition-colors"
                             >
                               <IconCopy size={15} aria-hidden="true" />
                               Copy from yesterday
@@ -2056,20 +2018,20 @@ function NutritionPageContent() {
                           e.stopPropagation();
                           openEditFood(entry);
                         }}
-                        className="w-full flex items-center justify-between gap-4 py-2 px-1 rounded-lg hover:bg-surface-800/50 active:bg-surface-800 transition-colors text-left"
+                        className="w-full flex items-center justify-between gap-4 py-2 px-1 rounded-input active:bg-fill transition-colors text-left"
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <FoodEmojiAvatar name={entry.food_name} />
                           <div className="min-w-0">
-                            <div className="text-[14px] text-surface-100 truncate">
+                            <div className="text-body text-ink truncate">
                               {toTitleCase(entry.food_name)}
                             </div>
-                            <div className="text-[12px] text-surface-500 truncate">
+                            <div className="text-subhead text-ink-2 truncate">
                               {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
                             </div>
                           </div>
                         </div>
-                        <span className="text-[15px] text-surface-300 flex-shrink-0 tabular-nums">
+                        <span className="text-body text-ink flex-shrink-0 tabular-nums">
                           {Math.round(entry.calories).toLocaleString()}
                         </span>
                       </button>
@@ -2082,11 +2044,12 @@ function NutritionPageContent() {
               <div className={`flex justify-end ${hasEntries ? 'mt-2' : 'mt-3'}`}>
                 <StyledButton
                   onClick={() => openAddFood(meal.type)}
-                  variant="primary"
+                  variant="secondary"
                   size="sm"
-                  className="rounded-full px-5"
+                  aria-label={`Add food to ${meal.label}`}
                 >
-                  Add Food
+                  <IconPlus size={16} aria-hidden="true" />
+                  Add food
                 </StyledButton>
               </div>
             </div>
@@ -2094,11 +2057,54 @@ function NutritionPageContent() {
         })}
       </div>
 
+      {/* Weight & trends: the old Weight and Insights tabs, one tap away */}
+      <ListGroup>
+        <ListRow
+          title="Weight & trends"
+          subtitle={
+            isToday && !hasLoggedWeightToday ? (
+              <span className="text-status-warn">No weigh-in yet today</span>
+            ) : todayWeightDisplay ? (
+              `Today ${todayWeightDisplay} ${weightUnit} · energy burn, trends`
+            ) : (
+              'Weight, energy burn, nutrition trends'
+            )
+          }
+          onClick={() => handleTabChange('weight')}
+          trailing={
+            <span className="flex items-center gap-1">
+              {isToday && !hasLoggedWeightToday && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowWeightLog(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowWeightLog(true);
+                    }
+                  }}
+                  className="px-2 py-1 text-body font-semibold text-action"
+                  data-testid="log-weight-inline"
+                >
+                  Log
+                </span>
+              )}
+              <IconChevronRight size={16} className="text-ink-3" aria-hidden="true" />
+            </span>
+          }
+        />
+      </ListGroup>
+
       </div>
       {/* ---- end Food Log tab ---- */}
 
       {/* ---- Weight tab ---- */}
-      <div className={activeTab === 'weight' ? 'space-y-4' : 'hidden'}>
+      <div className={activeTab !== 'log' ? 'relative space-y-4 motion-safe:animate-push-in' : 'hidden'}>
 
       {/* Log / update today's weight CTA */}
       <button
@@ -2106,12 +2112,12 @@ function NutritionPageContent() {
         className="w-full flex items-center justify-between gap-3 rounded-2xl border border-primary-500/40 bg-primary-500/10 p-4 hover:bg-primary-500/20 transition-colors"
       >
         <span className="flex items-center gap-3 min-w-0">
-          <IconScale size={22} className="text-primary-400 flex-shrink-0" aria-hidden="true" />
+          <IconScale size={22} className="text-action flex-shrink-0" aria-hidden="true" />
           <span className="text-left min-w-0">
-            <span className="block text-[15px] font-semibold text-surface-100">
+            <span className="block text-[15px] font-semibold text-ink">
               {hasLoggedWeightToday ? "Update today's weight" : "Log today's weight"}
             </span>
-            <span className="block text-[12px] text-surface-400 truncate">
+            <span className="block text-[12px] text-ink-2 truncate">
               {hasLoggedWeightToday
                 ? `Logged today: ${todayWeightDisplay} ${weightUnit}`
                 : 'Weigh in a few times a week to track your trend and keep your adaptive TDEE accurate'}
@@ -2162,34 +2168,34 @@ function NutritionPageContent() {
             <div className="grid md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <div>
-                  <div className="text-sm text-surface-400">Current Weight</div>
-                  <div className="text-2xl font-bold text-surface-100">
+                  <div className="text-sm text-ink-2">Current Weight</div>
+                  <div className="text-2xl font-bold text-ink">
                     {weightEntries[0] ? getDisplayWeight(weightEntries[0].weight, (weightEntries[0] as any)?.unit as 'lb' | 'kg' | null, weightUnit).toFixed(1) : '0.0'} {weightUnit}
                   </div>
-                  <div className="text-xs text-surface-500">
+                  <div className="text-xs text-ink-2">
                     {new Date(weightEntries[0]?.logged_at).toLocaleDateString()}
                   </div>
                 </div>
                 {sevenDayAverage && (
                   <div>
-                    <div className="text-sm text-surface-400">7-Day Average</div>
-                    <div className="text-xl font-semibold text-surface-100">
+                    <div className="text-sm text-ink-2">7-Day Average</div>
+                    <div className="text-xl font-semibold text-ink">
                       {sevenDayAverage.toFixed(1)} {weightUnit}
                     </div>
                   </div>
                 )}
                 {weightTrendRate && (
                   <div>
-                    <div className="text-sm text-surface-400">Trend ({weightChartRange})</div>
+                    <div className="text-sm text-ink-2">Trend ({weightChartRange})</div>
                     <div
                       className={`text-xl font-semibold ${
-                        weightRateOnTrack ? 'text-success-400' : 'text-warning-400'
+                        weightRateOnTrack ? 'text-status-ok' : 'text-status-warn'
                       }`}
                     >
                       {signedRate(weightTrendRate.perWeek)} {weightUnit}/wk
                     </div>
                     {weightTrendRate.target !== null && (
-                      <div className="text-xs text-surface-500">
+                      <div className="text-xs text-ink-2">
                         target {signedRate(weightTrendRate.target)} {weightUnit}/wk (
                         {currentPhase === 'bulk' ? 'bulk' : 'cut'})
                       </div>
@@ -2200,7 +2206,7 @@ function NutritionPageContent() {
 
               <div className="md:col-span-2">
                 <div className="flex justify-end mb-2">
-                  <div className="flex gap-1 bg-surface-800 rounded-lg p-0.5">
+                  <div className="flex gap-1 bg-fill rounded-lg p-0.5">
                     {(Object.keys(WEIGHT_CHART_RANGE_DAYS) as WeightChartRange[]).map((range) => (
                       <button
                         key={range}
@@ -2208,7 +2214,7 @@ function NutritionPageContent() {
                         className={`px-2 py-1 text-xs rounded-md transition-colors ${
                           weightChartRange === range
                             ? 'bg-primary-500 text-white'
-                            : 'text-surface-400 hover:text-surface-200'
+                            : 'text-ink-2 hover:text-ink'
                         }`}
                       >
                         {range}
@@ -2218,7 +2224,7 @@ function NutritionPageContent() {
                 </div>
                 {weightChartData.length === 0 && (
                   <div className="flex h-[200px] items-center justify-center">
-                    <p className="text-sm text-surface-400">No weight data for this period</p>
+                    <p className="text-sm text-ink-2">No weight data for this period</p>
                   </div>
                 )}
                 {weightChartData.length > 0 && (
@@ -2286,7 +2292,7 @@ function NutritionPageContent() {
       {/* ---- end Weight tab ---- */}
 
       {/* ---- Insights tab ---- */}
-      <div className={activeTab === 'insights' ? 'space-y-4' : 'hidden'}>
+      <div className={activeTab !== 'log' ? 'space-y-4' : 'hidden'}>
 
       {/* Nutrition Trends Graph */}
       <NutritionTrendGraph targets={nutritionTargets} />
@@ -2377,6 +2383,15 @@ function NutritionPageContent() {
         onAdd={handleAddFood}
         defaultMealType={selectedMealType}
         initialTab={addFoodTab}
+        onOpenDescribe={() => {
+          setShowAddFood(false);
+          setDescribeMealType(selectedMealType);
+          setShowDescribeMeal(true);
+        }}
+        onOpenSavedMeals={() => {
+          setShowAddFood(false);
+          setShowSavedMeals(true);
+        }}
         onCreateCustomFood={(barcode) => {
           setShowAddFood(false);
           setCustomFoodBarcode(barcode);
