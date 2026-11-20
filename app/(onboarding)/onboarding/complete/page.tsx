@@ -1,5 +1,6 @@
 'use client';
 
+import { IconAlertTriangle, IconApple, IconBarbell, IconChartLine, IconSparkles } from '@tabler/icons-react';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, ExplainedTerm } from '@/components/ui';
@@ -27,7 +28,7 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
   
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-surface-400">
+      <div className="flex justify-between text-caption text-ink-2">
         <span>{label}</span>
         {showValue && <span className="font-medium">{percentile}th</span>}
       </div>
@@ -237,7 +238,7 @@ function CompleteContent() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -250,21 +251,21 @@ function CompleteContent() {
       <div className="flex items-center justify-center gap-2 mb-8">
         {[1, 2, 3, 4].map((step) => (
           <div key={step} className="flex items-center">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium bg-primary-500 text-white">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-body font-medium bg-action text-on-action">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
               </svg>
             </div>
             {step < 4 && (
-              <div className="w-12 h-0.5 bg-primary-500" />
+              <div className="w-12 h-0.5 bg-action" />
             )}
           </div>
         ))}
       </div>
       
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-surface-100 mb-2">Your Strength Profile</h1>
-        <p className="text-surface-400">
+        <h1 className="text-large-title font-bold text-ink mb-2">Your strength profile</h1>
+        <p className="text-ink-2">
           Based on your calibration tests, here&apos;s your personalized profile. This data powers smart recommendations across the app.
         </p>
       </div>
@@ -275,7 +276,7 @@ function CompleteContent() {
       </InlineHint>
       
       {/* Overall score card */}
-      <Card className="bg-gradient-to-br from-primary-500/10 to-accent-500/10 border-primary-500/30">
+      <Card className="bg-action/10 border-action/30">
         <CardContent className="p-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-8">
             {/* Score circle */}
@@ -289,7 +290,7 @@ function CompleteContent() {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="8"
-                  className="text-surface-800"
+                  className="text-ink-3"
                 />
                 {/* Progress circle */}
                 <circle
@@ -297,50 +298,45 @@ function CompleteContent() {
                   cy="50"
                   r="45"
                   fill="none"
-                  stroke="url(#gradient)"
+                  stroke="currentColor"
+                  className="text-action"
                   strokeWidth="8"
                   strokeLinecap="round"
                   strokeDasharray={`${profile.overallScore * 2.83} 283`}
                   transform="rotate(-90 50 50)"
                 />
-                <defs>
-                  <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#8b5cf6" />
-                    <stop offset="100%" stopColor="#d946ef" />
-                  </linearGradient>
-                </defs>
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-bold text-surface-100">{profile.overallScore}</span>
-                <span className="text-sm text-surface-400">/ 100</span>
+                <span className="text-display text-ink">{profile.overallScore}</span>
+                <span className="text-body text-ink-2">/ 100</span>
               </div>
             </div>
             
             {/* Stats */}
             <div className="flex-1 space-y-4">
               <div>
-                <p className="text-sm text-surface-400">Strength Level</p>
+                <p className="text-body text-ink-2">Strength level</p>
                 <p className={`text-3xl font-bold capitalize ${getStrengthLevelColor(profile.strengthLevel)}`}>
                   {formatStrengthLevel(profile.strengthLevel)}
                 </p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-surface-900/50 rounded-lg">
-                  <p className="text-xs text-surface-500">Balance Score</p>
-                  <p className="text-2xl font-bold text-surface-100">{profile.balanceScore}%</p>
+                <div className="p-3 bg-card/50 rounded-lg">
+                  <p className="text-caption text-ink-3">Balance score</p>
+                  <p className="text-title font-bold text-ink">{profile.balanceScore}%</p>
                 </div>
-                <div className="p-3 bg-surface-900/50 rounded-lg">
-                  <p className="text-xs text-surface-500">
+                <div className="p-3 bg-card/50 rounded-lg">
+                  <p className="text-caption text-ink-3">
                     <ExplainedTerm term="FFMI" />
                   </p>
-                  <p className="text-2xl font-bold text-surface-100">{profile.bodyComposition.ffmi.toFixed(1)}</p>
+                  <p className="text-title font-bold text-ink">{profile.bodyComposition.ffmi.toFixed(1)}</p>
                 </div>
               </div>
 
               {/* Score interpretation */}
-              <div className="mt-4 p-3 bg-surface-900/30 rounded-lg border border-surface-700">
-                <p className="text-sm text-surface-300">
+              <div className="mt-4 p-3 bg-card/30 rounded-lg border border-sep">
+                <p className="text-body text-ink-2">
                   {profile.overallScore >= 80
                     ? "Excellent! You have a well-developed strength foundation with good balance."
                     : profile.overallScore >= 60
@@ -358,16 +354,16 @@ function CompleteContent() {
       {/* Individual lift results */}
       <Card>
         <CardHeader>
-          <CardTitle>Calibrated Lifts</CardTitle>
+          <CardTitle>Calibrated lifts</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {profile.calibratedLifts.map((lift) => (
-              <div key={lift.benchmarkId} className="p-4 bg-surface-800/50 rounded-xl">
+              <div key={lift.benchmarkId} className="p-4 bg-fill/50 rounded-xl">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <h4 className="font-medium text-surface-200">{lift.lift}</h4>
-                    <p className="text-sm text-surface-500">
+                    <h4 className="font-medium text-ink">{lift.lift}</h4>
+                    <p className="text-body text-ink-3">
                       {lift.benchmarkId === 'pullup' 
                         ? `${lift.testedReps} reps`
                         : `${displayWeight(lift.testedWeight)} ${weightUnit} × ${lift.testedReps} = ${displayWeight(lift.estimated1RM)} ${weightUnit} E1RM`}
@@ -381,7 +377,7 @@ function CompleteContent() {
                 <div className="space-y-2">
                   <PercentileBar 
                     percentile={lift.percentileScore.vsTrainedPopulation}
-                    label="vs Trained Lifters"
+                    label="vs trained lifters"
                   />
                 </div>
               </div>
@@ -392,11 +388,11 @@ function CompleteContent() {
       
       {/* Imbalances */}
       {profile.imbalances.length > 0 && (
-        <Card className="border-warning-500/30">
+        <Card className="border-status-warn/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <span>⚠️</span>
-              Imbalances Detected
+              <IconAlertTriangle size={18} className="text-status-warn" aria-hidden="true" />
+              Imbalances detected
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -406,16 +402,16 @@ function CompleteContent() {
                   key={i}
                   className={`p-4 rounded-lg ${
                     imbalance.severity === 'significant' 
-                      ? 'bg-danger-500/10 border border-danger-500/30'
+                      ? 'bg-status-bad/10 border border-status-bad/30'
                       : imbalance.severity === 'moderate'
-                      ? 'bg-warning-500/10 border border-warning-500/30'
-                      : 'bg-surface-800/50'
+                      ? 'bg-status-warn/10 border border-status-warn/30'
+                      : 'bg-fill/50'
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-medium text-surface-200">{imbalance.description}</p>
-                      <p className="text-sm text-surface-400 mt-1">{imbalance.recommendation}</p>
+                      <p className="font-medium text-ink">{imbalance.description}</p>
+                      <p className="text-body text-ink-2 mt-1">{imbalance.recommendation}</p>
                     </div>
                     <Badge variant={
                       imbalance.severity === 'significant' ? 'danger' :
@@ -434,16 +430,16 @@ function CompleteContent() {
       {/* Recommendations */}
       <Card>
         <CardHeader>
-          <CardTitle>Personalized Recommendations</CardTitle>
+          <CardTitle>Personalized recommendations</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {profile.recommendations.map((rec, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 bg-surface-800/50 rounded-lg">
-                <div className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary-400 text-sm font-medium">{i + 1}</span>
+              <div key={i} className="flex items-start gap-3 p-3 bg-fill/50 rounded-lg">
+                <div className="w-6 h-6 rounded-full bg-action/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-action text-body font-medium">{i + 1}</span>
                 </div>
-                <p className="text-surface-300">{rec}</p>
+                <p className="text-ink-2">{rec}</p>
               </div>
             ))}
           </div>
@@ -451,63 +447,63 @@ function CompleteContent() {
       </Card>
       
       {/* What's next */}
-      <Card className="bg-surface-800/50">
+      <Card className="bg-fill/50">
         <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-surface-100 mb-2">You&apos;re All Set! 🎉</h3>
-          <p className="text-surface-400 mb-4">
+          <h3 className="text-headline font-semibold text-ink mb-2">You&apos;re all set</h3>
+          <p className="text-ink-2 mb-4">
             Your calibration data is now powering personalized recommendations across the entire app. 
             Here&apos;s what you can do now:
           </p>
           
           <div className="grid sm:grid-cols-2 gap-3 mb-4">
-            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+            <div className="p-3 bg-card/50 rounded-lg border border-sep">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">🏋️</span>
-                <span className="font-medium text-surface-200">Create Mesocycle</span>
+                <IconBarbell size={20} className="text-action" aria-hidden="true" />
+                <span className="font-medium text-ink">Create mesocycle</span>
               </div>
-              <p className="text-xs text-surface-500">AI-generated training blocks with S-tier exercises</p>
+              <p className="text-caption text-ink-3">AI-generated training blocks with S-tier exercises</p>
             </div>
             
-            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+            <div className="p-3 bg-card/50 rounded-lg border border-sep">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">🍎</span>
-                <span className="font-medium text-surface-200">Track Nutrition</span>
+                <IconApple size={20} className="text-action" aria-hidden="true" />
+                <span className="font-medium text-ink">Track nutrition</span>
               </div>
-              <p className="text-xs text-surface-500">Log meals, set macro targets, scan barcodes</p>
+              <p className="text-caption text-ink-3">Log meals, set macro targets, scan barcodes</p>
             </div>
             
-            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+            <div className="p-3 bg-card/50 rounded-lg border border-sep">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">🤖</span>
-                <span className="font-medium text-surface-200">AI Coaching</span>
+                <IconSparkles size={20} className="text-action" aria-hidden="true" />
+                <span className="font-medium text-ink">AI coaching</span>
               </div>
-              <p className="text-xs text-surface-500">Get personalized advice before every workout</p>
+              <p className="text-caption text-ink-3">Get personalized advice before every workout</p>
             </div>
             
-            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+            <div className="p-3 bg-card/50 rounded-lg border border-sep">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">📊</span>
-                <span className="font-medium text-surface-200">Track Progress</span>
+                <IconChartLine size={20} className="text-action" aria-hidden="true" />
+                <span className="font-medium text-ink">Track progress</span>
               </div>
-              <p className="text-xs text-surface-500">Body comp, strength gains, volume trends</p>
+              <p className="text-caption text-ink-3">Body comp, strength gains, volume trends</p>
             </div>
           </div>
           
-          <ul className="space-y-2 text-sm text-surface-400">
+          <ul className="space-y-2 text-body text-ink-2">
             <li className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               Personalized weight recommendations for all exercises
             </li>
             <li className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               Smart macro targets based on your body composition
             </li>
             <li className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               Fatigue management and auto-deload detection
@@ -522,7 +518,7 @@ function CompleteContent() {
           size="lg" 
           onClick={handleFinish}
         >
-          Go to Dashboard
+          Go to dashboard
           <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
@@ -536,7 +532,7 @@ export default function CompletePage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     }>
       <CompleteContent />

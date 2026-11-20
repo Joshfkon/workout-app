@@ -45,7 +45,7 @@ function InstallContent() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -63,10 +63,10 @@ function InstallContent() {
           <div key={step} className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
               step <= 4
-                ? 'bg-primary-500 text-white'
+                ? 'bg-action text-on-action'
                 : step === 5
-                ? 'bg-primary-500/50 text-white border-2 border-primary-400'
-                : 'bg-surface-800 text-surface-500'
+                ? 'bg-action-tint text-action border-2 border-action'
+                : 'bg-fill text-ink-3'
             }`}>
               {step < 5 ? (
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -77,7 +77,7 @@ function InstallContent() {
               )}
             </div>
             {step < 5 && (
-              <div className={`w-8 sm:w-12 h-0.5 ${step < 5 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+              <div className={`w-8 sm:w-12 h-0.5 ${step < 5 ? 'bg-action' : 'bg-fill'}`} />
             )}
           </div>
         ))}
@@ -96,7 +96,7 @@ export default function InstallPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     }>
       <InstallContent />

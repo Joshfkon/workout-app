@@ -36,11 +36,11 @@ interface GymLocation {
 
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
   machines: { label: 'Machines', emoji: '🏋️' },
-  free_weights: { label: 'Free Weights', emoji: '💪' },
+  free_weights: { label: 'Free weights', emoji: '💪' },
   benches: { label: 'Benches', emoji: '🪑' },
   racks: { label: 'Racks', emoji: '🏗️' },
   stations: { label: 'Stations', emoji: '🔩' },
-  other: { label: 'Other Equipment', emoji: '🎯' },
+  other: { label: 'Other equipment', emoji: '🎯' },
 };
 
 export function GymEquipmentSettings() {
@@ -512,7 +512,7 @@ export function GymEquipmentSettings() {
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-surface-400">
+        <CardContent className="py-8 text-center text-ink-2">
           Loading equipment...
         </CardContent>
       </Card>
@@ -525,13 +525,13 @@ export function GymEquipmentSettings() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>My Gym Equipment</CardTitle>
-              <p className="text-sm text-surface-400 mt-1">
+              <CardTitle>My gym equipment</CardTitle>
+              <p className="text-body text-ink-2 mt-1">
                 Uncheck equipment you don&apos;t have access to. Workouts will only include exercises you can do.
               </p>
             </div>
             {unavailableCount > 0 && (
-              <span className="text-xs bg-warning-500/20 text-warning-400 px-2 py-1 rounded-full">
+              <span className="text-caption bg-status-warn/20 text-status-warn px-2 py-1 rounded-full">
                 {unavailableCount} unavailable
               </span>
             )}
@@ -541,8 +541,8 @@ export function GymEquipmentSettings() {
           {/* Location Tabs */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-surface-200">
-                Gym Location
+              <label className="block text-body font-medium text-ink">
+                Gym location
               </label>
               <Button
                 onClick={(e) => {
@@ -558,13 +558,13 @@ export function GymEquipmentSettings() {
                 <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                Add Location
+                Add location
               </Button>
             </div>
             
             <div className="flex gap-2 flex-wrap">
               {locations.length === 0 && (
-                <p className="text-sm text-surface-400">
+                <p className="text-body text-ink-2">
                   No locations found. Please run the database migration to enable location management.
                 </p>
               )}
@@ -575,8 +575,8 @@ export function GymEquipmentSettings() {
                       onClick={() => setSelectedLocationId(location.id)}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         selectedLocationId === location.id
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2 hover:bg-sep'
                       }`}
                     >
                       <span aria-hidden="true">
@@ -589,7 +589,7 @@ export function GymEquipmentSettings() {
                       </span>{' '}
                       {location.name}
                       {location.is_default && (
-                        <span className="ml-1 text-xs opacity-75">(Default)</span>
+                        <span className="ml-1 text-caption opacity-75">(Default)</span>
                       )}
                     </button>
                     
@@ -599,7 +599,7 @@ export function GymEquipmentSettings() {
                         e.stopPropagation();
                         setOpenLocationMenuId(openLocationMenuId === location.id ? null : location.id);
                       }}
-                      className="p-2 rounded-lg text-surface-400 hover:bg-surface-700 hover:text-surface-200 transition-colors"
+                      className="p-2 rounded-lg text-ink-2 hover:bg-sep hover:text-ink transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
@@ -614,7 +614,7 @@ export function GymEquipmentSettings() {
                         className="fixed inset-0 z-10" 
                         onClick={() => setOpenLocationMenuId(null)}
                       />
-                      <div className="absolute right-0 top-full mt-1 z-20 bg-surface-800 border border-surface-700 rounded-lg shadow-lg p-1 min-w-[140px]">
+                      <div className="absolute right-0 top-full mt-1 z-20 bg-fill border border-sep rounded-lg shadow-lg p-1 min-w-[140px]">
                         {!location.is_default && (
                           <button
                             onClick={(e) => {
@@ -622,9 +622,9 @@ export function GymEquipmentSettings() {
                               handleSetDefaultLocation(location.id);
                               setOpenLocationMenuId(null);
                             }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-surface-300 hover:bg-surface-700 rounded"
+                            className="w-full text-left px-3 py-1.5 text-caption text-ink-2 hover:bg-sep rounded"
                           >
-                            Set as Default
+                            Set as default
                           </button>
                         )}
                         <button
@@ -633,7 +633,7 @@ export function GymEquipmentSettings() {
                             handleEditLocation(location);
                             setOpenLocationMenuId(null);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-surface-300 hover:bg-surface-700 rounded"
+                          className="w-full text-left px-3 py-1.5 text-caption text-ink-2 hover:bg-sep rounded"
                         >
                           Edit
                         </button>
@@ -644,7 +644,7 @@ export function GymEquipmentSettings() {
                             handleDeleteLocation(location.id);
                             setOpenLocationMenuId(null);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-danger-400 hover:bg-surface-700 rounded"
+                          className="w-full text-left px-3 py-1.5 text-caption text-status-bad hover:bg-sep rounded"
                           disabled={isDeletingLocation}
                         >
                           Delete
@@ -665,16 +665,16 @@ export function GymEquipmentSettings() {
           return (
             <div key={category} className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-surface-200">
-                  {categoryInfo.emoji} {categoryInfo.label}
+                <h3 className="text-body font-medium text-ink">
+                  {categoryInfo.label}
                 </h3>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setAllCategory(category, true)}
                     className={`text-xs px-2 py-1 rounded transition-colors ${
                       allAvailable
-                        ? 'bg-success-500/20 text-success-400'
-                        : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                        ? 'bg-status-ok/20 text-status-ok'
+                        : 'bg-fill text-ink-2 hover:text-ink'
                     }`}
                   >
                     All
@@ -683,8 +683,8 @@ export function GymEquipmentSettings() {
                     onClick={() => setAllCategory(category, false)}
                     className={`text-xs px-2 py-1 rounded transition-colors ${
                       noneAvailable
-                        ? 'bg-danger-500/20 text-danger-400'
-                        : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                        ? 'bg-status-bad/20 text-status-bad'
+                        : 'bg-fill text-ink-2 hover:text-ink'
                     }`}
                   >
                     None
@@ -700,15 +700,15 @@ export function GymEquipmentSettings() {
                       onClick={() => toggleEquipment(eq.id)}
                       className={`p-3 rounded-lg text-left transition-all ${
                         isAvailable
-                          ? 'bg-surface-800 border border-surface-700'
-                          : 'bg-surface-900 border border-surface-800 opacity-60'
+                          ? 'bg-fill border border-sep'
+                          : 'bg-card opacity-60 shadow-card'
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
                           isAvailable 
-                            ? 'bg-success-500 border-success-500' 
-                            : 'border-surface-600'
+                            ? 'bg-status-ok border-status-ok' 
+                            : 'border-sep'
                         }`}>
                           {isAvailable && (
                             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -717,11 +717,11 @@ export function GymEquipmentSettings() {
                           )}
                         </div>
                         <div>
-                          <p className={`text-sm font-medium ${isAvailable ? 'text-surface-100' : 'text-surface-400 line-through'}`}>
+                          <p className={`text-sm font-medium ${isAvailable ? 'text-ink' : 'text-ink-2 line-through'}`}>
                             {eq.name}
                           </p>
                           {eq.description && (
-                            <p className="text-xs text-surface-500">{eq.description}</p>
+                            <p className="text-caption text-ink-3">{eq.description}</p>
                           )}
                         </div>
                       </div>
@@ -735,13 +735,13 @@ export function GymEquipmentSettings() {
 
           {/* Save Button */}
           {hasChanges && (
-            <div className="sticky bottom-0 pt-4 pb-2 bg-gradient-to-t from-surface-900 to-transparent">
+            <div className="sticky bottom-0 pt-4 pb-2 bg-card to-transparent">
               <Button
                 onClick={savePreferences}
                 isLoading={isSaving}
                 className="w-full"
               >
-                Save Equipment Preferences
+                Save equipment preferences
               </Button>
             </div>
           )}
@@ -756,12 +756,12 @@ export function GymEquipmentSettings() {
           setEditingLocation(null);
           setLocationName('');
         }}
-        title={editingLocation ? 'Edit Location' : 'Add New Location'}
+        title={editingLocation ? 'Edit location' : 'Add new location'}
       >
         <div className="space-y-4">
           {!editingLocation && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-surface-200">
+              <label className="block text-body font-medium text-ink">
                 Start from a preset
               </label>
               <div className="flex gap-2 flex-wrap">
@@ -771,8 +771,8 @@ export function GymEquipmentSettings() {
                     onClick={() => handlePickPreset(preset)}
                     className={`px-3 py-2 rounded-lg text-sm transition-colors ${
                       locationPreset?.kind === preset.kind
-                        ? 'bg-primary-500/20 border border-primary-500 text-primary-300'
-                        : 'bg-surface-800 border border-transparent text-surface-300 hover:bg-surface-700'
+                        ? 'bg-action/20 border border-action text-action'
+                        : 'bg-fill border border-transparent text-ink-2 hover:bg-sep'
                     }`}
                   >
                     {preset.icon} {preset.name}
@@ -782,14 +782,14 @@ export function GymEquipmentSettings() {
                   onClick={() => setLocationPreset(null)}
                   className={`px-3 py-2 rounded-lg text-sm transition-colors ${
                     locationPreset === null
-                      ? 'bg-primary-500/20 border border-primary-500 text-primary-300'
-                      : 'bg-surface-800 border border-transparent text-surface-300 hover:bg-surface-700'
+                      ? 'bg-action/20 border border-action text-action'
+                      : 'bg-fill border border-transparent text-ink-2 hover:bg-sep'
                   }`}
                 >
                   Custom
                 </button>
               </div>
-              <p className="text-xs text-surface-500">
+              <p className="text-caption text-ink-3">
                 Presets pre-check the equipment checklist (Gym: everything; Home: dumbbells,
                 bands, bench, pull-up bar; Hotel: dumbbells + bands). You can edit it after.
               </p>
@@ -797,10 +797,10 @@ export function GymEquipmentSettings() {
           )}
 
           <Input
-            label="Location Name"
+            label="Location name"
             value={locationName}
             onChange={(e) => setLocationName(e.target.value)}
-            placeholder="e.g., Home Gym, Commercial Gym, Work Gym"
+            placeholder="e.g., home gym, commercial gym, work gym"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && locationName.trim()) {
                 handleSaveLocation();
@@ -831,7 +831,7 @@ export function GymEquipmentSettings() {
               onClick={handleSaveLocation}
               disabled={!locationName.trim()}
             >
-              {editingLocation ? 'Save Changes' : 'Create Location'}
+              {editingLocation ? 'Save changes' : 'Create location'}
             </Button>
           </div>
         </div>

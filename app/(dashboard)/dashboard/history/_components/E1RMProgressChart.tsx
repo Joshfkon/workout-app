@@ -44,44 +44,44 @@ export default function E1RMProgressChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--ht-sep))" />
         <XAxis
           dataKey="date"
-          stroke="#9CA3AF"
+          stroke="rgb(var(--ht-ink-3))"
           tick={{ fontSize: 11 }}
           interval="preserveStartEnd"
         />
         <YAxis
-          stroke="#9CA3AF"
+          stroke="rgb(var(--ht-ink-3))"
           tick={{ fontSize: 11 }}
           domain={['auto', 'auto']}
           tickFormatter={(value) => `${value}`}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: '#1F2937',
-            border: '1px solid #374151',
+            backgroundColor: 'rgb(var(--ht-card))',
+            border: '1px solid rgb(var(--ht-sep))',
             borderRadius: '8px',
           }}
-          labelStyle={{ color: '#9CA3AF' }}
+          labelStyle={{ color: 'rgb(var(--ht-ink-3))' }}
           formatter={(value: number, name: string) => [
             `${value} ${unit}`,
-            name === 'e1rm' ? seriesLabel : 'Best Weight',
+            name === 'e1rm' ? seriesLabel : 'Best weight',
           ]}
         />
         <Line
           type="monotone"
           dataKey="e1rm"
-          stroke="#8B5CF6"
+          stroke="rgb(var(--ht-action))"
           strokeWidth={2}
-          dot={{ fill: '#8B5CF6', strokeWidth: 0, r: 4 }}
+          dot={{ fill: 'rgb(var(--ht-action))', strokeWidth: 0, r: 4 }}
           activeDot={{ r: 6 }}
         />
         <ReferenceLine
           y={prLine}
-          stroke="#22C55E"
+          stroke="rgb(var(--ht-ok))"
           strokeDasharray="5 5"
-          label={{ value: 'PR', fill: '#22C55E', fontSize: 11 }}
+          label={{ value: 'PR', fill: 'rgb(var(--ht-ok))', fontSize: 11 }}
         />
       </LineChart>
     </ResponsiveContainer>

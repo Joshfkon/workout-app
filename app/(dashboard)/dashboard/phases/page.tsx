@@ -282,14 +282,14 @@ export default function TrainingPhasesPage() {
     <div className="space-y-6 animate-fade-in max-w-3xl">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Training Phases</h1>
-          <p className="text-surface-400 text-sm">
+          <h1 className="text-large-title text-ink">Training phases</h1>
+          <p className="text-ink-2 text-body">
             Bulk, cut, recomp, and maintenance spans — trends and advice never cross a phase
             boundary.
           </p>
         </div>
-        <Link href="/dashboard/analytics" className="text-primary-400 text-sm shrink-0 hover:text-primary-300">
-          Back to Body
+        <Link href="/dashboard/analytics" className="text-action text-body shrink-0">
+          Back to body
         </Link>
       </div>
 
@@ -299,7 +299,7 @@ export default function TrainingPhasesPage() {
         </CardHeader>
         <CardContent>
           {historyQuery.isLoading ? (
-            <div className="h-56 animate-pulse bg-surface-800/50 rounded-lg" />
+            <div className="h-56 animate-pulse bg-fill/50 rounded-lg" />
           ) : (
             <>
               <PhaseHistoryChart
@@ -308,7 +308,7 @@ export default function TrainingPhasesPage() {
                 phases={sorted}
                 unitLabel={units}
               />
-              <div className="flex flex-wrap gap-3 mt-2 text-[11px] text-surface-400">
+              <div className="flex flex-wrap gap-3 mt-2 text-caption text-ink-2">
                 {PHASE_TYPES.map((type) => (
                   <span key={type} className="inline-flex items-center gap-1">
                     <span
@@ -332,8 +332,8 @@ export default function TrainingPhasesPage() {
         <Card>
           <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-surface-100">No phases yet</p>
-              <p className="text-xs text-surface-400">
+              <p className="text-body font-medium text-ink">No phases yet</p>
+              <p className="text-caption text-ink-2">
                 You have {'>'}90 days of weigh-ins — we can propose phase boundaries from the
                 weight trend for you to review.
               </p>
@@ -355,13 +355,13 @@ export default function TrainingPhasesPage() {
             <CardTitle>Suggested phases</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-surface-400">
+            <p className="text-caption text-ink-2">
               A deterministic starting point from your smoothed weight trend (boundaries snapped
               to DEXA scans within 14 days). Nothing is saved until you confirm; you can edit
               every span afterwards.
             </p>
             {suggestions.length === 0 ? (
-              <p className="text-sm text-surface-400">
+              <p className="text-body text-ink-2">
                 No sustained trend segments found — add phases manually instead.
               </p>
             ) : (
@@ -370,21 +370,21 @@ export default function TrainingPhasesPage() {
                 return (
                   <div
                     key={`${s.phaseType}-${s.startDay}`}
-                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface-800/60"
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-fill/60"
                   >
-                    <div className="flex items-center gap-2 text-sm">
+                    <div className="flex items-center gap-2 text-body">
                       <span
-                        className={`px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide text-[10px] ${style.badgeBg} ${style.text}`}
+                        className={`px-1.5 py-0.5 rounded text-caption font-semibold ${style.badgeBg} ${style.text}`}
                       >
                         {style.label}
                       </span>
-                      <span className="text-surface-300">
+                      <span className="text-ink-2">
                         {fmtDay(s.startDay)} – {fmtDay(s.endDay)}
                       </span>
                     </div>
                     <button
                       type="button"
-                      className="text-xs text-surface-500 hover:text-danger-400"
+                      className="text-caption text-ink-3 hover:text-status-bad"
                       onClick={() =>
                         setSuggestions((prev) => (prev ? prev.filter((_, j) => j !== i) : prev))
                       }
@@ -410,17 +410,17 @@ export default function TrainingPhasesPage() {
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-surface-100">Phases</h2>
+        <h2 className="text-headline font-semibold text-ink">Phases</h2>
         <Button size="sm" onClick={openAdd} data-testid="add-phase-button">
           + Add phase
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="h-24 animate-pulse bg-surface-800/50 rounded-lg" />
+        <div className="h-24 animate-pulse bg-fill/50 rounded-lg" />
       ) : sorted.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-center text-sm text-surface-400">
+          <CardContent className="py-8 text-center text-body text-ink-2">
             No phases yet. Add one, or use the suggestion above to backfill your history.
           </CardContent>
         </Card>
@@ -437,15 +437,15 @@ export default function TrainingPhasesPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span
-                        className={`px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide text-[10px] ${style.badgeBg} ${style.text} shrink-0`}
+                        className={`px-1.5 py-0.5 rounded text-caption font-semibold ${style.badgeBg} ${style.text} shrink-0`}
                       >
                         {style.label}
                       </span>
-                      <span className="text-sm text-surface-300 truncate">
+                      <span className="text-body text-ink-2 truncate">
                         {fmtDay(phase.startDay)} – {phase.endDay ? fmtDay(phase.endDay) : 'now'}
                       </span>
                       {phase.endDay === null && (
-                        <span className="text-[10px] uppercase tracking-wide text-primary-400 shrink-0">
+                        <span className="text-caption text-action shrink-0">
                           Active
                         </span>
                       )}
@@ -459,7 +459,7 @@ export default function TrainingPhasesPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs text-surface-400">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-caption text-ink-2">
                     <span>
                       {weeks >= 1 ? `${weeks} wk` : `${stats.durationDays} d`}
                       {phase.targetRateLbsPerWeek != null &&
@@ -477,10 +477,10 @@ export default function TrainingPhasesPage() {
                         Lean {fmtWeight(stats.leanDeltaLb, true)} · fat {fmtWeight(stats.fatDeltaLb, true)}
                       </span>
                     ) : (
-                      <span className="text-surface-600">No bracketing DEXA scans</span>
+                      <span className="text-ink-3">No bracketing DEXA scans</span>
                     )}
                   </div>
-                  {phase.note && <p className="text-xs text-surface-500">{phase.note}</p>}
+                  {phase.note && <p className="text-caption text-ink-3">{phase.note}</p>}
                 </CardContent>
               </Card>
             );

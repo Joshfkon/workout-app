@@ -52,14 +52,14 @@ export function AiDataSharingCard() {
   return (
     <Card data-testid="ai-data-sharing-card">
       <CardHeader>
-        <CardTitle>AI Features</CardTitle>
+        <CardTitle>AI features</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <AiDataSharingDetails />
           <Toggle checked={enabled} onChange={persist} disabled={isLoading || isSaving} />
         </div>
-        {error && <p className="text-xs text-danger-400">{error}</p>}
+        {error && <p className="text-caption text-status-bad">{error}</p>}
       </CardContent>
     </Card>
   );

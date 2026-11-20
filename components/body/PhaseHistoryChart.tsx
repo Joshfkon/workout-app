@@ -151,7 +151,7 @@ export function PhaseHistoryChart({ weighIns, scanDays, phases, unitLabel }: Pha
 
   if (weighIns.length < 2) {
     return (
-      <p className="text-sm text-ink-2 py-8 text-center">
+      <p className="text-body text-ink-2 py-8 text-center">
         Not enough weight data to chart yet.
       </p>
     );
@@ -170,24 +170,24 @@ export function PhaseHistoryChart({ weighIns, scanDays, phases, unitLabel }: Pha
     <div className="h-56" data-testid="phase-history-chart">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--ht-sep))" />
           <XAxis
             dataKey="ts"
             type="number"
             domain={['dataMin', 'dataMax']}
             ticks={ticks}
             tickFormatter={formatTick}
-            stroke="#9ca3af"
+            stroke="rgb(var(--ht-ink-3))"
             fontSize={11}
             minTickGap={32}
           />
-          <YAxis stroke="#9ca3af" fontSize={11} domain={['auto', 'auto']} width={40} />
+          <YAxis stroke="rgb(var(--ht-ink-3))" fontSize={11} domain={['auto', 'auto']} width={40} />
           <Tooltip
             contentStyle={{
-              backgroundColor: '#1f2937',
-              border: '1px solid #374151',
+              backgroundColor: 'rgb(var(--ht-card))',
+              border: '1px solid rgb(var(--ht-sep))',
               borderRadius: '8px',
-              color: '#f3f4f6',
+              color: 'rgb(var(--ht-ink))',
               fontSize: 12,
             }}
             formatter={(value: number, name: string) => [
@@ -215,10 +215,10 @@ export function PhaseHistoryChart({ weighIns, scanDays, phases, unitLabel }: Pha
           <Line
             type="monotone"
             dataKey="weight"
-            stroke="#0ea5e9"
+            stroke="rgb(var(--ht-action))"
             strokeWidth={1.5}
-            dot={sparse ? { r: 2, fill: '#0ea5e9', strokeWidth: 0 } : false}
-            activeDot={{ r: 4, fill: '#0ea5e9' }}
+            dot={sparse ? { r: 2, fill: 'rgb(var(--ht-action))', strokeWidth: 0 } : false}
+            activeDot={{ r: 4, fill: 'rgb(var(--ht-action))' }}
             isAnimationActive={false}
           />
           {Array.from({ length: gapCount }, (_, k) => (
@@ -226,7 +226,7 @@ export function PhaseHistoryChart({ weighIns, scanDays, phases, unitLabel }: Pha
               key={`gap${k}`}
               type="linear"
               dataKey={`gap${k}`}
-              stroke="#0ea5e9"
+              stroke="rgb(var(--ht-action))"
               strokeWidth={1.5}
               strokeDasharray="5 5"
               strokeOpacity={0.5}

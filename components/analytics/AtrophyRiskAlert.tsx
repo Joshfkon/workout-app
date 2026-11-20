@@ -35,9 +35,9 @@ export function AtrophyRiskAlert({
 
   const getSeverityStyles = () => {
     if (isOnCut) {
-      return 'border-danger-500/50 bg-danger-500/5';
+      return 'bg-status-bad-tint';
     }
-    return 'border-warning-500/50 bg-warning-500/5';
+    return 'bg-status-warn-tint';
   };
 
   // Match the "This Week vs MEV" card's labels (e.g. glute_med -> "Glute Med",
@@ -86,8 +86,7 @@ export function AtrophyRiskAlert({
 
   return (
     <Card
-      variant="bordered"
-      className={`border-l-4 ${getSeverityStyles()}`}
+      className={getSeverityStyles()}
       padding="none"
     >
       <div className="p-4">
@@ -96,7 +95,7 @@ export function AtrophyRiskAlert({
             <div className="flex items-center gap-2 mb-1">
               {/* Warning icon */}
               <svg
-                className={`w-5 h-5 ${isOnCut ? 'text-danger-400' : 'text-warning-400'}`}
+                className={`w-5 h-5 ${isOnCut ? 'text-status-bad' : 'text-status-warn'}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -108,18 +107,18 @@ export function AtrophyRiskAlert({
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-              <span className="font-medium text-surface-100">
-                {isOnCut ? 'Atrophy Risk' : 'Insufficient Volume'}
+              <span className="font-medium text-ink">
+                {isOnCut ? 'Atrophy risk' : 'Insufficient volume'}
               </span>
               <Badge variant={isOnCut ? 'danger' : 'warning'} size="sm">
                 {headline} muscle{headline > 1 ? 's' : ''} under weekly minimum
               </Badge>
               <InfoTooltip term="MEV" size="sm" />
             </div>
-            <p className="text-sm text-surface-400">
+            <p className="text-body text-ink-2">
               {isOnCut ? (
                 <>
-                  <span className="text-danger-400 font-medium">Cutting without adequate volume risks muscle loss.</span>
+                  <span className="text-status-bad font-medium">Cutting without adequate volume risks muscle loss.</span>
                   {' '}The following muscles are below minimum effective volume:
                 </>
               ) : (
@@ -130,7 +129,7 @@ export function AtrophyRiskAlert({
           {onDismiss && (
             <button
               onClick={onDismiss}
-              className="p-1 text-surface-500 hover:text-surface-300 transition-colors"
+              className="p-1 text-ink-3 hover:text-ink-2 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -143,7 +142,7 @@ export function AtrophyRiskAlert({
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className={`mt-2 flex items-center gap-1 text-sm ${
-            isOnCut ? 'text-danger-400 hover:text-danger-300' : 'text-primary-400 hover:text-primary-300'
+            isOnCut ? 'text-status-bad hover:text-status-bad' : 'text-action'
           } transition-colors`}
         >
           {isExpanded ? 'Hide' : 'Show'} details
@@ -168,23 +167,23 @@ export function AtrophyRiskAlert({
                     key={muscle.muscleGroup}
                     className={`px-2.5 py-1.5 rounded-lg text-sm ${
                       isOnCut
-                        ? 'bg-danger-500/10 border border-danger-500/20'
-                        : 'bg-warning-500/10 border border-warning-500/20'
+                        ? 'bg-status-bad/10 border border-status-bad/20'
+                        : 'bg-status-warn/10 border border-status-warn/20'
                     }`}
                   >
-                    <span className={`font-medium ${isOnCut ? 'text-danger-300' : 'text-warning-300'}`}>
+                    <span className={`font-medium ${isOnCut ? 'text-status-bad' : 'text-status-warn'}`}>
                       {formatMuscleName(muscle.muscleGroup)}
                     </span>
-                    <span className="text-surface-500 ml-1.5">
+                    <span className="text-ink-3 ml-1.5">
                       {muscle.totalSets}/{muscle.landmarks.mev} sets
                     </span>
-                    <span className={`text-xs ml-1 ${isOnCut ? 'text-danger-400' : 'text-warning-400'}`}>
+                    <span className={`text-xs ml-1 ${isOnCut ? 'text-status-bad' : 'text-status-warn'}`}>
                       (+{deficit} needed)
                     </span>
                     {/* Which exercises fed this muscle, so a miscount is visible
                         at a glance (e.g. "RDL 2 · Back Extension 1.5"). */}
                     {muscle.contributingExercises && muscle.contributingExercises.length > 0 && (
-                      <div className="mt-0.5 text-[11px] text-surface-500">
+                      <div className="mt-0.5 text-caption text-ink-3">
                         {muscle.contributingExercises
                           .map((ex) => `${ex.name} ${formatSetCredit(ex.sets)}`)
                           .join(' · ')}
@@ -200,9 +199,9 @@ export function AtrophyRiskAlert({
               {getSuggestions().map((suggestion, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-2 text-sm text-surface-300"
+                  className="flex items-start gap-2 text-body text-ink-2"
                 >
-                  <span className={`mt-0.5 ${isOnCut ? 'text-danger-400' : 'text-primary-400'}`}>•</span>
+                  <span className={`mt-0.5 ${isOnCut ? 'text-status-bad' : 'text-action'}`}>•</span>
                   <span>{suggestion}</span>
                 </div>
               ))}
@@ -212,10 +211,10 @@ export function AtrophyRiskAlert({
 
         {/* Cut-specific science callout */}
         {isOnCut && isExpanded && (
-          <div className="mt-4 p-3 bg-surface-800/50 rounded-lg border border-surface-700">
+          <div className="mt-4 p-3 bg-fill/50 rounded-lg border border-sep">
             <div className="flex items-start gap-2">
               <svg
-                className="w-4 h-4 text-primary-400 mt-0.5 flex-shrink-0"
+                className="w-4 h-4 text-action mt-0.5 flex-shrink-0"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -227,8 +226,8 @@ export function AtrophyRiskAlert({
                   d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-xs text-surface-400">
-                <span className="font-medium text-surface-300">Science note:</span> Research shows that
+              <div className="text-caption text-ink-2">
+                <span className="font-medium text-ink-2">Science note:</span> Research shows that
                 maintaining at least MEV during a caloric deficit is essential for muscle preservation.
                 Dropping under the weekly minimum while cutting significantly increases the risk of losing hard-earned muscle mass.
               </div>

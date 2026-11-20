@@ -76,20 +76,20 @@ export function TimelapseModal({ isOpen, onClose, photos, photoUrls, units }: Ti
     : '';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Progress Timelapse" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Progress timelapse" size="lg">
       <div className="space-y-3">
         {/* Info banner with date range and photo count */}
         {frames.length > 0 && (
-          <div className="rounded-lg bg-surface-800 border border-surface-700 px-3 py-2">
-            <p className="text-xs text-surface-400 text-center">
-              <span className="font-medium text-surface-200">{frames.length} photos</span>
+          <div className="rounded-lg bg-fill border border-sep px-3 py-2">
+            <p className="text-caption text-ink-2 text-center">
+              <span className="font-medium text-ink">{frames.length} photos</span>
               {firstDate && lastDate && firstDate !== lastDate && (
                 <span> • {firstDate} to {lastDate}</span>
               )}
             </p>
           </div>
         )}
-        <div className="relative aspect-[3/4] max-h-[60vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700">
+        <div className="relative aspect-[3/4] max-h-[60vh] mx-auto rounded-lg overflow-hidden bg-card ring-1 ring-sep">
           {/* Stack all frames; only the active one is visible. Keeps every
               image decoded so playback never flashes. */}
           {frames.map((photo, i) => (
@@ -103,7 +103,7 @@ export function TimelapseModal({ isOpen, onClose, photos, photoUrls, units }: Ti
             />
           ))}
           <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-8">
-            <p className="text-sm font-medium text-white">
+            <p className="text-body font-medium text-white">
               {formatDate(current.photoDate)}
               {current.weightKg != null && ` · ${displayWeight(current.weightKg)}`}
               {current.bodyFatPercent != null && ` · ${current.bodyFatPercent}% BF`}
@@ -132,10 +132,10 @@ export function TimelapseModal({ isOpen, onClose, photos, photoUrls, units }: Ti
               setIsPlaying(false);
               setIndex(Number(e.target.value));
             }}
-            className="flex-1 accent-primary-500"
+            className="flex-1 accent-action"
             aria-label="Scrub through photos"
           />
-          <span className="text-xs text-surface-500 tabular-nums">
+          <span className="text-caption text-ink-3 tabular-nums">
             {index + 1}/{frames.length}
           </span>
         </div>

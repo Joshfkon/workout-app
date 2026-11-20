@@ -241,15 +241,15 @@ export function AddPhotoModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add Progress Photo" size="md">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Add progress photo" size="md">
       <div className="space-y-4">
         {/* Pose guidance banner */}
         {!file && (
-          <div className="rounded-lg bg-primary-500/10 border border-primary-500/20 p-3">
-            <p className="text-xs font-medium text-primary-300 mb-1">
+          <div className="rounded-lg bg-action/10 border border-action/20 p-3">
+            <p className="text-caption font-medium text-action mb-1">
               💡 Tips for consistent photos
             </p>
-            <ul className="text-xs text-surface-300 space-y-0.5 list-disc list-inside">
+            <ul className="text-caption text-ink-2 space-y-0.5 list-disc list-inside">
               <li>Same lighting, time of day, and location each time</li>
               <li>Take front, side, and back poses (separate photos)</li>
               <li>Stand at the same distance from camera</li>
@@ -278,18 +278,18 @@ export function AddPhotoModal({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isCompressing}
-          className="w-full rounded-lg border-2 border-dashed border-surface-600 hover:border-primary-500 transition-colors overflow-hidden"
+          className="w-full rounded-lg border-2 border-dashed border-sep hover:border-action transition-colors overflow-hidden"
         >
           {isCompressing ? (
-            <div className="py-10 flex flex-col items-center gap-2 text-surface-400">
-              <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm">Optimizing photo…</span>
+            <div className="py-10 flex flex-col items-center gap-2 text-ink-2">
+              <div className="w-6 h-6 border-2 border-sep border-t-transparent rounded-full animate-spin" />
+              <span className="text-body">Optimizing photo…</span>
             </div>
           ) : previewUrl ? (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={previewUrl} alt="Selected progress photo" className="max-h-72 w-full object-contain bg-surface-900" />
+            <img src={previewUrl} alt="Selected progress photo" className="max-h-72 w-full object-contain bg-card" />
           ) : (
-            <div className="py-10 flex flex-col items-center gap-2 text-surface-400">
+            <div className="py-10 flex flex-col items-center gap-2 text-ink-2">
               <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
@@ -304,8 +304,8 @@ export function AddPhotoModal({
                   d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
                 />
               </svg>
-              <span className="text-sm">Tap to choose a photo</span>
-              <span className="text-xs text-surface-500">
+              <span className="text-body">Tap to choose a photo</span>
+              <span className="text-caption text-ink-3">
                 JPEG, PNG or WebP · large photos are compressed automatically
               </span>
             </div>
@@ -345,7 +345,7 @@ export function AddPhotoModal({
               }}
             />
             {showWeightPrefillNotice && weightDisplay && (
-              <p className="text-xs text-surface-400 mt-1">
+              <p className="text-caption text-ink-2 mt-1">
                 ✓ Auto-filled from your log
               </p>
             )}
@@ -366,14 +366,14 @@ export function AddPhotoModal({
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-body text-status-bad">{error}</p>}
 
         <ModalFooter>
           <Button variant="secondary" onClick={handleClose} disabled={isSaving}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={isSaving || isCompressing || !file}>
-            {isSaving ? 'Saving…' : 'Save Photo'}
+            {isSaving ? 'Saving…' : 'Save photo'}
           </Button>
         </ModalFooter>
       </div>

@@ -117,16 +117,16 @@ export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardPr
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Enhanced Athlete Mode</CardTitle>
+        <CardTitle>Enhanced athlete mode</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm text-surface-300">
+            <p className="text-body text-ink-2">
               PEDs significantly increase recovery capacity. HyperTrack raises your volume
               ceiling accordingly.
             </p>
-            <p className="mt-1 text-xs text-surface-500">{ENHANCED_MODE_CAPTION}</p>
+            <p className="mt-1 text-caption text-ink-3">{ENHANCED_MODE_CAPTION}</p>
           </div>
           <Toggle
             checked={enabled}
@@ -134,7 +134,7 @@ export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardPr
             disabled={isLoading || isSaving || !userId}
           />
         </div>
-        {error && <p className="mt-2 text-xs text-danger-400">{error}</p>}
+        {error && <p className="mt-2 text-caption text-status-bad">{error}</p>}
       </CardContent>
 
       {/* Mid-mesocycle decision — flipping the toggle during an active meso */}
@@ -146,13 +146,13 @@ export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardPr
       >
         {pendingChange && (
           <div className="space-y-4">
-            <p className="text-sm text-surface-300">
+            <p className="text-body text-ink-2">
               A mesocycle ({pendingChange.mesocycle.name}, week {pendingChange.mesocycle.current_week} of{' '}
               {pendingChange.mesocycle.total_weeks}) is in progress. How should the change apply?
             </p>
-            <div className="space-y-3 text-sm text-surface-400">
+            <div className="space-y-3 text-body text-ink-2">
               <p>
-                <span className="font-medium text-surface-200">Adjust remaining weeks</span> —
+                <span className="font-medium text-ink">Adjust remaining weeks</span> —
                 regenerates the future weeks of the current mesocycle with the{' '}
                 {pendingChange.value ? 'raised' : 'natural'} volume landmarks and progression rate.
                 Completed weeks and logged workouts are untouched. If this week is already underway,
@@ -161,7 +161,7 @@ export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardPr
                   ' Prescriptions above the natural volume ceiling are brought back down to it.'}
               </p>
               <p>
-                <span className="font-medium text-surface-200">Apply at next mesocycle</span> —
+                <span className="font-medium text-ink">Apply at next mesocycle</span> —
                 the current mesocycle runs unchanged; the setting takes effect when your next
                 mesocycle is generated.
               </p>

@@ -18,19 +18,19 @@ interface MusclePrioritySettingsProps {
 }
 
 const PRIORITY_LABELS: Record<MusclePriorityLevel, string> = {
-  1: 'High Priority',
+  1: 'High priority',
   2: 'Focus',
   3: 'Normal',
   4: 'Maintenance',
-  5: 'Low Priority',
+  5: 'Low priority',
 };
 
 const PRIORITY_COLORS: Record<MusclePriorityLevel, string> = {
-  1: 'bg-primary-500',
-  2: 'bg-primary-400',
-  3: 'bg-surface-500',
-  4: 'bg-surface-600',
-  5: 'bg-surface-700',
+  1: 'bg-action',
+  2: 'bg-action',
+  3: 'bg-ink-3',
+  4: 'bg-sep',
+  5: 'bg-sep',
 };
 
 const PRIORITY_BADGE_VARIANTS: Record<MusclePriorityLevel, 'info' | 'default' | 'outline'> = {
@@ -184,7 +184,7 @@ export function MusclePrioritySettings({
     return (
       <Card className={className}>
         <CardContent className="p-8 text-center">
-          <p className="text-surface-400">Loading priorities...</p>
+          <p className="text-ink-2">Loading priorities...</p>
         </CardContent>
       </Card>
     );
@@ -194,7 +194,7 @@ export function MusclePrioritySettings({
     <Card className={className}>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Muscle Training Priorities</span>
+          <span>Muscle training priorities</span>
           {hasChanges && (
             <Badge variant="warning" size="sm">
               Unsaved changes
@@ -204,18 +204,18 @@ export function MusclePrioritySettings({
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Priority Legend */}
-        <div className="flex flex-wrap gap-2 p-3 bg-surface-800/50 rounded-lg">
-          <span className="text-xs text-surface-400 w-full mb-1">Priority Levels:</span>
+        <div className="flex flex-wrap gap-2 p-3 bg-fill/50 rounded-lg">
+          <span className="text-caption text-ink-2 w-full mb-1">Priority levels:</span>
           {([1, 2, 3, 4, 5] as MusclePriorityLevel[]).map((level) => (
             <div key={level} className="flex items-center gap-1">
               <div className={`w-3 h-3 rounded ${PRIORITY_COLORS[level]}`} />
-              <span className="text-xs text-surface-400">{PRIORITY_LABELS[level]}</span>
+              <span className="text-caption text-ink-2">{PRIORITY_LABELS[level]}</span>
             </div>
           ))}
         </div>
 
         {/* Description */}
-        <p className="text-sm text-surface-400">
+        <p className="text-body text-ink-2">
           Set your training priorities for each muscle group. Higher priority muscles will receive
           more volume in your generated programs. Use this to focus on weak points or aesthetic
           goals.
@@ -224,7 +224,7 @@ export function MusclePrioritySettings({
         {/* Muscle Groups by Region */}
         {Object.entries(MUSCLE_GROUPS_BY_REGION).map(([region, muscles]) => (
           <section key={region}>
-            <h3 className="text-sm font-medium text-surface-300 mb-3">{region}</h3>
+            <h3 className="text-body font-medium text-ink-2 mb-3">{region}</h3>
             <div className="space-y-2">
               {muscles.map((muscle) => {
                 const priorityData = priorities.get(muscle);
@@ -233,12 +233,12 @@ export function MusclePrioritySettings({
                 return (
                   <div
                     key={muscle}
-                    className="flex flex-col gap-2 p-3 bg-surface-800/50 rounded-lg sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 p-3 bg-fill/50 rounded-lg sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex items-center justify-between gap-3 sm:justify-start">
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-8 rounded ${PRIORITY_COLORS[priority]}`} />
-                        <span className="text-sm font-medium text-surface-200">
+                        <span className="text-body font-medium text-ink">
                           {formatMuscleName(muscle)}
                         </span>
                       </div>
@@ -263,7 +263,7 @@ export function MusclePrioritySettings({
                             className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
                               priority === level
                                 ? `${PRIORITY_COLORS[level]} text-white`
-                                : 'bg-surface-700 text-surface-400 hover:bg-surface-600'
+                                : 'bg-sep text-ink-2 hover:bg-sep'
                             }`}
                             title={PRIORITY_LABELS[level]}
                           >
@@ -292,12 +292,12 @@ export function MusclePrioritySettings({
         <PrioritySummary priorities={priorities} />
 
         {/* Actions */}
-        <div className="flex justify-between pt-4 border-t border-surface-700">
+        <div className="flex justify-between pt-4 border-t border-sep">
           <Button variant="ghost" onClick={handleReset} disabled={isSaving}>
-            Reset to Default
+            Reset to default
           </Button>
           <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-            {isSaving ? 'Saving...' : 'Save Priorities'}
+            {isSaving ? 'Saving...' : 'Save priorities'}
           </Button>
         </div>
       </CardContent>
@@ -311,8 +311,8 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
 
   if (highPriority.length === 0 && lowPriority.length === 0) {
     return (
-      <div className="p-4 bg-surface-800/50 rounded-lg text-center">
-        <p className="text-sm text-surface-400">
+      <div className="p-4 bg-fill/50 rounded-lg text-center">
+        <p className="text-body text-ink-2">
           All muscles set to normal priority. Adjust above to customize your training focus.
         </p>
       </div>
@@ -326,12 +326,12 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
       .join(' ');
 
   return (
-    <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
-      <h4 className="text-sm font-medium text-surface-300">Your Training Focus</h4>
+    <div className="p-4 bg-fill/50 rounded-lg space-y-3">
+      <h4 className="text-body font-medium text-ink-2">Your training focus</h4>
 
       {highPriority.length > 0 && (
         <div>
-          <span className="text-xs text-surface-400">Extra volume for: </span>
+          <span className="text-caption text-ink-2">Extra volume for: </span>
           <div className="flex flex-wrap gap-1 mt-1">
             {highPriority.map((p) => (
               <Badge key={p.muscleGroup} variant="info" size="sm">
@@ -346,7 +346,7 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
 
       {lowPriority.length > 0 && (
         <div>
-          <span className="text-xs text-surface-400">Maintenance volume for: </span>
+          <span className="text-caption text-ink-2">Maintenance volume for: </span>
           <div className="flex flex-wrap gap-1 mt-1">
             {lowPriority.map((p) => (
               <Badge key={p.muscleGroup} variant="outline" size="sm">
@@ -357,7 +357,7 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
         </div>
       )}
 
-      <p className="text-xs text-surface-500">
+      <p className="text-caption text-ink-3">
         High priority muscles get up to 20% more volume. Low priority muscles get reduced volume.
       </p>
     </div>

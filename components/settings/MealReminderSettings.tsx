@@ -62,8 +62,8 @@ export function MealReminderSettings() {
     <div className="space-y-3" data-testid="meal-reminder-settings">
       <div className="flex items-center justify-between">
         <div className="pr-4">
-          <p className="text-sm font-medium text-surface-200">Meal reminders</p>
-          <p className="text-xs text-surface-500">
+          <p className="text-body font-medium text-ink">Meal reminders</p>
+          <p className="text-caption text-ink-3">
             A nudge for any meal you haven&apos;t logged yet. A rough estimate is better than nothing.
           </p>
         </div>
@@ -78,7 +78,7 @@ export function MealReminderSettings() {
         <div className="space-y-2 pl-1">
           {MEALS.map(({ meal, label }) => (
             <div key={meal} className="flex items-center justify-between">
-              <label htmlFor={`meal-reminder-${meal}`} className="text-sm text-surface-300">
+              <label htmlFor={`meal-reminder-${meal}`} className="text-body text-ink-2">
                 {label}
               </label>
               <input
@@ -88,16 +88,16 @@ export function MealReminderSettings() {
                 onChange={(e) =>
                   void persist({ ...settings, times: { ...settings.times, [meal]: e.target.value } })
                 }
-                className="rounded-lg bg-surface-800 border border-surface-700 px-3 py-1.5 text-sm text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="rounded-lg bg-fill border border-sep px-3 py-1.5 text-body text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent"
               />
             </div>
           ))}
         </div>
       )}
 
-      {notice && <p className="text-xs text-warning-400">{notice}</p>}
+      {notice && <p className="text-caption text-status-warn">{notice}</p>}
       {settings?.enabled && !isNativePlatform() && (
-        <p className="text-xs text-surface-500">
+        <p className="text-caption text-ink-3">
           Reminders are delivered in the HyperTrack iPhone app.
         </p>
       )}

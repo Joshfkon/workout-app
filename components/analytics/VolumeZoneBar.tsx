@@ -25,16 +25,16 @@ export function BarTrack({ row }: { row: VolumeRow }) {
   const pct = (v: number) => `${Math.min(100, Math.max(0, (v / maxDisplay) * 100))}%`;
 
   return (
-    <div className="relative h-3 rounded-full bg-surface-800 overflow-hidden">
+    <div className="relative h-3 rounded-full bg-fill overflow-hidden">
       {/* Green MEV–MRV zone band */}
       <div
-        className="absolute top-0 bottom-0 bg-success-500/10"
+        className="absolute top-0 bottom-0 bg-status-ok/10"
         style={{ left: pct(band.mev), width: `${Math.max(0, (band.mrv - band.mev) / maxDisplay) * 100}%` }}
       />
       {/* MEV marker */}
-      <div className="absolute top-0 bottom-0 w-px bg-surface-500" style={{ left: pct(band.mev) }} />
+      <div className="absolute top-0 bottom-0 w-px bg-ink-3" style={{ left: pct(band.mev) }} />
       {/* MRV marker */}
-      <div className="absolute top-0 bottom-0 w-px bg-danger-500/60" style={{ left: pct(band.mrv) }} />
+      <div className="absolute top-0 bottom-0 w-px bg-status-bad/60" style={{ left: pct(band.mrv) }} />
       {/* Current fill — row-aware: an in-zone parent with a lagging fine
           child demotes to warning, never green (rowBarClass). */}
       <div
@@ -54,14 +54,14 @@ export function VolumeRowContent({ row }: { row: VolumeRow }) {
   return (
     <>
       <div className="flex items-center justify-between mb-2">
-        <span className="font-medium text-surface-200">{row.displayName}</span>
-        <span className="text-sm tabular-nums flex-shrink-0">
+        <span className="font-medium text-ink">{row.displayName}</span>
+        <span className="text-body tabular-nums flex-shrink-0">
           <span className={`font-semibold ${rowTextClass(row)}`} data-testid={`volume-sets-${row.muscle}`}>
             {formatEffectiveVolume(row.effectiveSets)}
           </span>
           {/* Coarse bands are group-level landmarks, labeled as such so they
               can't be misread as the sum of the child zones beneath. */}
-          <span className="text-surface-500"> eff · {row.sets} sets · {groupZoneBandLabel(row.band)}</span>
+          <span className="text-ink-3"> eff · {row.sets} sets · {groupZoneBandLabel(row.band)}</span>
         </span>
       </div>
       <BarTrack row={row} />
@@ -77,12 +77,12 @@ export function VolumeChildContent({ child }: { child: VolumeRow }) {
   return (
     <>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-surface-400">{child.displayName}</span>
-        <span className="text-xs tabular-nums">
+        <span className="text-caption text-ink-2">{child.displayName}</span>
+        <span className="text-caption tabular-nums">
           <span className={rowTextClass(child)} data-testid={`volume-sets-${child.muscle}`}>
             {formatEffectiveVolume(child.effectiveSets)}
           </span>
-          <span className="text-surface-600">
+          <span className="text-ink-3">
             {' '}eff ({formatEffectiveVolume(child.directEffectiveSets)} direct) · {child.sets} sets · {zoneBandLabel(child.band)}
           </span>
         </span>

@@ -26,14 +26,14 @@ function BenchmarkCard({
       onClick={onToggle}
       className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
         isSelected 
-          ? 'bg-primary-500/10 border-primary-500' 
-          : 'bg-surface-900 border-surface-800 hover:border-surface-700'
+          ? 'bg-action/10 border-action' 
+          : 'bg-card border-sep hover:border-sep'
       }`}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-surface-100">{benchmark.name}</h3>
+            <h3 className="font-semibold text-ink">{benchmark.name}</h3>
             {isRecommended && (
               <Badge variant="success" size="sm">Recommended</Badge>
             )}
@@ -41,8 +41,8 @@ function BenchmarkCard({
               <Badge variant="warning" size="sm">Alternative</Badge>
             )}
           </div>
-          <p className="text-sm text-surface-400">{benchmark.description}</p>
-          <div className="flex items-center gap-3 mt-2 text-xs text-surface-500">
+          <p className="text-body text-ink-2">{benchmark.description}</p>
+          <div className="flex items-center gap-3 mt-2 text-caption text-ink-3">
             <span className="capitalize">{benchmark.pattern.replace('_', ' ')}</span>
             <span>•</span>
             <span className="capitalize">{benchmark.equipment}</span>
@@ -52,11 +52,11 @@ function BenchmarkCard({
         </div>
         <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
           isSelected 
-            ? 'bg-primary-500 border-primary-500' 
-            : 'border-surface-600'
+            ? 'bg-action border-action' 
+            : 'border-sep'
         }`}>
           {isSelected && (
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-on-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           )}
@@ -136,8 +136,8 @@ function BenchmarksContent() {
           <div key={step} className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
               step <= 2 
-                ? 'bg-primary-500 text-white' 
-                : 'bg-surface-800 text-surface-500'
+                ? 'bg-action text-on-action' 
+                : 'bg-fill text-ink-3'
             }`}>
               {step < 2 ? (
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -146,15 +146,15 @@ function BenchmarksContent() {
               ) : step}
             </div>
             {step < 4 && (
-              <div className={`w-12 h-0.5 ${step < 2 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+              <div className={`w-12 h-0.5 ${step < 2 ? 'bg-action' : 'bg-fill'}`} />
             )}
           </div>
         ))}
       </div>
       
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-surface-100 mb-2">Select Benchmark Lifts</h1>
-        <p className="text-surface-400">
+        <h1 className="text-large-title font-bold text-ink mb-2">Select benchmark lifts</h1>
+        <p className="text-ink-2">
           Choose which lifts you&apos;d like to test. This helps us personalize your entire training experience.
         </p>
       </div>
@@ -168,21 +168,21 @@ function BenchmarksContent() {
       />
 
       {/* Time estimate */}
-      <Card className="bg-surface-800/50">
+      <Card className="bg-fill/50">
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-10 h-10 rounded-lg bg-action/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <div>
-                <p className="font-medium text-surface-200">Estimated Time</p>
-                <p className="text-sm text-surface-400">{selectedBenchmarks.length} lifts selected</p>
+                <p className="font-medium text-ink">Estimated time</p>
+                <p className="text-body text-ink-2">{selectedBenchmarks.length} lifts selected</p>
               </div>
             </div>
-            <p className="text-2xl font-bold text-surface-100">{estimatedTime} min</p>
+            <p className="text-title font-bold text-ink">{estimatedTime} min</p>
           </div>
         </CardContent>
       </Card>
@@ -190,8 +190,8 @@ function BenchmarksContent() {
       {/* Recommended lifts */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-surface-200">Core Lifts</h2>
-          <span className="text-sm text-surface-500">Recommended for complete profile</span>
+          <h2 className="text-headline font-semibold text-ink">Core lifts</h2>
+          <span className="text-body text-ink-3">Recommended for complete profile</span>
         </div>
         <div className="grid gap-3">
           {BENCHMARK_LIFTS.filter(b => recommendedIds.includes(b.id)).map(benchmark => (
@@ -209,8 +209,8 @@ function BenchmarksContent() {
       {/* Optional lifts */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-surface-200">Optional Lifts</h2>
-          <span className="text-sm text-surface-500">For more complete data</span>
+          <h2 className="text-headline font-semibold text-ink">Optional lifts</h2>
+          <span className="text-body text-ink-3">For more complete data</span>
         </div>
         <div className="grid gap-3">
           {BENCHMARK_LIFTS.filter(b => optionalIds.includes(b.id)).map(benchmark => (
@@ -227,8 +227,8 @@ function BenchmarksContent() {
       {/* Alternative lifts */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-surface-200">Alternatives</h2>
-          <span className="text-sm text-surface-500">If you can&apos;t do barbell squats</span>
+          <h2 className="text-headline font-semibold text-ink">Alternatives</h2>
+          <span className="text-body text-ink-3">If you can&apos;t do barbell squats</span>
         </div>
         <div className="grid gap-3">
           {BENCHMARK_LIFTS.filter(b => alternativeIds.includes(b.id)).map(benchmark => (
@@ -270,8 +270,8 @@ function BenchmarksContent() {
 
       {/* Testing takes about an hour at a gym; most people sign up elsewhere.
           Starting weights are estimated from the profile without it. */}
-      <div className="rounded-xl border border-surface-800 bg-surface-900 p-4 text-center space-y-2">
-        <p className="text-sm text-surface-300">
+      <div className="rounded-card bg-card p-4 text-center space-y-2 shadow-card">
+        <p className="text-body text-ink-2">
           Not at the gym right now? Skip testing — we&apos;ll estimate your starting weights
           and fine-tune them from your first workouts.
         </p>
@@ -303,7 +303,7 @@ export default function BenchmarksPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     }>
       <BenchmarksContent />

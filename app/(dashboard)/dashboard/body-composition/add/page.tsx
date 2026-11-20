@@ -273,12 +273,12 @@ export default function AddDexaScanPage() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-surface-100">Add DEXA Scan</h1>
-        <p className="text-surface-400 mt-1">Record your body composition data</p>
+        <h1 className="text-large-title text-ink">Add DEXA scan</h1>
+        <p className="text-ink-2 mt-1">Record your body composition data</p>
       </div>
 
       {error && (
-        <div className="p-4 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-sm">
+        <div className="p-4 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-body">
           {error}
         </div>
       )}
@@ -288,7 +288,7 @@ export default function AddDexaScanPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Date */}
             <Input
-              label="Scan Date"
+              label="Scan date"
               type="date"
               value={scanDate}
               onChange={(e) => setScanDate(e.target.value)}
@@ -296,14 +296,14 @@ export default function AddDexaScanPage() {
             />
 
             {/* Input Mode Toggle */}
-            <div className="flex gap-2 p-1 bg-surface-800 rounded-lg">
+            <div className="flex gap-2 p-1 bg-fill rounded-lg">
               <button
                 type="button"
                 onClick={() => setInputMode('calculated')}
                 className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                   inputMode === 'calculated'
-                    ? 'bg-primary-500 text-white'
-                    : 'text-surface-400 hover:text-surface-200'
+                    ? 'bg-action text-on-action'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 Auto-Calculate
@@ -313,17 +313,17 @@ export default function AddDexaScanPage() {
                 onClick={() => setInputMode('manual')}
                 className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                   inputMode === 'manual'
-                    ? 'bg-primary-500 text-white'
-                    : 'text-surface-400 hover:text-surface-200'
+                    ? 'bg-action text-on-action'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
-                Manual Entry
+                Manual entry
               </button>
             </div>
 
             {inputMode === 'calculated' ? (
               <>
-                <p className="text-xs text-surface-500">
+                <p className="text-caption text-ink-3">
                   Enter your total weight and body fat %, and lean/fat mass will be calculated automatically.
                 </p>
                 
@@ -338,7 +338,7 @@ export default function AddDexaScanPage() {
                     required
                   />
                   <Input
-                    label="Body Fat %"
+                    label="Body fat %"
                     type="number"
                     step="0.1"
                     min="0"
@@ -351,21 +351,21 @@ export default function AddDexaScanPage() {
                 </div>
 
                 {leanMassDisplay && fatMassDisplay && (
-                  <div className="grid grid-cols-2 gap-4 p-4 bg-surface-800/50 rounded-lg">
+                  <div className="grid grid-cols-2 gap-4 p-4 bg-fill/50 rounded-lg">
                     <div>
-                      <p className="text-xs text-surface-500">Calculated Lean Mass</p>
-                      <p className="text-lg font-mono text-surface-200">{leanMassDisplay} {units === 'lb' ? 'lbs' : 'kg'}</p>
+                      <p className="text-caption text-ink-3">Calculated lean mass</p>
+                      <p className="text-headline font-mono text-ink">{leanMassDisplay} {units === 'lb' ? 'lbs' : 'kg'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-surface-500">Calculated Fat Mass</p>
-                      <p className="text-lg font-mono text-surface-200">{fatMassDisplay} {units === 'lb' ? 'lbs' : 'kg'}</p>
+                      <p className="text-caption text-ink-3">Calculated fat mass</p>
+                      <p className="text-headline font-mono text-ink">{fatMassDisplay} {units === 'lb' ? 'lbs' : 'kg'}</p>
                     </div>
                   </div>
                 )}
               </>
             ) : (
               <>
-                <p className="text-xs text-surface-500">
+                <p className="text-caption text-ink-3">
                   Enter all values directly from your DEXA scan report.
                 </p>
                 
@@ -380,7 +380,7 @@ export default function AddDexaScanPage() {
                 />
 
                 <Input
-                  label="Body Fat %"
+                  label="Body fat %"
                   type="number"
                   step="0.1"
                   min="0"
@@ -426,18 +426,18 @@ export default function AddDexaScanPage() {
             />
 
             {/* Regional Data Section */}
-            <div className="border border-surface-700 rounded-lg overflow-hidden">
+            <div className="border border-sep rounded-lg overflow-hidden">
               <button
                 type="button"
                 onClick={() => setShowRegionalData(!showRegionalData)}
-                className="w-full flex items-center justify-between p-4 bg-surface-800/50 hover:bg-surface-800 transition-colors"
+                className="w-full flex items-center justify-between p-4 bg-fill/50 hover:bg-fill transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-surface-200">Regional Body Composition</span>
+                  <span className="font-medium text-ink">Regional body composition</span>
                   <Badge variant="info" size="sm">Optional</Badge>
                 </div>
                 <svg 
-                  className={`w-5 h-5 text-surface-400 transition-transform ${showRegionalData ? 'rotate-180' : ''}`}
+                  className={`w-5 h-5 text-ink-2 transition-transform ${showRegionalData ? 'rotate-180' : ''}`}
                   fill="none" 
                   viewBox="0 0 24 24" 
                   stroke="currentColor"
@@ -447,21 +447,21 @@ export default function AddDexaScanPage() {
               </button>
               
               {showRegionalData && (
-                <div className="p-4 space-y-6 border-t border-surface-700">
-                  <p className="text-xs text-surface-500">
+                <div className="p-4 space-y-6 border-t border-sep">
+                  <p className="text-caption text-ink-3">
                     Enter regional data from your DEXA report for better exercise recommendations. 
                     Values should be in <strong>grams (g)</strong>.
                   </p>
                   
                   {/* Input Mode Toggle */}
-                  <div className="flex gap-2 p-1 bg-surface-800 rounded-lg">
+                  <div className="flex gap-2 p-1 bg-fill rounded-lg">
                     <button
                       type="button"
                       onClick={() => setRegionalInputMode('combined')}
                       className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
                         regionalInputMode === 'combined'
-                          ? 'bg-primary-500 text-white'
-                          : 'text-surface-400 hover:text-surface-200'
+                          ? 'bg-action text-on-action'
+                          : 'text-ink-2 hover:text-ink'
                       }`}
                     >
                       Total Arms/Legs
@@ -471,14 +471,14 @@ export default function AddDexaScanPage() {
                       onClick={() => setRegionalInputMode('split')}
                       className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
                         regionalInputMode === 'split'
-                          ? 'bg-primary-500 text-white'
-                          : 'text-surface-400 hover:text-surface-200'
+                          ? 'bg-action text-on-action'
+                          : 'text-ink-2 hover:text-ink'
                       }`}
                     >
-                      Left/Right Split
+                      Left/Right split
                     </button>
                   </div>
-                  <p className="text-xs text-surface-600">
+                  <p className="text-caption text-ink-3">
                     {regionalInputMode === 'combined' 
                       ? 'Use this if your DEXA report shows total arms and total legs without left/right breakdown.'
                       : 'Use this if your DEXA report shows separate values for left and right limbs.'}
@@ -488,12 +488,12 @@ export default function AddDexaScanPage() {
                     <>
                       {/* Arms - Combined */}
                       <div>
-                        <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
-                          💪 Arms (Total)
+                        <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
+                          Arms (total)
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                           <Input
-                            label="Total Lean (g)"
+                            label="Total lean (g)"
                             type="number"
                             step="1"
                             value={regionalData.totalArmsLean}
@@ -501,7 +501,7 @@ export default function AddDexaScanPage() {
                             placeholder="e.g., 7000"
                           />
                           <Input
-                            label="Total Fat (g)"
+                            label="Total fat (g)"
                             type="number"
                             step="1"
                             value={regionalData.totalArmsFat}
@@ -513,12 +513,12 @@ export default function AddDexaScanPage() {
 
                       {/* Legs - Combined */}
                       <div>
-                        <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
-                          🦵 Legs (Total)
+                        <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
+                          Legs (total)
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                           <Input
-                            label="Total Lean (g)"
+                            label="Total lean (g)"
                             type="number"
                             step="1"
                             value={regionalData.totalLegsLean}
@@ -526,7 +526,7 @@ export default function AddDexaScanPage() {
                             placeholder="e.g., 20000"
                           />
                           <Input
-                            label="Total Fat (g)"
+                            label="Total fat (g)"
                             type="number"
                             step="1"
                             value={regionalData.totalLegsFat}
@@ -540,12 +540,12 @@ export default function AddDexaScanPage() {
                     <>
                       {/* Arms - Split */}
                       <div>
-                        <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                        <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
                           💪 Arms
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-3">
-                            <p className="text-xs text-surface-500 font-medium">Left Arm</p>
+                            <p className="text-caption text-ink-3 font-medium">Left arm</p>
                             <Input
                               label="Lean (g)"
                               type="number"
@@ -564,7 +564,7 @@ export default function AddDexaScanPage() {
                             />
                           </div>
                           <div className="space-y-3">
-                            <p className="text-xs text-surface-500 font-medium">Right Arm</p>
+                            <p className="text-caption text-ink-3 font-medium">Right arm</p>
                             <Input
                               label="Lean (g)"
                               type="number"
@@ -587,12 +587,12 @@ export default function AddDexaScanPage() {
 
                       {/* Legs - Split */}
                       <div>
-                        <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                        <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
                           🦵 Legs
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-3">
-                            <p className="text-xs text-surface-500 font-medium">Left Leg</p>
+                            <p className="text-caption text-ink-3 font-medium">Left leg</p>
                             <Input
                               label="Lean (g)"
                               type="number"
@@ -611,7 +611,7 @@ export default function AddDexaScanPage() {
                             />
                           </div>
                           <div className="space-y-3">
-                            <p className="text-xs text-surface-500 font-medium">Right Leg</p>
+                            <p className="text-caption text-ink-3 font-medium">Right leg</p>
                             <Input
                               label="Lean (g)"
                               type="number"
@@ -636,7 +636,7 @@ export default function AddDexaScanPage() {
 
                   {/* Trunk */}
                   <div>
-                    <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                    <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
                       🫁 Trunk
                     </h4>
                     <div className="grid grid-cols-2 gap-4">
@@ -661,15 +661,15 @@ export default function AddDexaScanPage() {
 
                   {/* Android/Gynoid */}
                   <div>
-                    <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                    <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
                       📊 Android/Gynoid Fat Regions
                     </h4>
-                    <p className="text-xs text-surface-500 mb-3">
+                    <p className="text-caption text-ink-3 mb-3">
                       These measurements help assess metabolic health risk. Lower android/gynoid ratio is generally better.
                     </p>
                     <div className="grid grid-cols-2 gap-4">
                       <Input
-                        label="Android Fat (g)"
+                        label="Android fat (g)"
                         type="number"
                         step="1"
                         value={regionalData.androidFat}
@@ -678,7 +678,7 @@ export default function AddDexaScanPage() {
                         hint="Abdominal region"
                       />
                       <Input
-                        label="Gynoid Fat (g)"
+                        label="Gynoid fat (g)"
                         type="number"
                         step="1"
                         value={regionalData.gynoidFat}
@@ -697,17 +697,17 @@ export default function AddDexaScanPage() {
                     
                     if (result.error) {
                       return (
-                        <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-                          <p className="text-sm text-warning-400 font-medium">⚠️ Regional data incomplete</p>
-                          <p className="text-xs text-warning-300 mt-1">{result.error}</p>
+                        <div className="p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg">
+                          <p className="text-body text-status-warn font-medium">⚠️ Regional data incomplete</p>
+                          <p className="text-caption text-status-warn mt-1">{result.error}</p>
                         </div>
                       );
                     }
                     
                     return (
-                      <div className="p-3 bg-success-500/10 border border-success-500/20 rounded-lg">
-                        <p className="text-sm text-success-400 font-medium">✓ Regional data ready to save</p>
-                        <p className="text-xs text-success-300 mt-1">All required lean mass fields are filled.</p>
+                      <div className="p-3 bg-status-ok/10 border border-status-ok/20 rounded-lg">
+                        <p className="text-body text-status-ok font-medium">✓ Regional data ready to save</p>
+                        <p className="text-caption text-status-ok mt-1">All required lean mass fields are filled.</p>
                       </div>
                     );
                   })()}
@@ -717,7 +717,7 @@ export default function AddDexaScanPage() {
 
             {/* Notes */}
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1.5">
+              <label className="block text-body font-medium text-ink-2 mb-1.5">
                 Notes (Optional)
               </label>
               <textarea
@@ -725,7 +725,7 @@ export default function AddDexaScanPage() {
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Any notes about this scan..."
                 rows={3}
-                className="w-full px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder:text-surface-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                className="w-full px-4 py-2.5 bg-card rounded-lg text-ink placeholder:text-ink-3 focus:ring-2 focus:ring-action focus:border-transparent resize-none shadow-card"
               />
             </div>
 
@@ -744,7 +744,7 @@ export default function AddDexaScanPage() {
                 isLoading={isSubmitting}
                 className="flex-1"
               >
-                Save Scan
+                Save scan
               </Button>
             </div>
           </form>
@@ -754,15 +754,15 @@ export default function AddDexaScanPage() {
       {/* Info Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">About DEXA Scans</CardTitle>
+          <CardTitle className="text-body">About DEXA scans</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-surface-400">
+          <p className="text-body text-ink-2">
             DEXA (Dual-Energy X-ray Absorptiometry) is considered the gold standard for body composition 
             measurement. For best tracking, try to get scans under similar conditions (same time of day, 
             hydration status, etc.).
           </p>
-          <p className="text-sm text-surface-500 mt-3">
+          <p className="text-body text-ink-3 mt-3">
             <strong>Tip:</strong> Getting scans every 8-12 weeks provides enough time to see meaningful 
             changes while not being too frequent.
           </p>

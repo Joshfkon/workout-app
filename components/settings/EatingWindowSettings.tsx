@@ -21,7 +21,7 @@ import {
 import { DEFAULT_EATING_WINDOW } from '@/services/intakePacing';
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg bg-surface-800 border border-surface-700 text-surface-100 text-sm focus:outline-none focus:border-primary-500';
+  'w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-sm focus:outline-none focus:border-action';
 
 export function EatingWindowSettings() {
   const supabase = createUntypedClient();
@@ -77,16 +77,16 @@ export function EatingWindowSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Eating Window</CardTitle>
+        <CardTitle>Eating window</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-surface-500">
+        <p className="text-caption text-ink-3">
           Nutrition pacing (&ldquo;on pace / behind / ahead&rdquo;) judges your intake against how
           much of this window has passed. Nothing is flagged before the window or in its first hour.
         </p>
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className="block text-xs font-medium text-surface-400 mb-1" htmlFor="eating-window-start">
+            <label className="block text-caption font-medium text-ink-2 mb-1" htmlFor="eating-window-start">
               First meal
             </label>
             <input
@@ -98,7 +98,7 @@ export function EatingWindowSettings() {
             />
           </div>
           <div className="flex-1">
-            <label className="block text-xs font-medium text-surface-400 mb-1" htmlFor="eating-window-end">
+            <label className="block text-caption font-medium text-ink-2 mb-1" htmlFor="eating-window-end">
               Last meal
             </label>
             <input
@@ -111,7 +111,7 @@ export function EatingWindowSettings() {
           </div>
         </div>
         {message && (
-          <p className={`text-xs ${message.type === 'success' ? 'text-success-400' : 'text-danger-400'}`}>
+          <p className={`text-xs ${message.type === 'success' ? 'text-status-ok' : 'text-status-bad'}`}>
             {message.text}
           </p>
         )}

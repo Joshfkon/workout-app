@@ -42,7 +42,7 @@ import nextDynamic from 'next/dynamic';
 // only renders inside the exercise-detail modal.
 const E1RMProgressChart = nextDynamic(() => import('./_components/E1RMProgressChart'), {
   ssr: false,
-  loading: () => <div className="h-full flex items-center justify-center text-sm text-surface-500">Loading chart…</div>,
+  loading: () => <div className="h-full flex items-center justify-center text-body text-ink-3">Loading chart…</div>,
 });
 
 interface SetDetail {
@@ -1251,18 +1251,18 @@ function HistoryPageContent() {
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-        <div className="bg-surface-900 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-surface-700">
+        <div className="bg-card rounded-card max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
           {/* Modal header */}
-          <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+          <div className="p-4 border-b border-sep flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-surface-100">{selectedExercise.exerciseName}</h2>
-              <p className="text-sm text-surface-400">{muscleDisplayName(selectedExercise.primaryMuscle)}</p>
+              <h2 className="text-title font-bold text-ink">{selectedExercise.exerciseName}</h2>
+              <p className="text-body text-ink-2">{muscleDisplayName(selectedExercise.primaryMuscle)}</p>
             </div>
             <button
               onClick={() => setSelectedExercise(null)}
-              className="p-2 hover:bg-surface-800 rounded-lg transition-colors"
+              className="p-2 hover:bg-fill rounded-lg transition-colors"
             >
-              <svg className="w-5 h-5 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -1295,8 +1295,8 @@ function HistoryPageContent() {
                         }
                         className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                           isSelected
-                            ? 'bg-primary-500/20 text-primary-300'
-                            : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                            ? 'bg-action/20 text-action'
+                            : 'bg-fill text-ink-2 hover:text-ink'
                         }`}
                       >
                         {opt.label}
@@ -1304,7 +1304,7 @@ function HistoryPageContent() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-surface-500 mt-2">
+                <p className="text-caption text-ink-3 mt-2">
                   {selectedExercise.gymKey === ALL_GYMS
                     ? 'Combining gyms mixes machines that read differently — the trend and records below are not like-for-like.'
                     : 'Machine lift: trend and records are for this gym only. Machines at other gyms read differently.'}
@@ -1313,51 +1313,51 @@ function HistoryPageContent() {
             )}
             {loadingExercise ? (
               <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-action"></div>
               </div>
             ) : selectedExercise.history.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-surface-400">No history found for this exercise</p>
+                <p className="text-ink-2">No history found for this exercise</p>
               </div>
             ) : (
               <div className="space-y-6">
                 {/* Stats cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {isDuration ? (
-                    <div className="bg-surface-800 rounded-lg p-3 text-center">
-                      <p className="text-xs text-surface-500 uppercase">Last Best Hold</p>
-                      <p className="text-xl font-bold text-primary-400">
+                    <div className="bg-fill rounded-lg p-3 text-center">
+                      <p className="text-caption text-ink-3">Last best hold</p>
+                      <p className="text-title font-bold text-action">
                         {selectedExercise.history.length > 0
                           ? selectedExercise.history[selectedExercise.history.length - 1].bestReps
                           : 0}s
                       </p>
                     </div>
                   ) : (
-                    <div className="bg-surface-800 rounded-lg p-3 text-center">
-                      <p className="text-xs text-surface-500 uppercase">Current E1RM</p>
-                      <p className="text-xl font-bold text-primary-400">
+                    <div className="bg-fill rounded-lg p-3 text-center">
+                      <p className="text-caption text-ink-3">Current E1RM</p>
+                      <p className="text-title font-bold text-action">
                         {formatEstimateWeight(selectedExercise.currentE1RM, unit)}
                       </p>
                     </div>
                   )}
                   {isDuration ? (
-                    <div className="bg-surface-800 rounded-lg p-3 text-center">
-                      <p className="text-xs text-surface-500 uppercase">Longest Hold</p>
-                      <p className="text-xl font-bold text-success-400">
+                    <div className="bg-fill rounded-lg p-3 text-center">
+                      <p className="text-caption text-ink-3">Longest hold</p>
+                      <p className="text-title font-bold text-status-ok">
                         {selectedExercise.longestHoldSeconds}s
                       </p>
                     </div>
                   ) : (
-                    <div className="bg-surface-800 rounded-lg p-3 text-center">
-                      <p className="text-xs text-surface-500 uppercase">All-Time Best</p>
-                      <p className="text-xl font-bold text-success-400">
+                    <div className="bg-fill rounded-lg p-3 text-center">
+                      <p className="text-caption text-ink-3">All-time best</p>
+                      <p className="text-title font-bold text-status-ok">
                         {formatEstimateWeight(selectedExercise.allTimeMaxE1RM, unit)}
                       </p>
                       {/* An all-time best set before an equipment change is
                           not comparable to current work — say so instead of
                           contradicting the current-segment numbers. */}
                       {hasPreCalibrationBest && (
-                        <p className="text-[10px] text-surface-500 mt-0.5">
+                        <p className="text-caption text-ink-3 mt-0.5">
                           pre-calibration · since equipment change:{' '}
                           {formatEstimateWeight(selectedExercise.segmentBestE1RM, unit)}
                         </p>
@@ -1368,25 +1368,25 @@ function HistoryPageContent() {
                       column maxes — see BestSetRecord). The label states the
                       selection rule; the date makes a fabricated pairing
                       self-evident. */}
-                  <div className="bg-surface-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-surface-500 uppercase">
+                  <div className="bg-fill rounded-lg p-3 text-center">
+                    <p className="text-caption text-ink-3">
                       {isDuration
-                        ? 'Top Weight Set'
+                        ? 'Top weight set'
                         : selectedExercise.bestSet && selectedExercise.bestSet.e1rm > 0
                           ? 'Best Set (e1RM)'
                           : 'Best Set (heaviest)'}
                     </p>
                     {selectedExercise.bestSet ? (
                       <>
-                        <p className="text-xl font-bold text-surface-200">
+                        <p className="text-title font-bold text-ink">
                           {formatWeight(selectedExercise.bestSet.weightKg, unit)}
                         </p>
-                        <p className="text-xs text-surface-500">
+                        <p className="text-caption text-ink-3">
                           {isDuration
                             ? `× ${selectedExercise.bestSet.reps}s`
                             : `× ${selectedExercise.bestSet.reps} reps`}
                         </p>
-                        <p className="text-[10px] text-surface-500 mt-0.5">
+                        <p className="text-caption text-ink-3 mt-0.5">
                           {parseDateKey(selectedExercise.bestSet.date).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -1395,23 +1395,23 @@ function HistoryPageContent() {
                         </p>
                       </>
                     ) : (
-                      <p className="text-xl font-bold text-surface-200">—</p>
+                      <p className="text-title font-bold text-ink">—</p>
                     )}
                   </div>
-                  <div className="bg-surface-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-surface-500 uppercase">Progress</p>
-                    <p className={`text-xl font-bold ${selectedExercise.progressPercent >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                  <div className="bg-fill rounded-lg p-3 text-center">
+                    <p className="text-caption text-ink-3">Progress</p>
+                    <p className={`text-xl font-bold ${selectedExercise.progressPercent >= 0 ? 'text-status-ok' : 'text-status-bad'}`}>
                       {selectedExercise.progressPercent >= 0 ? '+' : ''}{selectedExercise.progressPercent.toFixed(1)}%
                     </p>
-                    <p className="text-xs text-surface-500">{selectedExercise.totalSetsAllTime} total sets</p>
+                    <p className="text-caption text-ink-3">{selectedExercise.totalSetsAllTime} total sets</p>
                   </div>
                 </div>
 
                 {/* Progress chart (recharts loads on demand — P1-2) */}
                 {chartData.length > 1 && (
-                  <div className="bg-surface-800 rounded-lg p-4">
-                    <h3 className="text-sm font-semibold text-surface-300 mb-4">
-                      {isDuration ? 'Hold Time Progress' : 'Estimated 1RM Progress'}
+                  <div className="bg-fill rounded-lg p-4">
+                    <h3 className="text-body font-semibold text-ink-2 mb-4">
+                      {isDuration ? 'Hold time progress' : 'Estimated 1RM progress'}
                     </h3>
                     <div className="h-48">
                       <E1RMProgressChart
@@ -1424,7 +1424,7 @@ function HistoryPageContent() {
                             // plate grid (must agree with the stat block).
                             : Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit) * 10) / 10
                         }
-                        seriesLabel={isDuration ? 'Longest Hold' : 'Est. 1RM'}
+                        seriesLabel={isDuration ? 'Longest hold' : 'Est. 1RM'}
                       />
                     </div>
                   </div>
@@ -1432,12 +1432,12 @@ function HistoryPageContent() {
 
                 {/* History list */}
                 <div>
-                  <h3 className="text-sm font-semibold text-surface-300 mb-3">Workout History</h3>
+                  <h3 className="text-body font-semibold text-ink-2 mb-3">Workout history</h3>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {[...selectedExercise.history].reverse().map((entry, idx) => (
-                      <div key={idx} className="bg-surface-800/50 rounded-lg p-3">
+                      <div key={idx} className="bg-fill/50 rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-surface-200">
+                          <span className="text-body font-medium text-ink">
                             {parseDateKey(entry.date).toLocaleDateString('en-US', {
                               weekday: 'short',
                               month: 'short',
@@ -1462,12 +1462,12 @@ function HistoryPageContent() {
                           {entry.sets.map((set, setIdx) => (
                             <span
                               key={setIdx}
-                              className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
+                              className="px-2 py-1 bg-sep rounded text-caption text-ink-2"
                             >
                               {isDuration
                                 ? `${set.reps}s @ ${formatWeight(set.weight, unit)}`
                                 : `${formatWeight(set.weight, unit)} × ${set.reps}`}
-                              {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
+                              {set.rpe && <span className="text-ink-3"> @{set.rpe}</span>}
                             </span>
                           ))}
                         </div>
@@ -1479,7 +1479,7 @@ function HistoryPageContent() {
                           <button
                             type="button"
                             onClick={() => toggleEquipmentChanged(entry)}
-                            className="mt-2 text-[11px] text-surface-500 hover:text-surface-300 underline decoration-dotted transition-colors"
+                            className="mt-2 text-caption text-ink-3 hover:text-ink-2 underline decoration-dotted transition-colors"
                           >
                             {entry.equipmentChanged
                               ? 'Unmark different equipment'
@@ -1506,12 +1506,12 @@ function HistoryPageContent() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
-          <p className="text-surface-400 mt-1">Your past training sessions</p>
+          <h1 className="text-large-title text-ink">Workout history</h1>
+          <p className="text-ink-2 mt-1">Your past training sessions</p>
         </div>
         <Card className="text-center py-12" data-testid="history-load-error">
-          <p className="text-surface-300 font-medium">Couldn&apos;t load your workout history</p>
-          <p className="text-surface-500 text-sm mt-2">Check your connection and try again.</p>
+          <p className="text-ink-2 font-medium">Couldn&apos;t load your workout history</p>
+          <p className="text-ink-3 text-body mt-2">Check your connection and try again.</p>
           <Button className="mt-6" onClick={() => firstPageQuery.refetch()}>
             Retry
           </Button>
@@ -1527,12 +1527,12 @@ function HistoryPageContent() {
     return (
       <div className="space-y-6" data-testid="history-full-loading">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
-          <p className="text-surface-400 mt-1">Your past training sessions</p>
+          <h1 className="text-large-title text-ink">Workout history</h1>
+          <p className="text-ink-2 mt-1">Your past training sessions</p>
         </div>
         <Card className="text-center py-12">
           <LoadingAnimation type="random" size="md" />
-          <p className="text-surface-400 mt-4">Loading your workout history...</p>
+          <p className="text-ink-2 mt-4">Loading your workout history...</p>
         </Card>
       </div>
     );
@@ -1542,8 +1542,8 @@ function HistoryPageContent() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
-          <p className="text-surface-400 mt-1">Your past training sessions</p>
+          <h1 className="text-large-title text-ink">Workout history</h1>
+          <p className="text-ink-2 mt-1">Your past training sessions</p>
         </div>
         {workouts.length > 0 && (
           <div className="flex items-center gap-2">
@@ -1551,9 +1551,9 @@ function HistoryPageContent() {
               <>
                 <button
                   onClick={selectAllWorkouts}
-                  className="px-3 py-1.5 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-body text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
                 >
-                  {selectedWorkouts.size === workouts.length ? 'Deselect All' : 'Select All'}
+                  {selectedWorkouts.size === workouts.length ? 'Deselect all' : 'Select all'}
                 </button>
                 {selectedWorkouts.size > 0 && (
                   <Button
@@ -1587,7 +1587,7 @@ function HistoryPageContent() {
 
       {/* List / Calendar toggle (P1-6) — flat list stays the default */}
       {workouts.length > 0 && (
-        <div className="flex gap-1 bg-surface-800/50 p-1 rounded-xl w-fit">
+        <div className="flex gap-1 bg-fill/50 p-1 rounded-xl w-fit">
           {(['list', 'calendar'] as const).map((mode) => (
             <button
               key={mode}
@@ -1598,8 +1598,8 @@ function HistoryPageContent() {
               aria-pressed={viewMode === mode}
               className={`px-5 min-h-[44px] rounded-lg text-sm font-medium capitalize transition-all ${
                 viewMode === mode
-                  ? 'bg-surface-700 text-surface-100 shadow-sm'
-                  : 'text-surface-400 hover:text-surface-200'
+                  ? 'bg-sep text-ink shadow-sm'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               {mode}
@@ -1630,8 +1630,8 @@ function HistoryPageContent() {
                 aria-label={exerciseFilter === name ? `Remove ${name} filter` : `Filter by ${name}`}
                 className={`shrink-0 whitespace-nowrap min-h-[44px] px-4 rounded-full text-sm font-medium transition-colors ${
                   exerciseFilter === name
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                    ? 'bg-action text-on-action'
+                    : 'bg-fill text-ink-2 hover:bg-sep'
                 }`}
               >
                 {name}
@@ -1639,12 +1639,12 @@ function HistoryPageContent() {
             ))}
           </div>
           {/* Fade gradient on right edge to indicate more content */}
-          <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-surface-950 to-transparent pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-2 w-8 bg-canvas to-transparent pointer-events-none" />
         </div>
       )}
 
       {viewMode === 'calendar' && selectedDay && displayedWorkouts.length === 0 && (
-        <p className="text-sm text-surface-500 text-center py-4">
+        <p className="text-body text-ink-3 text-center py-4">
           No {exerciseFilter ? `${exerciseFilter} ` : ''}workouts on{' '}
           {new Date(`${selectedDay}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
         </p>
@@ -1652,17 +1652,17 @@ function HistoryPageContent() {
 
       {workouts.length === 0 ? (
         <Card className="text-center py-12">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
-            <svg className="w-8 h-8 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">
+            <svg className="w-8 h-8 text-ink-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-surface-200">No workout history yet</h2>
-          <p className="text-surface-500 mt-2 max-w-md mx-auto">
+          <h2 className="text-headline font-semibold text-ink">No workout history yet</h2>
+          <p className="text-ink-3 mt-2 max-w-md mx-auto">
             Complete your first workout to start building your training history.
           </p>
           <Link href="/dashboard/workout/new">
-            <Button className="mt-6">Start Your First Workout</Button>
+            <Button className="mt-6">Start your first workout</Button>
           </Link>
         </Card>
       ) : (
@@ -1673,7 +1673,7 @@ function HistoryPageContent() {
             const isSelected = selectedWorkouts.has(workout.id);
 
             return (
-              <Card key={workout.id} className={`overflow-hidden group relative ${isSelectMode && isSelected ? 'ring-2 ring-primary-500' : ''}`}>
+              <Card key={workout.id} className={`overflow-hidden group relative ${isSelectMode && isSelected ? 'ring-2 ring-action' : ''}`}>
                 {/* Checkbox for select mode */}
                 {isSelectMode && (
                   <button
@@ -1686,11 +1686,11 @@ function HistoryPageContent() {
                   >
                     <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                       isSelected
-                        ? 'bg-primary-500 border-primary-500'
-                        : 'border-surface-500 hover:border-surface-400'
+                        ? 'bg-action border-action'
+                        : 'border-ink-3 hover:border-ink-3'
                     }`}>
                       {isSelected && (
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-3 h-3 text-on-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
@@ -1712,14 +1712,14 @@ function HistoryPageContent() {
                         disabled={togglingDeloadId === workout.id}
                         className={`p-1.5 rounded-lg transition-all ${
                           workout.is_deload
-                            ? 'bg-primary-500/20 text-primary-300 hover:text-primary-200'
-                            : 'text-surface-500 hover:bg-primary-500/20 hover:text-primary-400'
+                            ? 'bg-action/20 text-action'
+                            : 'text-ink-3 hover:bg-action/20 hover:text-action'
                         }`}
                         title={workout.is_deload ? 'Unmark as deload session' : 'Mark as deload session'}
                         aria-pressed={workout.is_deload}
                       >
                         {togglingDeloadId === workout.id ? (
-                          <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-action border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -1736,11 +1736,11 @@ function HistoryPageContent() {
                           handleRepeatWorkout(workout);
                         }}
                         disabled={repeatingId === workout.id}
-                        className="p-1.5 rounded-lg hover:bg-primary-500/20 text-primary-400 hover:text-primary-300 transition-all"
+                        className="p-1.5 rounded-lg hover:bg-action/20 text-action transition-all"
                         title="Do this workout again"
                       >
                         {repeatingId === workout.id ? (
-                          <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-action border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1756,11 +1756,11 @@ function HistoryPageContent() {
                         setConfirmDelete({ kind: 'single', workoutId: workout.id, state: workout.state });
                       }}
                       disabled={deletingId === workout.id}
-                      className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all"
+                      className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-status-bad/20 text-ink-3 hover:text-status-bad transition-all"
                       title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
                     >
                       {deletingId === workout.id ? (
-                        <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-4 h-4 border-2 border-status-bad border-t-transparent rounded-full animate-spin" />
                       ) : (
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1776,12 +1776,12 @@ function HistoryPageContent() {
                     onClick={() => toggleWorkoutSelection(workout.id)}
                     className="block w-full text-left"
                   >
-                    <div className={`p-4 sm:p-6 hover:bg-surface-800/30 transition-colors cursor-pointer ${isSelectMode ? 'pl-12' : ''}`}>
+                    <div className={`p-4 sm:p-6 hover:bg-fill/30 transition-colors cursor-pointer ${isSelectMode ? 'pl-12' : ''}`}>
                       {/* Header row */}
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                         <div className="flex-1 pr-8">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold text-surface-100">
+                            <h3 className="text-headline font-semibold text-ink">
                               {workout.completed_at
                                 ? formatDate(workout.completed_at)
                                 : formatDate(workout.planned_date)}
@@ -1790,7 +1790,7 @@ function HistoryPageContent() {
                               variant={workout.state === 'completed' ? 'success' : 'warning'}
                               size="sm"
                             >
-                              {workout.state === 'completed' ? 'Completed' : 'In Progress'}
+                              {workout.state === 'completed' ? 'Completed' : 'In progress'}
                             </Badge>
                             {workout.is_deload && (
                               <Badge variant="info" size="sm">
@@ -1798,7 +1798,7 @@ function HistoryPageContent() {
                               </Badge>
                             )}
                           </div>
-                          <div className="flex flex-wrap gap-4 text-sm text-surface-400">
+                          <div className="flex flex-wrap gap-4 text-body text-ink-2">
                             {workout.completed_at && (
                               <span>Finished at {formatTime(workout.completed_at)}</span>
                             )}
@@ -1812,12 +1812,12 @@ function HistoryPageContent() {
                   </button>
                 ) : (
                 <Link href={`/dashboard/workout/${workout.id}`} className="block">
-                  <div className="p-4 sm:p-6 hover:bg-surface-800/30 transition-colors cursor-pointer">
+                  <div className="p-4 sm:p-6 hover:bg-fill/30 transition-colors cursor-pointer">
                     {/* Header row */}
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                       <div className="flex-1 pr-8">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-surface-100">
+                          <h3 className="text-headline font-semibold text-ink">
                             {workout.completed_at 
                               ? formatDate(workout.completed_at)
                               : formatDate(workout.planned_date)}
@@ -1826,7 +1826,7 @@ function HistoryPageContent() {
                             variant={workout.state === 'completed' ? 'success' : 'warning'}
                             size="sm"
                           >
-                            {workout.state === 'completed' ? 'Completed' : 'In Progress'}
+                            {workout.state === 'completed' ? 'Completed' : 'In progress'}
                           </Badge>
                           {workout.state === 'in_progress' && (
                             <Badge variant="info" size="sm">
@@ -1839,7 +1839,7 @@ function HistoryPageContent() {
                             </Badge>
                           )}
                         </div>
-                        <div className="flex flex-wrap gap-4 text-sm text-surface-400">
+                        <div className="flex flex-wrap gap-4 text-body text-ink-2">
                           {workout.completed_at && (
                             <span>Finished at {formatTime(workout.completed_at)}</span>
                           )}
@@ -1848,21 +1848,15 @@ function HistoryPageContent() {
                           <span>{formatWeight(workout.totalVolume, unit, 0)} total</span>
                           {workout.session_rpe && (
                             <span className="flex items-center gap-1">
-                              RPE: <span className={workout.session_rpe >= 8 ? 'text-danger-400' : workout.session_rpe >= 6 ? 'text-warning-400' : 'text-surface-300'}>{workout.session_rpe}</span>
+                              Effort <span className={workout.session_rpe >= 8 ? 'text-status-bad' : workout.session_rpe >= 6 ? 'text-status-warn' : 'text-ink-2'}>{workout.session_rpe}/10</span>
                             </span>
                           )}
                           {workout.pump_rating && (
-                            <span>
-                              {workout.pump_rating === 5 && '🔥'}
-                              {workout.pump_rating === 4 && '😄'}
-                              {workout.pump_rating === 3 && '😊'}
-                              {workout.pump_rating === 2 && '🙂'}
-                              {workout.pump_rating === 1 && '😐'}
-                            </span>
+                            <span>Pump {workout.pump_rating}/5</span>
                           )}
                         </div>
                         {workout.session_notes && (
-                          <p className="mt-2 text-sm text-surface-500 line-clamp-2">
+                          <p className="mt-2 text-body text-ink-3 line-clamp-2">
                             {workout.session_notes}
                           </p>
                         )}
@@ -1876,7 +1870,7 @@ function HistoryPageContent() {
                     loads are tracked per gym, so a workout filed at the wrong
                     gym skews that gym's numbers. */}
                 {workout.state === 'completed' && !isSelectMode && gyms.length > 0 && (
-                  <div className="px-4 sm:px-6 pb-3 -mt-2 flex items-center gap-2 text-sm text-surface-400">
+                  <div className="px-4 sm:px-6 pb-3 -mt-2 flex items-center gap-2 text-body text-ink-2">
                     <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1888,7 +1882,7 @@ function HistoryPageContent() {
                       value={workout.location_id ?? ''}
                       disabled={changingGymId === workout.id}
                       onChange={(e) => handleChangeSessionGym(workout, e.target.value || null)}
-                      className="bg-transparent text-surface-300 hover:text-surface-100 rounded py-1 pr-6 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60"
+                      className="bg-transparent text-ink-2 hover:text-ink rounded py-1 pr-6 focus:outline-none focus:ring-1 focus:ring-action disabled:opacity-60"
                     >
                       {!workout.location_id && <option value="">No gym recorded</option>}
                       {workout.location_id && !gyms.some((g) => g.id === workout.location_id) && (
@@ -1899,21 +1893,21 @@ function HistoryPageContent() {
                       ))}
                     </select>
                     {changingGymId === workout.id && (
-                      <div className="w-3.5 h-3.5 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-3.5 h-3.5 border-2 border-action border-t-transparent rounded-full animate-spin" />
                     )}
                   </div>
                 )}
 
                 {/* Exercise summary - outside the link */}
                 {workout.exercises.length > 0 && !isSelectMode && (
-                  <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 border-t border-surface-800">
+                  <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 border-t border-sep">
                     <button
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         toggleExpand(workout.id);
                       }}
-                      className="flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 transition-colors py-3"
+                      className="flex items-center gap-2 text-body text-ink-2 hover:text-ink transition-colors py-3"
                     >
                       <svg 
                         className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
@@ -1937,7 +1931,7 @@ function HistoryPageContent() {
                               e.stopPropagation();
                               fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle, exercise.isDuration);
                             }}
-                            className="px-2 py-1 bg-surface-800 hover:bg-surface-700 rounded text-xs text-surface-300 transition-colors"
+                            className="px-2 py-1 bg-fill hover:bg-sep rounded text-caption text-ink-2 transition-colors"
                           >
                             {exercise.name} ({exercise.sets.length})
                           </button>
@@ -1949,7 +1943,7 @@ function HistoryPageContent() {
                     {isExpanded && (
                       <div className="space-y-4">
                         {workout.exercises.map((exercise) => (
-                          <div key={exercise.id} className="bg-surface-800/50 rounded-lg p-3">
+                          <div key={exercise.id} className="bg-fill/50 rounded-lg p-3">
                             <button
                               onClick={(e) => {
                                 e.preventDefault();
@@ -1958,7 +1952,7 @@ function HistoryPageContent() {
                               }}
                               className="flex items-center justify-between mb-2 w-full text-left group"
                             >
-                              <h4 className="font-medium text-surface-200 group-hover:text-primary-400 transition-colors">
+                              <h4 className="font-medium text-ink group-hover:text-action transition-colors">
                                 {exercise.name}
                                 <svg className="w-4 h-4 inline ml-2 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -1977,38 +1971,38 @@ function HistoryPageContent() {
                                        weight after the session is done. E1RM, PRs,
                                        volume and future suggestions all derive from
                                        set_logs at read time, so saving self-heals. */
-                                    <div key={set.id} className="flex items-center gap-2 text-sm py-1 px-2 rounded bg-surface-700/40">
-                                      <span className="text-surface-500 w-8">#{idx + 1}</span>
+                                    <div key={set.id} className="flex items-center gap-2 text-body py-1 px-2 rounded bg-sep/40">
+                                      <span className="text-ink-3 w-8">#{idx + 1}</span>
                                       <input
                                         type="number"
                                         inputMode="decimal"
                                         value={editWeight}
                                         onChange={(e) => setEditWeight(e.target.value)}
                                         aria-label="Weight"
-                                        className="w-20 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
+                                        className="w-20 min-h-[44px] px-2 bg-card border border-action/50 rounded-lg text-center font-mono text-ink focus:outline-none"
                                       />
-                                      <span className="text-surface-500 text-xs">{unit}</span>
-                                      <span className="text-surface-400">×</span>
+                                      <span className="text-ink-3 text-caption">{unit}</span>
+                                      <span className="text-ink-2">×</span>
                                       <input
                                         type="number"
                                         inputMode="numeric"
                                         value={editReps}
                                         onChange={(e) => setEditReps(e.target.value)}
                                         aria-label="Reps"
-                                        className="w-16 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
+                                        className="w-16 min-h-[44px] px-2 bg-card border border-action/50 rounded-lg text-center font-mono text-ink focus:outline-none"
                                       />
                                       <button
                                         onClick={() => saveSetEdit(workout.id, exercise.id, set.id)}
                                         disabled={savingSetEdit}
                                         aria-label="Save set"
-                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-primary-400 hover:bg-surface-700 font-semibold"
+                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-action hover:bg-sep font-semibold"
                                       >
                                         {savingSetEdit ? '…' : '✓'}
                                       </button>
                                       <button
                                         onClick={() => setEditingSetId(null)}
                                         aria-label="Cancel edit"
-                                        className="min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:bg-surface-700"
+                                        className="min-w-[44px] min-h-[44px] rounded-lg text-ink-3 hover:bg-sep"
                                       >
                                         ✕
                                       </button>
@@ -2016,35 +2010,35 @@ function HistoryPageContent() {
                                   ) : (
                                   <div
                                     key={set.id}
-                                    className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50 group/set"
+                                    className="flex items-center gap-4 text-body py-1 px-2 rounded hover:bg-sep/50 group/set"
                                   >
-                                    <span className="text-surface-500 w-8">#{idx + 1}</span>
+                                    <span className="text-ink-3 w-8">#{idx + 1}</span>
                                     {exercise.isDuration ? (
                                       <>
-                                        <span className="text-surface-200 font-medium">
+                                        <span className="text-ink font-medium">
                                           {set.reps}s
                                         </span>
-                                        <span className="text-surface-400">@</span>
-                                        <span className="text-surface-200 font-medium">
+                                        <span className="text-ink-2">@</span>
+                                        <span className="text-ink font-medium">
                                           {formatWeight(set.weight_kg, unit)}
                                         </span>
                                       </>
                                     ) : (
                                       <>
-                                        <span className="text-surface-200 font-medium">
+                                        <span className="text-ink font-medium">
                                           {formatWeight(set.weight_kg, unit)}
                                         </span>
-                                        <span className="text-surface-400">×</span>
-                                        <span className="text-surface-200 font-medium">
+                                        <span className="text-ink-2">×</span>
+                                        <span className="text-ink font-medium">
                                           {set.reps} reps
                                         </span>
                                       </>
                                     )}
                                     {set.rpe && (
                                       <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                        set.rpe >= 9 ? 'bg-danger-500/20 text-danger-400' :
-                                        set.rpe >= 7 ? 'bg-warning-500/20 text-warning-400' :
-                                        'bg-surface-700 text-surface-400'
+                                        set.rpe >= 9 ? 'bg-status-bad/20 text-status-bad' :
+                                        set.rpe >= 7 ? 'bg-status-warn/20 text-status-warn' :
+                                        'bg-sep text-ink-2'
                                       }`}>
                                         RPE {set.rpe}
                                       </span>
@@ -2056,7 +2050,7 @@ function HistoryPageContent() {
                                           startSetEdit(set);
                                         }}
                                         aria-label={`Edit set ${idx + 1}`}
-                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-primary-400 hover:bg-surface-700 transition-colors"
+                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-ink-3 hover:text-action hover:bg-sep transition-colors"
                                       >
                                         ✎
                                       </button>
@@ -2066,7 +2060,7 @@ function HistoryPageContent() {
                                 )}
                               </div>
                             ) : (
-                              <p className="text-sm text-surface-500">No sets recorded</p>
+                              <p className="text-body text-ink-3">No sets recorded</p>
                             )}
                           </div>
                         ))}
@@ -2086,19 +2080,19 @@ function HistoryPageContent() {
                         handleRepeatWorkout(workout);
                       }}
                       disabled={repeatingId === workout.id}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/30 rounded-lg text-primary-400 hover:text-primary-300 transition-all disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-action/10 hover:bg-action/20 border border-action/30 rounded-lg text-action transition-all disabled:opacity-50"
                     >
                       {repeatingId === workout.id ? (
                         <>
-                          <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
-                          <span className="text-sm font-medium">Starting workout...</span>
+                          <div className="w-4 h-4 border-2 border-action border-t-transparent rounded-full animate-spin" />
+                          <span className="text-body font-medium">Starting workout...</span>
                         </>
                       ) : (
                         <>
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
-                          <span className="text-sm font-medium">Restart Workout</span>
+                          <span className="text-body font-medium">Restart workout</span>
                         </>
                       )}
                     </button>
@@ -2147,7 +2141,7 @@ function HistoryPageContent() {
               : 'Delete this workout?'
         }
         message="This permanently removes the logged sets and cannot be undone."
-        confirmText={confirmDelete?.kind === 'single' && confirmDelete.state === 'in_progress' ? 'Cancel Workout' : 'Delete'}
+        confirmText={confirmDelete?.kind === 'single' && confirmDelete.state === 'in_progress' ? 'Cancel workout' : 'Delete'}
         cancelText="Keep"
         variant="danger"
         isLoading={isBulkDeleting || deletingId !== null}
@@ -2156,11 +2150,11 @@ function HistoryPageContent() {
       {/* Action errors (P2-7 — replaces native alert()) */}
       {actionError && (
         <div className="fixed bottom-20 left-4 right-4 z-50 max-w-md mx-auto" role="alert">
-          <div className="flex items-start gap-2 p-3 rounded-xl bg-danger-500/15 border border-danger-500/40 backdrop-blur text-sm text-danger-300">
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-status-bad/15 border border-status-bad/40 backdrop-blur text-body text-status-bad">
             <span className="flex-1">{actionError}</span>
             <button
               onClick={() => setActionError(null)}
-              className="min-w-[44px] min-h-[24px] text-danger-200 font-medium"
+              className="min-w-[44px] min-h-[24px] text-status-bad font-medium"
               aria-label="Dismiss error"
             >
               Dismiss

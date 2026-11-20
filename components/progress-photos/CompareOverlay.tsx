@@ -64,16 +64,16 @@ export function PhotoPane({
 }) {
   return (
     <div className="space-y-1">
-      <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700">
+      <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-card ring-1 ring-sep">
         {url ? (
           <AlignedImage url={url} alt={alt} align={align} />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-sep border-t-transparent rounded-full animate-spin" />
           </div>
         )}
       </div>
-      {caption && <p className="text-xs text-center text-surface-400">{caption}</p>}
+      {caption && <p className="text-caption text-center text-ink-2">{caption}</p>}
     </div>
   );
 }
@@ -92,7 +92,7 @@ export function WipeView({
   const [wipePercent, setWipePercent] = useState(50);
   return (
     <div className="space-y-2">
-      <div className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700 select-none">
+      <div className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-card ring-1 ring-sep select-none">
         {afterUrl && <AlignedImage url={afterUrl} alt="After" align={afterAlign} />}
         {/* The clip lives on a wrapper so it doesn't move with the transform. */}
         {beforeUrl && (
@@ -107,10 +107,10 @@ export function WipeView({
           className="absolute inset-y-0 w-0.5 bg-white/80 shadow pointer-events-none"
           style={{ left: `${wipePercent}%` }}
         />
-        <span className="absolute top-2 left-2 text-[10px] font-medium uppercase tracking-wide bg-black/60 text-white px-1.5 py-0.5 rounded">
+        <span className="absolute top-2 left-2 text-caption font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">
           Before
         </span>
-        <span className="absolute top-2 right-2 text-[10px] font-medium uppercase tracking-wide bg-black/60 text-white px-1.5 py-0.5 rounded">
+        <span className="absolute top-2 right-2 text-caption font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">
           After
         </span>
       </div>
@@ -120,10 +120,10 @@ export function WipeView({
         max={100}
         value={wipePercent}
         onChange={(e) => setWipePercent(Number(e.target.value))}
-        className="w-full accent-primary-500"
+        className="w-full accent-action"
         aria-label="Reveal before photo"
       />
-      <p className="text-xs text-center text-surface-500">
+      <p className="text-caption text-center text-ink-3">
         Photos not lined up? Use Overlay to align them — it applies here too.
       </p>
     </div>
@@ -217,7 +217,7 @@ export function OverlayView({
     <div className="space-y-2">
       <div
         ref={containerRef}
-        className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700 select-none touch-none cursor-move"
+        className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-card ring-1 ring-sep select-none touch-none cursor-move"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -235,15 +235,15 @@ export function OverlayView({
       </div>
 
       {/* Which photo the drag/pinch/zoom adjusts */}
-      <div className="flex gap-1 rounded-lg bg-surface-800 p-1">
+      <div className="flex gap-1 rounded-lg bg-fill p-1">
         {(['before', 'after'] as const).map((value) => (
           <button
             key={value}
             onClick={() => setTarget(value)}
             className={`flex-1 rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
               target === value
-                ? 'bg-surface-600 text-surface-100'
-                : 'text-surface-400 hover:text-surface-200'
+                ? 'bg-sep text-ink'
+                : 'text-ink-2 hover:text-ink'
             }`}
           >
             Adjust {value}
@@ -252,7 +252,7 @@ export function OverlayView({
       </div>
 
       <div className="space-y-1.5">
-        <label className="flex items-center gap-2 text-xs text-surface-400">
+        <label className="flex items-center gap-2 text-caption text-ink-2">
           <span className="w-14">Opacity</span>
           <input
             type="range"
@@ -260,11 +260,11 @@ export function OverlayView({
             max={100}
             value={opacity}
             onChange={(e) => setOpacity(Number(e.target.value))}
-            className="flex-1 accent-primary-500"
+            className="flex-1 accent-action"
             aria-label="After photo opacity"
           />
         </label>
-        <label className="flex items-center gap-2 text-xs text-surface-400">
+        <label className="flex items-center gap-2 text-caption text-ink-2">
           <span className="w-14">Zoom</span>
           <input
             type="range"
@@ -274,12 +274,12 @@ export function OverlayView({
             onChange={(e) =>
               onChangeAlign(target, clampAlign({ ...targetAlign, scale: Number(e.target.value) / 100 }))
             }
-            className="flex-1 accent-primary-500"
+            className="flex-1 accent-action"
             aria-label={`${target} photo zoom`}
           />
         </label>
         <div className="flex items-center justify-between">
-          <p className="text-xs text-surface-500">
+          <p className="text-caption text-ink-3">
             Drag to move · pinch or zoom to resize. Applies to every view.
           </p>
           <Button variant="secondary" size="sm" onClick={onResetAligns}>

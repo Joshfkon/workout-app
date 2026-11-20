@@ -194,7 +194,7 @@ export interface MuscleGroupListProps<R extends MuscleListRow> {
 function Chevron({ expanded }: { expanded: boolean }) {
   return (
     <svg
-      className={`w-3.5 h-3.5 flex-shrink-0 text-surface-500 transition-transform ${expanded ? 'rotate-90' : ''}`}
+      className={`w-3.5 h-3.5 flex-shrink-0 text-ink-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -258,7 +258,7 @@ export function MuscleGroupList<R extends MuscleListRow>({
             )}
 
             {visibleChildren.length > 0 && (
-              <div className={childrenClassName ?? 'mt-2 space-y-2 pl-4 ml-5 border-l border-surface-800/80'}>
+              <div className={childrenClassName ?? 'mt-2 space-y-2 pl-4 ml-5 border-l border-sep/80'}>
                 {visibleChildren.map((child) => (
                   <div key={child.muscle} data-testid={`${testIdPrefix}-${child.muscle}`}>
                     {renderChild(child, row)}
