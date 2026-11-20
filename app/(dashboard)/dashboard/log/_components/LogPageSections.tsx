@@ -25,7 +25,7 @@ import {
 /** Uppercase micro-label above each section ("QUICK LOG", "TODAY SO FAR"). */
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-surface-500">
+    <p className="text-caption font-semibold text-ink-3">
       {children}
     </p>
   );
@@ -60,28 +60,28 @@ export function UnfinishedWorkoutBanner({
   onDiscard,
 }: UnfinishedWorkoutBannerProps) {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-2xl bg-warning-500/10 border border-warning-500/30">
-      <IconBarbell size={18} className="text-warning-400 flex-shrink-0" aria-hidden="true" />
+    <div className="flex items-center gap-3 p-3 rounded-2xl bg-status-warn/10 border border-status-warn/30">
+      <IconBarbell size={18} className="text-status-warn flex-shrink-0" aria-hidden="true" />
       <button
         onClick={onResume}
         className="flex-1 min-w-0 flex items-center gap-3 text-left"
       >
         <span className="flex-1 min-w-0">
-          <span className="block text-[13px] font-semibold text-surface-100">
+          <span className="block text-subhead font-semibold text-ink">
             Unfinished workout
           </span>
-          <span className="block text-[12px] text-surface-400 truncate">
+          <span className="block text-caption text-ink-2 truncate">
             {startedAtLabel ? `Started ${startedAtLabel} · ` : ''}
             {setsDone === 0
               ? 'no sets logged'
               : `${setsDone} ${setsDone === 1 ? 'set' : 'sets'} logged`}
           </span>
         </span>
-        <span className="text-[13px] font-semibold text-warning-400 flex-shrink-0">Resume</span>
+        <span className="text-subhead font-semibold text-status-warn flex-shrink-0">Resume</span>
       </button>
       <button
         onClick={onDiscard}
-        className="p-1.5 -m-1 rounded-lg text-surface-500 hover:text-surface-300 hover:bg-surface-800/60 transition-colors flex-shrink-0"
+        className="p-1.5 -m-1 rounded-lg text-ink-3 hover:text-ink-2 hover:bg-fill/60 transition-colors flex-shrink-0"
         aria-label="Discard unfinished workout"
       >
         <IconX size={16} aria-hidden="true" />
@@ -95,11 +95,11 @@ export function UnfinishedWorkoutBanner({
 // ============================================================
 
 const HERO_CTA_CLASS =
-  'flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
+  'flex-1 py-3 rounded-xl bg-action text-on-action text-[15px] font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
 const HERO_SECONDARY_CTA_CLASS =
-  'flex-1 py-3 rounded-xl bg-surface-800 text-surface-200 text-[15px] font-semibold hover:bg-surface-700 active:scale-[0.98] transition-all disabled:cursor-not-allowed';
+  'flex-1 py-3 rounded-xl bg-fill text-ink text-[15px] font-semibold hover:bg-sep active:scale-[0.98] transition-all disabled:cursor-not-allowed';
 const HERO_SPARKLE_CLASS =
-  'w-12 self-stretch rounded-xl bg-surface-900 border border-surface-800 flex items-center justify-center hover:bg-surface-800/70 active:scale-95 transition-all disabled:opacity-60';
+  'w-12 self-stretch rounded-xl bg-card border border-sep flex items-center justify-center hover:bg-fill/70 active:scale-95 transition-all disabled:opacity-60';
 
 interface LogHeroCardProps {
   /** Gradient (primary action) or muted (rest day) framing. */
@@ -134,19 +134,19 @@ export function LogHeroCard({
     <div
       className={
         variant === 'primary'
-          ? 'rounded-2xl p-4 border border-primary-500/20 bg-gradient-to-br from-primary-500/10 to-accent-500/10'
-          : 'rounded-2xl p-4 bg-surface-900 border border-surface-800'
+          ? 'rounded-card p-4 bg-action-tint'
+          : 'rounded-card p-4 bg-card shadow-card'
       }
     >
       <p
-        className={`text-[11px] font-semibold tracking-[0.12em] uppercase ${
-          variant === 'primary' ? 'text-primary-400' : 'text-surface-500'
+        className={`text-caption font-semibold ${
+          variant === 'primary' ? 'text-action' : 'text-ink-3'
         }`}
       >
         {eyebrow}
       </p>
-      <h2 className="text-[26px] leading-tight font-bold text-surface-100 mt-1.5">{title}</h2>
-      <p className="text-[13px] text-surface-400 mt-1">{meta}</p>
+      <h2 className="text-title font-bold text-ink mt-1.5">{title}</h2>
+      <p className="text-subhead text-ink-2 mt-1">{meta}</p>
       <div className="flex gap-2 mt-4">
         <button
           onClick={onCtaTap}
@@ -156,10 +156,10 @@ export function LogHeroCard({
           {ctaLabel}
         </button>
         <button onClick={onSparkleTap} className={HERO_SPARKLE_CLASS} aria-label="AI suggested workout">
-          <IconSparkles size={20} className="text-primary-400" aria-hidden="true" />
+          <IconSparkles size={20} className="text-action" aria-hidden="true" />
         </button>
       </div>
-      <p className="flex items-center justify-center gap-1 text-[11px] text-surface-500 mt-2.5">
+      <p className="flex items-center justify-center gap-1 text-caption text-ink-3 mt-2.5">
         <IconSparkles size={12} className="flex-shrink-0" aria-hidden="true" />
         {footnote}
       </p>
@@ -185,14 +185,14 @@ export function QuickLogRow({ icon, title, subtitle, onTap, disabled }: QuickLog
     <button
       onClick={onTap}
       disabled={disabled}
-      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+      className="w-full flex items-center gap-3 p-3 rounded-card bg-card text-left hover:bg-fill/70 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-card"
     >
       {icon}
       <span className="flex-1 min-w-0">
-        <span className="block text-[15px] font-semibold text-surface-100">{title}</span>
-        <span className="block text-[12px] text-surface-500">{subtitle}</span>
+        <span className="block text-body font-semibold text-ink">{title}</span>
+        <span className="block text-caption text-ink-3">{subtitle}</span>
       </span>
-      <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+      <IconChevronRight size={16} className="text-ink-3 flex-shrink-0" aria-hidden="true" />
     </button>
   );
 }
@@ -221,13 +221,13 @@ export function WeightQuickLogRow({ todayLabel, lastLabel, onTap }: WeightQuickL
       icon={
         <span
           className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-            logged ? 'bg-success-500/15' : 'bg-accent-500/15'
+            logged ? 'bg-status-ok/15' : 'bg-action/15'
           }`}
         >
           {logged ? (
-            <IconCheck size={22} className="text-success-400" aria-hidden="true" />
+            <IconCheck size={22} className="text-status-ok" aria-hidden="true" />
           ) : (
-            <IconScale size={22} className="text-accent-400" aria-hidden="true" />
+            <IconScale size={22} className="text-action" aria-hidden="true" />
           )}
         </span>
       }
@@ -266,10 +266,10 @@ export interface TodaySoFar {
 
 /** Tile styling per pacing tone (bar fill + status word color). */
 const TONE_STYLES: Record<PaceTone, { bar: string; status: string }> = {
-  green: { bar: 'bg-success-500', status: 'text-success-400' },
-  yellow: { bar: 'bg-warning-500', status: 'text-warning-400' },
+  green: { bar: 'bg-status-ok', status: 'text-status-ok' },
+  yellow: { bar: 'bg-status-warn', status: 'text-status-warn' },
   orange: { bar: 'bg-orange-500', status: 'text-orange-400' },
-  neutral: { bar: 'bg-surface-600', status: 'text-surface-500' },
+  neutral: { bar: 'bg-sep', status: 'text-ink-3' },
 };
 
 function StatTile({
@@ -285,15 +285,15 @@ function StatTile({
 }) {
   const content = (
     <>
-      <span className="block text-[12px] text-surface-500">{label}</span>
-      <span className="block text-[17px] font-bold text-surface-100 mt-0.5">{value}</span>
-      <span className="block text-[11px] text-surface-500 mt-0.5">{sub}</span>
+      <span className="block text-caption text-ink-3">{label}</span>
+      <span className="block text-headline font-bold text-ink mt-0.5">{value}</span>
+      <span className="block text-caption text-ink-3 mt-0.5">{sub}</span>
     </>
   );
-  const tileClass = 'p-3 rounded-2xl bg-surface-900 border border-surface-800 text-left';
+  const tileClass = 'p-3 rounded-card bg-card text-left shadow-card';
   if (!onTap) return <div className={tileClass}>{content}</div>;
   return (
-    <button onClick={onTap} className={`${tileClass} hover:bg-surface-800/70 transition-colors`}>
+    <button onClick={onTap} className={`${tileClass} hover:bg-fill/70 transition-colors`}>
       {content}
     </button>
   );
@@ -334,14 +334,14 @@ function MacroTile({
   return (
     <button
       onClick={onTap}
-      className="p-3 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+      className="p-3 rounded-card bg-card text-left hover:bg-fill/70 transition-colors shadow-card"
     >
-      <span className="block text-[12px] text-surface-500">{label}</span>
-      <span className="block text-[17px] font-bold text-surface-100 mt-0.5">
+      <span className="block text-caption text-ink-3">{label}</span>
+      <span className="block text-headline font-bold text-ink mt-0.5">
         {consumed.toLocaleString()}
         {suffix}
         {target != null && target > 0 && (
-          <span className="text-[11px] font-medium text-surface-500">
+          <span className="text-caption font-medium text-ink-3">
             {' '}
             of {Math.round(target).toLocaleString()}
             {suffix}
@@ -350,7 +350,7 @@ function MacroTile({
       </span>
       {target != null && target > 0 && (
         <>
-          <span className="block h-1 rounded-full bg-surface-800 mt-2 overflow-hidden">
+          <span className="block h-1 rounded-full bg-fill mt-2 overflow-hidden">
             <span
               className={`block h-full rounded-full ${tone.bar}`}
               style={{ width: `${pct}%` }}

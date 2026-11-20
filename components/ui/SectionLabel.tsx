@@ -16,7 +16,7 @@ export interface SectionLabelProps {
 export function SectionLabel({ children, className }: SectionLabelProps) {
   return (
     <h2 className={cn(
-      'text-sm font-semibold text-surface-200 uppercase tracking-wide',
+      'text-subhead font-semibold text-ink-2',
       className
     )}>
       {children}

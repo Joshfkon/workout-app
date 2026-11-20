@@ -185,36 +185,36 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
           {activities.map((activity) => (
             <div
               key={activity.id}
-              className="flex items-center justify-between py-1 px-2 bg-surface-800/30 rounded"
+              className="flex items-center justify-between py-1 px-2 bg-fill/30 rounded"
             >
-              <div className="flex items-center gap-2 text-xs min-w-0">
-                <span className="font-medium text-surface-200 whitespace-nowrap">
+              <div className="flex items-center gap-2 text-caption min-w-0">
+                <span className="font-medium text-ink whitespace-nowrap">
                   {activity.name || typeLabel(activity.activityType)}
                 </span>
                 <span
                   className={`capitalize whitespace-nowrap ${
                     activity.intensity === 'hard'
-                      ? 'text-danger-400'
+                      ? 'text-status-bad'
                       : activity.intensity === 'moderate'
-                        ? 'text-warning-400'
-                        : 'text-surface-400'
+                        ? 'text-status-warn'
+                        : 'text-ink-2'
                   }`}
                 >
                   {activity.intensity}
                 </span>
                 {activity.durationMinutes && (
-                  <span className="text-surface-500 whitespace-nowrap">
+                  <span className="text-ink-3 whitespace-nowrap">
                     {activity.durationMinutes} min
                   </span>
                 )}
-                <span className="text-surface-500 truncate">{musclesSummary(activity)}</span>
-                <span className="text-surface-600 whitespace-nowrap">
+                <span className="text-ink-3 truncate">{musclesSummary(activity)}</span>
+                <span className="text-ink-3 whitespace-nowrap">
                   {dayLabel(activity.performedAt, now)}
                 </span>
               </div>
               <button
                 onClick={() => deleteActivity(activity.id)}
-                className="p-0.5 text-surface-600 hover:text-danger-400 transition-colors flex-shrink-0"
+                className="p-0.5 text-ink-3 hover:text-status-bad transition-colors flex-shrink-0"
                 aria-label="Delete activity"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -227,10 +227,10 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
       )}
 
       {showForm ? (
-        <div className="space-y-3 p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
+        <div className="space-y-3 p-3 bg-fill/50 border border-sep rounded-lg">
           {/* Preset chips */}
           <div>
-            <label className="block text-xs font-medium text-surface-300 mb-1.5">Activity</label>
+            <label className="block text-caption font-medium text-ink-2 mb-1.5">Activity</label>
             <div className="flex flex-wrap gap-1.5">
               {ACTIVITY_PRESETS.map((preset) => (
                 <button
@@ -238,8 +238,8 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                   onClick={() => selectPreset(preset.type)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                     activityType === preset.type
-                      ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40'
-                      : 'bg-surface-800 text-surface-300 border border-surface-700 hover:bg-surface-700'
+                      ? 'bg-action/20 text-action border border-action/40'
+                      : 'bg-fill text-ink-2 border border-sep hover:bg-sep'
                   }`}
                 >
                   {preset.label}
@@ -250,7 +250,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
 
           {(activityType === 'sport' || activityType === 'other') && (
             <div>
-              <label className="block text-xs font-medium text-surface-300 mb-1">
+              <label className="block text-caption font-medium text-ink-2 mb-1">
                 What was it? (optional)
               </label>
               <Input
@@ -264,7 +264,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
 
           {/* Intensity */}
           <div>
-            <label className="block text-xs font-medium text-surface-300 mb-1.5">
+            <label className="block text-caption font-medium text-ink-2 mb-1.5">
               How hard was it?
             </label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -274,15 +274,15 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                   onClick={() => setIntensity(option.value)}
                   className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     intensity === option.value
-                      ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40'
-                      : 'bg-surface-800 text-surface-300 border border-surface-700 hover:bg-surface-700'
+                      ? 'bg-action/20 text-action border border-action/40'
+                      : 'bg-fill text-ink-2 border border-sep hover:bg-sep'
                   }`}
                 >
                   {option.label}
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-[11px] text-surface-500">
+            <p className="mt-1 text-caption text-ink-3">
               {INTENSITY_OPTIONS.find((o) => o.value === intensity)?.hint}
             </p>
           </div>
@@ -290,7 +290,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
           {/* Duration + when */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-surface-300 mb-1">
+              <label className="block text-caption font-medium text-ink-2 mb-1">
                 Minutes (optional)
               </label>
               <Input
@@ -302,7 +302,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-surface-300 mb-1">When</label>
+              <label className="block text-caption font-medium text-ink-2 mb-1">When</label>
               <div className="flex gap-1.5">
                 {(['today', 'yesterday'] as const).map((option) => (
                   <button
@@ -310,8 +310,8 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                     onClick={() => setDay(option)}
                     className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
                       day === option
-                        ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40'
-                        : 'bg-surface-800 text-surface-300 border border-surface-700 hover:bg-surface-700'
+                        ? 'bg-action/20 text-action border border-action/40'
+                        : 'bg-fill text-ink-2 border border-sep hover:bg-sep'
                     }`}
                   >
                     {option}
@@ -323,7 +323,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
 
           {/* Affected muscles */}
           <div>
-            <label className="block text-xs font-medium text-surface-300 mb-1.5">
+            <label className="block text-caption font-medium text-ink-2 mb-1.5">
               What did it hit?
             </label>
             <div className="flex flex-wrap gap-1.5">
@@ -333,8 +333,8 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                   onClick={() => toggleMuscleKey(option.key)}
                   className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
                     selectedKeys.has(option.key)
-                      ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40'
-                      : 'bg-surface-800 text-surface-400 border border-surface-700 hover:bg-surface-700'
+                      ? 'bg-action/20 text-action border border-action/40'
+                      : 'bg-fill text-ink-2 border border-sep hover:bg-sep'
                   }`}
                 >
                   {option.label}
@@ -342,7 +342,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
               ))}
             </div>
             {muscleGroups.length === 0 && (
-              <p className="mt-1 text-[11px] text-warning-400">
+              <p className="mt-1 text-caption text-status-warn">
                 Pick at least one area so recovery knows what to rest.
               </p>
             )}
@@ -356,7 +356,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
               size="sm"
               className="flex-1"
             >
-              {isSaving ? 'Logging...' : 'Log Activity'}
+              {isSaving ? 'Logging...' : 'Log activity'}
             </Button>
             <Button onClick={resetForm} variant="ghost" size="sm">
               Cancel
@@ -366,7 +366,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
       ) : (
         <>
           {activities.length === 0 && !isLoading && (
-            <p className="text-xs text-surface-500">
+            <p className="text-caption text-ink-3">
               Bike rides, runs, sports — log them so recovery treats those muscles as
               recently worked.
             </p>
@@ -377,7 +377,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
             size="sm"
             className="w-full"
           >
-            + Log Activity
+            + Log activity
           </Button>
         </>
       )}

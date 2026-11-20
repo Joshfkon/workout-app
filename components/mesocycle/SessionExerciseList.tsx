@@ -39,7 +39,7 @@ export function SessionExerciseList({
 
   return (
     <ol
-      className={`rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden ${className}`}
+      className={`rounded-xl border border-sep bg-canvas/40 overflow-hidden ${className}`}
     >
       {exercises.map((exercise, index) => {
         const rest = formatRest(exercise.restSeconds);
@@ -47,14 +47,14 @@ export function SessionExerciseList({
         return (
           <li
             key={`${exercise.exerciseId ?? exercise.exerciseName}-${index}`}
-            className="flex items-start gap-3 px-3 py-2.5 border-b border-surface-800/50 last:border-b-0"
+            className="flex items-start gap-3 px-3 py-2.5 border-b border-sep/50 last:border-b-0"
           >
-            <span className="mt-0.5 w-5 flex-shrink-0 text-[11px] tabular-nums text-surface-600">
+            <span className="mt-0.5 w-5 flex-shrink-0 text-caption tabular-nums text-ink-3">
               {index + 1}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] text-surface-200">{exercise.exerciseName}</span>
-              <span className="block text-[11px] text-surface-500 mt-0.5">
+              <span className="block text-subhead text-ink">{exercise.exerciseName}</span>
+              <span className="block text-caption text-ink-3 mt-0.5">
                 {[
                   `${exercise.sets} ${exercise.sets === 1 ? 'set' : 'sets'} × ${exercise.repRange.min}–${exercise.repRange.max}`,
                   `${exercise.targetRir} RIR`,
@@ -64,7 +64,7 @@ export function SessionExerciseList({
                   .join(' · ')}
               </span>
               {note && (
-                <span className="block text-[11px] text-surface-600 mt-0.5 italic">{note}</span>
+                <span className="block text-caption text-ink-3 mt-0.5 italic">{note}</span>
               )}
             </span>
           </li>

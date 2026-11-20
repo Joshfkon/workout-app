@@ -27,10 +27,10 @@ export function TrainReadinessCard() {
 
   return (
     <div
-      className="rounded-2xl p-4 bg-surface-900 border border-surface-800"
+      className="rounded-card p-4 bg-card shadow-card"
       data-testid="train-readiness-card"
     >
-      <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Recovery</h3>
+      <h3 className="text-body font-semibold text-ink mb-3">Recovery</h3>
       <MuscleReadinessContent
         rows={rows}
         targets={targets}
