@@ -37,7 +37,7 @@ export function PhotoDetailModal({
     >
       {photo && (
         <div className="space-y-4">
-          <div className="rounded-lg overflow-hidden bg-surface-900 flex items-center justify-center">
+          <div className="rounded-lg overflow-hidden bg-card flex items-center justify-center">
             {signedUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
@@ -47,12 +47,12 @@ export function PhotoDetailModal({
               />
             ) : (
               <div className="h-64 flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-sep border-t-transparent rounded-full animate-spin" />
               </div>
             )}
           </div>
           {(photo.weightKg != null || photo.bodyFatPercent != null) && (
-            <p className="text-sm text-surface-300">
+            <p className="text-body text-ink-2">
               {[
                 photo.weightKg != null ? `Weight: ${displayWeight(photo.weightKg)}` : null,
                 photo.bodyFatPercent != null ? `Body fat: ${photo.bodyFatPercent}%` : null,
@@ -62,7 +62,7 @@ export function PhotoDetailModal({
             </p>
           )}
           {photo.notes && (
-            <p className="text-sm text-surface-400 whitespace-pre-wrap">{photo.notes}</p>
+            <p className="text-body text-ink-2 whitespace-pre-wrap">{photo.notes}</p>
           )}
           <BfEstimatePanel photo={photo} signedUrl={signedUrl} onEstimated={onEstimated} />
           <ModalFooter>

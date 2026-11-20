@@ -224,9 +224,9 @@ function PhotoSelect({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-surface-400">{label}</span>
+      <span className="text-caption font-medium text-ink-2">{label}</span>
       <select
-        className="mt-1 w-full rounded-lg bg-surface-800 border border-surface-600 text-surface-100 text-sm px-3 py-2"
+        className="mt-1 w-full rounded-lg bg-fill border border-sep text-ink text-body px-3 py-2"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -303,7 +303,7 @@ export function ComparePhotos({
   if (chronological.length < 2) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Compare Photos" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Compare photos" size="lg">
       <div className="space-y-4">
         {/* Photo pickers */}
         <div className="grid grid-cols-2 gap-3">
@@ -324,7 +324,7 @@ export function ComparePhotos({
         </div>
 
         {/* Mode tabs */}
-        <div className="flex gap-1 rounded-lg bg-surface-800 p-1" role="tablist">
+        <div className="flex gap-1 rounded-lg bg-fill p-1" role="tablist">
           {(
             [
               ['side', 'Side by side'],
@@ -339,8 +339,8 @@ export function ComparePhotos({
               onClick={() => setMode(value)}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
                 mode === value
-                  ? 'bg-surface-600 text-surface-100'
-                  : 'text-surface-400 hover:text-surface-200'
+                  ? 'bg-sep text-ink'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               {label}
@@ -386,8 +386,8 @@ export function ComparePhotos({
 
         {/* Delta stats - prominently shown */}
         {deltaCaption && (
-          <div className="rounded-lg bg-surface-800 border border-surface-700 p-3">
-            <p className="text-sm text-center text-surface-200 font-medium">{deltaCaption}</p>
+          <div className="rounded-lg bg-fill border border-sep p-3">
+            <p className="text-body text-center text-ink font-medium">{deltaCaption}</p>
           </div>
         )}
 
@@ -397,9 +397,9 @@ export function ComparePhotos({
           disabled={isSharing || !beforeUrl || !afterUrl}
           onClick={handleShare}
         >
-          {isSharing ? 'Creating…' : 'Share Before / After'}
+          {isSharing ? 'Creating…' : 'Share before / after'}
         </Button>
-        {shareError && <p className="text-xs text-center text-red-400">{shareError}</p>}
+        {shareError && <p className="text-caption text-center text-status-bad">{shareError}</p>}
       </div>
     </Modal>
   );

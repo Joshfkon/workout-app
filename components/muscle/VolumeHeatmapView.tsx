@@ -92,8 +92,8 @@ export function HeatmapTimeframeChips({
           onClick={() => onChange(t.id)}
           className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
             value === t.id
-              ? 'bg-surface-700 text-surface-100'
-              : 'text-surface-500 hover:text-surface-300'
+              ? 'bg-sep text-ink'
+              : 'text-ink-3 hover:text-ink-2'
           }`}
           data-testid={`${testIdPrefix}-timeframe-${t.id}`}
           aria-pressed={value === t.id}
@@ -114,7 +114,7 @@ export function HeatmapLegend({ testId = 'heatmap-legend' }: { testId?: string }
           <span key={level} className={`flex-1 ${HEAT_SWATCH_CLASSES[level]}`} title={HEAT_LABELS[level]} />
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-[10px] text-surface-500">
+      <div className="mt-1 flex justify-between text-caption text-ink-3">
         <span>Not enough to grow</span>
         <span>MEV</span>
         <span>MRV+</span>
@@ -133,14 +133,14 @@ export function HeatmapMuscleDetail({
 }) {
   return (
     <div
-      className="mt-2 rounded-lg bg-surface-800/60 px-3 py-2 text-xs text-surface-400"
+      className="mt-2 rounded-lg bg-fill/60 px-3 py-2 text-caption text-ink-2"
       data-testid={testId}
     >
-      <span className="font-medium text-surface-200">{row.displayName}</span>
+      <span className="font-medium text-ink">{row.displayName}</span>
       <span> — {formatHeatmapSets(row.avgWeeklySets)} sets/wk avg</span>
-      <span className="text-surface-500"> · {HEAT_LABELS[row.heat]}</span>
-      <span className="text-surface-500"> · {groupZoneBandLabel(row.band)}</span>
-      <span className="text-surface-500"> · {formatHeatmapSets(row.totalSets)} sets total</span>
+      <span className="text-ink-3"> · {HEAT_LABELS[row.heat]}</span>
+      <span className="text-ink-3"> · {groupZoneBandLabel(row.band)}</span>
+      <span className="text-ink-3"> · {formatHeatmapSets(row.totalSets)} sets total</span>
     </div>
   );
 }
@@ -194,9 +194,9 @@ export function CompactVolumeHeatmap({
       </div>
 
       {isLoading && !heatmap ? (
-        <div className="h-44 animate-pulse rounded-lg bg-surface-800" data-testid={`${testIdPrefix}-loading`} />
+        <div className="h-44 animate-pulse rounded-lg bg-fill" data-testid={`${testIdPrefix}-loading`} />
       ) : !hasAnyVolume ? (
-        <p className="py-8 text-center text-sm text-surface-500" data-testid={`${testIdPrefix}-empty`}>
+        <p className="py-8 text-center text-body text-ink-3" data-testid={`${testIdPrefix}-empty`}>
           No completed workouts in this period yet.
         </p>
       ) : (
@@ -217,7 +217,7 @@ export function CompactVolumeHeatmap({
       )}
 
       <p
-        className={`mt-1.5 text-[10px] text-surface-600 ${isPlaceholderData ? 'animate-pulse' : ''}`}
+        className={`mt-1.5 text-[10px] text-ink-3 ${isPlaceholderData ? 'animate-pulse' : ''}`}
         data-testid={`${testIdPrefix}-caption`}
       >
         {heatmapCaption(timeframe, heatmap)}

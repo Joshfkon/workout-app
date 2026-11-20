@@ -131,12 +131,12 @@ export function GhostCameraCapture({ ghostUrl, onCapture, onCancel }: GhostCamer
         )}
         {!isReady && !error && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-sep border-t-transparent rounded-full animate-spin" />
           </div>
         )}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center p-6">
-            <p className="text-sm text-red-400 text-center">{error}</p>
+            <p className="text-body text-red-400 text-center">{error}</p>
           </div>
         )}
         <button
@@ -157,7 +157,7 @@ export function GhostCameraCapture({ ghostUrl, onCapture, onCancel }: GhostCamer
       </div>
 
       {ghostUrl && (
-        <label className="flex items-center gap-2 text-xs text-surface-400">
+        <label className="flex items-center gap-2 text-caption text-ink-2">
           <span className="w-24 shrink-0">Ghost overlay</span>
           <input
             type="range"
@@ -165,17 +165,17 @@ export function GhostCameraCapture({ ghostUrl, onCapture, onCancel }: GhostCamer
             max={70}
             value={ghostOpacity}
             onChange={(e) => setGhostOpacity(Number(e.target.value))}
-            className="flex-1 accent-primary-500"
+            className="flex-1 accent-action"
             aria-label="Previous photo overlay opacity"
           />
         </label>
       )}
       {ghostUrl ? (
-        <p className="text-xs text-surface-500">
+        <p className="text-caption text-ink-3">
           Line yourself up with your last photo, then capture.
         </p>
       ) : (
-        <p className="text-xs text-surface-500">
+        <p className="text-caption text-ink-3">
           Your next photo will show here as a ghost overlay for consistent posing.
         </p>
       )}

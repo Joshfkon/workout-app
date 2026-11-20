@@ -81,21 +81,21 @@ export function RollingVolumeForecast({
 
   return (
     <div
-      className="rounded-lg bg-surface-800/40 px-2.5 py-2 mt-1.5"
+      className="rounded-lg bg-fill/40 px-2.5 py-2 mt-1.5"
       data-testid={`${testIdPrefix}-${muscle}`}
     >
-      <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1.5">
+      <p className="text-caption text-ink-3 mb-1.5">
         Rolling 7-day forecast · if nothing new is logged
       </p>
       <div className="relative h-16">
         {/* Zone floor (MEV) — the dashed line the bars fall through. */}
         <div
-          className="absolute inset-x-0 border-t border-dashed border-surface-500/50 pointer-events-none"
+          className="absolute inset-x-0 border-t border-dashed border-ink-3/50 pointer-events-none"
           style={{ bottom: `${mevPct}%` }}
           aria-hidden="true"
         />
         <span
-          className="absolute right-0 text-[9px] leading-none text-surface-500 pointer-events-none"
+          className="absolute right-0 text-[9px] leading-none text-ink-3 pointer-events-none"
           style={{ bottom: `calc(${mevPct}% + 2px)` }}
           aria-hidden="true"
         >
@@ -112,7 +112,7 @@ export function RollingVolumeForecast({
                 data-testid={`${testIdPrefix}-bar-${muscle}-${d}`}
               >
                 <div
-                  className={`w-full rounded-sm ${sets > 0 ? zoneBarClass(zone, sets, band) : 'bg-surface-800'}`}
+                  className={`w-full rounded-sm ${sets > 0 ? zoneBarClass(zone, sets, band) : 'bg-fill'}`}
                   style={{ height: `${sets > 0 ? heightPct(sets, scaleMax) : 2}%` }}
                 />
               </div>
@@ -124,14 +124,14 @@ export function RollingVolumeForecast({
         {projection.map((_, d) => (
           <span
             key={d}
-            className={`flex-1 text-center text-[9px] ${d === 0 ? 'text-surface-400' : 'text-surface-600'}`}
+            className={`flex-1 text-center text-[9px] ${d === 0 ? 'text-ink-2' : 'text-ink-3'}`}
           >
             {dayLabel(d, base)}
           </span>
         ))}
       </div>
       <p
-        className="mt-1 text-[10px] leading-relaxed text-surface-600"
+        className="mt-1 text-caption leading-relaxed text-ink-3"
         data-testid={`${testIdPrefix}-caption-${muscle}`}
       >
         {dropDay === 0 ? (
@@ -145,7 +145,7 @@ export function RollingVolumeForecast({
         ) : dropDay !== null ? (
           <>
             Falls below the {band.mev}-set zone floor{' '}
-            <span className="text-surface-400">{dayPhrase(dropDay, base)}</span> as older{' '}
+            <span className="text-ink-2">{dayPhrase(dropDay, base)}</span> as older{' '}
             {displayName} sets leave the 7-day window.
           </>
         ) : (
