@@ -47,9 +47,9 @@ export const ContextCard = memo(function ContextCard({
   }
 
   const variants = {
-    default: 'bg-surface-800/50 border-surface-700',
-    subtle: 'bg-surface-900/50 border-surface-800',
-    highlighted: 'bg-primary-900/20 border-primary-800',
+    default: 'bg-fill/50 border-sep',
+    subtle: 'bg-card/50 border-sep',
+    highlighted: 'bg-action/15 border-action/40',
   };
 
   return (
@@ -65,18 +65,18 @@ export const ContextCard = memo(function ContextCard({
         onClick={() => collapsible && setIsCollapsed(!isCollapsed)}
         className={cn(
           'w-full flex items-center gap-3 p-4 text-left',
-          collapsible && 'hover:bg-surface-800/50 transition-colors cursor-pointer',
+          collapsible && 'hover:bg-fill/50 transition-colors cursor-pointer',
           !collapsible && 'cursor-default'
         )}
         disabled={!collapsible}
       >
         {/* Icon */}
-        <span className="text-2xl flex-shrink-0" role="img" aria-hidden="true">
+        <span className="text-title flex-shrink-0" role="img" aria-hidden="true">
           {content.icon}
         </span>
 
         {/* Title */}
-        <span className="flex-1 font-medium text-surface-100">
+        <span className="flex-1 font-medium text-ink">
           {content.title}
         </span>
 
@@ -84,7 +84,7 @@ export const ContextCard = memo(function ContextCard({
         {collapsible && (
           <svg
             className={cn(
-              'w-5 h-5 text-surface-400 transition-transform duration-200',
+              'w-5 h-5 text-ink-2 transition-transform duration-200',
               isCollapsed && 'rotate-180'
             )}
             fill="none"
@@ -112,9 +112,9 @@ export const ContextCard = memo(function ContextCard({
           {/* Bullet points */}
           <ul className="space-y-2">
             {content.points.map((point, index) => (
-              <li key={index} className="flex items-start gap-2 text-sm text-surface-300">
+              <li key={index} className="flex items-start gap-2 text-body text-ink-2">
                 <svg
-                  className="w-4 h-4 text-primary-500 mt-0.5 flex-shrink-0"
+                  className="w-4 h-4 text-action mt-0.5 flex-shrink-0"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -133,7 +133,7 @@ export const ContextCard = memo(function ContextCard({
 
           {/* Preview text */}
           {content.preview && (
-            <p className="text-xs text-surface-400 italic border-t border-surface-700 pt-3">
+            <p className="text-caption text-ink-2 italic border-t border-sep pt-3">
               {content.preview}
             </p>
           )}
@@ -166,16 +166,16 @@ export const ContextBanner = memo(function ContextBanner({
     <div
       className={cn(
         'flex items-start gap-3 p-4 rounded-lg',
-        'bg-surface-800/50 border border-surface-700',
+        'bg-fill/50 border border-sep',
         className
       )}
     >
-      <span className="text-xl flex-shrink-0" role="img" aria-hidden="true">
+      <span className="text-title flex-shrink-0" role="img" aria-hidden="true">
         {icon}
       </span>
       <div>
-        <h4 className="font-medium text-surface-100 text-sm">{title}</h4>
-        <p className="text-xs text-surface-400 mt-0.5">{description}</p>
+        <h4 className="font-medium text-ink text-body">{title}</h4>
+        <p className="text-caption text-ink-2 mt-0.5">{description}</p>
       </div>
     </div>
   );
@@ -199,16 +199,16 @@ export const WelcomeCard = memo(function WelcomeCard({
     <div
       className={cn(
         'p-6 rounded-xl',
-        'bg-gradient-to-br from-primary-900/30 to-surface-900',
-        'border border-primary-800/50',
+        'bg-action/15 ',
+        'border border-action/50',
         className
       )}
     >
-      <h2 className="text-xl font-bold text-surface-100 mb-2">
+      <h2 className="text-title font-bold text-ink mb-2">
         Welcome{userName ? `, ${userName}` : ''} to HyperTrack
       </h2>
 
-      <p className="text-surface-300 mb-4">
+      <p className="text-ink-2 mb-4">
         Let&apos;s set up your personalized training experience. This takes about 5-7 minutes and helps us:
       </p>
 
@@ -219,8 +219,8 @@ export const WelcomeCard = memo(function WelcomeCard({
           'Set personalized nutrition targets',
           'Track your progress accurately',
         ].map((point, index) => (
-          <li key={index} className="flex items-center gap-2 text-sm text-surface-300">
-            <span className="w-5 h-5 rounded-full bg-primary-600 text-white text-xs flex items-center justify-center">
+          <li key={index} className="flex items-center gap-2 text-body text-ink-2">
+            <span className="w-5 h-5 rounded-full bg-action text-on-action text-caption flex items-center justify-center">
               {index + 1}
             </span>
             {point}
@@ -230,12 +230,12 @@ export const WelcomeCard = memo(function WelcomeCard({
 
       <button
         onClick={onContinue}
-        className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-500 text-white font-medium rounded-lg transition-colors"
+        className="w-full py-3 px-4 bg-action hover:bg-action text-on-action font-medium rounded-lg transition-colors"
       >
         Let&apos;s Get Started
       </button>
 
-      <p className="text-xs text-surface-500 text-center mt-3">
+      <p className="text-caption text-ink-3 text-center mt-3">
         You can always update these settings later
       </p>
     </div>
