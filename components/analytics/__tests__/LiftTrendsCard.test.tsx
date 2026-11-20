@@ -1,6 +1,6 @@
 /**
  * Progress › Strength front door: summary card, lift rows with status, the
- * attention line → plateau ideas, and a row opening that lift's sheet.
+ * attention line → plateau ideas, and a row linking to that lift's screen.
  */
 
 import React from 'react';
@@ -76,16 +76,13 @@ describe('LiftTrendsCard', () => {
     expect(onSeeIdeas).toHaveBeenCalled();
   });
 
-  it('opens a lift sheet with its estimated max, recent sessions and a link to its workouts', async () => {
-    render(<LiftTrendsCard summary={summary} units="kg" />);
-    await userEvent.click(screen.getByTestId('lift-row-bench'));
-    const sheet = screen.getByTestId('lift-detail');
-    expect(screen.getByRole('dialog', { name: 'Bench press' })).toBeInTheDocument();
-    expect(sheet).toHaveTextContent('Estimated max');
-    expect(sheet).toHaveTextContent('Nov 1');
-    expect(within(sheet).getByRole('link', { name: 'All Bench press workouts' })).toHaveAttribute(
+  it("links each row to that lift's own screen, gym-split lifts included", () => {
+    const split = lift({ seriesKey: 'bench@gym-1', locationId: 'gym-1', locationLabel: 'Home gym' });
+    render(<LiftTrendsCard summary={{ ...summary, lifts: [...summary.lifts, split] }} units="kg" />);
+    expect(screen.getByTestId('lift-row-bench')).toHaveAttribute('href', '/dashboard/analytics/lift/bench');
+    expect(screen.getByTestId('lift-row-bench@gym-1')).toHaveAttribute(
       'href',
-      '/dashboard/history?exercise=bench'
+      '/dashboard/analytics/lift/bench%40gym-1'
     );
   });
 

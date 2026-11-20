@@ -70,12 +70,7 @@ import { ProgressPhotosHero } from '@/components/analytics/ProgressPhotosHero';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
-import {
-  computeLiftTrends,
-  LIFT_TREND_WINDOW_DAYS,
-  LIFT_TREND_SESSION_SELECT,
-  type LiftTrendsSummary,
-} from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import { useLiftTrends } from '@/hooks/useLiftTrends';
 import { listOutbox } from '@/lib/offline/setOutbox';
 import {
   rangeStartLocalDay,
@@ -344,7 +339,8 @@ function AnalyticsPageContent() {
   const [userId, setUserId] = useState<string | null>(null);
   // Per-lift trend breakdown behind the home "Lifts" tile (shared function +
   // identical query window, so the tile aggregate and this detail agree).
-  const [liftTrendsSummary, setLiftTrendsSummary] = useState<LiftTrendsSummary | null>(null);
+  // Shared React Query cache with the single-lift screen (hooks/useLiftTrends).
+  const liftTrendsSummary = useLiftTrends().data ?? null;
 
   // Per-time-range result cache (P1-2) — lives for the page's lifetime.
   const analyticsRangeCacheRef = useRef(
@@ -580,53 +576,6 @@ function AnalyticsPageContent() {
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainQuery.data]);
-
-  // Fetch lift-trend data for the Strength tab. Deliberately the SAME query
-  // shape, window (LIFT_TREND_WINDOW_DAYS), and pure function as the home
-  // "Lifts" glance tile (lib/actions/dashboard.ts fetchLiftTrends), so the
-  // tile's "N rising of M" and this detail list can never disagree.
-  useEffect(() => {
-    async function fetchLiftTrendData() {
-      if (!userId) return;
-
-      const supabase = createUntypedClient();
-      const since = new Date();
-      since.setDate(since.getDate() - LIFT_TREND_WINDOW_DAYS);
-
-      try {
-        const [{ data: sessions }, { data: goalRow }, { data: activeMesos }] = await Promise.all([
-          supabase
-            .from('workout_sessions')
-            .select(LIFT_TREND_SESSION_SELECT)
-            .eq('user_id', userId)
-            .eq('state', 'completed')
-            .gte('completed_at', since.toISOString())
-            .order('completed_at', { ascending: true }),
-          supabase.from('users').select('goal').eq('id', userId).single(),
-          supabase
-            .from('mesocycles')
-            .select('start_date')
-            .eq('user_id', userId)
-            .or('is_active.eq.true,state.eq.active')
-            .order('created_at', { ascending: false })
-            .limit(1),
-        ]);
-
-        setLiftTrendsSummary(
-          computeLiftTrends(
-            (sessions as any) || [],
-            (goalRow?.goal as PlateauGoal | null) ?? undefined,
-            new Date(),
-            { programStartDate: activeMesos?.[0]?.start_date ?? null }
-          )
-        );
-      } catch (error) {
-        console.error('Failed to fetch lift trend data:', error);
-      }
-    }
-
-    fetchLiftTrendData();
-  }, [userId]);
 
   // Deep-link scroll target (?section=lift-trends / muscle-progression):
   // retried as each section's data lands (they arrive from separate fetches)
