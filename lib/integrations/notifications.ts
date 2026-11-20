@@ -187,6 +187,76 @@ export async function cancelBloodPressureReminder(): Promise<void> {
 }
 
 /**
+ * Replace every scheduled meal reminder with `planned` (one-shot local
+ * notifications; see services/mealReminders). Native only. Pass [] to clear.
+ * Returns false when permission is missing or scheduling failed.
+ */
+export async function scheduleMealReminders(
+  planned: Array<{ id: number; fireAt: Date; title: string; body: string; url: string }>,
+  options: { requestPermission?: boolean } = {}
+): Promise<boolean> {
+  if (!isNativePlatform()) return false;
+  try {
+    const { MEAL_REMINDER_ID_BASE, MEAL_REMINDER_ID_COUNT } = await import('@/services/mealReminders');
+    await LocalNotifications.cancel({
+      notifications: Array.from({ length: MEAL_REMINDER_ID_COUNT }, (_, i) => ({
+        id: MEAL_REMINDER_ID_BASE + i,
+      })),
+    });
+    if (planned.length === 0) return true;
+
+    // Background re-syncs never pop the permission sheet; only the explicit
+    // "turn on" tap asks (requestPermission).
+    const granted = options.requestPermission
+      ? await ensureNotificationPermission()
+      : (await LocalNotifications.checkPermissions())?.display === 'granted';
+    if (!granted) return false;
+
+    await LocalNotifications.schedule({
+      notifications: planned.map((reminder) => ({
+        id: reminder.id,
+        title: reminder.title,
+        body: reminder.body,
+        schedule: { at: reminder.fireAt, allowWhileIdle: true },
+        sound: 'default',
+        extra: { url: reminder.url },
+      })),
+    });
+    return true;
+  } catch (error) {
+    console.warn('[Notifications] Failed to schedule meal reminders:', error);
+    return false;
+  }
+}
+
+/**
+ * Call `onOpen(url)` when the user taps a notification that carries an
+ * in-app route (meal reminders). Returns an unsubscribe. No-op on web.
+ */
+export function onNotificationTap(onOpen: (url: string) => void): () => void {
+  if (!isNativePlatform() || typeof LocalNotifications.addListener !== 'function') {
+    return () => {};
+  }
+  let handle: { remove: () => void } | null = null;
+  let removed = false;
+  Promise.resolve(
+    LocalNotifications.addListener('localNotificationActionPerformed', (event: any) => {
+      const url = event?.notification?.extra?.url;
+      if (typeof url === 'string' && url.startsWith('/')) onOpen(url);
+    })
+  )
+    .then((h: { remove: () => void }) => {
+      if (removed) h?.remove?.();
+      else handle = h;
+    })
+    .catch(() => {});
+  return () => {
+    removed = true;
+    handle?.remove?.();
+  };
+}
+
+/**
  * Trigger vibration/haptic feedback for the rest-complete alarm.
  *
  * On native we use the Capacitor Haptics plugin (a notification-style pattern

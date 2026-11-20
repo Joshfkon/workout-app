@@ -77,6 +77,7 @@ import {
 import { getDisplayWeight, prepareWeightForStorage } from '@/lib/weightUtils';
 import { computeWeightRate } from '@/app/(dashboard)/dashboard/_lib/weightRate';
 import NutritionLoading from './loading';
+import { MealReminderPrompt } from '@/components/nutrition/MealReminderPrompt';
 import {
   LineChart,
   Line,
@@ -274,6 +275,8 @@ function NutritionPageContent() {
   const [addFoodTab, setAddFoodTab] = useState<AddFoodTab>('search');
   const [selectedMealType, setSelectedMealType] = useState<MealType>('breakfast');
   const [showDescribeMeal, setShowDescribeMeal] = useState(false);
+  // Meal type a reminder deep-linked into Describe for (?describe=lunch).
+  const [describeMealType, setDescribeMealType] = useState<MealType | null>(null);
   const [showSavedMeals, setShowSavedMeals] = useState(false);
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showWeightHistory, setShowWeightHistory] = useState(false);
@@ -301,6 +304,19 @@ function NutritionPageContent() {
   // the Eat nav item) must reset a previously deep-linked tab.
   useEffect(() => {
     setActiveTab(parseNutritionTabParam(searchParams.get('tab')) ?? 'log');
+  }, [searchParams]);
+
+  // A meal reminder opens straight into Describe for that meal: a rough
+  // estimate in one sentence beats a blank. Strip the param so a reload
+  // doesn't reopen it.
+  useEffect(() => {
+    const meal = searchParams.get('describe');
+    if (meal === 'breakfast' || meal === 'lunch' || meal === 'dinner' || meal === 'snack') {
+      setDescribeMealType(meal);
+      setShowDescribeMeal(true);
+      window.history.replaceState(null, '', pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const handleTabChange = (tab: NutritionTab) => {
@@ -1919,6 +1935,8 @@ function NutritionPageContent() {
       </div>
 
       {/* Quick actions: Describe / Scan / Search / Meals */}
+      <MealReminderPrompt />
+
       <NutritionQuickActions
         onDescribe={() => setShowDescribeMeal(true)}
         onScan={() => openAddFood(timeMealType, 'barcode')}
@@ -2382,8 +2400,11 @@ function NutritionPageContent() {
 
       <DescribeMealModal
         isOpen={showDescribeMeal}
-        onClose={() => setShowDescribeMeal(false)}
-        defaultMealType={timeMealType}
+        onClose={() => {
+          setShowDescribeMeal(false);
+          setDescribeMealType(null);
+        }}
+        defaultMealType={describeMealType ?? timeMealType}
         onLogItems={handleLogParsedItems}
       />
 

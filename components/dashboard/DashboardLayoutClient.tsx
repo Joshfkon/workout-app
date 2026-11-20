@@ -19,6 +19,7 @@ import { ResumeWorkoutBanner } from '@/components/workout/ResumeWorkoutBanner';
 import { flushSetOutbox, unparkOutboxEntries } from '@/lib/offline/setOutbox';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useHealthKitForegroundSync } from '@/hooks/useHealthKitSync';
+import { useMealReminderSync } from '@/hooks/useMealReminderSync';
 import { isActiveWorkoutRoute } from './isActiveWorkoutRoute';
 import { AiConsentPrompt } from '@/components/ai/AiConsentPrompt';
 
@@ -53,6 +54,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   // Apple Health: anchored pull on entry + every app foreground (iOS native
   // only; no-op everywhere else).
   useHealthKitForegroundSync();
+  useMealReminderSync();
 
   // Offline outbox (P0-2): flush queued set writes whenever connectivity
   // returns, from ANY dashboard tab — not just the workout page.
