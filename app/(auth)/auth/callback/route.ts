@@ -97,8 +97,8 @@ export async function GET(request: Request) {
         }
       }
 
-      // User has completed onboarding, go to specified next page or the train page
-      const safePath = isValidRedirectPath(next) ? next : '/dashboard/train';
+      // User has completed onboarding, go to specified next page or Home
+      const safePath = isValidRedirectPath(next) ? next : '/dashboard';
       return NextResponse.redirect(`${origin}${safePath}`);
     }
   }

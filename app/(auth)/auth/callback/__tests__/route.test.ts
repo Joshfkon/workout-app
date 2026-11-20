@@ -92,7 +92,7 @@ describe('recovery implies confirmation', () => {
 
     expect(mockUpdateUserById).toHaveBeenCalledWith('u2', { email_confirm: true });
     // Not a recovery — proceeds to the normal onboarding-aware redirect.
-    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard`);
   });
 
   it('does not touch an already-confirmed user', async () => {
@@ -192,27 +192,27 @@ describe('open-redirect protection', () => {
     expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/analytics`);
   });
 
-  it('rejects protocol-relative URLs and defaults to /dashboard/train', async () => {
+  it('rejects protocol-relative URLs and defaults to Home (/dashboard)', async () => {
     const res = await get('?code=abc&next=%2F%2Fevil.com%2Fphishing');
 
-    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard`);
   });
 
-  it('rejects absolute URLs with protocols and defaults to /dashboard/train', async () => {
+  it('rejects absolute URLs with protocols and defaults to Home (/dashboard)', async () => {
     const res = await get('?code=abc&next=https%3A%2F%2Fevil.com');
 
-    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard`);
   });
 
-  it('rejects paths not starting with / and defaults to /dashboard/train', async () => {
+  it('rejects paths not starting with / and defaults to Home (/dashboard)', async () => {
     const res = await get('?code=abc&next=dashboard%2Ftrain');
 
-    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard`);
   });
 
-  it('handles missing next param by defaulting to /dashboard/train', async () => {
+  it('handles missing next param by defaulting to Home (/dashboard)', async () => {
     const res = await get('?code=abc');
 
-    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard`);
   });
 });

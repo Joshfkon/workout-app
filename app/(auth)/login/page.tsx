@@ -139,7 +139,7 @@ export default function LoginPage() {
           window.location.href = returnPath;
           return;
         }
-        router.push('/dashboard/train');
+        router.push('/dashboard');
         router.refresh();
       }
     } catch (err) {

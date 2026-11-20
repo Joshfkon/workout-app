@@ -28,14 +28,14 @@ export default async function Home({
   // The dashboard's own auth guards handle a session that turns out dead.
   const cookieStore = await cookies();
   if (isSessionCookieValid(cookieStore.getAll())) {
-    redirect("/dashboard/log");
+    redirect("/dashboard");
   }
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (user) {
-    redirect("/dashboard/log");
+    redirect("/dashboard");
   }
   // Inside the native app a signed-out user goes straight to /login: the
   // marketing page (and its pricing link) is web-only.
