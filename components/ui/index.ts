@@ -31,7 +31,8 @@ export {
   LoadingAnimation, 
   SkeletonCard, 
   SkeletonExercise, 
-  FullPageLoading 
+  FullPageLoading,
+  PageSkeleton,
 } from './LoadingAnimation';
 export { ErrorRetry } from './ErrorRetry';
 export { SwipeableRow } from './SwipeableRow';

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { IconAlertTriangle } from '@tabler/icons-react';
-import { Button, LoadingAnimation } from '@/components/ui';
+import { Button, PageSkeleton } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
@@ -1514,12 +1514,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <LoadingAnimation type="random" size="lg" />
-        <p className="mt-4 text-surface-400">Loading dashboard...</p>
-      </div>
-    );
+    return <PageSkeleton text="Loading dashboard..." />;
   }
 
   const cardioPrescription = nutritionTargets?.cardio_prescription;

@@ -7,20 +7,20 @@ export default function ActiveWorkoutLoading() {
       <div className="animate-pulse">
         <div className="flex items-center justify-between mb-4">
           <div className="space-y-2">
-            <div className="h-6 bg-surface-700 rounded w-40" />
-            <div className="h-4 bg-surface-700 rounded w-24" />
+            <div className="h-6 bg-fill rounded w-40" />
+            <div className="h-4 bg-fill rounded w-24" />
           </div>
-          <div className="h-10 w-24 bg-surface-700 rounded" />
+          <div className="h-10 w-24 bg-fill rounded" />
         </div>
       </div>
 
       {/* Rest timer panel skeleton */}
-      <div className="animate-pulse bg-surface-800 rounded-lg p-4">
+      <div className="animate-pulse bg-card rounded-lg p-4">
         <div className="flex items-center justify-between">
-          <div className="h-8 bg-surface-700 rounded w-20" />
+          <div className="h-8 bg-fill rounded w-20" />
           <div className="flex gap-2">
-            <div className="h-8 w-8 bg-surface-700 rounded" />
-            <div className="h-8 w-8 bg-surface-700 rounded" />
+            <div className="h-8 w-8 bg-fill rounded" />
+            <div className="h-8 w-8 bg-fill rounded" />
           </div>
         </div>
       </div>

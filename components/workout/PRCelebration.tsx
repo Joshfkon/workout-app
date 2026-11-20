@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { successHaptic } from '@/lib/integrations/notifications';
 
 export interface PRCelebrationData {
   /** Keyed per celebration so back-to-back PRs re-run the animation. */
@@ -57,6 +58,9 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
 
   useEffect(() => {
     if (!celebration) return;
+
+    // A success tap the moment a PR lands (native only; no-op on web).
+    void successHaptic();
 
     // Auto-dismiss after timeout
     const autoTimeout = setTimeout(onDone, AUTO_DISMISS_MS);

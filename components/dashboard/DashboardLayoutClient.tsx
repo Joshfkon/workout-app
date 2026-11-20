@@ -98,14 +98,14 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
     // overflow-x-clip, NOT -hidden: hidden makes this div a scroll container,
     // which kills the sticky header below and makes iOS unpin the fixed
     // bottom nav mid-scroll. clip clips without creating a scroll container.
-    <div className="min-h-screen bg-surface-950 overflow-x-clip">
+    <div className="min-h-screen bg-canvas overflow-x-clip">
       <Sidebar onSignOut={handleSignOut} volumeGoalsMet={volumeGoalsMet} />
 
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top header - hidden on workout pages to avoid two sticky headers at top-0 */}
         {!hideAppHeader && (
-          <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-surface-950/80 backdrop-blur-lg border-b border-surface-800 lg:px-6">
+          <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-canvas/80 backdrop-blur-lg border-b border-sep lg:px-6">
           {/* Spacer for mobile menu button */}
           <div className="w-10 lg:hidden" />
 

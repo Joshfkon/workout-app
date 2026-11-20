@@ -420,10 +420,10 @@ export function LoadingAnimation({
 export function SkeletonCard({ className = '' }: { className?: string }) {
   return (
     <div className={`animate-pulse ${className}`}>
-      <div className="bg-surface-800 rounded-lg p-4 space-y-3">
-        <div className="h-4 bg-surface-700 rounded w-3/4" />
-        <div className="h-3 bg-surface-700 rounded w-1/2" />
-        <div className="h-8 bg-surface-700 rounded w-full" />
+      <div className="bg-card shadow-card rounded-card p-4 space-y-3">
+        <div className="h-4 bg-fill rounded w-3/4" />
+        <div className="h-3 bg-fill rounded w-1/2" />
+        <div className="h-8 bg-fill rounded w-full" />
       </div>
     </div>
   );
@@ -432,33 +432,68 @@ export function SkeletonCard({ className = '' }: { className?: string }) {
 // Skeleton for exercise cards
 export function SkeletonExercise() {
   return (
-    <div className="animate-pulse bg-surface-800/50 rounded-lg p-4 space-y-3">
+    <div className="animate-pulse bg-card shadow-card rounded-card p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-surface-700 rounded-lg" />
-          <div className="space-y-2">
-            <div className="h-4 bg-surface-700 rounded w-32" />
-            <div className="h-3 bg-surface-700 rounded w-20" />
-          </div>
+        <div className="space-y-2">
+          <div className="h-4 bg-fill rounded w-40" />
+          <div className="h-3 bg-fill rounded w-24" />
         </div>
-        <div className="w-16 h-8 bg-surface-700 rounded" />
+        <div className="w-8 h-8 bg-fill rounded-full" />
       </div>
-      <div className="grid grid-cols-4 gap-2">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-12 bg-surface-700 rounded" />
-        ))}
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="h-10 bg-fill rounded-input" />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Quiet, layout-shaped placeholder for a whole screen (design system):
+ * the real title, a hero block and a few list cards, pulsing gently.
+ * Replaces the animated full-page spinners so loading looks like an app
+ * filling in, not a website waiting.
+ */
+export function PageSkeleton({ title, text = 'Loading' }: { title?: string; text?: string }) {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label={text} role="status">
+      <span className="sr-only">{text}</span>
+      {title ? (
+        <h1 className="text-large-title text-ink">{title}</h1>
+      ) : (
+        <div className="animate-pulse h-9 w-48 rounded-input bg-fill" />
+      )}
+      <div className="animate-pulse space-y-3">
+        <div className="h-36 rounded-card bg-card shadow-card" />
+        <div className="rounded-card bg-card shadow-card p-4 space-y-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-[9px] bg-fill" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3.5 w-2/5 rounded bg-fill" />
+                <div className="h-3 w-3/5 rounded bg-fill" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="h-20 rounded-card bg-card shadow-card" />
       </div>
     </div>
   );
 }
 
 // Full page loading state
-export function FullPageLoading({ text = 'Loading...', type = 'random' as AnimationType }) {
-  return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <LoadingAnimation type={type} size="lg" text={text} showTip />
-    </div>
-  );
+// Full page loading state — now a layout-shaped skeleton (see PageSkeleton).
+// `type` is kept for existing callers; the animated icons are no longer used
+// for whole-page loads.
+export function FullPageLoading({
+  text = 'Loading...',
+  title,
+}: {
+  text?: string;
+  type?: AnimationType;
+  title?: string;
+}) {
+  return <PageSkeleton text={text} title={title} />;
 }
 
 export default LoadingAnimation;

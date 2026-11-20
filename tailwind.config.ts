@@ -163,6 +163,8 @@ const config: Config = {
         'sheet-up': 'sheetUp 0.34s cubic-bezier(0.32, 0.72, 0, 1)',
         'sheet-down': 'sheetDown 0.2s ease-in forwards',
         'fade-out': 'fadeOut 0.2s ease-in forwards',
+        // Pushed screen entering (see app/(dashboard)/dashboard/template.tsx).
+        'push-in': 'pushIn 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
       },
       keyframes: {
         fadeIn: {
@@ -188,6 +190,13 @@ const config: Config = {
         sheetDown: {
           '0%': { transform: 'translateY(0)' },
           '100%': { transform: 'translateY(100%)' },
+        },
+        // Animates `left`, not transform, so fixed-position chrome inside the
+        // screen doesn't jump (a transform would re-anchor it).
+        pushIn: {
+          '0%': { left: '30%', opacity: '0' },
+          '55%': { opacity: '1' },
+          '100%': { left: '0', opacity: '1' },
         },
         fadeOut: {
           '0%': { opacity: '1' },

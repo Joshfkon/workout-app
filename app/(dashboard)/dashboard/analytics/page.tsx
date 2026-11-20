@@ -1386,7 +1386,7 @@ function AnalyticsPageContent() {
   // (warm cache) or reload (IndexedDB restore) has the bundle available and
   // renders immediately.
   if (isLoading && !mainQuery.data && !isRestoring) {
-    return <div data-testid="analytics-full-loading"><FullPageLoading text="Loading your analytics..." type="heartbeat" /></div>;
+    return <div data-testid="analytics-full-loading"><FullPageLoading text="Loading your analytics..." title="Progress" /></div>;
   }
 
   // After the unified sheet saves: refresh the hub widgets, and for a DEXA
@@ -2063,7 +2063,7 @@ function AnalyticsPageContent() {
 export default function AnalyticsPage() {
   useDocumentTitle('Analytics');
   return (
-    <Suspense fallback={<FullPageLoading text="Loading your analytics..." type="heartbeat" />}>
+    <Suspense fallback={<FullPageLoading text="Loading your analytics..." title="Progress" />}>
       <AnalyticsPageContent />
     </Suspense>
   );

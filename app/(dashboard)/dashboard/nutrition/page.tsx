@@ -7,7 +7,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts, EmptyState } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, PageSkeleton, SwipeableRow, ToastContainer, useToasts, EmptyState } from '@/components/ui';
 import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
@@ -2501,11 +2501,7 @@ export default function NutritionPage() {
   useDocumentTitle('Nutrition');
   return (
     <Suspense
-      fallback={
-        <div className="flex flex-col items-center justify-center py-20">
-          <LoadingAnimation type="random" size="lg" />
-        </div>
-      }
+      fallback={<PageSkeleton title="Eat" />}
     >
       <NutritionPageContent />
     </Suspense>
