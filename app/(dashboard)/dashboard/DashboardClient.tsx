@@ -1,5 +1,6 @@
 'use client';
 
+import { addFoodHref } from '@/lib/nutrition/addFoodLink';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
@@ -9,7 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
-import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
+import type { MealType } from '@/types/nutrition';
 import { type MuscleVolumeData } from '@/services/volumeTracker';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
@@ -81,10 +82,6 @@ const CardSkeleton = () => (
 );
 
 // Lazy load modal content — only fetched when a quick-log modal opens
-const QuickFoodLogger = dynamic(
-  () => import('@/components/nutrition/QuickFoodLogger').then(mod => ({ default: mod.QuickFoodLogger })),
-  { ssr: false, loading: () => <CardSkeleton /> }
-);
 
 const LogBodyDataSheet = dynamic(
   () => import('@/components/body/LogBodyDataSheet').then(mod => ({ default: mod.LogBodyDataSheet })),
@@ -292,7 +289,7 @@ interface DashboardClientProps {
   initialData?: DashboardInitialData;
 }
 
-type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep' | 'bp' | 'today';
+type QuickLogModal = 'weight' | 'water' | 'cardio' | 'checkin' | 'sleep' | 'bp' | 'today';
 
 export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
@@ -768,8 +765,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const glanceVolume: GlanceVolumeSummary | null =
     muscleVolume.length > 0 ? coarseMevTiles(volumeRows) : null;
 
-  const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
-  const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
 
   // Load cached weight history on mount for faster initial render.
   // Skipped when server initialData exists (it is strictly fresher — applying
@@ -925,61 +920,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         // Skip this fast path after a midnight rollover (dateKey !== initialDateKey) so the
         // full fetch below recomputes today's workout / nutrition / weight for the new day.
         if (hasInitialData && dateKey === initialDateKey) {
-          // Fetch only the deferred data that wasn't fetched server-side
-          // (frequent foods, system foods). Weekly volume is NOT refetched:
-          // initialData.muscleVolume was fetched server-side in this same
-          // render (item 6), and calling setMuscleVolume with a fresh array
-          // replaced the SSR'd atrophy card — the dashboard's LCP element —
-          // after hydration, moving the recorded LCP from first paint
-          // (~1.2s) to post-hydration (~4.7s).
-          Promise.all([
-            supabase.from('food_log')
-              .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
-              .limit(50),
-            supabase.from('system_foods')
-              .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
-              .eq('is_active', true)
-              .order('name')
-              .limit(100),
-          ]).then(([frequentDataResult, systemFoodsResult]) => {
-            // Process frequent foods
-            if (frequentDataResult.data && frequentDataResult.data.length > 0) {
-              const frequencyMap = new Map<string, FrequentFood>();
-              for (const entry of frequentDataResult.data) {
-                if (!entry.food_name) continue;
-                const key = `${entry.meal_type}:${entry.food_name}`;
-                const existing = frequencyMap.get(key);
-                const servingsNum = entry.servings || 1;
-                if (existing) {
-                  const totalLogs = existing.times_logged + 1;
-                  existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
-                  existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
-                  existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
-                  existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
-                  existing.times_logged = totalLogs;
-                } else {
-                  frequencyMap.set(key, {
-                    user_id: user.id,
-                    meal_type: entry.meal_type as MealType,
-                    food_name: entry.food_name,
-                    serving_size: entry.serving_size,
-                    avg_calories: (entry.calories || 0) / servingsNum,
-                    avg_protein: (entry.protein || 0) / servingsNum,
-                    avg_carbs: (entry.carbs || 0) / servingsNum,
-                    avg_fat: (entry.fat || 0) / servingsNum,
-                    times_logged: 1,
-                    last_logged: new Date().toISOString(),
-                  });
-                }
-              }
-              setFrequentFoods(Array.from(frequencyMap.values()));
-            }
-            if (systemFoodsResult.data) {
-              setSystemFoods(systemFoodsResult.data as SystemFood[]);
-            }
-          }).catch(() => {});
+          // Everything Home needs was fetched server-side. (Food logging
+          // opens Eat's Add food sheet, which loads its own recents.)
           return;
         }
 
@@ -1068,63 +1010,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         const storedUnits = (userProfileResult.data?.preferences as { units?: string } | null)?.units;
         const preferredUnit: 'lb' | 'kg' | null =
           storedUnits === 'kg' || storedUnits === 'lb' ? storedUnits : null;
-
-        // Deferred queries - load in background, only needed for food logging
-        // These don't block initial render
-        Promise.all([
-          // Frequent foods - only needed when opening food logger
-          supabase.from('food_log')
-            .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(50),
-
-          // System foods - only needed when opening food logger
-          supabase.from('system_foods')
-            .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
-            .eq('is_active', true)
-            .order('name')
-            .limit(100),
-        ]).then(([frequentDataResult, systemFoodsResult]) => {
-          // Process deferred data in background
-          if (frequentDataResult.data && frequentDataResult.data.length > 0) {
-            const frequencyMap = new Map<string, FrequentFood>();
-            for (const entry of frequentDataResult.data) {
-              if (!entry.food_name) continue;
-              const key = `${entry.meal_type}:${entry.food_name}`;
-              const existing = frequencyMap.get(key);
-              const servingsNum = entry.servings || 1;
-
-              if (existing) {
-                const totalLogs = existing.times_logged + 1;
-                existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
-                existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
-                existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
-                existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
-                existing.times_logged = totalLogs;
-              } else {
-                frequencyMap.set(key, {
-                  user_id: user.id,
-                  meal_type: entry.meal_type as MealType,
-                  food_name: entry.food_name,
-                  serving_size: entry.serving_size,
-                  avg_calories: (entry.calories || 0) / servingsNum,
-                  avg_protein: (entry.protein || 0) / servingsNum,
-                  avg_carbs: (entry.carbs || 0) / servingsNum,
-                  avg_fat: (entry.fat || 0) / servingsNum,
-                  times_logged: 1,
-                  last_logged: new Date().toISOString(),
-                });
-              }
-            }
-            setFrequentFoods(Array.from(frequencyMap.values()));
-          }
-          if (systemFoodsResult.data) {
-            setSystemFoods(systemFoodsResult.data as SystemFood[]);
-          }
-        }).catch(() => {
-          // Ignore errors in deferred queries - not critical
-        });
 
         // Process user profile
         if (userProfileResult.data?.goal) {
@@ -1415,62 +1300,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     fetchDashboardData();
   }, [hasInitialData, dateKey]);
 
-  const handleAddFood = async (food: {
-    food_name: string;
-    serving_size: string;
-    servings: number;
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    meal_type: MealType;
-    source: 'usda' | 'manual' | 'barcode';
-  }) => {
-    try {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('handleAddFood: No user found');
-        return;
-      }
-
-      const { error } = await supabase.from('food_log').insert({
-        user_id: user.id,
-        food_name: food.food_name,
-        serving_size: food.serving_size,
-        servings: food.servings,
-        calories: food.calories,
-        protein: food.protein,
-        carbs: food.carbs,
-        fat: food.fat,
-        meal_type: food.meal_type,
-        source: food.source || 'manual',
-        logged_at: getLocalDateString(),
-      });
-
-      if (error) {
-        console.error('handleAddFood: Supabase error:', error);
-        return;
-      }
-
-      // Update local state and cache together to prevent stale data on reload
-      setNutritionTotals((prev) => {
-        const newTotals = {
-          calories: prev.calories + food.calories,
-          protein: prev.protein + food.protein,
-          carbs: prev.carbs + food.carbs,
-          fat: prev.fat + food.fat,
-        };
-        // Update cache with new totals to persist across reloads
-        updateDashboardCache({ nutritionTotals: newTotals });
-        return newTotals;
-      });
-      setActiveModal(null);
-    } catch (err) {
-      console.error('handleAddFood: Exception:', err);
-    }
-  };
-
   // The unified "Log body data" sheet writes weight_log itself (via
   // lib/body/bodyLog — the same update-or-insert semantics this component
   // used to inline); this handler only syncs the dashboard's local state and
@@ -1699,7 +1528,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         eyebrowContext={heroEyebrowContext}
         workoutMeta={workoutHeroMeta}
         meal={mealHero}
-        onLogFood={() => setActiveModal('food')}
+        onLogFood={() => router.push(addFoodHref())}
         coachLine={coachLine}
         onStartWorkout={handleStartWorkout}
         isStarting={isStartingWorkout}
@@ -1730,7 +1559,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       <QuickLogRow
         onLogWeight={() => setActiveModal('weight')}
         onLogWater={userId ? () => setActiveModal('water') : undefined}
-        onLogFood={() => setActiveModal('food')}
+        onLogFood={() => router.push(addFoodHref())}
         onLogSleep={userId ? () => setActiveModal('sleep') : undefined}
         onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
         onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
@@ -1783,18 +1612,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       {activeModal === 'water' && userId && (
         <Modal isOpen onClose={() => setActiveModal(null)} title="Log water">
           <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} />
-        </Modal>
-      )}
-
-      {activeModal === 'food' && (
-        <Modal isOpen onClose={() => setActiveModal(null)} title="Log food" size="lg">
-          <QuickFoodLogger
-            onAdd={handleAddFood}
-            onClose={() => setActiveModal(null)}
-            frequentFoods={frequentFoods}
-            systemFoods={systemFoods}
-            defaultMealType={inferMealType(new Date())}
-          />
         </Modal>
       )}
 
