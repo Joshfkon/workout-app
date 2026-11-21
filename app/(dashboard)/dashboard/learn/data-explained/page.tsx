@@ -2,111 +2,98 @@
 
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
-import Link from 'next/link';
-import { Card } from '@/components/ui/Card';
+import type { ReactNode } from 'react';
+import { IconCalculator } from '@tabler/icons-react';
+import { ArticleCTA, ArticleHeader, ArticlePage, ContentCard, TermNote } from '@/components/learn/ArticleKit';
 
-const metrics = [
+const metrics: Array<{ name: string; description: string; formula: string; usage: string; terms?: ReactNode }> = [
   {
-    name: 'E1RM (Estimated 1RM)',
+    name: 'e1RM (estimated 1RM)',
     description: 'Your estimated one-rep max, calculated from your best sets using the Epley formula.',
     formula: 'Weight × (1 + Reps/30)',
     usage: 'Tracks strength progress over time without needing to actually max out.',
+    terms: <TermNote term="e1RM" fullName="estimated one-rep max" />,
   },
   {
-    name: 'Weekly Volume',
+    name: 'Weekly volume',
     description: 'Total hard sets per muscle group per week.',
     formula: 'Count of sets within 0-3 RIR',
-    usage: 'Ensures you\'re in the productive 10-20 sets/week range for most muscles.',
+    usage: "Keeps you in the productive 10-20 sets a week range for most muscles.",
+    terms: <TermNote term="RIR" fullName="reps in reserve" />,
   },
   {
-    name: 'Fatigue Budget',
+    name: 'Fatigue budget',
     description: 'Running total of exercise "costs" to prevent overtraining.',
     formula: 'Compounds: 8-12 pts, Isolations: 3-5 pts',
     usage: 'Triggers deloads when approaching your weekly limit.',
   },
   {
     name: 'FFMI',
-    description: 'Fat-Free Mass Index - how muscular you are relative to height.',
+    description: 'Fat-free mass index: how muscular you are relative to your height.',
     formula: 'Lean Mass (kg) / Height (m)² + 6.1 × (1.8 - Height)',
     usage: 'Natural limit typically 24-26. Helps set realistic goals.',
   },
   {
-    name: 'RPE / RIR',
-    description: 'Rate of Perceived Exertion / Reps in Reserve.',
+    name: 'RPE and RIR',
+    description: 'Rate of perceived exertion and reps in reserve.',
     formula: 'RPE 10 = 0 RIR = failure',
-    usage: 'Autoregulates intensity based on daily performance.',
+    usage: 'Adjusts intensity to how you are performing on the day.',
+    terms: <TermNote term="RPE" fullName="rate of perceived exertion" />,
   },
   {
-    name: 'MEV / MAV / MRV',
+    name: 'MEV, MAV and MRV',
     description: 'Volume landmarks from Renaissance Periodization.',
     formula: 'MEV < MAV < MRV',
-    usage: 'Minimum, Maximum Adaptive, and Maximum Recoverable Volume.',
+    usage: 'Minimum effective, maximum adaptive and maximum recoverable volume.',
+    terms: (
+      <>
+        <TermNote term="MEV" fullName="minimum effective volume" />
+        <TermNote term="MAV" fullName="maximum adaptive volume" />
+        <TermNote term="MRV" fullName="maximum recoverable volume" />
+      </>
+    ),
   },
 ];
 
 export default function DataExplainedArticle() {
-  useDocumentTitle('Data Explained');
+  useDocumentTitle('Data explained');
   return (
-    <div className="max-w-3xl mx-auto pb-12">
-      {/* Back Navigation */}
-      <Link
-        href="/dashboard/learn"
-        className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-8 transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to Learn & Science
-      </Link>
+    <ArticlePage>
+      <ArticleHeader
+        icon={IconCalculator}
+        tag="Guide"
+        title="Understanding your data"
+        subtitle="A guide to every metric we track and what the numbers mean."
+      />
 
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-4xl">🧮</span>
-          <span className="px-3 py-1 bg-action/10 text-action rounded-full text-xs font-medium">
-            Guide
-          </span>
-        </div>
-        <h1 className="text-3xl font-bold text-ink mb-3">Understanding Your Data</h1>
-        <p className="text-lg text-ink-2">
-          A comprehensive guide to every metric we track and what the numbers mean.
-        </p>
-      </div>
-
-      {/* Article Content */}
-      <article className="space-y-6 text-ink-2">
-        {metrics.map((metric, idx) => (
-          <Card key={idx} className="p-5">
-            <h3 className="font-bold text-ink text-lg mb-2">{metric.name}</h3>
-            <p className="text-ink-2 text-sm mb-3">{metric.description}</p>
-            <div className="grid md:grid-cols-2 gap-3">
-              <div className="p-3 bg-fill/50 rounded-lg">
-                <p className="text-xs text-ink-3 mb-1">Formula</p>
-                <p className="text-sm font-mono text-ink-2">{metric.formula}</p>
+      <div className="space-y-3">
+        {metrics.map((metric) => (
+          <ContentCard key={metric.name} className="space-y-3">
+            <div className="space-y-1">
+              <h2 className="text-headline text-ink">{metric.name}</h2>
+              <p className="text-body text-ink-2">{metric.description}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-fill p-3">
+                <p className="text-caption text-ink-3">Formula</p>
+                <p className="font-mono text-subhead text-ink-2">{metric.formula}</p>
               </div>
-              <div className="p-3 bg-fill/50 rounded-lg">
-                <p className="text-xs text-ink-3 mb-1">How We Use It</p>
-                <p className="text-sm text-ink-2">{metric.usage}</p>
+              <div className="rounded-xl bg-fill p-3">
+                <p className="text-caption text-ink-3">How we use it</p>
+                <p className="text-subhead text-ink-2">{metric.usage}</p>
               </div>
             </div>
-          </Card>
+            {metric.terms && <div className="space-y-1">{metric.terms}</div>}
+          </ContentCard>
         ))}
+      </div>
 
-        {/* CTA */}
-        <section className="pt-4">
-          <Card className="p-6 text-center bg-action/10 border-action/20">
-            <h3 className="text-lg font-bold text-ink mb-2">View Your Analytics</h3>
-            <p className="text-sm text-ink-2 mb-4">
-              See all your metrics in action on your dashboard.
-            </p>
-            <Link href="/dashboard/analytics">
-              <button className="px-6 py-2 bg-action hover:bg-action text-on-action font-semibold rounded-lg transition-colors">
-                Go to Analytics
-              </button>
-            </Link>
-          </Card>
-        </section>
-      </article>
-    </div>
+      <ArticleCTA
+        title="View your analytics"
+        body="See all your metrics in action on your dashboard."
+        href="/dashboard/analytics"
+        label="Go to analytics"
+      />
+    </ArticlePage>
   );
 }
