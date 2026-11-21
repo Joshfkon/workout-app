@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IconCheck } from '@tabler/icons-react';
 import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
@@ -26,24 +26,53 @@ export function CopyWorkoutSheet({
   const [isCopying, setIsCopying] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Feed and Discover keep one sheet mounted across workouts, so a copy that
+  // finishes after the sheet was dismissed (or switched to another workout)
+  // must not touch the new state. Each request takes a ticket; dismissing or
+  // switching workouts invalidates outstanding tickets and the close timer.
+  const ticket = useRef(0);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const close = () => {
+  const reset = () => {
+    ticket.current += 1;
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
     setIsCopying(false);
     setSuccess(false);
     setError(null);
+  };
+
+  const workoutId = workout?.id ?? null;
+  useEffect(() => {
+    reset();
+    // reset only touches refs and setters, so it is safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workoutId]);
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    []
+  );
+
+  const close = () => {
+    reset();
     onClose();
   };
 
   const handleCopy = async () => {
     if (!workout) return;
+    const mine = ++ticket.current;
     setIsCopying(true);
     setError(null);
 
     const result = await copySharedWorkout(workout.id, createClient());
+    if (mine !== ticket.current) return; // dismissed or switched meanwhile
 
     if (result.success) {
       setSuccess(true);
-      setTimeout(close, CLOSE_AFTER_SUCCESS_MS);
+      closeTimer.current = setTimeout(close, CLOSE_AFTER_SUCCESS_MS);
     } else {
       setError(result.error || 'Failed to copy workout');
       setIsCopying(false);

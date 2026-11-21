@@ -54,6 +54,46 @@ describe('CopyWorkoutSheet', () => {
     expect(await screen.findByText('Copied to your templates')).toBeInTheDocument();
   });
 
+  it('ignores a copy that finishes after the sheet moved on to another workout', async () => {
+    let finish: (v: { success: boolean }) => void = () => {};
+    mockCopy.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const onClose = jest.fn();
+    const user = userEvent.setup();
+    const other = { ...workout, id: 'w2', title: 'Pull day' } as SharedWorkoutWithProfile;
+    const { rerender } = render(<CopyWorkoutSheet workout={workout} onClose={onClose} />);
+
+    await user.click(screen.getByRole('button', { name: 'Copy to my workouts' }));
+    rerender(<CopyWorkoutSheet workout={other} onClose={onClose} />);
+    await React.act(async () => finish({ success: true }));
+
+    expect(screen.queryByText('Copied to your templates')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy to my workouts' })).toBeEnabled();
+  });
+
+  it('cancels the auto-close when the confirmation is dismissed', async () => {
+    jest.useFakeTimers();
+    try {
+      mockCopy.mockResolvedValue({ success: true });
+      const onClose = jest.fn();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      const other = { ...workout, id: 'w2', title: 'Pull day' } as SharedWorkoutWithProfile;
+      const { rerender } = render(<CopyWorkoutSheet workout={workout} onClose={onClose} />);
+
+      await user.click(screen.getByRole('button', { name: 'Copy to my workouts' }));
+      await screen.findByText('Copied to your templates');
+      // The parent swaps in another workout before the confirmation times out.
+      rerender(<CopyWorkoutSheet workout={other} onClose={onClose} />);
+      await React.act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Copy to my workouts' })).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('shows the error and keeps the buttons when the copy fails', async () => {
     mockCopy.mockResolvedValue({ success: false, error: 'Already copied' });
     const user = userEvent.setup();
