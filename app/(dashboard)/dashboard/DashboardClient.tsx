@@ -67,6 +67,7 @@ import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
 import { applyAdjustmentToMacros } from '@/lib/nutrition/step-calorie-adjustment';
+import { updateTodayWorkoutWidget, updateNutritionWidget } from '@/lib/integrations/liveActivity';
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
 import type { TrainingStyle } from '@/lib/training/trainingStyle';
 import { fetchTrainingStyleData } from '@/lib/actions/dashboard';
@@ -711,6 +712,40 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         : nutritionTargets,
     [nutritionTargets, stepAdjustment?.adjustment]
   );
+
+  // iOS home-screen widgets (no-op elsewhere): today's session and what's
+  // left of the calorie / protein targets. Written whenever Home's data
+  // settles or changes (a quick-log, a refetch, the day rolling over).
+  useEffect(() => {
+    if (isLoading || !clientNow) return;
+    const restDay = !!planMesocycle && !heroScheduled && !heroWorkout;
+    const sessionName = restDay
+      ? null
+      : heroScheduled?.dayName ?? heroWorkout?.name ?? (planMesocycle?.name || 'Start a workout');
+    const detail = !heroWorkout
+      ? null
+      : heroWorkout.state === 'completed'
+        ? 'Done for today'
+        : heroWorkout.state === 'in_progress'
+          ? `In progress · ${heroWorkout.completedSets}/${heroWorkout.totalSets} sets`
+          : `${heroWorkout.exercises} exercise${heroWorkout.exercises === 1 ? '' : 's'}`;
+    void updateTodayWorkoutWidget({
+      sessionName,
+      detail,
+      path: heroWorkout ? `/dashboard/workout/${heroWorkout.id}` : '/dashboard',
+    });
+  }, [isLoading, clientNow, planMesocycle, heroScheduled, heroWorkout]);
+
+  useEffect(() => {
+    if (isLoading || !effectiveTargets) return;
+    void updateNutritionWidget({
+      caloriesLeft: effectiveTargets.calories - nutritionTotals.calories,
+      caloriesTarget: effectiveTargets.calories,
+      proteinLeft: effectiveTargets.protein - nutritionTotals.protein,
+      proteinTarget: effectiveTargets.protein,
+      path: '/dashboard/nutrition',
+    });
+  }, [isLoading, effectiveTargets, nutritionTotals]);
 
   // Next-meal hero content — shown when there's no pending workout (done or
   // rest day) and meaningful calories remain for the day.

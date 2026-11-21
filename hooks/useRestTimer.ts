@@ -6,6 +6,12 @@ import {
   cancelRestCompleteNotification,
   restCompleteHaptic,
 } from '@/lib/integrations/notifications';
+import {
+  startRestLiveActivity,
+  updateRestLiveActivity,
+  endRestLiveActivity,
+  type RestActivityContext,
+} from '@/lib/integrations/liveActivity';
 
 const TIMER_STORAGE_KEY = 'workout_rest_timer';
 
@@ -57,18 +63,31 @@ export function clearPersistedRestTimer(): void {
     // Storage unavailable: nothing persisted to clear.
   }
   void cancelRestCompleteNotification();
+  void endRestLiveActivity();
+}
+
+/** Drop the pending notification AND the lock-screen Live Activity. */
+function cancelNativeRest(): void {
+  void cancelRestCompleteNotification();
+  void endRestLiveActivity();
 }
 
 interface UseRestTimerOptions {
   defaultSeconds?: number;
   autoStart?: boolean;
   onComplete?: () => void;
+  /**
+   * Labels for the iOS lock-screen / Dynamic Island Live Activity (exercise
+   * name, next set). Changes while a rest is running update the activity.
+   */
+  activityContext?: RestActivityContext;
 }
 
 export function useRestTimer({
   defaultSeconds = 180,
   autoStart = false,
   onComplete,
+  activityContext,
 }: UseRestTimerOptions = {}) {
   // Use a ref to store the initial defaultSeconds so it doesn't change on re-renders
   const initialDefaultSecondsRef = useRef(defaultSeconds);
@@ -87,10 +106,33 @@ export function useRestTimer({
   const hasPlayedAlarm = useRef(false);
   const onCompleteRef = useRef(onComplete);
   const secondsRef = useRef(defaultSeconds);
+  const activityContextRef = useRef<RestActivityContext | undefined>(activityContext);
+  const initialSecondsRef = useRef(initialDefaultSecondsRef.current);
 
   useEffect(() => {
     secondsRef.current = seconds;
   }, [seconds]);
+
+  useEffect(() => {
+    initialSecondsRef.current = initialSeconds;
+  }, [initialSeconds]);
+
+  // Keep the Live Activity's labels current: the workout page usually derives
+  // "Set 3 of 4" from state that settles a render AFTER start() ran.
+  const activityExercise = activityContext?.exerciseName;
+  const activityNextSet = activityContext?.nextSet;
+  useEffect(() => {
+    const prev = activityContextRef.current;
+    activityContextRef.current = { exerciseName: activityExercise, nextSet: activityNextSet };
+    if (prev?.exerciseName === activityExercise && prev?.nextSet === activityNextSet) return;
+    if (isRunning && endTimeRef.current !== null) {
+      void updateRestLiveActivity(
+        endTimeRef.current,
+        initialSecondsRef.current,
+        activityContextRef.current
+      );
+    }
+  }, [activityExercise, activityNextSet, isRunning]);
 
   // Keep onComplete ref updated
   useEffect(() => {
@@ -229,6 +271,9 @@ export function useRestTimer({
             void cancelRestCompleteNotification();
             playAlarm();
           }
+          // The countdown is over either way; the lock screen keeps the
+          // notification, not a frozen 0:00.
+          void endRestLiveActivity();
           onCompleteRef.current?.();
         }
       } else {
@@ -268,6 +313,7 @@ export function useRestTimer({
           setFinishedAt(state.endTime);
           endTimeRef.current = null;
           clearTimerState();
+          void endRestLiveActivity();
           if (!hasPlayedAlarm.current) {
             hasPlayedAlarm.current = true;
             playAlarm();
@@ -316,6 +362,8 @@ export function useRestTimer({
     // ONLY reliable alert when the app is backgrounded / screen locked, since
     // the JS interval and Web Audio are suspended then. No-op on web.
     void scheduleRestCompleteNotification(endTime);
+    // Lock-screen / Dynamic Island countdown (iOS). It ticks on its own.
+    void startRestLiveActivity(endTime, totalForProgress, activityContextRef.current);
 
     // Create the countdown interval immediately
     intervalRef.current = setInterval(() => {
@@ -353,6 +401,9 @@ export function useRestTimer({
             void cancelRestCompleteNotification();
             playAlarm();
           }
+          // The countdown is over either way; the lock screen keeps the
+          // notification, not a frozen 0:00.
+          void endRestLiveActivity();
           onCompleteRef.current?.();
         }
       } else {
@@ -371,7 +422,7 @@ export function useRestTimer({
       setIsRunning(false);
       endTimeRef.current = null;
       clearTimerState();
-      void cancelRestCompleteNotification();
+      cancelNativeRest();
     } else {
       // Resume/Start. A resume keeps the original allotment as the progress
       // denominator (totalSeconds) — re-anchoring initialSeconds to the
@@ -396,7 +447,7 @@ export function useRestTimer({
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
     clearTimerState();
-    void cancelRestCompleteNotification();
+    cancelNativeRest();
   }, [initialSeconds, clearTimerState, defaultSeconds]);
 
   const addTime = useCallback((amount: number) => {
@@ -428,8 +479,9 @@ export function useRestTimer({
       // the prior one). If we ran the clock down to <= 0, just cancel it.
       if (newRemaining > 0) {
         void scheduleRestCompleteNotification(newEndTime);
+        void updateRestLiveActivity(newEndTime, newInitial, activityContextRef.current);
       } else {
-        void cancelRestCompleteNotification();
+        cancelNativeRest();
       }
     } else if (isFinished) {
       // Timer already completed: adding time means "give me more rest", so
@@ -460,7 +512,7 @@ export function useRestTimer({
     setRestedSeconds(rested > 0 ? rested : 0);
     endTimeRef.current = null;
     clearTimerState();
-    void cancelRestCompleteNotification();
+    cancelNativeRest();
     onCompleteRef.current?.();
   }, [seconds, initialSeconds, clearTimerState]);
 
@@ -473,7 +525,7 @@ export function useRestTimer({
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
     clearTimerState();
-    void cancelRestCompleteNotification();
+    cancelNativeRest();
   }, [defaultSeconds, clearTimerState]);
 
   // Mark timer as complete without playing alarm (used when starting dropsets)
@@ -490,7 +542,7 @@ export function useRestTimer({
     setRestedSeconds(0);
     endTimeRef.current = null;
     clearTimerState();
-    void cancelRestCompleteNotification();
+    cancelNativeRest();
   }, [clearTimerState]);
 
   const progressPercent = initialSeconds > 0
