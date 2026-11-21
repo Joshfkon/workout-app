@@ -1287,11 +1287,11 @@ function AnalyticsPageContent() {
     assessment.status === 'attention' ||
     assessment.status === 'off_track';
   const VERDICT_COVERED_TITLES = new Set([
-    'Fat gain too fast',
-    'Lean mass trending down during bulk',
-    'Muscle gain below expected',
-    'Muscle loss detected',
-    'Successful recomp',
+    'Fat Gain Too Fast',
+    'Lean Mass Trending Down During Bulk',
+    'Muscle Gain Below Expected',
+    'Muscle Loss Detected',
+    'Successful Recomp',
   ]);
   const allRecommendations = userProfile?.heightCm
     ? generateCoachingRecommendations(
