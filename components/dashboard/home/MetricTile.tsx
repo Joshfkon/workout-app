@@ -26,7 +26,7 @@ export function MetricTile({ icon: TileIcon, label, href, onClick, action, accen
   const inner = (
     <>
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5 text-xs text-ink-2">
+        <div className="flex items-center gap-1.5 text-caption text-ink-2">
           <TileIcon size={14} aria-hidden="true" /> {label}
         </div>
         {action && href ? (

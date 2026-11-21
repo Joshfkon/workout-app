@@ -1047,7 +1047,7 @@ export default function MesocyclePage() {
                         )
                       }
                     >
-                      {isRegenerating ? 'Regenerating...' : 'Update & Regenerate'}
+                      {isRegenerating ? 'Regenerating...' : 'Update & regenerate'}
                     </Button>
                   </div>
                 </div>

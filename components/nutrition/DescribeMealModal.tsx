@@ -106,13 +106,13 @@ export function DescribeMealModal({
     key: 'calories' | 'protein' | 'carbs' | 'fat'
   ) => (
     <div className="flex-1 min-w-0">
-      <label className="block text-[11px] text-ink-3 mb-0.5">{label}</label>
+      <label className="block text-caption text-ink-3 mb-0.5">{label}</label>
       <input
         type="number"
         min={0}
         value={value}
         onChange={(e) => updateItem(index, { [key]: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-        className="w-full px-2 py-1 bg-card rounded-lg text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-action shadow-card"
+        className="w-full px-2 py-1 bg-card rounded-lg text-subhead text-ink focus:outline-none focus:ring-1 focus:ring-action shadow-card"
       />
     </div>
   );
@@ -127,7 +127,7 @@ export function DescribeMealModal({
               key={option.type}
               type="button"
               onClick={() => setMealType(option.type)}
-              className={`rounded-full px-2.5 py-1 text-[11px] transition-colors ${
+              className={`rounded-full px-2.5 py-1 text-caption transition-colors ${
                 mealType === option.type
                   ? 'bg-action text-on-action'
                   : 'bg-fill text-ink-2 hover:bg-sep'
@@ -146,11 +146,11 @@ export function DescribeMealModal({
               rows={4}
               maxLength={600}
               placeholder="2 eggs, toast with butter, and a glass of orange juice"
-              className="w-full px-3 py-2 bg-card rounded-lg text-[13px] text-ink placeholder-ink-3 resize-none focus:outline-none focus:ring-2 focus:ring-action shadow-card"
+              className="w-full px-3 py-2 bg-card rounded-lg text-subhead text-ink placeholder-ink-3 resize-none focus:outline-none focus:ring-2 focus:ring-action shadow-card"
             />
 
             {parseError && (
-              <p className="text-[13px] text-status-bad">{parseError}</p>
+              <p className="text-subhead text-status-bad">{parseError}</p>
             )}
 
             <Button
@@ -172,13 +172,13 @@ export function DescribeMealModal({
                     <Input
                       value={item.name}
                       onChange={(e) => updateItem(index, { name: e.target.value })}
-                      className="flex-1 text-[13px]"
+                      className="flex-1 text-subhead"
                       aria-label="Food name"
                     />
                     <Input
                       value={item.quantity}
                       onChange={(e) => updateItem(index, { quantity: e.target.value })}
-                      className="w-24 text-[13px]"
+                      className="w-24 text-subhead"
                       aria-label="Quantity"
                     />
                     <button
@@ -199,13 +199,13 @@ export function DescribeMealModal({
                 </div>
               ))}
               {items.length === 0 && (
-                <p className="text-center text-[13px] text-ink-3 py-4">
+                <p className="text-center text-subhead text-ink-3 py-4">
                   All items removed — start over to try again.
                 </p>
               )}
             </div>
 
-            {logError && <p className="text-[13px] text-status-bad">{logError}</p>}
+            {logError && <p className="text-subhead text-status-bad">{logError}</p>}
 
             <div className="flex gap-2">
               <Button

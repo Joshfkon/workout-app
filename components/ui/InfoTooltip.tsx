@@ -197,7 +197,7 @@ export const InfoTooltip = memo(function InfoTooltip({
         <div>
           <span className="font-semibold text-ink">{content.term}</span>
           {content.fullName && (
-            <span className="text-ink-2 text-sm ml-1">
+            <span className="text-ink-2 text-subhead ml-1">
               ({content.fullName})
             </span>
           )}
@@ -214,13 +214,13 @@ export const InfoTooltip = memo(function InfoTooltip({
       </div>
 
       {/* Short explanation */}
-      <p className="text-sm text-ink-2 leading-relaxed">
+      <p className="text-subhead text-ink-2 leading-relaxed">
         {content.shortExplanation}
       </p>
 
       {/* Long explanation (if available) */}
       {content.longExplanation && (
-        <p className="text-xs text-ink-2 mt-2 leading-relaxed">
+        <p className="text-caption text-ink-2 mt-2 leading-relaxed">
           {content.longExplanation}
         </p>
       )}
@@ -229,7 +229,7 @@ export const InfoTooltip = memo(function InfoTooltip({
       {content.learnMoreSlug && (
         <Link
           href={`/dashboard/learn/${content.learnMoreSlug}`}
-          className="inline-flex items-center gap-1 mt-3 text-xs text-action transition-colors"
+          className="inline-flex items-center gap-1 mt-3 text-caption text-action transition-colors"
           onClick={() => setIsOpen(false)}
         >
           Learn more

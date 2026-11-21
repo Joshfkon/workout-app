@@ -80,19 +80,19 @@ export function WeightLogModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={existingEntry ? 'Update Weight' : 'Log Weight'}
+      title={existingEntry ? 'Update weight' : 'Log weight'}
       size="sm"
     >
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
           {error && (
-            <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
+            <div className="p-3 text-subhead text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="weight" className="block text-sm font-medium text-ink-2 mb-1">
+            <label htmlFor="weight" className="block text-subhead font-medium text-ink-2 mb-1">
               Weight ({preferredUnit === 'kg' ? 'kg' : 'lbs'})
             </label>
             <Input
@@ -108,7 +108,7 @@ export function WeightLogModal({
           </div>
 
           <div>
-            <label htmlFor="date" className="block text-sm font-medium text-ink-2 mb-1">
+            <label htmlFor="date" className="block text-subhead font-medium text-ink-2 mb-1">
               Date
             </label>
             <Input
@@ -121,7 +121,7 @@ export function WeightLogModal({
           </div>
 
           <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-ink-2 mb-1">
+            <label htmlFor="notes" className="block text-subhead font-medium text-ink-2 mb-1">
               Notes (optional)
             </label>
             <textarea

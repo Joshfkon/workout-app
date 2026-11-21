@@ -135,7 +135,7 @@ export function SwipeableRow({ children, onDelete, deleteLabel = 'Delete' }: Swi
         <button
           onClick={handleDelete}
           disabled={isDeleting}
-          className="h-full w-full flex items-center justify-center text-white font-medium text-sm"
+          className="h-full w-full flex items-center justify-center text-white font-medium text-subhead"
         >
           {isDeleting ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

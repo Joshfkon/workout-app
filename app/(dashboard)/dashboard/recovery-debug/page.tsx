@@ -139,7 +139,7 @@ export default function RecoveryDebugPage() {
   }, [user?.id]);
 
   const header = (
-    <tr className="text-left text-[11px] uppercase tracking-wide text-ink-3">
+    <tr className="text-left text-caption text-ink-3">
       <th className="py-1 pr-3">Muscle</th>
       <th className="py-1 pr-3">Status</th>
       <th className="py-1 pr-3">Ready</th>
@@ -152,23 +152,23 @@ export default function RecoveryDebugPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-ink">Recovery debug</h1>
-        <p className="text-[13px] text-ink-2">
+        <h1 className="text-headline font-semibold text-ink">Recovery debug</h1>
+        <p className="text-subhead text-ink-2">
           Live output of the mover model and the stabilizer channel over the last week of
           completed sessions{isLoading ? ' (history loading…)' : ''}.
         </p>
       </div>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-ink mb-2">
+        <h2 className="text-subhead font-semibold text-ink mb-2">
           Stabilizer channel
-          <span className="ml-2 font-normal text-[12px] text-ink-3">
+          <span className="ml-2 font-normal text-caption text-ink-3">
             warn below {(config.stabilizerReadinessThreshold * 100).toFixed(0)}% ready at ≥
             {(config.stabilizerIntensityThreshold * 100).toFixed(0)}% intensity
           </span>
         </h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-subhead">
             <thead>{header}</thead>
             <tbody>
               {stabilizerResults.map(({ muscle, result }) => (
@@ -186,9 +186,9 @@ export default function RecoveryDebugPage() {
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-ink mb-2">Mover model (all muscles)</h2>
+        <h2 className="text-subhead font-semibold text-ink mb-2">Mover model (all muscles)</h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-subhead">
             <thead>{header}</thead>
             <tbody>
               {moverResults.map(({ muscle, result }) => (
@@ -204,16 +204,16 @@ export default function RecoveryDebugPage() {
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-ink mb-2">
+        <h2 className="text-subhead font-semibold text-ink mb-2">
           Recent stabilizer warnings
         </h2>
         {warningEvents.length === 0 ? (
-          <p className="text-[13px] text-ink-3">No warnings recorded yet.</p>
+          <p className="text-subhead text-ink-3">No warnings recorded yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-subhead">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-ink-3">
+                <tr className="text-left text-caption text-ink-3">
                   <th className="py-1 pr-3">When</th>
                   <th className="py-1 pr-3">Muscle</th>
                   <th className="py-1 pr-3">Ready</th>

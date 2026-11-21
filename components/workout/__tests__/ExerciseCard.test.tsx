@@ -406,13 +406,13 @@ describe('ExerciseCard', () => {
 
       // Tapping the meta line expands the history detail
       await user.click(metaLine);
-      expect(screen.getByText('Last Workout')).toBeInTheDocument();
+      expect(screen.getByText('Last workout')).toBeInTheDocument();
       expect(screen.getByText(/Estimated 1RM/)).toBeInTheDocument();
       expect(screen.getByText(/5 sessions/)).toBeInTheDocument();
 
       // Tapping again collapses it
       await user.click(metaLine);
-      expect(screen.queryByText('Last Workout')).not.toBeInTheDocument();
+      expect(screen.queryByText('Last workout')).not.toBeInTheDocument();
     });
 
     it('leads the meta line with the calibration tag so phone truncation cannot hide it', () => {
@@ -1583,7 +1583,7 @@ describe('ExerciseCard', () => {
       await user.click(screen.getByRole('button', { name: 'Add set feedback' }));
 
       // Form rating
-      await user.click(screen.getByText('Some Breakdown'));
+      await user.click(screen.getByText('Some breakdown'));
 
       // Discomfort: expand the joint picker — two taps (joint, then severity)
       await user.click(screen.getByText(/Log injury or discomfort/));
@@ -2074,7 +2074,7 @@ describe('ExerciseCard', () => {
 
     it('hides the warmup protocol while no weight is known or entered', () => {
       render(<ExerciseCard {...uncalibratedProps} />);
-      expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+      expect(screen.queryByText('Warmup protocol')).not.toBeInTheDocument();
     });
 
     it('surfaces a full protocol computed from the weight typed into the set input', async () => {
@@ -2083,11 +2083,11 @@ describe('ExerciseCard', () => {
 
       await typeWeight(user, '100');
 
-      expect(screen.getByText('Warmup Protocol')).toBeInTheDocument();
+      expect(screen.getByText('Warmup protocol')).toBeInTheDocument();
 
       // Expand the table and check the protocol was regenerated for 100 kg
       // (multi-set barbell ramp), not the single-set weight-0 protocol.
-      await user.click(screen.getByText('Warmup Protocol'));
+      await user.click(screen.getByText('Warmup protocol'));
       expect(screen.getByText('W1')).toBeInTheDocument();
       expect(screen.getByText('W3')).toBeInTheDocument();
     });
@@ -2096,8 +2096,8 @@ describe('ExerciseCard', () => {
       const user = userEvent.setup();
       render(<ExerciseCard {...uncalibratedProps} workingWeight={100} />);
 
-      expect(screen.getByText('Warmup Protocol')).toBeInTheDocument();
-      await user.click(screen.getByText('Warmup Protocol'));
+      expect(screen.getByText('Warmup protocol')).toBeInTheDocument();
+      await user.click(screen.getByText('Warmup protocol'));
       expect(screen.getByText('W1')).toBeInTheDocument();
       expect(screen.queryByText('W2')).not.toBeInTheDocument();
     });
@@ -2108,7 +2108,7 @@ describe('ExerciseCard', () => {
 
       await typeWeight(user, '100');
 
-      expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+      expect(screen.queryByText('Warmup protocol')).not.toBeInTheDocument();
     });
   });
 
@@ -2125,7 +2125,7 @@ describe('ExerciseCard', () => {
     };
 
     const expandWarmups = async (user: ReturnType<typeof userEvent.setup>) => {
-      await user.click(screen.getByText('Warmup Protocol'));
+      await user.click(screen.getByText('Warmup protocol'));
     };
 
     it('opens the calculator pre-filled with the row load in kg', async () => {
@@ -2284,7 +2284,7 @@ describe('warmup decision rendering (warmup engine)', () => {
     expect(screen.getByTestId('warmup-decision-none')).toHaveTextContent(
       /No warmup needed — 7 prior sets/
     );
-    expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+    expect(screen.queryByText('Warmup protocol')).not.toBeInTheDocument();
   });
 
   it('renders a targeted ramp set with its stated reason', async () => {
@@ -2292,8 +2292,8 @@ describe('warmup decision rendering (warmup engine)', () => {
     render(<ExerciseCard {...decisionProps} warmupDecision={rampDecision} />);
 
     // Header names the decision kind, not a generic protocol
-    expect(screen.getByText('Ramp Set')).toBeInTheDocument();
-    await user.click(screen.getByText('Ramp Set'));
+    expect(screen.getByText('Ramp set')).toBeInTheDocument();
+    await user.click(screen.getByText('Ramp set'));
 
     // Decision reason + per-set reason are visible
     expect(screen.getByTestId('warmup-decision-reason')).toHaveTextContent(/rotation not yet loaded today/);
@@ -2315,7 +2315,7 @@ describe('warmup decision rendering (warmup engine)', () => {
       />
     );
 
-    await user.click(screen.getByText('Ramp Set'));
+    await user.click(screen.getByText('Ramp set'));
     // The completion toggle is the last cell's button in the W1 row
     const rampRow = screen.getByText('W1').closest('tr')!;
     const toggle = Array.from(rampRow.querySelectorAll('button')).pop()!;
@@ -2337,7 +2337,7 @@ describe('warmup decision rendering (warmup engine)', () => {
         warmupDecision={rampDecision}
       />
     );
-    expect(screen.getByText('Ramp Set')).toBeInTheDocument();
+    expect(screen.getByText('Ramp set')).toBeInTheDocument();
     expect(screen.getByText(/\(0\/1\)/)).toBeInTheDocument();
   });
 });
@@ -2379,7 +2379,7 @@ describe('warmup decision with unknown working weight (Codex review fix)', () =>
 
     // 30 kg belongs in the two-step 50/75 ladder, not the 60 kg three-step one
     await typeWeight(user, '30');
-    await user.click(screen.getByText('Warmup Protocol'));
+    await user.click(screen.getByText('Warmup protocol'));
 
     expect(screen.getByText('W1')).toBeInTheDocument();
     expect(screen.getByText('W2')).toBeInTheDocument();
@@ -2442,7 +2442,7 @@ describe('bodyweight warmup loads (added weight, not effective load)', () => {
     const user = userEvent.setup();
     render(<ExerciseCard {...bwProps} warmupDecision={rampDecision} />);
 
-    await user.click(screen.getByText('Ramp Set'));
+    await user.click(screen.getByText('Ramp set'));
     const rampRow = screen.getByText('W1').closest('tr')!;
 
     // The old behaviour printed 60% of the page's target weight (51 kg).
@@ -2466,7 +2466,7 @@ describe('bodyweight warmup loads (added weight, not effective load)', () => {
     // Last session was BW+20 → the card opens in Weighted mode with 20 seeded,
     // so the working set is 118 kg and 60% of that is 70.8 kg — below the
     // lifter's 98 kg, so the ramp is bodyweight, with the belt for the top set.
-    await user.click(screen.getByText('Ramp Set'));
+    await user.click(screen.getByText('Ramp set'));
     expect(screen.getByText('W1').closest('tr')).toHaveTextContent('BW');
 
     // A 95% step, by contrast, IS loadable: BW + 14 kg.
@@ -2703,7 +2703,7 @@ describe('warmup checkmark persistence (~15 min warmth window)', () => {
   });
 
   const expandWarmups = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByText('Warmup Protocol'));
+    await user.click(screen.getByText('Warmup protocol'));
   };
 
   it('keeps checkmarks when switching to another exercise and back', async () => {

@@ -95,9 +95,9 @@ export function UnfinishedWorkoutBanner({
 // ============================================================
 
 const HERO_CTA_CLASS =
-  'flex-1 py-3 rounded-xl bg-action text-on-action text-[15px] font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
+  'flex-1 py-3 rounded-xl bg-action text-on-action text-body font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
 const HERO_SECONDARY_CTA_CLASS =
-  'flex-1 py-3 rounded-xl bg-fill text-ink text-[15px] font-semibold hover:bg-sep active:scale-[0.98] transition-all disabled:cursor-not-allowed';
+  'flex-1 py-3 rounded-xl bg-fill text-ink text-body font-semibold hover:bg-sep active:scale-[0.98] transition-all disabled:cursor-not-allowed';
 const HERO_SPARKLE_CLASS =
   'w-12 self-stretch rounded-xl bg-card border border-sep flex items-center justify-center hover:bg-fill/70 active:scale-95 transition-all disabled:opacity-60';
 
@@ -356,7 +356,7 @@ function MacroTile({
               style={{ width: `${pct}%` }}
             />
           </span>
-          <span className={`block text-[11px] font-medium mt-1.5 ${tone.status}`}>
+          <span className={`block text-caption font-medium mt-1.5 ${tone.status}`}>
             {verdict.suppressed ? ' ' : verdict.status}
           </span>
         </>

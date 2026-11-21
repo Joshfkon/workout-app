@@ -105,7 +105,7 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
           {APP_NAME.split('').map((letter, i) => (
             <span
               key={i}
-              className="text-3xl md:text-4xl font-black text-ink tracking-wider splash-letter"
+              className="text-large-title md:text-4xl font-black text-ink tracking-wider splash-letter"
               style={{ animationDelay: `${0.08 + i * 0.015}s` }}
             >
               {letter}
@@ -114,8 +114,8 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
         </div>
 
         {/* Tagline */}
-        <p className="mt-3 text-sm text-action font-medium tracking-widest uppercase splash-tagline">
-          Train Smarter
+        <p className="mt-3 text-subhead text-action font-medium splash-tagline">
+          Train smarter
         </p>
 
         {/* Loading bar */}

@@ -54,7 +54,7 @@ export function ProgressPhotosHero({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Progress Photos</CardTitle>
+            <CardTitle>Progress photos</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
@@ -80,15 +80,15 @@ export function ProgressPhotosHero({
                 />
               </svg>
             </div>
-            <h3 className="text-sm font-semibold text-ink mb-1">
-              Start Tracking Your Visual Progress
+            <h3 className="text-subhead font-semibold text-ink mb-1">
+              Start tracking your visual progress
             </h3>
-            <p className="text-xs text-ink-2 mb-4 max-w-sm mx-auto">
+            <p className="text-caption text-ink-2 mb-4 max-w-sm mx-auto">
               Photos are the most honest progress tracker. Take them in consistent lighting
               and poses to see changes the scale might miss.
             </p>
             <Button size="sm" onClick={onAddPhoto}>
-              Take Your First Photo
+              Take your first photo
             </Button>
           </div>
         </CardContent>
@@ -101,9 +101,9 @@ export function ProgressPhotosHero({
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1">
-            <CardTitle>Progress Photos</CardTitle>
+            <CardTitle>Progress photos</CardTitle>
             {latest && (
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-caption text-ink-2">
                 <span>{formatDate(latest.photoDate)}</span>
                 {latest.weightKg != null && (
                   <>

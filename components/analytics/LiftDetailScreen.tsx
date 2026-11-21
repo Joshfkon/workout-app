@@ -116,7 +116,7 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
             Trends cover your most-trained lifts over the last 12 weeks.
           </p>
           <Link href={PROGRESS_HREF} className="mt-3 inline-block text-body font-semibold text-action">
-            Back to Progress
+            Back to progress
           </Link>
         </div>
       </div>

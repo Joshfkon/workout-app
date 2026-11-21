@@ -91,7 +91,7 @@ export const PlateCalculatorModal = memo(function PlateCalculatorModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Plate Calculator"
+      title="Plate calculator"
       description="Calculate which plates to load on each side of the barbell or machine"
       size="lg"
     >

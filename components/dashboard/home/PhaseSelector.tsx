@@ -123,13 +123,13 @@ export function PhaseSelector({ phase, onPhaseChanged, offerPlanRebuild = true }
       >
         {staleMesocycle ? (
           <>
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               Phase updated to <span className="font-medium text-ink">{PHASE_META[selected].label.toLowerCase()}</span>.
               Your current training block{staleMesocycle.name ? (
                 <> &ldquo;<span className="font-medium text-ink">{staleMesocycle.name}</span>&rdquo;</>
               ) : null} was planned for your old phase &mdash; its split, volume, and rep ranges won&apos;t match the new one.
             </p>
-            <p className="mt-2 text-xs text-ink-2">
+            <p className="mt-2 text-caption text-ink-2">
               Rebuilding starts a fresh block for your new phase. Your workout history and progress are kept.
             </p>
             <div className="mt-5 flex items-center justify-end gap-2">
@@ -159,8 +159,8 @@ export function PhaseSelector({ phase, onPhaseChanged, offerPlanRebuild = true }
                     : 'border-sep bg-card hover:border-sep'
                 }`}
               >
-                <span className="block text-[14px] font-medium text-ink">{option.label}</span>
-                <span className="block text-xs text-ink-2 mt-0.5">{option.description}</span>
+                <span className="block text-body font-medium text-ink">{option.label}</span>
+                <span className="block text-caption text-ink-2 mt-0.5">{option.description}</span>
               </button>
             );
           })}
@@ -173,12 +173,12 @@ export function PhaseSelector({ phase, onPhaseChanged, offerPlanRebuild = true }
             onChange={(e) => setSyncTargets(e.target.checked)}
             className="mt-0.5 h-4 w-4 rounded border-sep bg-fill accent-action"
           />
-          <span className="text-xs text-ink-2">
+          <span className="text-caption text-ink-2">
             Update my calorie &amp; macro targets to match the new phase
           </span>
         </label>
 
-        {error && <p className="mt-3 text-xs text-status-bad">{error}</p>}
+        {error && <p className="mt-3 text-caption text-status-bad">{error}</p>}
 
         <div className="mt-5 flex items-center justify-end gap-2">
           <Button size="sm" variant="ghost" onClick={() => setIsOpen(false)} disabled={isSaving}>

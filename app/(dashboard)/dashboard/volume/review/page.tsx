@@ -41,7 +41,7 @@ function VerdictBadge({ verdict }: { verdict: VolumeVerdict }) {
   }, [verdict]);
 
   return (
-    <span className={`px-2 py-1 text-xs font-medium rounded border ${config.className}`}>
+    <span className={`px-2 py-1 text-caption font-medium rounded border ${config.className}`}>
       {config.icon} {config.text}
     </span>
   );

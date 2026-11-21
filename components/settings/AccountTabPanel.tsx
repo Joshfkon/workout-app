@@ -107,7 +107,7 @@ export function AccountTabPanel() {
             </div>
 
             {promoResult && (
-              <div className={`mt-3 p-3 rounded-lg text-sm ${
+              <div className={`mt-3 p-3 rounded-lg text-subhead ${
                 promoResult.success
                   ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
                   : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'

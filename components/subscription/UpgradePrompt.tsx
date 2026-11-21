@@ -36,7 +36,7 @@ const FEATURE_INFO: Record<Feature, { title: string; description: string; requir
     requiredTier: 'pro',
   },
   'ai-coaching': {
-    title: 'AI Coach',
+    title: 'AI coach',
     description: 'Get personalized training advice from an AI coach that analyzes your actual workout data, body composition, and training phase.',
     requiredTier: 'elite',
   },

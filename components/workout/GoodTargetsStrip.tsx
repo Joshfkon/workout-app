@@ -61,20 +61,20 @@ export function GoodTargetsStrip({
     <>
       <div className="mb-2 rounded-lg bg-fill/60 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] uppercase tracking-wide text-ink-3">
+          <p className="text-caption text-ink-3">
             {previewing ? `Good targets in ${formatHoursAhead(hoursAhead)}` : 'Good targets today'}
           </p>
           {previewing && (
             <button
               onClick={() => onHoursAheadChange(0)}
-              className="flex-shrink-0 text-[11px] font-medium text-action"
+              className="flex-shrink-0 text-caption font-medium text-action"
               data-testid="readiness-time-reset"
             >
               Back to now
             </button>
           )}
         </div>
-        <p className="text-sm text-ink mt-0.5" data-testid="readiness-targets">
+        <p className="text-subhead text-ink mt-0.5" data-testid="readiness-targets">
           {targets.length > 0 ? (
             targets.map((t, i) => (
               <span key={`${t.muscle}-${t.isChild ? 'c' : 'r'}`}>
@@ -122,7 +122,7 @@ export function GoodTargetsStrip({
 
       {previewing && (
         <p
-          className="mb-2 text-[11px] leading-relaxed text-ink-3"
+          className="mb-2 text-caption leading-relaxed text-ink-3"
           data-testid="readiness-preview-note"
         >
           Projected for {futureLabel}, assuming nothing new is logged: recovery

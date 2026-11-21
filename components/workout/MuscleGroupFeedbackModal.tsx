@@ -5,7 +5,7 @@
  *
  * Replaces the per-exercise pump/workload chip rows: instead of asking after
  * every exercise, the questions are asked ONCE per muscle group trained, in
- * the confirmation popup that opens when the user taps "Finish Workout".
+ * the confirmation popup that opens when the user taps "Finish workout".
  *
  * Doubles as the finish confirmation (finishing is easy to hit by accident),
  * so it always shows the sets-logged message and Keep Training / Finish
@@ -32,7 +32,7 @@ export type MuscleFeedbackRatings = Partial<
 
 export interface MuscleGroupFeedbackModalProps {
   isOpen: boolean;
-  /** "Keep Training" — closes without finishing. */
+  /** "Keep training" — closes without finishing. */
   onClose: () => void;
   /** Finish the workout, carrying whatever was rated (possibly nothing). */
   onConfirm: (ratings: MuscleFeedbackRatings) => void;
@@ -164,7 +164,7 @@ export function MuscleGroupFeedbackModal({
             Finish
           </Button>
           <Button variant="tertiary" className="w-full" onClick={onClose}>
-            Keep Training
+            Keep training
           </Button>
         </div>
       </div>

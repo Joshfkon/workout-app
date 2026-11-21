@@ -23,12 +23,12 @@ export function FFMIGauge({ ffmiResult, size = 'md' }: FFMIGaugeProps) {
   const sizeConfig = useMemo(() => {
     switch (size) {
       case 'sm':
-        return { width: 160, height: 100, strokeWidth: 8, fontSize: 'text-xl' };
+        return { width: 160, height: 100, strokeWidth: 8, fontSize: 'text-headline' };
       case 'lg':
         return { width: 280, height: 160, strokeWidth: 14, fontSize: 'text-4xl' };
       case 'md':
       default:
-        return { width: 220, height: 130, strokeWidth: 12, fontSize: 'text-3xl' };
+        return { width: 220, height: 130, strokeWidth: 12, fontSize: 'text-large-title' };
     }
   }, [size]);
   
@@ -158,7 +158,7 @@ export function FFMIGauge({ ffmiResult, size = 'md' }: FFMIGaugeProps) {
               y={y}
               textAnchor="middle"
               dominantBaseline="middle"
-              className="fill-ink-3 text-[10px]"
+              className="fill-ink-3 text-caption"
             >
               {value}
             </text>
@@ -171,13 +171,13 @@ export function FFMIGauge({ ffmiResult, size = 'md' }: FFMIGaugeProps) {
         <div className={`${sizeConfig.fontSize} font-bold ${getFFMIColor(classification)}`}>
           {ffmi}
         </div>
-        <div className="text-sm text-ink-2 mt-1">
+        <div className="text-subhead text-ink-2 mt-1">
           {getFFMILabel(classification)}
         </div>
-        <div className="text-xs text-ink-3 mt-0.5">
+        <div className="text-caption text-ink-3 mt-0.5">
           {percentOfLimit}% of natural limit
         </div>
-        <div className="text-[10px] text-ink-3 mt-0.5">
+        <div className="text-caption text-ink-3 mt-0.5">
           Normalized (height-adj.): {normalizedFfmi}
         </div>
       </div>

@@ -61,33 +61,33 @@ const CustomTooltip = memo(function CustomTooltip({
   if (!data?.hasData) {
     return (
       <div className="bg-fill border border-sep rounded-lg p-3 shadow-lg">
-        <p className="text-sm font-medium text-ink">{label}</p>
-        <p className="text-xs text-ink-2">No data logged</p>
+        <p className="text-subhead font-medium text-ink">{label}</p>
+        <p className="text-caption text-ink-2">No data logged</p>
       </div>
     );
   }
 
   return (
     <div className="bg-fill border border-sep rounded-lg p-3 shadow-lg min-w-[140px]">
-      <p className="text-sm font-medium text-ink mb-2">{label}</p>
+      <p className="text-subhead font-medium text-ink mb-2">{label}</p>
       <div className="space-y-1">
         <div className="flex justify-between gap-4">
-          <span className="text-xs text-action">Calories</span>
-          <span className="text-xs font-medium text-ink">
+          <span className="text-caption text-action">Calories</span>
+          <span className="text-caption font-medium text-ink">
             {Math.round(data.calories)}
           </span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-xs text-action">Protein</span>
-          <span className="text-xs font-medium text-ink">{Math.round(data.protein)}g</span>
+          <span className="text-caption text-action">Protein</span>
+          <span className="text-caption font-medium text-ink">{Math.round(data.protein)}g</span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-xs text-status-warn">Carbs</span>
-          <span className="text-xs font-medium text-ink">{Math.round(data.carbs)}g</span>
+          <span className="text-caption text-status-warn">Carbs</span>
+          <span className="text-caption font-medium text-ink">{Math.round(data.carbs)}g</span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-xs text-status-bad">Fat</span>
-          <span className="text-xs font-medium text-ink">{Math.round(data.fat)}g</span>
+          <span className="text-caption text-status-bad">Fat</span>
+          <span className="text-caption font-medium text-ink">{Math.round(data.fat)}g</span>
         </div>
       </div>
     </div>
@@ -239,7 +239,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Nutrition Trends</CardTitle>
+          <CardTitle>Nutrition trends</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-64 flex items-center justify-center">
@@ -255,14 +255,14 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Nutrition Trends</CardTitle>
+          <CardTitle>Nutrition trends</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-12">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">
               <IconChartBar size={28} className="text-ink-2" aria-hidden="true" />
             </div>
-            <h3 className="text-lg font-semibold text-ink mb-2">
+            <h3 className="text-headline font-semibold text-ink mb-2">
               No nutrition data yet
             </h3>
             <p className="text-ink-3 max-w-md mx-auto">
@@ -279,9 +279,9 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="flex items-center gap-2">
-            Nutrition Trends
+            Nutrition trends
             {averages && (
-              <span className="text-sm font-normal text-ink-2">
+              <span className="text-subhead font-normal text-ink-2">
                 ({averages.daysTracked} days tracked)
               </span>
             )}
@@ -291,7 +291,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
             <div className="flex rounded-lg bg-fill p-0.5">
               <button
                 onClick={() => setViewMode('calories')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                className={`px-3 py-1.5 text-caption font-medium rounded-md transition-colors ${
                   viewMode === 'calories'
                     ? 'bg-action text-on-action'
                     : 'text-ink-2 hover:text-ink'
@@ -301,7 +301,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
               </button>
               <button
                 onClick={() => setViewMode('macros')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                className={`px-3 py-1.5 text-caption font-medium rounded-md transition-colors ${
                   viewMode === 'macros'
                     ? 'bg-action text-on-action'
                     : 'text-ink-2 hover:text-ink'
@@ -316,7 +316,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                 <button
                   key={range.days}
                   onClick={() => setDays(range.days)}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-2.5 py-1.5 text-caption font-medium rounded-md transition-colors ${
                     days === range.days
                       ? 'bg-action text-on-action'
                       : 'text-ink-2 hover:text-ink'
@@ -334,20 +334,20 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
         {averages && (
           <div className="grid grid-cols-4 gap-3 mb-4">
             <div className="text-center p-2 bg-fill/50 rounded-lg">
-              <div className="text-xs text-ink-3">Avg Calories</div>
-              <div className="text-lg font-semibold text-action">{averages.calories}</div>
+              <div className="text-caption text-ink-3">Avg calories</div>
+              <div className="text-headline font-semibold text-action">{averages.calories}</div>
             </div>
             <div className="text-center p-2 bg-fill/50 rounded-lg">
-              <div className="text-xs text-ink-3">Avg Protein</div>
-              <div className="text-lg font-semibold text-action">{averages.protein}g</div>
+              <div className="text-caption text-ink-3">Avg protein</div>
+              <div className="text-headline font-semibold text-action">{averages.protein}g</div>
             </div>
             <div className="text-center p-2 bg-fill/50 rounded-lg">
-              <div className="text-xs text-ink-3">Avg Carbs</div>
-              <div className="text-lg font-semibold text-status-warn">{averages.carbs}g</div>
+              <div className="text-caption text-ink-3">Avg carbs</div>
+              <div className="text-headline font-semibold text-status-warn">{averages.carbs}g</div>
             </div>
             <div className="text-center p-2 bg-fill/50 rounded-lg">
-              <div className="text-xs text-ink-3">Avg Fat</div>
-              <div className="text-lg font-semibold text-status-bad">{averages.fat}g</div>
+              <div className="text-caption text-ink-3">Avg fat</div>
+              <div className="text-headline font-semibold text-status-bad">{averages.fat}g</div>
             </div>
           </div>
         )}
@@ -475,7 +475,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
         {/* Interpretation */}
         {averages && targets?.calories && (
           <div className="mt-4 p-3 bg-fill/30 rounded-lg">
-            <p className="text-xs text-ink-2">
+            <p className="text-caption text-ink-2">
               {averages.calories > targets.calories ? (
                 <>
                   <span className="text-status-warn font-medium">Above target: </span>

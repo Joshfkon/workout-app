@@ -66,8 +66,8 @@ export function ProgressBar({
     <div className="w-full">
       {(label || valueLabel) && (
         <div className="flex items-center justify-between mb-1">
-          {label && <span className="text-xs text-ink-2">{label}</span>}
-          {valueLabel && <span className="text-xs font-medium text-ink">{valueLabel}</span>}
+          {label && <span className="text-caption text-ink-2">{label}</span>}
+          {valueLabel && <span className="text-caption font-medium text-ink">{valueLabel}</span>}
         </div>
       )}
       <div className={`relative w-full bg-fill rounded-full overflow-hidden ${sizeClasses[size]}`}>
@@ -90,7 +90,7 @@ export function ProgressBar({
       </div>
       {showPercentage && (
         <div className="mt-1 text-right">
-          <span className="text-[10px] text-ink-3">{Math.round(percentage)}%</span>
+          <span className="text-caption text-ink-3">{Math.round(percentage)}%</span>
         </div>
       )}
     </div>
@@ -141,8 +141,8 @@ export function RatioProgressBar({
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-ink-2">{label}</span>
-        <div className="flex items-center gap-2 text-xs">
+        <span className="text-caption text-ink-2">{label}</span>
+        <div className="flex items-center gap-2 text-caption">
           <span className={`font-medium ${isOptimal ? 'text-status-ok' : isBelowOptimal ? 'text-status-warn' : 'text-ink'}`}>
             {current.toFixed(2)}
           </span>
@@ -240,12 +240,12 @@ export function BenchmarkBar({
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-ink-2">{label}</span>
+        <span className="text-caption font-medium text-ink-2">{label}</span>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${tierColors[currentTier].replace('bg-', 'text-').replace('-500', '-400')}`}>
+          <span className={`text-caption font-medium ${tierColors[currentTier].replace('bg-', 'text-').replace('-500', '-400')}`}>
             {current.toFixed(1)} {unit}
           </span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded ${tierColors[currentTier]} text-white`}>
+          <span className={`text-caption px-1.5 py-0.5 rounded ${tierColors[currentTier]} text-white`}>
             {tierLabels[currentTier]}
           </span>
         </div>
@@ -288,7 +288,7 @@ export function BenchmarkBar({
           style={{ left: `${toPercent(current)}%`, transform: 'translateX(-50%)' }}
         >
           <div className={`w-1 h-full ${tierColors[currentTier]}`} />
-          <div className="absolute -bottom-0.5 text-[10px] text-white font-bold">▲</div>
+          <div className="absolute -bottom-0.5 text-caption text-white font-bold">▲</div>
         </div>
       </div>
     </div>
@@ -328,11 +328,11 @@ export function ProportionsBenchmarkBar({
 
   // Zone colors based on status
   const statusConfig = {
-    far_below: { color: 'bg-status-bad', textColor: 'text-status-bad', label: 'Needs Focus' },
-    below: { color: 'bg-status-warn', textColor: 'text-status-warn', label: 'Below Target' },
+    far_below: { color: 'bg-status-bad', textColor: 'text-status-bad', label: 'Needs focus' },
+    below: { color: 'bg-status-warn', textColor: 'text-status-warn', label: 'Below target' },
     optimal: { color: 'bg-status-ok', textColor: 'text-status-ok', label: 'Optimal' },
-    above: { color: 'bg-action', textColor: 'text-action', label: 'Above Target' },
-    far_above: { color: 'bg-ink-3', textColor: 'text-ink-2', label: 'Well Developed' },
+    above: { color: 'bg-action', textColor: 'text-action', label: 'Above target' },
+    far_above: { color: 'bg-ink-3', textColor: 'text-ink-2', label: 'Well developed' },
   };
 
   const config = statusConfig[status];
@@ -340,13 +340,13 @@ export function ProportionsBenchmarkBar({
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-ink-2">{label}</span>
+        <span className="text-caption font-medium text-ink-2">{label}</span>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${config.textColor}`}>
+          <span className={`text-caption font-medium ${config.textColor}`}>
             {current.toFixed(2)}
           </span>
-          <span className="text-[10px] text-ink-3">→ {target.toFixed(2)}</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded ${config.color} text-white`}>
+          <span className="text-caption text-ink-3">→ {target.toFixed(2)}</span>
+          <span className={`text-caption px-1.5 py-0.5 rounded ${config.color} text-white`}>
             {config.label}
           </span>
         </div>
@@ -396,7 +396,7 @@ export function ProportionsBenchmarkBar({
           style={{ left: `${toPercent(current)}%`, transform: 'translateX(-50%)' }}
         >
           <div className={`w-1 h-full ${config.color}`} />
-          <div className={`absolute -bottom-0.5 text-[10px] ${config.textColor} font-bold`}>▲</div>
+          <div className={`absolute -bottom-0.5 text-caption ${config.textColor} font-bold`}>▲</div>
         </div>
       </div>
     </div>
@@ -483,12 +483,12 @@ export function ProgressRing({
       {(showValue || label) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {showValue && (
-            <span className="text-sm font-bold text-ink">
+            <span className="text-subhead font-bold text-ink">
               {Math.round(value)}%
             </span>
           )}
           {label && (
-            <span className="text-[10px] text-ink-3">{label}</span>
+            <span className="text-caption text-ink-3">{label}</span>
           )}
         </div>
       )}
@@ -518,9 +518,9 @@ export function ScoreGauge({
   onShowBreakdown,
 }: ScoreGaugeProps) {
   const sizeConfig = {
-    sm: { ringSize: 48, fontSize: 'text-sm', labelSize: 'text-[9px]' },
-    md: { ringSize: 80, fontSize: 'text-xl', labelSize: 'text-xs' },
-    lg: { ringSize: 120, fontSize: 'text-3xl', labelSize: 'text-sm' },
+    sm: { ringSize: 48, fontSize: 'text-subhead', labelSize: 'text-[9px]' },
+    md: { ringSize: 80, fontSize: 'text-headline', labelSize: 'text-caption' },
+    lg: { ringSize: 120, fontSize: 'text-large-title', labelSize: 'text-subhead' },
   };
 
   const config = sizeConfig[size];
@@ -553,7 +553,7 @@ export function ScoreGauge({
       {onShowBreakdown && (
         <button
           onClick={onShowBreakdown}
-          className="mt-1 text-[10px] text-action"
+          className="mt-1 text-caption text-action"
         >
           View breakdown
         </button>

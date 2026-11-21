@@ -73,9 +73,9 @@ export function LoadingAnimation({
   };
 
   const textSizes = {
-    sm: 'text-xs',
-    md: 'text-sm',
-    lg: 'text-base',
+    sm: 'text-caption',
+    md: 'text-subhead',
+    lg: 'text-body',
   };
 
   return (
@@ -408,8 +408,8 @@ export function LoadingAnimation({
       )}
 
       {showTip && tip && (
-        <p className="text-xs text-ink-3 max-w-xs text-center italic">
-          💡 {tip}
+        <p className="text-caption text-ink-3 max-w-xs text-center italic">
+          {tip}
         </p>
       )}
     </div>

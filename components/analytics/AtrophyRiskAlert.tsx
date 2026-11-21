@@ -40,7 +40,7 @@ export function AtrophyRiskAlert({
     return 'bg-status-warn-tint';
   };
 
-  // Match the "This Week vs MEV" card's labels (e.g. glute_med -> "Glute Med",
+  // Match the "This week vs MEV" card's labels (e.g. glute_med -> "Glute Med",
   // lats -> "Lats") so the two cards read identically for the same muscle.
   const formatMuscleName = (name: string) => {
     return (
@@ -141,7 +141,7 @@ export function AtrophyRiskAlert({
         {/* Expand/collapse toggle */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`mt-2 flex items-center gap-1 text-sm ${
+          className={`mt-2 flex items-center gap-1 text-subhead ${
             isOnCut ? 'text-status-bad hover:text-status-bad' : 'text-action'
           } transition-colors`}
         >
@@ -165,7 +165,7 @@ export function AtrophyRiskAlert({
                 return (
                   <div
                     key={muscle.muscleGroup}
-                    className={`px-2.5 py-1.5 rounded-lg text-sm ${
+                    className={`px-2.5 py-1.5 rounded-lg text-subhead ${
                       isOnCut
                         ? 'bg-status-bad/10 border border-status-bad/20'
                         : 'bg-status-warn/10 border border-status-warn/20'
@@ -177,7 +177,7 @@ export function AtrophyRiskAlert({
                     <span className="text-ink-3 ml-1.5">
                       {muscle.totalSets}/{muscle.landmarks.mev} sets
                     </span>
-                    <span className={`text-xs ml-1 ${isOnCut ? 'text-status-bad' : 'text-status-warn'}`}>
+                    <span className={`text-caption ml-1 ${isOnCut ? 'text-status-bad' : 'text-status-warn'}`}>
                       (+{deficit} needed)
                     </span>
                     {/* Which exercises fed this muscle, so a miscount is visible

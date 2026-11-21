@@ -38,7 +38,7 @@ export function EmptyState({ icon, title, description, action, className }: Empt
             )}
           </div>
         )}
-        <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        <h2 className="text-headline font-semibold text-ink">{title}</h2>
         <p className="text-ink-3 mt-2 max-w-md mx-auto">
           {description}
         </p>

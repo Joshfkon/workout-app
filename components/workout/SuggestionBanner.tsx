@@ -127,7 +127,7 @@ export function SuggestionBanner({
   return (
     <div
       className={`flex items-start gap-2 rounded-lg px-3 py-2 transition-colors ${
-        showWarning ? 'bg-amber-500/10' : 'bg-action/10'
+        showWarning ? 'bg-status-warn-tint' : 'bg-action/10'
       }`}
     >
       {showWarning ? (
@@ -147,7 +147,7 @@ export function SuggestionBanner({
           visible layer is exposed to assistive tech. */}
       <div className="flex-1 min-w-0 grid">
         <p
-          className={`col-start-1 row-start-1 text-[12px] leading-snug text-action ${
+          className={`col-start-1 row-start-1 text-caption leading-snug text-action ${
             showWarning ? 'invisible' : ''
           }`}
           aria-hidden={showWarning}
@@ -164,7 +164,7 @@ export function SuggestionBanner({
             </span>
           )}
           {roleTag ? (
-            <span className="ml-1.5 rounded bg-action/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-action">
+            <span className="ml-1.5 rounded bg-action/20 px-1.5 py-0.5 text-caption text-action">
               {roleTag}
             </span>
           ) : null}
@@ -175,7 +175,7 @@ export function SuggestionBanner({
             data-testid={showWarning ? 'effort-warning' : undefined}
             aria-hidden={!showWarning}
             aria-live="polite"
-            className={`col-start-1 row-start-1 text-[12px] leading-snug font-medium text-status-warn ${
+            className={`col-start-1 row-start-1 text-caption leading-snug font-medium text-status-warn ${
               showWarning ? '' : 'invisible'
             }`}
           >
@@ -205,7 +205,7 @@ export function SuggestionBanner({
             ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
             : explanation
           ).map((line, i) => (
-            <li key={i} className="flex items-start gap-2 text-[13px] text-ink">
+            <li key={i} className="flex items-start gap-2 text-subhead text-ink">
               <span className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0" aria-hidden="true" />
               {line}
             </li>

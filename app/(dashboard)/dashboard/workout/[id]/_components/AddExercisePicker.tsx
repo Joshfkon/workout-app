@@ -423,17 +423,17 @@ export function AddExercisePicker({
           className="min-w-0 flex-1 text-left disabled:opacity-50 hover:opacity-80 transition-opacity"
         >
           <div className="flex items-center gap-1.5">
-            <span className="text-[13px] leading-5 text-ink truncate">{exercise.name}</span>
+            <span className="text-subhead leading-5 text-ink truncate">{exercise.name}</span>
             {frequentExerciseIds.has(exercise.id) && (
-              <span className="text-amber-400 text-[11px] flex-shrink-0">&#9733;</span>
+              <span className="text-status-warn text-caption flex-shrink-0">&#9733;</span>
             )}
             {unavailableReason && (
-              <span className="flex-shrink-0 px-1 rounded bg-status-warn/15 border border-status-warn/30 text-[10px] font-medium text-status-warn">
+              <span className="flex-shrink-0 px-1 rounded bg-status-warn/15 border border-status-warn/30 text-caption font-medium text-status-warn">
                 {unavailableReason}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] leading-4 text-ink-3">
+          <div className="flex items-center gap-1.5 text-caption leading-4 text-ink-3">
             <span className="truncate">{formatMuscleName(exercise.primary_muscle)}</span>
             <span aria-hidden="true">&middot;</span>
             <span className="capitalize">{exercise.mechanic}</span>
@@ -443,7 +443,7 @@ export function AddExercisePicker({
             <span className="capitalize">{equipmentGroupLabel(exerciseEquipmentGroup(exercise))}</span>
             {exercise.hypertrophy_tier && (
               <span
-                className="px-1 rounded bg-fill border border-sep text-[10px] font-medium text-ink-2"
+                className="px-1 rounded bg-fill border border-sep text-caption font-medium text-ink-2"
                 title="Muscle-building rating: S is best, F is weakest"
                 aria-label={`Muscle-building rating ${exercise.hypertrophy_tier} (S best, F weakest)`}
               >
@@ -464,7 +464,7 @@ export function AddExercisePicker({
               aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
             >
               {isFavorited ? (
-                <IconStarFilled size={16} className="text-amber-400" />
+                <IconStarFilled size={16} className="text-status-warn" />
               ) : (
                 <IconStar size={16} className="text-ink-3" />
               )}
@@ -477,7 +477,7 @@ export function AddExercisePicker({
   };
 
   const renderSectionHeader = (label: string) => (
-    <div className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+    <div className="px-4 pt-3 pb-1 text-caption font-semibold text-ink-3">
       {label}
     </div>
   );
@@ -513,7 +513,7 @@ export function AddExercisePicker({
           <button
             type="button"
             onClick={onToggleShowAllExercises}
-            className="w-full p-4 text-center text-sm font-medium text-action hover:bg-fill/50 transition-colors border-b border-sep/50"
+            className="w-full p-4 text-center text-subhead font-medium text-action hover:bg-fill/50 transition-colors border-b border-sep/50"
           >
             Show fewer
           </button>
@@ -558,7 +558,7 @@ export function AddExercisePicker({
           <button
             type="button"
             onClick={onToggleShowAllExercises}
-            className="w-full p-4 text-center text-sm font-medium text-action hover:bg-fill/50 transition-colors border-b border-sep/50"
+            className="w-full p-4 text-center text-subhead font-medium text-action hover:bg-fill/50 transition-colors border-b border-sep/50"
           >
             Browse all {pool.length} exercises
           </button>
@@ -583,7 +583,7 @@ export function AddExercisePicker({
   const adjustmentsActive = selectedLocationFilter !== null || exerciseSortOption !== 'frequency';
 
   const chipClass = (active: boolean) =>
-    `shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] leading-4 capitalize border transition-colors ${
+    `shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-caption leading-4 capitalize border transition-colors ${
       active
         ? 'bg-action/20 border-action/40 text-action'
         : 'bg-fill border-sep text-ink-2 hover:text-ink'
@@ -619,12 +619,12 @@ export function AddExercisePicker({
             <IconX size={20} />
           </button>
           <div className="min-w-0 text-center">
-            <h2 className="text-lg font-semibold text-ink">Add Exercise</h2>
+            <h2 className="text-headline font-semibold text-ink">Add exercise</h2>
             {/* Live cost of the workout being assembled — the number the user
                 is really deciding against when picking a sixth exercise. */}
             {sessionDuration && (
               <p
-                className="text-[11px] leading-4 text-ink-3 truncate"
+                className="text-caption leading-4 text-ink-3 truncate"
                 data-testid="picker-duration-estimate"
               >
                 ~{sessionDuration.totalLabel} workout
@@ -637,7 +637,7 @@ export function AddExercisePicker({
           <button
             onClick={onAddSelected}
             disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
-            className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+            className={`px-3 py-1.5 rounded-lg font-medium text-subhead transition-colors ${
               selectedExercisesToAdd.length > 0
                 ? 'bg-action text-on-action hover:bg-action'
                 : 'bg-sep text-ink-3 cursor-not-allowed'
@@ -655,7 +655,7 @@ export function AddExercisePicker({
             value={exerciseSearch}
             onChange={(e) => onExerciseSearchChange(e.target.value)}
             placeholder="Search exercises..."
-            className="w-full px-4 py-2 bg-fill border border-sep rounded-lg text-[13px] text-ink placeholder-ink-3"
+            className="w-full px-4 py-2 bg-fill border border-sep rounded-lg text-subhead text-ink placeholder-ink-3"
           />
 
           {/* Muscle chips + adjustments toggle */}
@@ -724,7 +724,7 @@ export function AddExercisePicker({
                   onClick={() => selectedEquipmentGroups.forEach(onToggleEquipmentGroup)}
                   className={chipClass(selectedEquipmentGroups.length === 0)}
                 >
-                  All Gear
+                  All gear
                 </button>
                 {equipmentOptions.map(group => (
                   <button
@@ -749,7 +749,7 @@ export function AddExercisePicker({
           {showAdjustments && (
             <div className="mt-2 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-ink-3 w-14 flex-shrink-0">Sort</span>
+                <span className="text-caption text-ink-3 w-14 flex-shrink-0">Sort</span>
                 <div className="flex items-center gap-1.5">
                   {SORT_OPTIONS.map(option => (
                     <button
@@ -765,7 +765,7 @@ export function AddExercisePicker({
               </div>
               {gymLocations.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-ink-3 w-14 flex-shrink-0">Location</span>
+                  <span className="text-caption text-ink-3 w-14 flex-shrink-0">Location</span>
                   <div
                     className="flex-1 flex items-center gap-1.5 overflow-x-auto pb-2 pr-8"
                     style={{ scrollbarWidth: 'none' }}
@@ -799,7 +799,7 @@ export function AddExercisePicker({
 
           {/* Error display (variant="workout") */}
           {error && (
-            <div className="mt-2 p-2 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-xs">
+            <div className="mt-2 p-2 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-caption">
               {error}
             </div>
           )}
@@ -818,7 +818,7 @@ export function AddExercisePicker({
               className="w-full py-2.5 bg-fill/50 hover:bg-fill rounded-lg border border-dashed border-sep hover:border-action/50 transition-all flex items-center justify-center gap-2 text-ink-2 hover:text-action"
             >
               <IconPlus size={16} />
-              <span className="text-[13px] font-medium">Create custom exercise</span>
+              <span className="text-subhead font-medium">Create custom exercise</span>
             </button>
           </div>
         )}

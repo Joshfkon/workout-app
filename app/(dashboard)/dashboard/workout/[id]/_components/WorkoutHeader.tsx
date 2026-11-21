@@ -229,7 +229,7 @@ export function WorkoutHeader({
             data-testid="workout-timer-pill"
             data-paused={workoutTimer.isPaused ? 'true' : 'false'}
             aria-pressed={workoutTimer.isPaused}
-            className={`inline-flex items-center gap-1.5 flex-shrink-0 min-h-[44px] px-3 rounded-full border text-sm font-medium tabular-nums transition-colors ${
+            className={`inline-flex items-center gap-1.5 flex-shrink-0 min-h-[44px] px-3 rounded-full border text-subhead font-medium tabular-nums transition-colors ${
               workoutTimer.isPaused
                 ? 'bg-status-warn-tint border-transparent text-status-warn'
                 : 'bg-card border-transparent shadow-card text-ink hover:bg-fill'
@@ -261,7 +261,7 @@ export function WorkoutHeader({
                 <span
                   data-testid="workout-timer-pill-remaining"
                   title={remainingDurationHint}
-                  className={`text-[10px] font-normal ${
+                  className={`text-caption font-normal ${
                     workoutTimer.isPaused ? 'text-status-warn' : 'text-ink-2'
                   }`}
                 >
@@ -461,7 +461,7 @@ export function WorkoutHeader({
               ? `Training at ${locationName}. Change workout location.`
               : 'Set workout location.'
           }
-          className={`flex flex-shrink-0 max-w-[65%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+          className={`flex flex-shrink-0 max-w-[65%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-caption font-medium transition-colors ${
             locationName
               ? 'border-transparent bg-card shadow-card text-ink-2 hover:text-ink'
               : 'border-transparent bg-status-warn-tint text-status-warn'

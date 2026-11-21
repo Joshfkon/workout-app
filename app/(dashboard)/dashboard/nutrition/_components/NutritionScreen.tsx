@@ -1752,7 +1752,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       {/* Macro Update Notification */}
       {macroUpdateNotification && (
         <div className="bg-status-ok-tint rounded-card px-4 py-3 flex items-center justify-between">
-          <span className="text-status-ok text-sm">{macroUpdateNotification}</span>
+          <span className="text-status-ok text-subhead">{macroUpdateNotification}</span>
           <button
             onClick={() => setMacroUpdateNotification(null)}
             className="text-status-ok hover:text-status-ok"
@@ -2143,10 +2143,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         <span className="flex items-center gap-3 min-w-0">
           <IconScale size={22} className="text-action flex-shrink-0" aria-hidden="true" />
           <span className="text-left min-w-0">
-            <span className="block text-[15px] font-semibold text-ink">
+            <span className="block text-body font-semibold text-ink">
               {hasLoggedWeightToday ? "Update today's weight" : "Log today's weight"}
             </span>
-            <span className="block text-[12px] text-ink-2 truncate">
+            <span className="block text-caption text-ink-2 truncate">
               {hasLoggedWeightToday
                 ? `Logged today: ${todayWeightDisplay} ${weightUnit}`
                 : 'Weigh in a few times a week to track your trend and keep your adaptive TDEE accurate'}
@@ -2183,13 +2183,13 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Weight Trend</CardTitle>
+              <CardTitle>Weight trend</CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowWeightHistory(true)}
               >
-                View History
+                View history
               </Button>
             </div>
           </CardHeader>
@@ -2197,34 +2197,34 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             <div className="grid md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <div>
-                  <div className="text-sm text-ink-2">Current Weight</div>
-                  <div className="text-2xl font-bold text-ink">
+                  <div className="text-subhead text-ink-2">Current weight</div>
+                  <div className="text-title font-bold text-ink">
                     {weightEntries[0] ? getDisplayWeight(weightEntries[0].weight, (weightEntries[0] as any)?.unit as 'lb' | 'kg' | null, weightUnit).toFixed(1) : '0.0'} {weightUnit}
                   </div>
-                  <div className="text-xs text-ink-2">
+                  <div className="text-caption text-ink-2">
                     {new Date(weightEntries[0]?.logged_at).toLocaleDateString()}
                   </div>
                 </div>
                 {sevenDayAverage && (
                   <div>
-                    <div className="text-sm text-ink-2">7-Day Average</div>
-                    <div className="text-xl font-semibold text-ink">
+                    <div className="text-subhead text-ink-2">7-Day Average</div>
+                    <div className="text-headline font-semibold text-ink">
                       {sevenDayAverage.toFixed(1)} {weightUnit}
                     </div>
                   </div>
                 )}
                 {weightTrendRate && (
                   <div>
-                    <div className="text-sm text-ink-2">Trend ({weightChartRange})</div>
+                    <div className="text-subhead text-ink-2">Trend ({weightChartRange})</div>
                     <div
-                      className={`text-xl font-semibold ${
+                      className={`text-headline font-semibold ${
                         weightRateOnTrack ? 'text-status-ok' : 'text-status-warn'
                       }`}
                     >
                       {signedRate(weightTrendRate.perWeek)} {weightUnit}/wk
                     </div>
                     {weightTrendRate.target !== null && (
-                      <div className="text-xs text-ink-2">
+                      <div className="text-caption text-ink-2">
                         target {signedRate(weightTrendRate.target)} {weightUnit}/wk (
                         {currentPhase === 'bulk' ? 'bulk' : 'cut'})
                       </div>
@@ -2240,7 +2240,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                       <button
                         key={range}
                         onClick={() => setWeightChartRange(range)}
-                        className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                        className={`px-2 py-1 text-caption rounded-md transition-colors ${
                           weightChartRange === range
                             ? 'bg-action text-on-action'
                             : 'text-ink-2 hover:text-ink'
@@ -2253,7 +2253,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                 </div>
                 {weightChartData.length === 0 && (
                   <div className="flex h-[200px] items-center justify-center">
-                    <p className="text-sm text-ink-2">No weight data for this period</p>
+                    <p className="text-subhead text-ink-2">No weight data for this period</p>
                   </div>
                 )}
                 {weightChartData.length > 0 && (
@@ -2389,7 +2389,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       <Modal
         isOpen={showActivitySettings}
         onClose={() => setShowActivitySettings(false)}
-        title="Activity Settings"
+        title="Activity settings"
         size="lg"
       >
         {showActivitySettings && <ActivitySettingsScreen />}

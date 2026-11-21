@@ -573,7 +573,7 @@ export function GymEquipmentSettings() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setSelectedLocationId(location.id)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-lg text-subhead font-medium transition-colors ${
                         selectedLocationId === location.id
                           ? 'bg-action text-on-action'
                           : 'bg-fill text-ink-2 hover:bg-sep'
@@ -671,7 +671,7 @@ export function GymEquipmentSettings() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setAllCategory(category, true)}
-                    className={`text-xs px-2 py-1 rounded transition-colors ${
+                    className={`text-caption px-2 py-1 rounded transition-colors ${
                       allAvailable
                         ? 'bg-status-ok/20 text-status-ok'
                         : 'bg-fill text-ink-2 hover:text-ink'
@@ -681,7 +681,7 @@ export function GymEquipmentSettings() {
                   </button>
                   <button
                     onClick={() => setAllCategory(category, false)}
-                    className={`text-xs px-2 py-1 rounded transition-colors ${
+                    className={`text-caption px-2 py-1 rounded transition-colors ${
                       noneAvailable
                         ? 'bg-status-bad/20 text-status-bad'
                         : 'bg-fill text-ink-2 hover:text-ink'
@@ -717,7 +717,7 @@ export function GymEquipmentSettings() {
                           )}
                         </div>
                         <div>
-                          <p className={`text-sm font-medium ${isAvailable ? 'text-ink' : 'text-ink-2 line-through'}`}>
+                          <p className={`text-subhead font-medium ${isAvailable ? 'text-ink' : 'text-ink-2 line-through'}`}>
                             {eq.name}
                           </p>
                           {eq.description && (
@@ -769,7 +769,7 @@ export function GymEquipmentSettings() {
                   <button
                     key={preset.kind}
                     onClick={() => handlePickPreset(preset)}
-                    className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                    className={`px-3 py-2 rounded-lg text-subhead transition-colors ${
                       locationPreset?.kind === preset.kind
                         ? 'bg-action/20 border border-action text-action'
                         : 'bg-fill border border-transparent text-ink-2 hover:bg-sep'
@@ -780,7 +780,7 @@ export function GymEquipmentSettings() {
                 ))}
                 <button
                   onClick={() => setLocationPreset(null)}
-                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                  className={`px-3 py-2 rounded-lg text-subhead transition-colors ${
                     locationPreset === null
                       ? 'bg-action/20 border border-action text-action'
                       : 'bg-fill border border-transparent text-ink-2 hover:bg-sep'

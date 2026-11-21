@@ -24,7 +24,7 @@ export function ReviewButton({
       type="button"
       onClick={onReview}
       disabled={disabled || status === 'loading'}
-      className={`rounded-2xl border border-sep bg-card px-4 py-3.5 text-sm font-medium transition-colors hover:bg-fill disabled:opacity-60 ${
+      className={`rounded-2xl border border-sep bg-card px-4 py-3.5 text-subhead font-medium transition-colors hover:bg-fill disabled:opacity-60 ${
         status === 'unavailable' ? 'max-w-[45%] text-status-warn' : 'text-ink'
       }`}
       data-testid="setup-review"
@@ -49,16 +49,16 @@ export function ReviewBanner({
 }) {
   if (totalCount === 0) {
     return (
-      <div className="rounded-lg bg-status-ok/10 px-3 py-2.5 text-sm text-status-ok" data-testid="setup-review-banner">
+      <div className="rounded-lg bg-status-ok/10 px-3 py-2.5 text-subhead text-status-ok" data-testid="setup-review-banner">
         ✓ Looks good.{summary ? ` ${summary}` : ''}
       </div>
     );
   }
   return (
     <div className="rounded-lg bg-fill/70 px-3 py-2.5" data-testid="setup-review-banner">
-      {summary && <p className="text-sm text-ink">{summary}</p>}
+      {summary && <p className="text-subhead text-ink">{summary}</p>}
       <div className="mt-1.5 flex items-center justify-between gap-2">
-        <span className="text-xs text-ink-2">
+        <span className="text-caption text-ink-2">
           {pendingCount > 0 ? `${pendingCount} suggestion${pendingCount === 1 ? '' : 's'}` : 'All suggestions handled'}
         </span>
         {pendingCount > 0 && (
@@ -66,7 +66,7 @@ export function ReviewBanner({
             <button
               type="button"
               onClick={onDismissAll}
-              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-2 hover:bg-sep"
+              className="rounded-lg px-2.5 py-1.5 text-caption font-medium text-ink-2 hover:bg-sep"
               data-testid="setup-review-dismiss-all"
             >
               Dismiss all
@@ -74,7 +74,7 @@ export function ReviewBanner({
             <button
               type="button"
               onClick={onAcceptAll}
-              className="rounded-lg bg-action/20 px-2.5 py-1.5 text-xs font-medium text-action hover:bg-action/30"
+              className="rounded-lg bg-action/20 px-2.5 py-1.5 text-caption font-medium text-action hover:bg-action/30"
               data-testid="setup-review-accept-all"
             >
               Accept all
@@ -118,7 +118,7 @@ export function SuggestionCard({
       className={`mt-2 rounded-lg border px-2.5 py-2 ${warn ? 'border-status-warn/40 bg-status-warn/10' : 'border-action/30 bg-action/10'}`}
       data-testid={`setup-suggestion-${suggestion.id}`}
     >
-      <p className="text-xs text-ink">
+      <p className="text-caption text-ink">
         <span className={`font-semibold ${warn ? 'text-status-warn' : 'text-action'}`}>
           {describe(suggestion, exercisesById)}
         </span>
@@ -128,7 +128,7 @@ export function SuggestionCard({
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-2 hover:bg-fill"
+          className="rounded-md px-2.5 py-1.5 text-caption font-medium text-ink-2 hover:bg-fill"
           data-testid={`setup-suggestion-dismiss-${suggestion.id}`}
         >
           Dismiss
@@ -136,7 +136,7 @@ export function SuggestionCard({
         <button
           type="button"
           onClick={onAccept}
-          className="rounded-md bg-fill px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-sep"
+          className="rounded-md bg-fill px-2.5 py-1.5 text-caption font-medium text-ink hover:bg-sep"
           data-testid={`setup-suggestion-accept-${suggestion.id}`}
         >
           {suggestion.type === 'flag' ? 'Got it' : 'Accept'}

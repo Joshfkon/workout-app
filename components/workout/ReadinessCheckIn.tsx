@@ -1,5 +1,6 @@
 'use client';
 
+import { IconAlertTriangle, IconBandage, IconTarget } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { Button, Card, Slider, Badge } from '@/components/ui';
 import type {
@@ -24,24 +25,24 @@ const SORENESS_CHIP_OPTIONS: { value: SorenessRating; label: string }[] = [
 ];
 
 // Injury area options with display names
-const INJURY_AREAS: { value: TemporaryInjury['area']; label: string; icon: string }[] = [
-  { value: 'lower_back', label: 'Lower Back', icon: '🔻' },
-  { value: 'upper_back', label: 'Upper Back', icon: '🔺' },
-  { value: 'neck', label: 'Neck', icon: '🦴' },
-  { value: 'shoulder_left', label: 'Left Shoulder', icon: '💪' },
-  { value: 'shoulder_right', label: 'Right Shoulder', icon: '💪' },
-  { value: 'elbow_left', label: 'Left Elbow', icon: '🦾' },
-  { value: 'elbow_right', label: 'Right Elbow', icon: '🦾' },
-  { value: 'wrist_left', label: 'Left Wrist', icon: '🤚' },
-  { value: 'wrist_right', label: 'Right Wrist', icon: '🤚' },
-  { value: 'hip_left', label: 'Left Hip', icon: '🦵' },
-  { value: 'hip_right', label: 'Right Hip', icon: '🦵' },
-  { value: 'knee_left', label: 'Left Knee', icon: '🦿' },
-  { value: 'knee_right', label: 'Right Knee', icon: '🦿' },
-  { value: 'ankle_left', label: 'Left Ankle', icon: '🦶' },
-  { value: 'ankle_right', label: 'Right Ankle', icon: '🦶' },
-  { value: 'chest', label: 'Chest', icon: '❤️' },
-  { value: 'other', label: 'Other', icon: '⚠️' },
+const INJURY_AREAS: { value: TemporaryInjury['area']; label: string }[] = [
+  { value: 'lower_back', label: 'Lower back' },
+  { value: 'upper_back', label: 'Upper back' },
+  { value: 'neck', label: 'Neck' },
+  { value: 'shoulder_left', label: 'Left shoulder' },
+  { value: 'shoulder_right', label: 'Right shoulder' },
+  { value: 'elbow_left', label: 'Left elbow' },
+  { value: 'elbow_right', label: 'Right elbow' },
+  { value: 'wrist_left', label: 'Left wrist' },
+  { value: 'wrist_right', label: 'Right wrist' },
+  { value: 'hip_left', label: 'Left hip' },
+  { value: 'hip_right', label: 'Right hip' },
+  { value: 'knee_left', label: 'Left knee' },
+  { value: 'knee_right', label: 'Right knee' },
+  { value: 'ankle_left', label: 'Left ankle' },
+  { value: 'ankle_right', label: 'Right ankle' },
+  { value: 'chest', label: 'Chest' },
+  { value: 'other', label: 'Other' },
 ];
 
 // Convert lbs to kg
@@ -76,7 +77,7 @@ function RatingSegments({
           key={rating}
           onClick={() => onChange(rating)}
           aria-pressed={value === rating}
-          className={`relative flex-1 h-8 rounded-md text-sm font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-[''] ${
+          className={`relative flex-1 h-8 rounded-md text-subhead font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-[''] ${
             value === rating
               ? selectedClass
               : 'text-ink-2 hover:bg-sep'
@@ -298,7 +299,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
     const labels = {
       sleep: ['Terrible', 'Poor', 'Okay', 'Good', 'Great'],
       stress: ['Very High', 'High', 'Moderate', 'Low', 'Very Low'],
-      nutrition: ['Poor', 'Below Average', 'Average', 'Good', 'Excellent'],
+      nutrition: ['Poor', 'Below average', 'Average', 'Good', 'Excellent'],
       focus: ['Very Foggy', 'Foggy', 'Normal', 'Sharp', 'Very Sharp'],
       libido: ['Very Low', 'Low', 'Normal', 'High', 'Very High'],
     };
@@ -321,8 +322,8 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-sep flex-shrink-0">
-        <h2 className="text-lg font-semibold text-ink">
-          Pre-Workout Check-In
+        <h2 className="text-headline font-semibold text-ink">
+          Pre-workout check-in
         </h2>
         {onClose && (
           <button
@@ -343,7 +344,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Sleep Hours */}
         <div>
           <Slider
-            label="Hours of Sleep"
+            label="Hours of sleep"
             min={3}
             max={12}
             step={0.5}
@@ -356,10 +357,10 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Sleep Quality */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-sm font-medium text-ink">
-              Sleep Quality
+            <label className="text-subhead font-medium text-ink">
+              Sleep quality
             </label>
-            <span className="text-sm text-action">
+            <span className="text-subhead text-action">
               {getRatingLabel(sleepQuality, 'sleep')}
             </span>
           </div>
@@ -369,11 +370,11 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Stress Level */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-sm font-medium text-ink">
-              Stress Level{' '}
-              <span className="font-normal text-xs text-ink-3">(1 = high, 5 = low)</span>
+            <label className="text-subhead font-medium text-ink">
+              Stress level{' '}
+              <span className="font-normal text-caption text-ink-3">(1 = high, 5 = low)</span>
             </label>
-            <span className="text-sm text-action">
+            <span className="text-subhead text-action">
               {getRatingLabel(stressLevel, 'stress')}
             </span>
           </div>
@@ -383,14 +384,14 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Muscle soreness from the last session hitting today's muscles */}
         {sorenessMuscles && sorenessMuscles.length > 0 && (
           <div>
-            <label className="text-sm font-medium text-ink">
+            <label className="text-subhead font-medium text-ink">
               Muscle soreness{' '}
-              <span className="font-normal text-xs text-ink-3">(optional)</span>
+              <span className="font-normal text-caption text-ink-3">(optional)</span>
             </label>
             <div className="mt-1.5 space-y-1.5">
               {sorenessMuscles.map((muscle) => (
                 <div key={muscle} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className="text-xs font-medium text-ink-2 min-w-[60px]">
+                  <p className="text-caption font-medium text-ink-2 min-w-[60px]">
                     {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
                   </p>
                   <div className="flex flex-wrap items-center gap-1">
@@ -398,7 +399,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                       <button
                         key={option.value}
                         onClick={() => toggleSoreness(muscle, option.value)}
-                        className={`relative rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-2 after:content-[''] ${
+                        className={`relative rounded-full px-2.5 py-1 text-caption font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-2 after:content-[''] ${
                           sorenessRatings[muscle] === option.value
                             ? 'bg-action text-on-action'
                             : 'bg-fill text-ink-2 hover:bg-sep'
@@ -416,58 +417,58 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
 
         {/* Cut-specific: Focus & Libido (for refeed detection) */}
         {isOnCut && (
-          <div className="bg-amber-500/10 p-3 border border-amber-500/20 rounded-xl space-y-3">
+          <div className="bg-status-warn-tint p-3 border border-status-warn/20 rounded-xl space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-lg">🎯</span>
+              <IconTarget className="h-5 w-5 flex-shrink-0 text-status-warn" stroke={1.75} aria-hidden="true" />
               <div>
-                <p className="text-sm font-medium text-ink">Cut Health Check</p>
-                <p className="text-xs text-ink-2">These help us detect when you might need a refeed</p>
+                <p className="text-subhead font-medium text-ink">Cut health check</p>
+                <p className="text-caption text-ink-2">These help us detect when you might need a refeed</p>
               </div>
             </div>
 
             {/* Focus Rating */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-ink">
-                  Mental Focus / Clarity
+                <label className="text-subhead font-medium text-ink">
+                  Mental focus and clarity
                 </label>
-                <span className={`text-sm ${focusRating <= 2 ? 'text-amber-400' : 'text-action'}`}>
+                <span className={`text-subhead ${focusRating <= 2 ? 'text-status-warn' : 'text-action'}`}>
                   {getRatingLabel(focusRating, 'focus')}
                 </span>
               </div>
               <RatingSegments
                 value={focusRating}
                 onChange={setFocusRating}
-                selectedClass={focusRating <= 2 ? 'bg-amber-500 text-white' : 'bg-action text-on-action'}
+                selectedClass={focusRating <= 2 ? 'bg-status-warn text-white' : 'bg-action text-on-action'}
               />
             </div>
 
             {/* Libido Rating */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-ink">
-                  Libido / Drive
+                <label className="text-subhead font-medium text-ink">
+                  Libido and drive
                 </label>
-                <span className={`text-sm ${libidoRating <= 2 ? 'text-amber-400' : 'text-action'}`}>
+                <span className={`text-subhead ${libidoRating <= 2 ? 'text-status-warn' : 'text-action'}`}>
                   {getRatingLabel(libidoRating, 'libido')}
                 </span>
               </div>
               <RatingSegments
                 value={libidoRating}
                 onChange={setLibidoRating}
-                selectedClass={libidoRating <= 2 ? 'bg-amber-500 text-white' : 'bg-action text-on-action'}
+                selectedClass={libidoRating <= 2 ? 'bg-status-warn text-white' : 'bg-action text-on-action'}
               />
-              <p className="text-xs text-ink-3 mt-1">A drop in libido can indicate hormonal stress from dieting</p>
+              <p className="text-caption text-ink-3 mt-1">A drop in libido can indicate hormonal stress from dieting</p>
             </div>
 
             {/* Refeed Alert */}
             {refeedRecommended && (
-              <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+              <div className="p-3 bg-status-warn-tint rounded-lg">
                 <div className="flex items-start gap-2">
-                  <span className="text-lg">⚠️</span>
+                  <IconAlertTriangle className="h-5 w-5 flex-shrink-0 text-status-warn" stroke={1.75} aria-hidden="true" />
                   <div>
-                    <p className="text-sm font-medium text-amber-400">Refeed Recommended</p>
-                    <p className="text-xs text-ink-2 mt-1">
+                    <p className="text-subhead font-medium text-status-warn">Refeed recommended</p>
+                    <p className="text-caption text-ink-2 mt-1">
                       Low focus and libido can indicate your body needs more fuel. Consider a higher-carb day to restore glycogen and hormonal balance.
                     </p>
                   </div>
@@ -480,10 +481,10 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Today's Nutrition (from logging) */}
         <div className="px-3 py-2.5 bg-fill/50 rounded-lg">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-ink">
+            <label className="text-subhead font-medium text-ink">
               Today&apos;s Nutrition
             </label>
-            <span className={`text-sm font-medium ${
+            <span className={`text-subhead font-medium ${
               nutritionRating >= 4 ? 'text-status-ok' :
               nutritionRating >= 3 ? 'text-action' :
               nutritionRating >= 2 ? 'text-status-warn' : 'text-status-bad'
@@ -492,7 +493,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
             </span>
           </div>
           {todayNutrition ? (
-            <p className="mt-1 text-sm text-ink-2">
+            <p className="mt-1 text-subhead text-ink-2">
               {Math.round(todayNutrition.calories)} cal
               {' · '}
               <span className="text-action">{Math.round(todayNutrition.protein * 10) / 10}g P</span>
@@ -502,7 +503,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
               {Math.round(todayNutrition.fat)}g F
             </p>
           ) : (
-            <p className="mt-1 text-xs text-ink-3">No nutrition logged today. Log your meals to improve this score!</p>
+            <p className="mt-1 text-caption text-ink-3">No nutrition logged today. Log your meals to improve this score!</p>
           )}
           {todayNutrition && todayNutrition.targetProtein && (
             <div className="mt-1.5 flex items-center gap-2">
@@ -518,7 +519,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                   style={{ width: `${Math.min(100, (todayNutrition.protein / todayNutrition.targetProtein) * 100)}%` }}
                 />
               </div>
-              <span className="text-xs text-ink-2">
+              <span className="text-caption text-ink-2">
                 {Math.round((todayNutrition.protein / todayNutrition.targetProtein) * 100)}% protein
               </span>
             </div>
@@ -527,9 +528,9 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
 
         {/* Bodyweight (optional) — label and input inline */}
         <div className="flex items-center justify-between gap-3">
-          <label htmlFor="checkin-bodyweight" className="text-sm font-medium text-ink">
+          <label htmlFor="checkin-bodyweight" className="text-subhead font-medium text-ink">
             Bodyweight{' '}
-            <span className="font-normal text-xs text-ink-3">(optional)</span>
+            <span className="font-normal text-caption text-ink-3">(optional)</span>
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -541,7 +542,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
               step="0.1"
               className="w-24 px-3 py-2 text-right bg-fill border border-sep rounded-lg text-ink placeholder:text-ink-3 focus:ring-2 focus:ring-action focus:border-transparent"
             />
-            <span className="text-sm text-ink-2">{unit}</span>
+            <span className="text-subhead text-ink-2">{unit}</span>
           </div>
         </div>
 
@@ -553,8 +554,8 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
             className="flex items-center justify-between w-full text-left"
           >
             <div className="flex items-center gap-2">
-              <span className="text-lg">🤕</span>
-              <span className="text-sm font-medium text-ink">
+              <IconBandage className="h-5 w-5 flex-shrink-0 text-ink-2" stroke={1.75} aria-hidden="true" />
+              <span className="text-subhead font-medium text-ink">
                 Dealing with pain or injury today?
               </span>
             </div>
@@ -576,7 +577,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                     key={injury.area}
                     variant={injury.severity === 3 ? 'danger' : injury.severity === 2 ? 'warning' : 'default'}
                   >
-                    {areaInfo?.icon} {areaInfo?.label}
+                    {areaInfo?.label}
                   </Badge>
                 );
               })}
@@ -585,14 +586,14 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
 
           {showInjurySection && (
             <div className="mt-3 space-y-4 p-4 bg-fill/50 rounded-lg">
-              <p className="text-xs text-ink-2">
+              <p className="text-caption text-ink-2">
                 Tell us about any temporary pain or injury. We&apos;ll adjust your workout to avoid aggravating it.
               </p>
 
               {/* Current injuries */}
               {temporaryInjuries.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-ink-2">Current issues:</p>
+                  <p className="text-caption font-medium text-ink-2">Current issues:</p>
                   <div className="flex flex-wrap gap-2">
                     {temporaryInjuries.map(injury => {
                       const areaInfo = INJURY_AREAS.find(a => a.value === injury.area);
@@ -600,7 +601,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                       return (
                         <div
                           key={injury.area}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-subhead ${
                             injury.severity === 3
                               ? 'bg-status-bad/20 text-status-bad'
                               : injury.severity === 2
@@ -608,9 +609,8 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                                 : 'bg-sep text-ink-2'
                           }`}
                         >
-                          <span>{areaInfo?.icon}</span>
                           <span>{areaInfo?.label}</span>
-                          <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
+                          <span className="text-caption opacity-70">({severityLabels[injury.severity - 1]})</span>
                           <button
                             onClick={() => removeInjury(injury.area)}
                             className="ml-1 p-0.5 hover:bg-sep rounded-full"
@@ -629,30 +629,30 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
               {/* Add injury form */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-ink-2 mb-1.5">Area affected</label>
+                  <label className="block text-caption font-medium text-ink-2 mb-1.5">Area affected</label>
                   <select
                     value={selectedArea}
                     onChange={(e) => setSelectedArea(e.target.value as TemporaryInjury['area'])}
-                    className="w-full px-3 py-2 bg-sep border border-sep rounded-lg text-ink text-sm"
+                    className="w-full px-3 py-2 bg-sep border border-sep rounded-lg text-ink text-subhead"
                   >
                     <option value="">Select area...</option>
                     {INJURY_AREAS.filter(area => !temporaryInjuries.some(i => i.area === area.value)).map(area => (
                       <option key={area.value} value={area.value}>
-                        {area.icon} {area.label}
+                        {area.label}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-ink-2 mb-1.5">Severity</label>
+                  <label className="block text-caption font-medium text-ink-2 mb-1.5">Severity</label>
                   <div className="flex gap-2">
                     {[1, 2, 3].map(level => (
                       <button
                         key={level}
                         type="button"
                         onClick={() => setSelectedSeverity(level as 1 | 2 | 3)}
-                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                        className={`flex-1 py-2 px-3 rounded-lg text-caption font-medium transition-colors ${
                           selectedSeverity === level
                             ? level === 3
                               ? 'bg-status-bad text-white'
@@ -666,7 +666,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-ink-3 mt-1">
+                  <p className="text-caption text-ink-3 mt-1">
                     {selectedSeverity === 1 && 'Slight discomfort - can work around it'}
                     {selectedSeverity === 2 && 'Noticeable pain - need to be careful'}
                     {selectedSeverity === 3 && 'Significant pain - avoid stressing this area'}
@@ -690,15 +690,15 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Readiness Score Display */}
         <div className="bg-fill/50 rounded-lg px-3 py-2.5 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm text-ink-2">Readiness Score</p>
-            <p className={`text-sm ${getScoreColor(readinessScore)}`}>
+            <p className="text-subhead text-ink-2">Readiness score</p>
+            <p className={`text-subhead ${getScoreColor(readinessScore)}`}>
               {interpretation.message}
             </p>
-            <p className="text-xs text-ink-3 mt-0.5">
+            <p className="text-caption text-ink-3 mt-0.5">
               {interpretation.recommendation}
             </p>
           </div>
-          <p className={`text-3xl font-bold flex-shrink-0 ${getScoreColor(readinessScore)}`}>
+          <p className={`text-large-title font-bold flex-shrink-0 ${getScoreColor(readinessScore)}`}>
             {readinessScore}
           </p>
         </div>
@@ -707,7 +707,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {onSkipPermanently && (
           <button
             onClick={onSkipPermanently}
-            className="w-full text-center text-xs text-ink-3 hover:text-ink-2 transition-colors"
+            className="w-full text-center text-caption text-ink-3 hover:text-ink-2 transition-colors"
           >
             Don&apos;t show this again — re-enable in Settings
           </button>
@@ -725,7 +725,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
           </Button>
         )}
         <Button onClick={handleSubmit} className="flex-1">
-          Start Workout
+          Start workout
         </Button>
       </div>
     </Card>

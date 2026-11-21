@@ -91,10 +91,10 @@ export default function QuickWorkoutPage() {
         <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-action/15 flex items-center justify-center">
           <IconBarbell size={28} className="text-action" />
         </div>
-        <h1 className="text-xl font-bold text-ink">
+        <h1 className="text-headline font-bold text-ink">
           {continuing ? 'Continue today’s workout?' : 'Start a quick workout?'}
         </h1>
-        <p className="text-sm text-ink-2 mt-2">
+        <p className="text-subhead text-ink-2 mt-2">
           {continuing
             ? 'You already have a workout in progress today — pick up where you left off.'
             : 'Opens an empty session. Add exercises as you go.'}
@@ -102,7 +102,7 @@ export default function QuickWorkoutPage() {
 
         {error && (
           <div className="mt-4 p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
-            <p className="text-sm text-status-bad">{error}</p>
+            <p className="text-subhead text-status-bad">{error}</p>
           </div>
         )}
 

@@ -47,7 +47,7 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
   return (
     <Card data-testid="blood-pressure-card">
       <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>Blood Pressure</CardTitle>
+        <CardTitle>Blood pressure</CardTitle>
         <Button size="sm" variant="ghost" onClick={() => setShowLog(true)}>
           + Log
         </Button>
@@ -57,8 +57,8 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
           <div className="h-16 animate-pulse rounded-lg bg-fill" />
         ) : !latest || !latestCategory ? (
           <div className="py-2">
-            <p className="text-sm text-ink-2">No readings yet.</p>
-            <p className="text-xs text-ink-3 mt-1">
+            <p className="text-subhead text-ink-2">No readings yet.</p>
+            <p className="text-caption text-ink-3 mt-1">
               Log your first reading to start tracking your trend.
             </p>
           </div>
@@ -69,14 +69,14 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
               <div>
                 <div className="flex items-baseline gap-2">
                   <span
-                    className="text-3xl font-bold text-ink tabular-nums"
+                    className="text-large-title font-bold text-ink tabular-nums"
                     data-testid="bp-latest-reading"
                   >
                     {formatReading(latest.systolic, latest.diastolic)}
                   </span>
-                  <span className="text-xs text-ink-3">mmHg</span>
+                  <span className="text-caption text-ink-3">mmHg</span>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-ink-3">
                   <span>{takenLabel}</span>
                   {latest.pulse != null && (
                     <>
@@ -93,7 +93,7 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
                 </div>
               </div>
               <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${TONE_BADGE[latestCategory.tone]}`}
+                className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-medium ${TONE_BADGE[latestCategory.tone]}`}
                 data-testid="bp-latest-category"
               >
                 {latestCategory.label}
@@ -103,7 +103,7 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
             {/* Crisis-level guidance — calm but clear. */}
             {latestCategory.id === 'crisis' && (
               <p
-                className="rounded-lg border border-status-bad/30 bg-status-bad/10 px-3 py-2 text-xs text-status-bad"
+                className="rounded-lg border border-status-bad/30 bg-status-bad/10 px-3 py-2 text-caption text-status-bad"
                 role="alert"
               >
                 {latestCategory.advice}
@@ -126,7 +126,7 @@ export const BloodPressureCard = memo(function BloodPressureCard() {
 
             <Link
               href="/dashboard/blood-pressure"
-              className="inline-block text-xs font-medium text-action"
+              className="inline-block text-caption font-medium text-action"
             >
               View history & trends →
             </Link>
@@ -150,16 +150,16 @@ function AvgTile({
 }) {
   return (
     <div className="rounded-lg bg-fill px-3 py-2">
-      <p className="text-[11px] text-ink-3">{label}</p>
+      <p className="text-caption text-ink-3">{label}</p>
       {avg && avg.count > 1 ? (
-        <p className="text-sm font-semibold text-ink tabular-nums">
+        <p className="text-subhead font-semibold text-ink tabular-nums">
           {formatReading(avg.systolic, avg.diastolic)}
-          <span className="ml-1 text-[11px] font-normal text-ink-3">
+          <span className="ml-1 text-caption font-normal text-ink-3">
             ({avg.count})
           </span>
         </p>
       ) : (
-        <p className="text-sm text-ink-3">—</p>
+        <p className="text-subhead text-ink-3">—</p>
       )}
     </div>
   );

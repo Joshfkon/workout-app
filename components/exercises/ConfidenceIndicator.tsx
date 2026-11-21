@@ -87,7 +87,7 @@ export function ConfidenceIndicator({ confidence, notes }: ConfidenceIndicatorPr
 
       {notes && (
         <div className="mt-3 pt-3 border-t border-sep">
-          <p className="text-caption text-ink-3 mb-1">AI Notes:</p>
+          <p className="text-caption text-ink-3 mb-1">AI notes:</p>
           <p className="text-subhead text-ink-2">{notes}</p>
         </div>
       )}

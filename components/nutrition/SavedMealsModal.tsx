@@ -122,9 +122,9 @@ export function SavedMealsModal({ isOpen, onClose, targetMealLabel, onLog }: Sav
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Saved meals" size="lg">
       <div className="space-y-3">
-        <p className="text-[11px] text-ink-3">One tap logs everything to {targetMealLabel}.</p>
+        <p className="text-caption text-ink-3">One tap logs everything to {targetMealLabel}.</p>
 
-        {error && <p className="text-[13px] text-status-bad">{error}</p>}
+        {error && <p className="text-subhead text-status-bad">{error}</p>}
 
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -133,8 +133,8 @@ export function SavedMealsModal({ isOpen, onClose, targetMealLabel, onLog }: Sav
         ) : meals.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <IconBookmark size={20} className="text-ink-3" aria-hidden="true" />
-            <p className="text-[13px] text-ink-2">No saved meals yet.</p>
-            <p className="text-[11px] text-ink-3">
+            <p className="text-subhead text-ink-2">No saved meals yet.</p>
+            <p className="text-caption text-ink-3">
               Use the bookmark icon on a meal card to save it for one-tap logging.
             </p>
           </div>
@@ -146,8 +146,8 @@ export function SavedMealsModal({ isOpen, onClose, targetMealLabel, onLog }: Sav
                 className="flex items-center gap-2 rounded-lg bg-fill/50 p-3"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-ink truncate">{meal.name}</p>
-                  <p className="text-[11px] text-ink-3">
+                  <p className="text-subhead font-medium text-ink truncate">{meal.name}</p>
+                  <p className="text-caption text-ink-3">
                     {Math.round(meal.total_calories)} kcal · {Math.round(meal.total_protein)}p
                     {meal.times_logged > 0 ? ` · logged ${meal.times_logged}x` : ''}
                   </p>

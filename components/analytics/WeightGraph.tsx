@@ -67,7 +67,7 @@ const WeightTooltip = memo(function WeightTooltip({
 
   return (
     <div className="bg-fill border border-sep rounded-lg p-3 shadow-lg">
-      <p className="text-sm text-ink-2 mb-1">{formatDate(data.date)}</p>
+      <p className="text-subhead text-ink-2 mb-1">{formatDate(data.date)}</p>
       <p className="text-ink font-semibold">
         {data.weight.toFixed(1)} <span className="text-ink-2 font-normal">{preferredUnit}</span>
       </p>
@@ -193,7 +193,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     return (
       <div className={className}>
         <div className="text-center py-4">
-          <p className="text-ink-2 text-sm">No weight data for this period</p>
+          <p className="text-ink-2 text-subhead">No weight data for this period</p>
         </div>
       </div>
     );
@@ -203,7 +203,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     <div className={className}>
       {/* Timeframe selector */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-xs text-ink-3">
+        <div className="flex items-center gap-2 text-caption text-ink-3">
           <span>Trend</span>
           {trend && (
             <span
@@ -225,7 +225,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
-              className={`px-2 py-1 text-xs rounded-md transition-colors ${
+              className={`px-2 py-1 text-caption rounded-md transition-colors ${
                 timeframe === tf
                   ? 'bg-action text-on-action'
                   : 'text-ink-2 hover:text-ink'

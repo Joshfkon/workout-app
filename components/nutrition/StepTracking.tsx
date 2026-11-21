@@ -95,13 +95,13 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <IconWalk size={18} aria-hidden="true" />
-          <span>Step Tracking</span>
+          <span>Step tracking</span>
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
           <div>
-            <label htmlFor="steps-input" className="block text-sm font-medium text-ink-2 mb-1.5">
+            <label htmlFor="steps-input" className="block text-subhead font-medium text-ink-2 mb-1.5">
               Steps for {displayDate}
             </label>
             <div className="flex gap-2">
@@ -132,13 +132,13 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
           </div>
           
           {savedSteps !== null && (
-            <div className="text-sm text-ink-2">
+            <div className="text-subhead text-ink-2">
               Saved: <span className="font-medium text-ink">{savedSteps.toLocaleString()}</span> steps
             </div>
           )}
 
           {isToday && savedSteps === null && (
-            <p className="text-xs text-ink-3">
+            <p className="text-caption text-ink-3">
               Log your steps to improve TDEE accuracy
             </p>
           )}

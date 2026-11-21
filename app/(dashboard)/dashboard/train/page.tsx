@@ -883,7 +883,7 @@ export default function TrainPage() {
               avg workout
             </span>
           )}
-          <span className={`block text-[13px] mt-0.5 ${volumeStatusLine.className}`}>
+          <span className={`block text-subhead mt-0.5 ${volumeStatusLine.className}`}>
             {volumeStatusLine.text}
           </span>
         </span>

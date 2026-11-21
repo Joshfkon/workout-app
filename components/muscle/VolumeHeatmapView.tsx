@@ -90,7 +90,7 @@ export function HeatmapTimeframeChips({
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
-          className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+          className={`px-2.5 py-1 rounded text-caption font-medium transition-colors ${
             value === t.id
               ? 'bg-sep text-ink'
               : 'text-ink-3 hover:text-ink-2'
@@ -217,7 +217,7 @@ export function CompactVolumeHeatmap({
       )}
 
       <p
-        className={`mt-1.5 text-[10px] text-ink-3 ${isPlaceholderData ? 'animate-pulse' : ''}`}
+        className={`mt-1.5 text-caption text-ink-3 ${isPlaceholderData ? 'animate-pulse' : ''}`}
         data-testid={`${testIdPrefix}-caption`}
       >
         {heatmapCaption(timeframe, heatmap)}

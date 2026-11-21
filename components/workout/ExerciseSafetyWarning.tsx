@@ -1,5 +1,6 @@
 'use client';
 
+import { IconAlertTriangle, IconBan, IconBulb } from '@tabler/icons-react';
 import React, { useState } from 'react';
 import { Card, Button, Badge } from '@/components/ui';
 import { formatMuscleName } from '@/lib/utils';
@@ -54,17 +55,19 @@ export function ExerciseSafetyWarning({
   }
 
   return (
-    <Card className={`p-4 ${isAvoid ? 'bg-red-500/10 border-red-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
+    <Card className={`p-4 ${isAvoid ? 'bg-status-bad-tint border-status-bad/30' : 'bg-status-warn-tint border-status-warn/30'}`}>
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className={`text-2xl ${isAvoid ? 'text-red-500' : 'text-amber-500'}`}>
-          {isAvoid ? '⛔' : '⚠️'}
+        <div className={`mt-0.5 ${isAvoid ? 'text-status-bad' : 'text-status-warn'}`}>
+          {isAvoid
+            ? <IconBan className="h-6 w-6" stroke={1.75} aria-hidden="true" />
+            : <IconAlertTriangle className="h-6 w-6" stroke={1.75} aria-hidden="true" />}
         </div>
         <div className="flex-1">
-          <h3 className={`font-semibold ${isAvoid ? 'text-red-400' : 'text-amber-400'}`}>
-            {isAvoid ? 'Not Recommended' : 'Use Caution'}: {exercise.name}
+          <h3 className={`font-semibold ${isAvoid ? 'text-status-bad' : 'text-status-warn'}`}>
+            {isAvoid ? 'Not recommended' : 'Use caution'}: {exercise.name}
           </h3>
-          <p className="text-sm text-ink-2 mt-1">
+          <p className="text-subhead text-ink-2 mt-1">
             {isAvoid
               ? 'This exercise may aggravate your injury.'
               : 'This exercise may require modifications.'}
@@ -74,12 +77,12 @@ export function ExerciseSafetyWarning({
 
       {/* Reasons */}
       <div className="mt-4 space-y-2">
-        <p className="text-sm font-medium text-ink-2">
+        <p className="text-subhead font-medium text-ink-2">
           This exercise stresses your injured area due to:
         </p>
         <ul className="space-y-1">
           {displayReasons.map((reason, idx) => (
-            <li key={idx} className="flex items-start gap-2 text-sm">
+            <li key={idx} className="flex items-start gap-2 text-subhead">
               <span className={getSeverityDot(reason.severity)} />
               <span className="text-ink-2">{reason.description}</span>
             </li>
@@ -88,7 +91,7 @@ export function ExerciseSafetyWarning({
         {hasMoreReasons && !showAllReasons && (
           <button
             onClick={() => setShowAllReasons(true)}
-            className="text-sm text-action"
+            className="text-subhead text-action"
           >
             + {safetyResult.reasons.length - 3} more reasons
           </button>
@@ -98,11 +101,11 @@ export function ExerciseSafetyWarning({
       {/* Caution Recommendations */}
       {safetyResult.level === 'caution' && safetyResult.cautionRecommendations && (
         <div className="mt-4 p-3 bg-sep/50 rounded-lg">
-          <p className="text-sm font-medium text-ink-2 mb-2">Recommendations:</p>
+          <p className="text-subhead font-medium text-ink-2 mb-2">Recommendations:</p>
           <ul className="space-y-1">
             {safetyResult.cautionRecommendations.map((rec, idx) => (
-              <li key={idx} className="text-sm text-ink-2 flex items-start gap-2">
-                <span className="text-amber-400">•</span>
+              <li key={idx} className="text-subhead text-ink-2 flex items-start gap-2">
+                <span className="text-status-warn">•</span>
                 {rec}
               </li>
             ))}
@@ -113,7 +116,7 @@ export function ExerciseSafetyWarning({
       {/* Alternatives */}
       {showAlternatives && safetyResult.alternatives.length > 0 && (
         <div className="mt-4">
-          <p className="text-sm font-medium text-ink-2 mb-2">
+          <p className="text-subhead font-medium text-ink-2 mb-2">
             Safer alternatives for {formatMuscleName(exercise.primaryMuscle)}:
           </p>
           <div className="space-y-2">
@@ -124,10 +127,10 @@ export function ExerciseSafetyWarning({
                 className="w-full flex items-center justify-between p-3 bg-sep/50 hover:bg-sep/50 rounded-lg transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-emerald-400">✓</span>
+                  <span className="text-status-ok">✓</span>
                   <div className="text-left">
                     <span className="text-ink">{alt.name}</span>
-                    <div className="text-xs text-ink-2">
+                    <div className="text-caption text-ink-2">
                       {alt.equipment} • {formatSpinalLoading(alt.spinalLoading)}
                     </div>
                   </div>
@@ -152,16 +155,16 @@ export function ExerciseSafetyWarning({
               onClick={() => safetyResult.alternatives[0] && onSelectAlternative(safetyResult.alternatives[0])}
               disabled={safetyResult.alternatives.length === 0}
             >
-              Choose Alternative
+              Choose alternative
             </Button>
             {onProceedAnyway && (
               <Button
                 variant="secondary"
                 size="sm"
-                className="text-red-400"
+                className="text-status-bad"
                 onClick={onProceedAnyway}
               >
-                Do It Anyway
+                Do it anyway
               </Button>
             )}
           </>
@@ -181,7 +184,7 @@ export function ExerciseSafetyWarning({
               onClick={() => safetyResult.alternatives[0] && onSelectAlternative(safetyResult.alternatives[0])}
               disabled={safetyResult.alternatives.length === 0}
             >
-              See Alternatives
+              See alternatives
             </Button>
           </>
         )}
@@ -209,13 +212,13 @@ function CompactWarning({
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-subhead ${
         isAvoid
-          ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+          ? 'bg-status-bad-tint text-status-bad border border-status-bad/20'
+          : 'bg-status-warn-tint text-status-warn border border-status-warn/20'
       }`}
     >
-      <span>{isAvoid ? '⛔' : '⚠️'}</span>
+      {isAvoid ? <IconBan className="h-4 w-4 flex-shrink-0" stroke={1.75} aria-hidden="true" /> : <IconAlertTriangle className="h-4 w-4 flex-shrink-0" stroke={1.75} aria-hidden="true" />}
       <span className="flex-1 truncate">{topReason?.description || 'May affect injury'}</span>
     </div>
   );
@@ -245,13 +248,15 @@ export function WorkoutScanModal({
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md p-6 bg-fill">
         <div className="text-center mb-6">
-          <div className="text-4xl mb-3">
-            {avoidExercises.length > 0 ? '⚠️' : '💡'}
-          </div>
-          <h2 className="text-xl font-bold text-ink">
+          <div className="mb-3 flex justify-center">
             {avoidExercises.length > 0
-              ? 'Some Exercises May Aggravate Your Injury'
-              : 'Workout Review'}
+              ? <IconAlertTriangle className="h-10 w-10 text-status-warn" stroke={1.75} aria-hidden="true" />
+              : <IconBulb className="h-10 w-10 text-action" stroke={1.75} aria-hidden="true" />}
+          </div>
+          <h2 className="text-headline font-bold text-ink">
+            {avoidExercises.length > 0
+              ? 'Some exercises may aggravate your injury'
+              : 'Workout review'}
           </h2>
           <p className="text-ink-2 mt-2">
             Found {totalIssues} exercise{totalIssues !== 1 ? 's' : ''} that may need attention
@@ -261,13 +266,13 @@ export function WorkoutScanModal({
         {/* Issue Summary */}
         <div className="space-y-3 mb-6">
           {avoidExercises.length > 0 && (
-            <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <span className="text-red-400">⛔</span>
+            <div className="flex items-center gap-3 p-3 bg-status-bad-tint rounded-lg">
+              <IconBan className="h-5 w-5 flex-shrink-0 text-status-bad" stroke={1.75} aria-hidden="true" />
               <div className="flex-1">
-                <span className="font-medium text-red-400">
-                  {avoidExercises.length} Not Recommended
+                <span className="font-medium text-status-bad">
+                  {avoidExercises.length} not recommended
                 </span>
-                <div className="text-sm text-ink-2">
+                <div className="text-subhead text-ink-2">
                   {avoidExercises.map((e) => e.exercise.name).join(', ')}
                 </div>
               </div>
@@ -275,13 +280,13 @@ export function WorkoutScanModal({
           )}
 
           {cautionExercises.length > 0 && (
-            <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-              <span className="text-amber-400">⚠️</span>
+            <div className="flex items-center gap-3 p-3 bg-status-warn-tint rounded-lg">
+              <IconAlertTriangle className="h-5 w-5 flex-shrink-0 text-status-warn" stroke={1.75} aria-hidden="true" />
               <div className="flex-1">
-                <span className="font-medium text-amber-400">
-                  {cautionExercises.length} Use Caution
+                <span className="font-medium text-status-warn">
+                  {cautionExercises.length} use caution
                 </span>
-                <div className="text-sm text-ink-2">
+                <div className="text-subhead text-ink-2">
                   {cautionExercises.map((e) => e.exercise.name).join(', ')}
                 </div>
               </div>
@@ -298,7 +303,7 @@ export function WorkoutScanModal({
               className="w-full"
               onClick={onSwapAll}
             >
-              Replace All with Safe Alternatives
+              Replace all with safe alternatives
             </Button>
           )}
           <Button
@@ -307,7 +312,7 @@ export function WorkoutScanModal({
             className="w-full"
             onClick={onReviewIndividually}
           >
-            Review Individually
+            Review individually
           </Button>
           <Button
             variant="ghost"
@@ -315,7 +320,7 @@ export function WorkoutScanModal({
             className="w-full text-ink-2"
             onClick={onDismiss}
           >
-            Proceed Without Changes
+            Proceed without changes
           </Button>
         </div>
       </Card>
@@ -327,9 +332,9 @@ export function WorkoutScanModal({
 function getSeverityDot(severity: 'high' | 'medium' | 'low'): string {
   switch (severity) {
     case 'high':
-      return 'w-2 h-2 rounded-full bg-red-500 mt-1.5 flex-shrink-0';
+      return 'w-2 h-2 rounded-full bg-status-bad mt-1.5 flex-shrink-0';
     case 'medium':
-      return 'w-2 h-2 rounded-full bg-amber-500 mt-1.5 flex-shrink-0';
+      return 'w-2 h-2 rounded-full bg-status-warn mt-1.5 flex-shrink-0';
     case 'low':
       return 'w-2 h-2 rounded-full bg-ink-3 mt-1.5 flex-shrink-0';
   }

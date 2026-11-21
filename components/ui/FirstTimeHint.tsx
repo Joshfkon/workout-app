@@ -211,8 +211,8 @@ export const FirstTimeHint = memo(function FirstTimeHint({
       {/* Content */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
-          <h4 className="font-semibold text-sm mb-1">{title}</h4>
-          <p className="text-xs text-action leading-relaxed">
+          <h4 className="font-semibold text-subhead mb-1">{title}</h4>
+          <p className="text-caption text-action leading-relaxed">
             {description}
           </p>
         </div>
@@ -235,21 +235,21 @@ export const FirstTimeHint = memo(function FirstTimeHint({
             <a
               href={action.href}
               onClick={handleDismiss}
-              className="px-3 py-1.5 bg-white text-action text-xs font-medium rounded hover:bg-action-tint transition-colors"
+              className="px-3 py-1.5 bg-white text-action text-caption font-medium rounded hover:bg-action-tint transition-colors"
             >
               {action.label}
             </a>
           ) : (
             <button
               onClick={handleAction}
-              className="px-3 py-1.5 bg-white text-action text-xs font-medium rounded hover:bg-action-tint transition-colors"
+              className="px-3 py-1.5 bg-white text-action text-caption font-medium rounded hover:bg-action-tint transition-colors"
             >
               {action.label}
             </button>
           )}
           <button
             onClick={handleDismiss}
-            className="px-3 py-1.5 text-xs text-action hover:text-white transition-colors"
+            className="px-3 py-1.5 text-caption text-action hover:text-white transition-colors"
           >
             Got it
           </button>
@@ -260,7 +260,7 @@ export const FirstTimeHint = memo(function FirstTimeHint({
       {!action && (
         <button
           onClick={handleDismiss}
-          className="mt-2 text-xs text-action hover:text-white transition-colors"
+          className="mt-2 text-caption text-action hover:text-white transition-colors"
         >
           Got it, don&apos;t show again
         </button>
@@ -329,7 +329,7 @@ export const InlineHint = memo(function InlineHint({
           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
-      <div className="flex-1 text-sm">{children}</div>
+      <div className="flex-1 text-subhead">{children}</div>
       <button
         onClick={dismiss}
         className="flex-shrink-0 p-1 hover:bg-action-tint dark:hover:bg-action-tint rounded transition-colors"

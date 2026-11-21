@@ -3,12 +3,12 @@ import Link from 'next/link';
 /**
  * What goes to which AI provider. Shown in the one-time consent prompt and the
  * Settings card so the user sees the same disclosure both times (App Store
- * Review Guideline 5.1.2(i)). Keep in sync with "AI Processing" in
+ * Review Guideline 5.1.2(i)). Keep in sync with "AI processing" in
  * app/privacy/page.tsx and the providers called from lib/actions.
  */
 export function AiDataSharingDetails() {
   return (
-    <div className="space-y-3 text-sm text-ink-2">
+    <div className="space-y-3 text-subhead text-ink-2">
       <p>
         Some HyperTrack features use outside AI services. To use them, the app sends the data
         below to that provider. Nothing is sent unless you allow it.
@@ -26,7 +26,7 @@ export function AiDataSharingDetails() {
           details. Sends the text, photos and body stats used by that feature.
         </li>
       </ul>
-      <p className="text-xs text-ink-3">
+      <p className="text-caption text-ink-3">
         The data is sent only to answer your request, and HyperTrack does not use it to train AI
         models. You can change this any time in Settings → Profile.{' '}
         <Link href="/privacy" className="text-action underline">

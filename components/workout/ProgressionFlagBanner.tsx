@@ -96,16 +96,16 @@ export const ProgressionFlagBanner = memo(function ProgressionFlagBanner({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className={cn('font-medium text-sm', colors.accent)}>
+            <span className={cn('font-medium text-subhead', colors.accent)}>
               {signalText}
             </span>
             {signal.metadata?.weeksStagnant != null && (
-              <span className="text-xs text-ink-3">
+              <span className="text-caption text-ink-3">
                 {signal.metadata.weeksStagnant} weeks
               </span>
             )}
           </div>
-          <p className="text-sm text-ink-2 leading-snug">
+          <p className="text-subhead text-ink-2 leading-snug">
             {signal.reason}
           </p>
         </div>
@@ -119,7 +119,7 @@ export const ProgressionFlagBanner = memo(function ProgressionFlagBanner({
             size="sm"
             onClick={onLearnMore}
           >
-            Learn More
+            Learn more
           </Button>
         )}
         <Button
@@ -160,7 +160,7 @@ export const ProgressionFlagInline = memo(function ProgressionFlagInline({
       onClick={onPress}
       className={cn(
         'flex items-center gap-2 px-2 py-1 rounded-md',
-        'text-xs text-ink-2',
+        'text-caption text-ink-2',
         'hover:bg-fill transition-colors'
       )}
     >

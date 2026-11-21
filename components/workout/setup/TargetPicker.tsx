@@ -53,7 +53,7 @@ function DeficitMeter({ chip }: { chip: TargetChip }) {
           style={{ width: `${pct}%` }}
         />
       </span>
-      <span className="text-[10px] tabular-nums text-ink-2">
+      <span className="text-caption tabular-nums text-ink-2">
         {Math.round(chip.weeklyCredited)}/{chip.zoneMin}
       </span>
     </span>
@@ -80,8 +80,8 @@ export function TargetPicker({
   return (
     <div className="mt-6 flex flex-col gap-5" data-testid="setup-target-picker">
       <div>
-        <h2 className="text-lg font-semibold text-ink">What are you training?</h2>
-        <p className="text-sm text-ink-2">
+        <h2 className="text-headline font-semibold text-ink">What are you training?</h2>
+        <p className="text-subhead text-ink-2">
           Good targets are pre-selected. Tap to change.
         </p>
       </div>
@@ -93,7 +93,7 @@ export function TargetPicker({
               type="button"
               disabled={disabled}
               onClick={() => onRepeatType(shortcuts.repeatType!.groups)}
-              className="flex-shrink-0 rounded-full border border-sep bg-fill px-3.5 py-2 text-sm text-ink hover:bg-sep disabled:opacity-50"
+              className="flex-shrink-0 rounded-full border border-sep bg-fill px-3.5 py-2 text-subhead text-ink hover:bg-sep disabled:opacity-50"
               data-testid="setup-shortcut-repeat-type"
             >
               ↻ Repeat last {shortcuts.repeatType.label}
@@ -105,7 +105,7 @@ export function TargetPicker({
               type="button"
               disabled={disabled}
               onClick={() => onLoadSession(session)}
-              className="flex-shrink-0 rounded-full bg-card px-3.5 py-2 text-sm text-ink-2 hover:bg-fill disabled:opacity-50 shadow-card"
+              className="flex-shrink-0 rounded-full bg-card px-3.5 py-2 text-subhead text-ink-2 hover:bg-fill disabled:opacity-50 shadow-card"
               data-testid={`setup-shortcut-session-${session.sessionId}`}
             >
               {label} · {daysAgoLabel(daysAgo)}
@@ -143,12 +143,12 @@ export function TargetPicker({
                     className={`h-2 w-2 flex-shrink-0 rounded-full ${STATUS_DOT[chip.status]}`}
                     title={STATUS_LABEL[chip.status]}
                   />
-                  <span className={`truncate text-sm font-medium ${isSelected ? 'text-ink' : 'text-ink'}`}>
+                  <span className={`truncate text-subhead font-medium ${isSelected ? 'text-ink' : 'text-ink'}`}>
                     {chip.displayName}
                   </span>
                 </span>
                 <span className="mt-1 flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-ink-3">{STATUS_LABEL[chip.status]}</span>
+                  <span className="text-caption text-ink-3">{STATUS_LABEL[chip.status]}</span>
                   <DeficitMeter chip={chip} />
                 </span>
               </button>
@@ -158,7 +158,7 @@ export function TargetPicker({
       )}
 
       <div>
-        <p className="mb-1.5 text-xs text-ink-3">Time budget</p>
+        <p className="mb-1.5 text-caption text-ink-3">Time budget</p>
         <div className="flex gap-1.5" role="radiogroup" aria-label="Time budget">
           {budgetOptions.map((opt) => {
             const active = timeBudget === opt;
@@ -170,7 +170,7 @@ export function TargetPicker({
                 aria-checked={active}
                 disabled={disabled}
                 onClick={() => onTimeBudgetChange(opt)}
-                className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                className={`flex-1 rounded-lg py-2 text-subhead font-medium transition-colors ${
                   active ? 'bg-action text-on-action' : 'bg-fill text-ink-2 hover:text-ink'
                 }`}
                 data-testid={`setup-budget-${opt ?? 'none'}`}
@@ -188,7 +188,7 @@ export function TargetPicker({
           type="button"
           onClick={onBuild}
           disabled={disabled || selected.size === 0}
-          className="bg-action w-full rounded-2xl py-4 text-lg font-semibold text-on-action shadow-lg shadow-action/25 transition-all active:scale-[0.99] disabled:opacity-50"
+          className="bg-action w-full rounded-2xl py-4 text-headline font-semibold text-on-action shadow-lg shadow-action/25 transition-all active:scale-[0.99] disabled:opacity-50"
           data-testid="setup-build-plan"
         >
           Build plan{selected.size > 0 ? ` · ${selected.size} group${selected.size === 1 ? '' : 's'}` : ''}
@@ -197,7 +197,7 @@ export function TargetPicker({
           type="button"
           onClick={onBuildManually}
           disabled={disabled}
-          className="mt-2 w-full py-2 text-sm font-medium text-ink-2 hover:text-ink disabled:opacity-50"
+          className="mt-2 w-full py-2 text-subhead font-medium text-ink-2 hover:text-ink disabled:opacity-50"
           data-testid="setup-build-manually"
         >
           Build manually

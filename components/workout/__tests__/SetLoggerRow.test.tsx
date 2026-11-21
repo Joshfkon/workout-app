@@ -88,7 +88,7 @@ describe('SetLoggerRow feedback sheet', () => {
       await openFeedbackSheet(user);
 
       const clean = screen.getByRole('button', { name: /Clean/ });
-      const breakdown = screen.getByRole('button', { name: /Some Breakdown/ });
+      const breakdown = screen.getByRole('button', { name: /Some breakdown/ });
       const ugly = screen.getByRole('button', { name: /Ugly/ });
 
       // Nothing selected: every chip is neutral, no semantic tint anywhere.

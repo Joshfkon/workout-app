@@ -120,7 +120,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <span className="text-base font-bold text-ink hidden sm:block">HyperTrack</span>
+            <span className="text-body font-bold text-ink hidden sm:block">HyperTrack</span>
           </Link>
 
           {/* Spacer */}
@@ -132,7 +132,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
             <SubscriptionBadge />
             <Link
               href="/dashboard/science"
-              className="text-xs text-ink-3 hover:text-ink-2 transition-colors"
+              className="text-caption text-ink-3 hover:text-ink-2 transition-colors"
             >
               About
             </Link>

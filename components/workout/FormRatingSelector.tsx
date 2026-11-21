@@ -28,7 +28,7 @@ const FORM_OPTIONS: FormOption[] = [
   },
   {
     value: 'some_breakdown',
-    label: 'Some Breakdown',
+    label: 'Some breakdown',
     glyph: '~',
     description: 'Last 1-2 reps got sloppy',
     selectedBg: 'bg-status-warn text-white',
@@ -64,7 +64,7 @@ export const FormRatingSelector = memo(function FormRatingSelector({
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-1 text-sm font-medium text-ink-2">
+      <label className="flex items-center gap-1 text-subhead font-medium text-ink-2">
         Form
         <InfoTooltip term="FORM_QUALITY" size="sm" />
       </label>
@@ -82,7 +82,7 @@ export const FormRatingSelector = memo(function FormRatingSelector({
                 disabled ? 'opacity-50 cursor-not-allowed' : ''
               } ${isSelected ? option.selectedBg : SELECTOR_CHIP_IDLE}`}
             >
-              <span className="text-[13px] leading-tight text-center">
+              <span className="text-subhead leading-tight text-center">
                 <span aria-hidden="true">{option.glyph}</span> {option.label}
               </span>
             </button>
@@ -90,7 +90,7 @@ export const FormRatingSelector = memo(function FormRatingSelector({
         })}
       </div>
       {activeDescription && (
-        <p className="text-xs text-ink-3 text-center">{activeDescription}</p>
+        <p className="text-caption text-ink-3 text-center">{activeDescription}</p>
       )}
     </div>
   );

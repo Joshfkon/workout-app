@@ -20,7 +20,7 @@ export default function SearchPage() {
     <div className="max-w-2xl mx-auto px-4 py-6">
       <Card>
         <CardHeader>
-          <CardTitle>Find People</CardTitle>
+          <CardTitle>Find people</CardTitle>
         </CardHeader>
         <CardContent>
           <UserSearch

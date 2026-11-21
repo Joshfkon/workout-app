@@ -193,7 +193,7 @@ export default function UserProfilePage() {
               The user @{username} doesn&apos;t exist or their profile is private.
             </p>
             <Link href="/dashboard">
-              <Button variant="primary">Go to Dashboard</Button>
+              <Button variant="primary">Go to dashboard</Button>
             </Link>
           </CardContent>
         </Card>

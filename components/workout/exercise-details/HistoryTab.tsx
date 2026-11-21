@@ -47,8 +47,8 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, is
         <svg className="w-12 h-12 mx-auto text-ink-3 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
-        <p className="text-ink-2 text-sm">No workout history for this exercise yet</p>
-        <p className="text-ink-3 text-xs mt-1">Add it to a workout to start tracking progress!</p>
+        <p className="text-ink-2 text-subhead">No workout history for this exercise yet</p>
+        <p className="text-ink-3 text-caption mt-1">Add it to a workout to start tracking progress!</p>
       </div>
     );
   }
@@ -69,7 +69,7 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, is
             >
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-sm font-medium text-ink">
+                  <span className="text-subhead font-medium text-ink">
                     {formatDetailDate(session.date)}
                   </span>
                   {session.locationName && (
@@ -79,7 +79,7 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, is
                     <Badge variant="info" size="sm">Deload</Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-ink-2 mt-0.5">
+                <div className="flex items-center gap-2 text-caption text-ink-2 mt-0.5">
                   {session.topSet && (
                     <span>Top: {setLabel(session.topSet.weightKg, session.topSet.reps, unit)}</span>
                   )}
@@ -115,13 +115,13 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, is
                   {session.sets.map((set, idx) => {
                     const rir = setRir(set.rpe);
                     return (
-                      <div key={idx} className="flex items-center gap-2 text-sm">
-                        <span className="text-ink-3 text-xs w-5">{idx + 1}</span>
+                      <div key={idx} className="flex items-center gap-2 text-subhead">
+                        <span className="text-ink-3 text-caption w-5">{idx + 1}</span>
                         <span className="text-ink">
                           {setLabel(set.weightKg, set.reps, unit)}
                         </span>
                         {rir !== null && (
-                          <span className={`text-xs font-medium ${effortColorClass(set.rpe)}`}>
+                          <span className={`text-caption font-medium ${effortColorClass(set.rpe)}`}>
                             @ {rir} RIR
                           </span>
                         )}
@@ -132,7 +132,7 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, is
                 {repTotalMode ? (
                   // rep_total: the progression metric IS the session total —
                   // no e1RM exists for this exercise.
-                  <p className="text-xs text-ink-3 pt-1">
+                  <p className="text-caption text-ink-3 pt-1">
                     Session rep total:{' '}
                     <span className="text-action font-medium">
                       {/* Straight sets only — same rule the rep_total policy grades. */}
@@ -144,7 +144,7 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, is
                   </p>
                 ) : (
                   session.bestE1RM > 0 && (
-                    <p className="text-xs text-ink-3 pt-1">
+                    <p className="text-caption text-ink-3 pt-1">
                       Session best e1RM:{' '}
                       <span className="text-action font-medium">
                         {Math.round(convertWeight(session.bestE1RM, 'kg', unit))} {unit}
@@ -161,7 +161,7 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, is
       {sessions.length > visibleCount && (
         <button
           onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-          className="w-full py-2.5 text-sm text-action bg-fill/40 hover:bg-fill/70 rounded-lg transition-colors"
+          className="w-full py-2.5 text-subhead text-action bg-fill/40 hover:bg-fill/70 rounded-lg transition-colors"
         >
           Show older sessions ({sessions.length - visibleCount} more)
         </button>

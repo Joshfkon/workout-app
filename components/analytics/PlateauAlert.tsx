@@ -62,9 +62,9 @@ export function PlateauAlert({
   };
 
   const getSeverityLabel = () => {
-    if (result.weeksSinceProgress >= 6) return 'Significant Plateau';
-    if (result.weeksSinceProgress >= 4) return 'Plateau Detected';
-    return 'Stalling Progress';
+    if (result.weeksSinceProgress >= 6) return 'Significant plateau';
+    if (result.weeksSinceProgress >= 4) return 'Plateau detected';
+    return 'Stalling progress';
   };
 
   return (
@@ -98,7 +98,7 @@ export function PlateauAlert({
                 {getSeverityLabel()}
               </Badge>
             </div>
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               No progress in {formatWeeks(result.weeksSinceProgress)}
               {hasValidE1RM && (
                 <>
@@ -129,7 +129,7 @@ export function PlateauAlert({
         <div className="mt-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-sm text-action transition-colors"
+            className="flex items-center gap-1 text-subhead text-action transition-colors"
           >
             {isExpanded ? 'Hide' : 'Show'} suggestions
             <svg
@@ -147,7 +147,7 @@ export function PlateauAlert({
               {result.suggestions.map((suggestion, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-2 text-sm text-ink"
+                  className="flex items-start gap-2 text-subhead text-ink"
                 >
                   <span className="text-action mt-0.5">•</span>
                   <span>{suggestion}</span>
@@ -186,7 +186,7 @@ export function PlateauAlertList({ alerts, units, onDismiss }: PlateauAlertListP
             </svg>
           </div>
           <p className="text-ink font-medium">All exercises progressing</p>
-          <p className="text-sm text-ink-2 mt-1">
+          <p className="text-subhead text-ink-2 mt-1">
             No plateaus detected - keep up the great work!
           </p>
         </div>
@@ -197,7 +197,7 @@ export function PlateauAlertList({ alerts, units, onDismiss }: PlateauAlertListP
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-ink">
+        <h3 className="text-subhead font-medium text-ink">
           Plateau Alerts ({activeAlerts.length})
         </h3>
       </div>

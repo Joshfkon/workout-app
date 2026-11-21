@@ -73,7 +73,7 @@ export const RIRSelector = memo(function RIRSelector({
 }: RIRSelectorProps) {
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-1 text-sm font-medium text-ink-2">
+      <label className="flex items-center gap-1 text-subhead font-medium text-ink-2">
         Reps left in tank?
         <InfoTooltip term="RIR" size="sm" />
       </label>
@@ -93,12 +93,12 @@ export const RIRSelector = memo(function RIRSelector({
               `}
             >
               <span
-                className={`text-lg font-bold ${isSelected ? 'text-white' : option.color}`}
+                className={`text-headline font-bold ${isSelected ? 'text-white' : option.color}`}
               >
                 {option.label}
               </span>
               <span
-                className={`text-xs ${isSelected ? 'text-white/80' : 'text-ink-2'}`}
+                className={`text-caption ${isSelected ? 'text-white/80' : 'text-ink-2'}`}
               >
                 {option.subLabel}
               </span>

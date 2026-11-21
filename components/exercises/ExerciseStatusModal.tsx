@@ -124,7 +124,7 @@ export function ExerciseStatusModal({
             onClick={handleSubmit}
             isLoading={isSubmitting}
           >
-            {isArchive ? 'Archive' : "Don't Suggest"}
+            {isArchive ? 'Archive' : "Don't suggest"}
           </Button>
         </ModalFooter>
       </div>

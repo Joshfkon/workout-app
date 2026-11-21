@@ -142,8 +142,8 @@ export function WaistPaceCheckCard({
       <div className="flex items-start gap-3">
         <IconRulerMeasure className="w-5 h-5 text-status-warn flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-medium text-ink">Waist is outpacing this gain</p>
-          <p className="mt-1.5 text-xs text-ink-2">{signal.message}</p>
+          <p className="text-body font-medium text-ink">Waist is outpacing this gain</p>
+          <p className="mt-1.5 text-caption text-ink-2">{signal.message}</p>
           <div className="mt-3">
             <Button size="sm" variant="ghost" onClick={handleDismiss}>
               Dismiss

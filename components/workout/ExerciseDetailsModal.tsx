@@ -39,7 +39,8 @@ import { deriveProgressionScope } from '@/services/progressionScope';
 import { defaultTrackKey, shouldSplitByLocation } from '@/services/locationTracks';
 import { getFailureSafetyTier, getTierDisplayInfo } from '@/services/exerciseSafety';
 import { convertWeightForDisplay } from '@/lib/utils';
-import { getExerciseProp, getTierBadgeClasses } from './exercise-details/helpers';
+import { getExerciseProp } from './exercise-details/helpers';
+import { tierBadgeClasses } from '@/components/exercises/tierBadge';
 import { AboutTab } from './exercise-details/AboutTab';
 import { HistoryTab } from './exercise-details/HistoryTab';
 import { ChartsTab } from './exercise-details/ChartsTab';
@@ -113,7 +114,7 @@ function DetailHeaderMeta({
   const chip = (label: string, key: string) => (
     <span
       key={key}
-      className="px-2 py-0.5 rounded-full bg-fill text-ink-2 text-xs capitalize"
+      className="px-2 py-0.5 rounded-full bg-fill text-ink-2 text-caption capitalize"
     >
       {label}
     </span>
@@ -125,14 +126,14 @@ function DetailHeaderMeta({
           equipment · pattern as one wrapping chip row */}
       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
         {tier && (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getTierBadgeClasses(tier)}`}>
+          <span className={`px-2 py-0.5 rounded-full text-caption font-bold ${tierBadgeClasses(tier)}`}>
             Tier {tier}
           </span>
         )}
         {isCautioned && (
           <span
             data-testid="exercise-detail-caution"
-            className="px-2 py-0.5 rounded-full bg-status-warn/15 text-status-warn text-xs font-medium"
+            className="px-2 py-0.5 rounded-full bg-status-warn/15 text-status-warn text-caption font-medium"
           >
             ⚠ {safetyInfo.shortLabel}
           </span>
@@ -146,12 +147,12 @@ function DetailHeaderMeta({
 
       {/* Caution reason — why this exercise carries the flag */}
       {isCautioned && (
-        <p className="mt-2 text-xs text-status-warn/90">{safetyInfo.description}</p>
+        <p className="mt-2 text-caption text-status-warn/90">{safetyInfo.description}</p>
       )}
 
       {/* Compact last-session summary (full history lives in the History tab) */}
       {lastSessionSummary && (
-        <p data-testid="exercise-detail-last-session" className="mt-2 text-xs text-ink-2">
+        <p data-testid="exercise-detail-last-session" className="mt-2 text-caption text-ink-2">
           {lastSessionSummary}
         </p>
       )}
@@ -328,7 +329,7 @@ export function ExerciseDetailsModal({
         <div className="p-4 sm:p-6">
           {/* Compact header — line 1: name · edit · close */}
           <div className="flex items-start justify-between gap-3">
-            <h2 className="flex-1 min-w-0 text-xl font-bold text-ink break-words">
+            <h2 className="flex-1 min-w-0 text-headline font-bold text-ink break-words">
               {exercise.name}
             </h2>
             <div className="flex items-center gap-1 shrink-0">
@@ -382,7 +383,7 @@ export function ExerciseDetailsModal({
                       aria-selected={isActive}
                       data-testid={`exercise-detail-tab-${tab.id}`}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex-1 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                      className={`flex-1 py-2.5 text-subhead font-medium border-b-2 -mb-px transition-colors ${
                         isActive
                           ? 'text-action border-action'
                           : 'text-ink-2 border-transparent hover:text-ink'
@@ -410,7 +411,7 @@ export function ExerciseDetailsModal({
                           role="radio"
                           aria-checked={isSelected}
                           onClick={() => setSelectedTrack(opt.key)}
-                          className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          className={`shrink-0 px-3 py-1 rounded-full text-caption font-medium transition-colors ${
                             isSelected
                               ? 'bg-action/20 text-action'
                               : 'bg-fill text-ink-2 hover:text-ink'

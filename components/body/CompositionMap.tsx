@@ -237,7 +237,7 @@ function MapTooltip({
   const weight = units === 'lb' ? `${kgToLbs(p.weightKg).toFixed(1)} lb` : `${p.weightKg.toFixed(1)} kg`;
   return (
     <div
-      className="rounded-lg px-3 py-2 text-xs"
+      className="rounded-lg px-3 py-2 text-caption"
       style={{ backgroundColor: '#1f2937', border: '1px solid #374151', color: '#f3f4f6' }}
     >
       <p className="font-medium">
@@ -1074,7 +1074,7 @@ export function CompositionMap({
 
   if (scanPoints.length < 2) {
     return (
-      <p className="text-sm text-ink-2 py-8 text-center">
+      <p className="text-subhead text-ink-2 py-8 text-center">
         Log at least two DEXA scans to unlock the Composition Map.
       </p>
     );
@@ -1129,7 +1129,7 @@ export function CompositionMap({
               key={option.value}
               type="button"
               onClick={() => setViewMode(option.value)}
-              className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
+              className={`px-2 py-0.5 text-caption font-medium rounded transition-all ${
                 viewMode === option.value
                   ? 'bg-sep text-ink'
                   : 'text-ink-2 hover:text-ink'
@@ -1284,10 +1284,10 @@ export function CompositionMap({
       </div>
 
       {/* Direction legend + decomposition caption */}
-      <p className="text-[11px] text-ink-2 mt-2">
+      <p className="text-caption text-ink-2 mt-2">
         ↑ muscle gained · ← fat lost · ↖ recomp
       </p>
-      <p className="text-[11px] text-ink-2 mt-1">
+      <p className="text-caption text-ink-2 mt-1">
         FMI + FFMI = BMI — this map decomposes BMI into fat (x) and fat-free
         (y) parts; diagonals are constant BMI. Scan points are the signal;
         the faint trail is the day-to-day estimate, shown for context only.
@@ -1307,7 +1307,7 @@ export function CompositionMap({
       {/* No target yet: zone + suggestion carry the destination until one
           is set. The zone is a destination, not a grade. */}
       {!targetPoint && (
-        <p className="text-[11px] text-ink-2 mt-2">
+        <p className="text-caption text-ink-2 mt-2">
           Green zone = typical athletic range.
           {suggestion && ' Tap the suggested dot to set it as your target.'}{' '}
           <Link
@@ -1326,20 +1326,20 @@ export function CompositionMap({
           className="mt-2 p-3 rounded-lg bg-fill/60 border border-sep"
           data-testid="map-suggestion-card"
         >
-          <p className="text-xs text-ink">
+          <p className="text-caption text-ink">
             Suggested next milestone:{' '}
             <span className="font-medium text-status-ok">
               FFMI {suggestion.ffmi.toFixed(1)} · BF {suggestion.bodyFatPercent.toFixed(0)}%
             </span>
           </p>
-          <p className="text-[11px] text-ink-2 mt-0.5">
+          <p className="text-caption text-ink-2 mt-0.5">
             A conservative waypoint for your current {phase ?? 'training'} phase — not the
             final destination.
           </p>
           <div className="flex gap-2 mt-2">
             <button
               type="button"
-              className="px-2.5 py-1 text-xs font-medium rounded bg-status-ok/20 text-status-ok hover:bg-status-ok/30 transition-colors"
+              className="px-2.5 py-1 text-caption font-medium rounded bg-status-ok/20 text-status-ok hover:bg-status-ok/30 transition-colors"
               onClick={async () => {
                 await onSetTarget?.({
                   targetFfmi: suggestion.ffmi,
@@ -1352,7 +1352,7 @@ export function CompositionMap({
             </button>
             <button
               type="button"
-              className="px-2.5 py-1 text-xs font-medium rounded bg-fill text-ink hover:bg-sep transition-colors"
+              className="px-2.5 py-1 text-caption font-medium rounded bg-fill text-ink hover:bg-sep transition-colors"
               onClick={async () => {
                 // Save first so the goals editor opens pre-filled with it.
                 await onSetTarget?.({
@@ -1373,12 +1373,12 @@ export function CompositionMap({
         <div className="mt-3 p-3 rounded-lg bg-fill/60 border border-sep">
           <div className="flex items-center justify-between gap-2">
             {goalProgress.status === 'target_reached' ? (
-              <p className="text-sm font-medium text-status-ok">
+              <p className="text-subhead font-medium text-status-ok">
                 Target reached — composition at or beyond your goal
               </p>
             ) : (
               <p
-                className={`text-sm font-medium ${
+                className={`text-subhead font-medium ${
                   (goalProgress.progressPercent ?? 0) < 0
                     ? 'text-status-warn'
                     : 'text-ink'
@@ -1399,7 +1399,7 @@ export function CompositionMap({
                     key={option.value}
                     type="button"
                     onClick={() => setStartMode(option.value)}
-                    className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
+                    className={`px-2 py-0.5 text-caption font-medium rounded transition-all ${
                       startMode === option.value
                         ? 'bg-sep text-ink'
                         : 'text-ink-2 hover:text-ink'
@@ -1413,23 +1413,23 @@ export function CompositionMap({
           </div>
           {goalProgress.status !== 'target_reached' &&
             (goalProgress.progressPercent ?? 0) < 0 && (
-              <p className="text-[11px] text-status-warn/80 mt-1">
+              <p className="text-caption text-status-warn/80 mt-1">
                 Moving away from the target along the goal direction.
               </p>
             )}
           {goalProgress.offAxisNote && (
-            <p className="text-[11px] text-ink-2 mt-1">
+            <p className="text-caption text-ink-2 mt-1">
               {goalProgress.offAxisNote}
             </p>
           )}
           {/* Trend ETA: an "if the trend holds" statement, not a promise. */}
           {forecast && goalProgress.status !== 'target_reached' && (
             forecast.goalEtaWeeks != null ? (
-              <p className="text-[11px] text-status-ok/80 mt-1">
+              <p className="text-caption text-status-ok/80 mt-1">
                 On this trend: goal in ~{forecast.goalEtaWeeks} wk.
               </p>
             ) : (
-              <p className="text-[11px] text-ink-2 mt-1">
+              <p className="text-caption text-ink-2 mt-1">
                 Current trend isn&apos;t tracking through the goal point.
               </p>
             )
@@ -1440,7 +1440,7 @@ export function CompositionMap({
       {/* P-ratio between consecutive scans */}
       {visiblePairs.length > 0 && (
         <div className="mt-3">
-          <p className="text-xs font-medium text-ink mb-1.5">
+          <p className="text-caption font-medium text-ink mb-1.5">
             Partitioning between scans (p-ratio)
           </p>
           <div className="space-y-1">
@@ -1451,7 +1451,7 @@ export function CompositionMap({
               return (
                 <div
                   key={`${pair.fromDate}-${pair.toDate}`}
-                  className="flex items-baseline justify-between gap-2 text-xs"
+                  className="flex items-baseline justify-between gap-2 text-caption"
                 >
                   <span className="text-ink-2 shrink-0">
                     {formatDateShort(pair.fromDate)} → {formatDateShort(pair.toDate)}
@@ -1476,7 +1476,7 @@ export function CompositionMap({
               );
             })}
           </div>
-          <p className="text-[10px] text-ink-3 mt-1.5">
+          <p className="text-caption text-ink-3 mt-1.5">
             DEXA precision is ~±1–2% BF and ±1–2 lb lean (hydration-sensitive)
             — deltas inside that range are labeled as measurement noise.
           </p>
@@ -1489,32 +1489,32 @@ export function CompositionMap({
         data-testid="map-summary-footer"
       >
         <div>
-          <p className="text-xs font-medium text-cyan-300">
+          <p className="text-caption font-medium text-cyan-300">
             Latest ({formatDateShort(lastScan.date)})
           </p>
-          <p className="text-xs text-ink mt-1">
+          <p className="text-caption text-ink mt-1">
             FFMI {lastScan.ffmi.toFixed(1)} · FMI {lastScan.fmi.toFixed(1)} · BF{' '}
             {lastScan.bodyFatPercent.toFixed(1)}%
           </p>
-          <p className="text-[11px] text-ink-2 mt-0.5">
+          <p className="text-caption text-ink-2 mt-0.5">
             Weight {formatWeightDisplay(lastScan.weightKg)}
           </p>
         </div>
         {targetPoint && targetWeightKg != null ? (
           <div className="border-l border-sep pl-3">
-            <p className="text-xs font-medium text-status-ok">Goal</p>
-            <p className="text-xs text-ink mt-1">
+            <p className="text-caption font-medium text-status-ok">Goal</p>
+            <p className="text-caption text-ink mt-1">
               FFMI {targetPoint.ffmi.toFixed(1)} · FMI {targetPoint.fmi.toFixed(1)} · BF{' '}
               {targetBfPercent!.toFixed(1)}%
             </p>
-            <p className="text-[11px] text-ink-2 mt-0.5">
+            <p className="text-caption text-ink-2 mt-0.5">
               Implied weight ~{formatWeightDisplay(targetWeightKg)}
             </p>
           </div>
         ) : (
           <div className="border-l border-sep pl-3">
-            <p className="text-xs font-medium text-ink-2">Goal</p>
-            <p className="text-[11px] text-ink-2 mt-1">
+            <p className="text-caption font-medium text-ink-2">Goal</p>
+            <p className="text-caption text-ink-2 mt-1">
               No target set —{' '}
               <Link
                 href="/dashboard/analytics?tab=goals&section=body-targets"

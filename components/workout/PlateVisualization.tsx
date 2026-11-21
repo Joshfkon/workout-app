@@ -148,10 +148,10 @@ export function BarbellVisualization({
           data-testid="plate-calc-below-base"
           className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-sep bg-card/40 py-8 text-center"
         >
-          <p className="text-sm font-semibold text-ink">
+          <p className="text-subhead font-semibold text-ink">
             Target is below the {isMachine ? 'starting' : 'bar'} weight
           </p>
-          <p className="text-xs text-ink-2">
+          <p className="text-caption text-ink-2">
             The {isMachine ? 'machine starts' : 'empty bar weighs'} {baseWeight}
             {unit}. Enter {baseWeight}
             {unit} or more to load plates.
@@ -197,10 +197,10 @@ export function BarbellVisualization({
 
           {/* Weight summary */}
           <div className="mt-3 text-center">
-            <p className="text-lg font-bold text-ink">
+            <p className="text-headline font-bold text-ink">
               {calculation.actualTotal} {unit}
             </p>
-            <p className="text-xs text-ink-2">
+            <p className="text-caption text-ink-2">
               {isMachine ? (
                 (machineBaseWeight ?? 0) > 0 ? (
                   <>Machine base: {machineBaseWeight}{unit} + Plates: {calculation.weightPerSide}{unit} × 2</>
@@ -214,7 +214,7 @@ export function BarbellVisualization({
             {isClosestMatch && (
               <p
                 data-testid="plate-calc-closest"
-                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-status-warn bg-sep px-2 py-1 text-xs font-medium text-ink"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-status-warn bg-sep px-2 py-1 text-caption font-medium text-ink"
               >
                 <span aria-hidden className="h-2 w-2 rounded-full bg-status-warn" />
                 Can&apos;t match exactly — closest is {calculation.actualTotal}{unit}
@@ -260,7 +260,7 @@ export function PlateChip({
         className="h-3 w-3 rounded-sm border border-ink-3"
         style={{ backgroundColor: color }}
       />
-      <span className="text-xs font-medium text-ink">
+      <span className="text-caption font-medium text-ink">
         {plate}{unit}
         {count && count > 1 ? ` × ${count}` : ''}
       </span>

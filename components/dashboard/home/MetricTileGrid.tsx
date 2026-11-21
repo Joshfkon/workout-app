@@ -187,16 +187,16 @@ export function MetricTileGrid({
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {nutritionTargets && (
         <MetricTile icon={IconApple} label="Nutrition" href="/dashboard/nutrition">
-          <div className="text-xl font-semibold text-ink">
+          <div className="text-headline font-semibold text-ink">
             {kcalLeft >= 0 ? (
               <>
                 {kcalLeft.toLocaleString()}
-                <span className="text-sm text-ink-2 font-normal"> left</span>
+                <span className="text-subhead text-ink-2 font-normal"> left</span>
               </>
             ) : (
               <>
                 {Math.abs(kcalLeft).toLocaleString()}
-                <span className="text-sm text-status-warn font-normal"> over</span>
+                <span className="text-subhead text-status-warn font-normal"> over</span>
               </>
             )}
           </div>
@@ -206,7 +206,7 @@ export function MetricTileGrid({
               style={{ width: `${Math.min(100, (nutritionTotals.calories / Math.max(1, nutritionTargets.calories)) * 100)}%` }}
             />
           </div>
-          <div className={`text-[11px] mt-1.5 ${kcalPaceColor}`}>
+          <div className={`text-caption mt-1.5 ${kcalPaceColor}`}>
             {proteinLeft > 0 ? `${proteinLeft}g protein to go` : 'protein target hit'}
             {/* No pace judgment before/at the start of the eating window */}
             {!kcalVerdict.suppressed && <> · {kcalVerdict.status}</>}
@@ -216,14 +216,14 @@ export function MetricTileGrid({
       {showLifts && liftTrends && (
         <MetricTile icon={IconTrendingUp} label="Lifts" href="/dashboard/analytics?tab=strength&section=lift-trends">
           {confidentLifts > 0 ? (
-            <div className="text-xl font-semibold text-status-ok">
+            <div className="text-headline font-semibold text-status-ok">
               {liftTrends.rising} rising
-              <span className="text-sm text-ink-2 font-normal"> of {confidentLifts}</span>
+              <span className="text-subhead text-ink-2 font-normal"> of {confidentLifts}</span>
             </div>
           ) : (
-            <div className="text-xl font-semibold text-ink">
+            <div className="text-headline font-semibold text-ink">
               Learning
-              <span className="text-sm text-ink-2 font-normal"> your lifts</span>
+              <span className="text-subhead text-ink-2 font-normal"> your lifts</span>
             </div>
           )}
           <div className="flex gap-1 mt-2" aria-hidden="true">
@@ -241,9 +241,9 @@ export function MetricTileGrid({
             ))}
           </div>
           {confidentLifts > 0 && liftParts.length > 0 ? (
-            <div className="text-[11px] text-ink-2 mt-1.5 truncate">{liftParts.join(' · ')}</div>
+            <div className="text-caption text-ink-2 mt-1.5 truncate">{liftParts.join(' · ')}</div>
           ) : confidentLifts === 0 ? (
-            <div className="text-[11px] text-ink-2 mt-1.5 truncate">trends appear after 2–3 sessions</div>
+            <div className="text-caption text-ink-2 mt-1.5 truncate">trends appear after 2–3 sessions</div>
           ) : null}
         </MetricTile>
       )}
@@ -254,10 +254,10 @@ export function MetricTileGrid({
           href="/dashboard/volume"
           accent={volume.lowCount > 0 ? 'warning' : undefined}
         >
-          <div className="text-xl font-semibold text-ink">
+          <div className="text-headline font-semibold text-ink">
             {/* Effective Volume (RIR-weighted) primary; raw count secondary. */}
             {formatEffectiveVolume(volume.totalEffectiveSets)}
-            <span className="text-sm text-ink-2 font-normal">
+            <span className="text-subhead text-ink-2 font-normal">
               {' '}effective / {volume.totalSets} sets
             </span>
           </div>
@@ -267,7 +267,7 @@ export function MetricTileGrid({
               style={{ width: `${Math.min(100, (volume.totalSets / Math.max(1, volume.totalTarget)) * 100)}%` }}
             />
           </div>
-          <div className={`text-[11px] mt-1.5 ${volume.lowCount > 0 ? 'text-status-warn' : 'text-status-ok'}`}>
+          <div className={`text-caption mt-1.5 ${volume.lowCount > 0 ? 'text-status-warn' : 'text-status-ok'}`}>
             {volume.lowCount > 0
               ? `${volume.lowCount} muscle${volume.lowCount === 1 ? '' : 's'} under weekly minimum →`
               : 'Every muscle at its weekly minimum'}
@@ -285,19 +285,19 @@ export function MetricTileGrid({
             <button
               type="button"
               onClick={onLogWeight}
-              className="text-xs font-medium text-action transition-colors"
+              className="text-caption font-medium text-action transition-colors"
             >
               + log
             </button>
           }
         >
-          <div className="text-xl font-semibold text-ink">
+          <div className="text-headline font-semibold text-ink">
             {getDisplayWeight(latestWeight.weight, latestWeight.unit as 'lb' | 'kg' | null, weightUnit).toFixed(1)}
-            <span className="text-sm text-ink-2 font-normal"> {weightUnit}</span>
+            <span className="text-subhead text-ink-2 font-normal"> {weightUnit}</span>
           </div>
           <Sparkline values={sparkValues} />
           {weightRate && (
-            <div className={`text-[11px] mt-1 ${rateOnTrack ? 'text-status-ok' : 'text-status-warn'}`}>
+            <div className={`text-caption mt-1 ${rateOnTrack ? 'text-status-ok' : 'text-status-warn'}`}>
               {signed(weightRate.perWeek)} {weightUnit}/wk
               {weightRate.target !== null && (
                 <span className="text-ink-2"> · target {signed(weightRate.target)}</span>
@@ -319,20 +319,20 @@ export function MetricTileGrid({
             const ffmiArrow = bodyCompArrow(bodyComp.ffmiRatePerMonth, 0.05, true);
             return (
               <>
-                <div className="text-xl font-semibold text-ink">
+                <div className="text-headline font-semibold text-ink">
                   {bodyComp.bodyFatPercent.toFixed(1)}
-                  <span className="text-sm text-ink-2 font-normal">% BF</span>
-                  <span className={`text-sm ml-1 ${bfArrow.color}`} aria-hidden="true">
+                  <span className="text-subhead text-ink-2 font-normal">% BF</span>
+                  <span className={`text-subhead ml-1 ${bfArrow.color}`} aria-hidden="true">
                     {bfArrow.icon}
                   </span>
                 </div>
-                <div className="text-sm text-ink mt-1.5">
+                <div className="text-subhead text-ink mt-1.5">
                   FFMI {bodyComp.ffmi.toFixed(1)}
                   <span className={`ml-1 ${ffmiArrow.color}`} aria-hidden="true">
                     {ffmiArrow.icon}
                   </span>
                 </div>
-                <div className="text-[11px] text-ink-2 mt-1.5">
+                <div className="text-caption text-ink-2 mt-1.5">
                   DEXA-anchored · {bodyComp.scanCount} scans
                 </div>
               </>

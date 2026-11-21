@@ -51,7 +51,7 @@ const BarcodeScanner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex items-center justify-center py-10 text-sm text-ink-2">
+      <div className="flex items-center justify-center py-10 text-subhead text-ink-2">
         Loading camera…
       </div>
     ),
@@ -64,7 +64,7 @@ const LabelScanner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex items-center justify-center py-10 text-sm text-ink-2">
+      <div className="flex items-center justify-center py-10 text-subhead text-ink-2">
         Loading scanner…
       </div>
     ),
@@ -173,7 +173,7 @@ const MEAL_LABELS: Record<MealType, string> = {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-medium text-ink-2 uppercase tracking-wide mb-1.5">
+    <p className="text-caption font-medium text-ink-2 mb-1.5">
       {children}
     </p>
   );
@@ -239,8 +239,8 @@ function RecentFoodRow({
       >
         <FoodEmojiAvatar name={recent.food_name} size="sm" />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-ink truncate">{recent.food_name}</span>
-          <span className="text-xs text-ink-2 flex items-center gap-1.5">
+          <span className="block text-subhead font-medium text-ink truncate">{recent.food_name}</span>
+          <span className="text-caption text-ink-2 flex items-center gap-1.5">
             <span className="truncate">{subtitle}</span>
             <span className="text-ink-3" aria-hidden="true">·</span>
             <span className="flex-shrink-0 flex items-center gap-0.5 text-ink-2">
@@ -929,7 +929,7 @@ export function AddFoodModal({
         )}
 
         {error && (
-          <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
+          <div className="p-3 text-subhead text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
             {error}
           </div>
         )}
@@ -952,7 +952,7 @@ export function AddFoodModal({
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0">
                     <h3 className="font-medium text-ink">{activeSelection.name}</h3>
-                    <p className="text-xs text-action">{activeSelection.subtitle}</p>
+                    <p className="text-caption text-action">{activeSelection.subtitle}</p>
                   </div>
                   <button
                     onClick={clearSelection}
@@ -964,7 +964,7 @@ export function AddFoodModal({
                 </div>
 
                 {isLoadingDetails ? (
-                  <p className="text-sm text-ink-2 py-2">Loading serving options...</p>
+                  <p className="text-subhead text-ink-2 py-2">Loading serving options...</p>
                 ) : (
                   <>
                     <ServingAmountEditor
@@ -1000,7 +1000,7 @@ export function AddFoodModal({
                     aria-selected={searchView === view}
                     onClick={() => setSearchView(view)}
                     data-testid={`add-food-view-${view}`}
-                    className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    className={`flex-1 py-1.5 text-subhead font-medium rounded-md transition-colors ${
                       searchView === view
                         ? 'bg-fill text-ink'
                         : 'text-ink-2 hover:text-ink'
@@ -1024,8 +1024,8 @@ export function AddFoodModal({
                 ) : visibleMeals.length === 0 ? (
                   <div className="py-8 text-center" data-testid="prior-meals-empty">
                     <IconToolsKitchen2 size={28} className="mx-auto text-ink-3 mb-2" aria-hidden="true" />
-                    <p className="text-sm text-ink-2">No prior meals yet</p>
-                    <p className="text-xs text-ink-2 mt-1">
+                    <p className="text-subhead text-ink-2">No prior meals yet</p>
+                    <p className="text-caption text-ink-2 mt-1">
                       Meals you log will appear here so you can grab foods from them.
                     </p>
                   </div>
@@ -1052,10 +1052,10 @@ export function AddFoodModal({
                                 className={`flex-shrink-0 text-ink-2 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                               />
                               <span className="min-w-0">
-                                <span className="block text-sm font-medium text-ink truncate">
+                                <span className="block text-subhead font-medium text-ink truncate">
                                   {meal.dayLabel} · {meal.mealLabel}
                                 </span>
-                                <span className="block text-xs text-ink-2">
+                                <span className="block text-caption text-ink-2">
                                   {Math.round(meal.totalCalories)} cal · {meal.itemCount} item{meal.itemCount === 1 ? '' : 's'}
                                 </span>
                               </span>
@@ -1064,7 +1064,7 @@ export function AddFoodModal({
                               type="button"
                               onClick={() => handleAddAllFromMeal(meal)}
                               disabled={isSubmitting || quickAddingKey !== null}
-                              className="flex-shrink-0 text-xs font-semibold text-action px-2 py-1 rounded-md hover:bg-action/15 transition-colors disabled:opacity-40"
+                              className="flex-shrink-0 text-caption font-semibold text-action px-2 py-1 rounded-md hover:bg-action/15 transition-colors disabled:opacity-40"
                               data-testid="prior-meal-add-all"
                             >
                               {quickAddingKey === `all:${meal.key}` ? 'Adding…' : 'Add all'}
@@ -1081,8 +1081,8 @@ export function AddFoodModal({
                                   <div className="flex-1 min-w-0 p-2 flex items-center gap-2">
                                     <FoodEmojiAvatar name={entry.food_name} size="sm" />
                                     <div className="min-w-0">
-                                      <p className="text-sm text-ink truncate">{entry.food_name}</p>
-                                      <p className="text-xs text-ink-2 truncate">
+                                      <p className="text-subhead text-ink truncate">{entry.food_name}</p>
+                                      <p className="text-caption text-ink-2 truncate">
                                         {Math.round(entry.calories || 0)} cal · {entry.serving_size || '1 serving'}
                                       </p>
                                     </div>
@@ -1104,7 +1104,7 @@ export function AddFoodModal({
                       <button
                         type="button"
                         onClick={() => setMealsVisibleDays((d) => d + MEALS_LOAD_MORE_DAYS)}
-                        className="w-full py-2 text-sm text-action transition-colors"
+                        className="w-full py-2 text-subhead text-action transition-colors"
                         data-testid="prior-meals-load-more"
                       >
                         Load more
@@ -1133,7 +1133,7 @@ export function AddFoodModal({
                       ))}
                     </div>
                   ) : filteredRecents.length === 0 ? (
-                    <p className="text-[13px] text-ink-2 py-1" data-testid="recent-foods-empty">
+                    <p className="text-subhead text-ink-2 py-1" data-testid="recent-foods-empty">
                       {debouncedQuery
                         ? 'No matches in recent foods'
                         : 'No recent foods yet — search or scan to log your first food.'}
@@ -1157,7 +1157,7 @@ export function AddFoodModal({
                 <section>
                   <SectionLabel>Your foods</SectionLabel>
                   {frequentFoodsForMeal.length === 0 && filteredCustomFoods.length === 0 ? (
-                    <p className="text-[13px] text-ink-2 py-1">
+                    <p className="text-subhead text-ink-2 py-1">
                       {debouncedQuery ? 'No matches in your foods' : `No ${MEAL_LABELS[mealType].toLowerCase()} favorites or custom foods yet`}
                     </p>
                   ) : (
@@ -1172,13 +1172,13 @@ export function AddFoodModal({
                           <div className="flex items-center gap-2 min-w-0">
                             <FoodEmojiAvatar name={food.food_name} size="sm" />
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-ink truncate">{food.food_name}</p>
-                              <p className="text-xs text-ink-2">
+                              <p className="text-subhead font-medium text-ink truncate">{food.food_name}</p>
+                              <p className="text-caption text-ink-2">
                                 {Math.round(food.avg_calories)} cal · logged {food.times_logged}x
                               </p>
                             </div>
                           </div>
-                          <span className="text-action text-sm flex-shrink-0">+ Add</span>
+                          <span className="text-action text-subhead flex-shrink-0">+ Add</span>
                         </button>
                       ))}
                       {filteredCustomFoods.map((food) => (
@@ -1190,15 +1190,15 @@ export function AddFoodModal({
                           <div className="flex items-center gap-2 min-w-0">
                             <FoodEmojiAvatar name={food.food_name} size="sm" />
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-ink truncate">{food.food_name}</p>
-                              <p className="text-xs text-ink-2">
+                              <p className="text-subhead font-medium text-ink truncate">{food.food_name}</p>
+                              <p className="text-caption text-ink-2">
                                 {food.is_per_weight
                                   ? `${food.calories_per_ref} cal per ${food.reference_amount}${food.reference_unit || 'g'}`
                                   : `${food.calories} cal · ${food.serving_size}`}
                               </p>
                             </div>
                           </div>
-                          <span className="text-xs text-ink-2 flex-shrink-0">Custom</span>
+                          <span className="text-caption text-ink-2 flex-shrink-0">Custom</span>
                         </button>
                       ))}
                     </div>
@@ -1209,7 +1209,7 @@ export function AddFoodModal({
                 <section>
                   <SectionLabel>Common foods</SectionLabel>
                   {filteredSystemFoods.length === 0 ? (
-                    <p className="text-[13px] text-ink-2 py-1">No matches in common foods</p>
+                    <p className="text-subhead text-ink-2 py-1">No matches in common foods</p>
                   ) : debouncedQuery ? (
                     <div className="space-y-1">
                       {filteredSystemFoods.map((food) => (
@@ -1220,9 +1220,9 @@ export function AddFoodModal({
                         >
                           <span className="flex items-center gap-2 min-w-0">
                             <FoodEmojiAvatar name={food.name} size="sm" />
-                            <span className="text-sm text-ink truncate">{food.name}</span>
+                            <span className="text-subhead text-ink truncate">{food.name}</span>
                           </span>
-                          <span className="text-xs text-ink-2 flex-shrink-0">
+                          <span className="text-caption text-ink-2 flex-shrink-0">
                             {food.calories_per_100g} cal | {food.protein_per_100g}g P
                           </span>
                         </button>
@@ -1231,7 +1231,7 @@ export function AddFoodModal({
                   ) : (
                     Object.entries(groupedSystemFoods).map(([category, foods]) => (
                       <div key={category} className="mb-2">
-                        <p className="text-[11px] text-ink-3 mb-1">
+                        <p className="text-caption text-ink-3 mb-1">
                           {CATEGORY_LABELS[category] || category}
                         </p>
                         <div className="space-y-1">
@@ -1243,9 +1243,9 @@ export function AddFoodModal({
                             >
                               <span className="flex items-center gap-2 min-w-0">
                                 <FoodEmojiAvatar name={food.name} size="sm" />
-                                <span className="text-sm text-ink truncate">{food.name}</span>
+                                <span className="text-subhead text-ink truncate">{food.name}</span>
                               </span>
-                              <span className="text-xs text-ink-2 flex-shrink-0">
+                              <span className="text-caption text-ink-2 flex-shrink-0">
                                 {food.calories_per_100g} cal | {food.protein_per_100g}g P
                               </span>
                             </button>
@@ -1260,15 +1260,15 @@ export function AddFoodModal({
                 <section>
                   <SectionLabel>USDA database</SectionLabel>
                   {!showUsdaSection ? (
-                    <p className="text-[13px] text-ink-2 py-1">
+                    <p className="text-subhead text-ink-2 py-1">
                       Type at least 3 characters to search the USDA database
                     </p>
                   ) : isSearchingUsda ? (
-                    <p className="text-[13px] text-ink-2 py-1">Searching USDA...</p>
+                    <p className="text-subhead text-ink-2 py-1">Searching USDA...</p>
                   ) : usdaError ? (
-                    <p className="text-[13px] text-ink-2 py-1">{usdaError}</p>
+                    <p className="text-subhead text-ink-2 py-1">{usdaError}</p>
                   ) : usdaResults.length === 0 ? (
-                    <p className="text-[13px] text-ink-2 py-1">No USDA results</p>
+                    <p className="text-subhead text-ink-2 py-1">No USDA results</p>
                   ) : (
                     <div className="space-y-1">
                       {usdaResults.map((food, idx) => (
@@ -1280,11 +1280,11 @@ export function AddFoodModal({
                           <div className="flex items-center gap-2 min-w-0">
                             <FoodEmojiAvatar name={food.name} size="sm" />
                             <div className="min-w-0">
-                              <p className="text-sm text-ink truncate">{food.name}</p>
-                              <p className="text-xs text-ink-2">{food.servingSize}</p>
+                              <p className="text-subhead text-ink truncate">{food.name}</p>
+                              <p className="text-caption text-ink-2">{food.servingSize}</p>
                             </div>
                           </div>
-                          <span className="text-xs text-ink-2 flex-shrink-0">
+                          <span className="text-caption text-ink-2 flex-shrink-0">
                             {food.calories} cal | {food.protein}g P
                           </span>
                         </button>
@@ -1301,7 +1301,7 @@ export function AddFoodModal({
         {activeTab === 'barcode' && (
           <div className="space-y-4">
             {barcodeError && (
-              <div className="p-3 text-sm text-status-warn bg-status-warn/10 border border-status-warn/20 rounded-lg space-y-2">
+              <div className="p-3 text-subhead text-status-warn bg-status-warn/10 border border-status-warn/20 rounded-lg space-y-2">
                 <p>{barcodeError}</p>
                 {notFoundBarcode && onCreateCustomFood && (
                   <Button
@@ -1342,22 +1342,22 @@ export function AddFoodModal({
                       </div>
                     ) : (
                       <div
-                        className="w-20 h-20 bg-fill rounded-lg flex items-center justify-center text-3xl"
+                        className="w-20 h-20 bg-fill rounded-lg flex items-center justify-center text-large-title"
                         aria-hidden="true"
                       >
                         {foodEmoji(scannedProduct.name, scannedProduct.brand)}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-ink text-lg leading-tight">
+                      <h3 className="font-semibold text-ink text-headline leading-tight">
                         {scannedProduct.name}
                       </h3>
                       {scannedProduct.brand && (
-                        <p className="text-sm text-ink-2 mt-1">
+                        <p className="text-subhead text-ink-2 mt-1">
                           {scannedProduct.brand}
                         </p>
                       )}
-                      <p className="text-xs text-ink-2 mt-1">
+                      <p className="text-caption text-ink-2 mt-1">
                         Base: {scannedProduct.servingSize}
                       </p>
                     </div>
@@ -1417,7 +1417,7 @@ export function AddFoodModal({
         {activeTab === 'manual' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-ink mb-1">
+              <label className="block text-subhead font-medium text-ink mb-1">
                 Food name *
               </label>
               <Input
@@ -1429,7 +1429,7 @@ export function AddFoodModal({
 
             {/* Amount + unit (matches the editor's layout for consistency) */}
             <div>
-              <label className="block text-sm font-medium text-ink mb-1">
+              <label className="block text-subhead font-medium text-ink mb-1">
                 Amount
               </label>
               <div className="flex gap-2">
@@ -1455,7 +1455,7 @@ export function AddFoodModal({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-ink mb-1">
+                <label className="block text-subhead font-medium text-ink mb-1">
                   Calories *
                 </label>
                 <Input
@@ -1468,7 +1468,7 @@ export function AddFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink mb-1">
+                <label className="block text-subhead font-medium text-ink mb-1">
                   Protein (g)
                 </label>
                 <Input
@@ -1481,7 +1481,7 @@ export function AddFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink mb-1">
+                <label className="block text-subhead font-medium text-ink mb-1">
                   Carbs (g)
                 </label>
                 <Input
@@ -1494,7 +1494,7 @@ export function AddFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink mb-1">
+                <label className="block text-subhead font-medium text-ink mb-1">
                   Fat (g)
                 </label>
                 <Input

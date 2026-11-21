@@ -20,7 +20,7 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(
       type={type}
       aria-pressed={props.onClick ? selected : undefined}
       className={cn(
-        'inline-flex h-9 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[14px] font-medium transition-colors',
+        'inline-flex h-9 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-body font-medium transition-colors',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-action disabled:opacity-50',
         selected
           ? 'bg-action-tint text-action'

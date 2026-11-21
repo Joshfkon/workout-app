@@ -202,10 +202,10 @@ export function ResumeWorkoutBanner() {
                 }
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-ink truncate">
+                <p className="text-subhead font-semibold text-ink truncate">
                   {workoutLabel}
                 </p>
-                <p className="text-[11px] text-ink-2 truncate tabular-nums">
+                <p className="text-caption text-ink-2 truncate tabular-nums">
                   {/* Stale + empty: nothing was ever logged, so a rest countdown
                       or set tally would be noise. Say what it actually is. */}
                   {staleEmpty ? (
@@ -225,7 +225,7 @@ export function ResumeWorkoutBanner() {
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDiscard(); }}
-                className="flex-shrink-0 min-h-[44px] px-3 rounded-full text-xs text-ink-2 hover:text-ink transition-colors"
+                className="flex-shrink-0 min-h-[44px] px-3 rounded-full text-caption text-ink-2 hover:text-ink transition-colors"
               >
                 Discard
               </button>
@@ -245,16 +245,16 @@ export function ResumeWorkoutBanner() {
       {showDiscardConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-card rounded-card p-6 max-w-sm w-full shadow-xl">
-            <h3 className="text-lg font-semibold text-ink mb-2">
+            <h3 className="text-headline font-semibold text-ink mb-2">
               Discard Workout?
             </h3>
-            <p className="text-ink-2 text-sm mb-4">
+            <p className="text-ink-2 text-subhead mb-4">
               {completedSetsCount > 0
                 ? `You have ${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''} logged. Discarding will delete this progress and can't be undone.`
                 : 'This will remove the workout session. You can start fresh later.'}
             </p>
             {discardError && (
-              <p className="text-status-bad text-sm mb-4">
+              <p className="text-status-bad text-subhead mb-4">
                 {discardError}
               </p>
             )}

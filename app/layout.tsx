@@ -214,7 +214,7 @@ export default function RootLayout({
               />
             </svg>
             <span className="app-name">HYPERTROPHY</span>
-            <span className="tagline">Train Smarter</span>
+            <span className="tagline">Train smarter</span>
             <div className="progress-bar">
               <div className="progress-fill"></div>
             </div>

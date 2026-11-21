@@ -130,10 +130,10 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
 
   const getActivityColor = useCallback((level: string) => {
     switch (level) {
-      case 'very_active': return 'text-red-400';
+      case 'very_active': return 'text-status-bad';
       case 'active': return 'text-orange-400';
-      case 'moderate': return 'text-green-400';
-      case 'light': return 'text-blue-400';
+      case 'moderate': return 'text-status-ok';
+      case 'light': return 'text-action';
       default: return 'text-ink-2';
     }
   }, []);
@@ -258,7 +258,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                 placeholder="Enter steps"
                 value={manualSteps}
                 onChange={handleManualStepsChange}
-                className="flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-ink text-sm focus:outline-none focus:ring-2 focus:ring-action"
+                className="flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-ink text-subhead focus:outline-none focus:ring-2 focus:ring-action"
                 autoFocus
               />
               <Button
@@ -288,17 +288,17 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                     </svg>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-ink">
+                    <p className="text-title font-bold text-ink">
                       {steps.toLocaleString()}
                     </p>
-                    <p className="text-xs text-ink-3">steps today</p>
+                    <p className="text-caption text-ink-3">steps today</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`text-sm font-medium ${getActivityColor(activityLevel)}`}>
+                  <span className={`text-subhead font-medium ${getActivityColor(activityLevel)}`}>
                     {getActivityLabel(activityLevel)}
                   </span>
-                  <p className="text-xs text-ink-3">
+                  <p className="text-caption text-ink-3">
                     {connections[0]?.deviceName || 'Connected'}
                   </p>
                 </div>
@@ -306,8 +306,8 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
 
               {/* Progress Bar */}
               <div>
-                <div className="flex items-center justify-between text-xs text-ink-3 mb-1">
-                  <span>Daily Goal</span>
+                <div className="flex items-center justify-between text-caption text-ink-3 mb-1">
+                  <span>Daily goal</span>
                   <span>{steps.toLocaleString()} / 10,000</span>
                 </div>
                 <div className="h-2 bg-fill rounded-full overflow-hidden">
@@ -320,7 +320,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
 
               {/* Calorie Burn Estimate */}
               {todayActivity?.calculated.totalActivityExpenditure && (
-                <div className="flex items-center justify-between pt-2 border-t border-sep text-sm">
+                <div className="flex items-center justify-between pt-2 border-t border-sep text-subhead">
                   <span className="text-ink-2">Est. activity burn</span>
                   <span className="text-ink font-medium">
                     +{todayActivity.calculated.totalActivityExpenditure} cal
@@ -335,15 +335,15 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p className="text-ink-2 text-sm">No steps synced yet today</p>
-              <p className="text-ink-3 text-xs mt-1">
+              <p className="text-ink-2 text-subhead">No steps synced yet today</p>
+              <p className="text-ink-3 text-caption mt-1">
                 {healthKitCapable
                   ? `Steps sync automatically from ${connections[0]?.deviceName || 'your wearable'} — open the app later today or enter them manually.`
                   : `Waiting on ${connections[0]?.deviceName || 'your wearable'} to sync. You can enter steps manually in the meantime.`}
               </p>
               <button
                 onClick={handleOpenManualInput}
-                className="mt-3 text-xs text-action transition-colors"
+                className="mt-3 text-caption text-action transition-colors"
               >
                 Enter steps manually
               </button>
@@ -357,11 +357,11 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
             <div className="space-y-3">
               <div className="flex items-center gap-4 p-4 bg-action/10 rounded-lg border border-action/20">
                 <div className="w-12 h-12 rounded-xl bg-action/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-2xl">⌚</span>
+                  <span className="text-title">⌚</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink">Track Your Steps</p>
-                  <p className="text-xs text-ink-2 mt-0.5">
+                  <p className="text-subhead font-medium text-ink">Track your steps</p>
+                  <p className="text-caption text-ink-2 mt-0.5">
                     {healthKitCapable
                       ? 'Connect Apple Health to sync steps automatically and improve your TDEE estimate.'
                       : 'Connect Fitbit or Google Fit to sync steps automatically, or enter them manually.'}
@@ -373,7 +373,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
               </div>
               <button
                 onClick={handleOpenManualInput}
-                className="w-full text-center text-xs text-ink-3 hover:text-ink-2 transition-colors py-2"
+                className="w-full text-center text-caption text-ink-3 hover:text-ink-2 transition-colors py-2"
               >
                 Or enter steps manually
               </button>
@@ -386,7 +386,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
       <Modal
         isOpen={showConnectModal}
         onClose={handleCloseConnectModal}
-        title="Connect Wearable"
+        title="Connect wearable"
         size="lg"
       >
         <WearableConnectionsScreen onConnectionsChange={refreshAfterConnectionChange} />
@@ -396,7 +396,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
       <Modal
         isOpen={showSettingsModal}
         onClose={handleCloseSettingsModal}
-        title="Activity Settings"
+        title="Activity settings"
         size="lg"
       >
         <ActivitySettingsScreen />

@@ -272,7 +272,7 @@ export default function OnboardingBodyCompPage() {
         <div className="flex items-center justify-center gap-2 mb-8">
           {[1, 2, 3, 4].map((s) => (
             <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
                 s === 1 
                   ? 'bg-action text-on-action' 
                   : 'bg-fill text-ink-3'
@@ -395,7 +395,7 @@ export default function OnboardingBodyCompPage() {
         <div className="flex items-center justify-center gap-2 mb-8">
           {[1, 2, 3, 4].map((s) => (
             <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
                 s <= 2
                   ? 'bg-action text-on-action'
                   : 'bg-fill text-ink-3'
@@ -485,7 +485,7 @@ export default function OnboardingBodyCompPage() {
       <div className="flex items-center justify-center gap-2 mb-8">
         {[1, 2, 3, 4].map((s) => (
           <div key={s} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
               s <= 2 
                 ? 'bg-action text-on-action' 
                 : 'bg-fill text-ink-3'
@@ -743,11 +743,11 @@ export default function OnboardingBodyCompPage() {
                     <ExplainedTerm term="FFMI" />
                   </p>
                   <p className="text-5xl font-bold text-ink mb-2">{bodyComp.ffmi.toFixed(1)}</p>
-                  <p className={`text-sm font-medium capitalize ${
+                  <p className={`text-subhead font-medium capitalize ${
                     bodyComp.ffmiBracket === 'elite' ? 'text-action' :
                     bodyComp.ffmiBracket === 'excellent' ? 'text-action' :
                     bodyComp.ffmiBracket === 'above_average' ? 'text-status-ok' :
-                    bodyComp.ffmiBracket === 'average' ? 'text-info-400' :
+                    bodyComp.ffmiBracket === 'average' ? 'text-ink' :
                     'text-ink-2'
                   }`}>
                     {bodyComp.ffmiBracket.replace('_', ' ')}

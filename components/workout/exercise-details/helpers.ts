@@ -34,21 +34,6 @@ export function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: 
   return result;
 }
 
-export function getTierBadgeClasses(tier: string): string {
-  switch (tier) {
-    case 'S':
-      return 'bg-amber-500 text-black';
-    case 'A':
-      return 'bg-emerald-500/30 text-emerald-400';
-    case 'B':
-      return 'bg-blue-500/30 text-blue-400';
-    case 'C':
-      return 'bg-sep text-ink-2';
-    default:
-      return 'bg-sep text-ink-3';
-  }
-}
-
 /** "Jun 12, 2026" style label for session/record dates. */
 export function formatDetailDate(iso: string): string {
   const d = new Date(iso);

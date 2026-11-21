@@ -240,7 +240,7 @@ export function OverlayView({
           <button
             key={value}
             onClick={() => setTarget(value)}
-            className={`flex-1 rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
+            className={`flex-1 rounded-md px-3 py-1 text-caption font-medium capitalize transition-colors ${
               target === value
                 ? 'bg-sep text-ink'
                 : 'text-ink-2 hover:text-ink'

@@ -676,7 +676,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           key={loc.id}
           onClick={() => handleSelectLocation(loc.id)}
           disabled={aiRequested || isStarting}
-          className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors disabled:opacity-60 ${
+          className={`px-2.5 py-1.5 rounded-full text-caption border transition-colors disabled:opacity-60 ${
             selectedLocationId === loc.id
               ? 'bg-action/20 border-action text-action'
               : 'bg-fill border-transparent text-ink-2 hover:bg-sep'
@@ -719,7 +719,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
               key={preset.kind}
               type="button"
               onClick={() => pickNewLocationPreset(preset.kind)}
-              className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors ${
+              className={`px-2.5 py-1.5 rounded-full text-caption border transition-colors ${
                 newLocationPreset === preset.kind
                   ? 'bg-action/20 border-action text-action'
                   : 'bg-fill border-transparent text-ink-2 hover:bg-sep'
@@ -731,7 +731,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           <button
             type="button"
             onClick={() => setNewLocationPreset('custom')}
-            className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors ${
+            className={`px-2.5 py-1.5 rounded-full text-caption border transition-colors ${
               newLocationPreset === 'custom'
                 ? 'bg-action/20 border-action text-action'
                 : 'bg-fill border-transparent text-ink-2 hover:bg-sep'

@@ -76,7 +76,7 @@ export function SubscriptionCard() {
         <div className="p-4 bg-fill/50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <span className="text-body text-ink-2">Current plan</span>
-            <span className={`text-lg font-bold ${
+            <span className={`text-headline font-bold ${
               effectiveTier === 'elite' ? 'text-action' :
               effectiveTier === 'pro' ? 'text-action' :
               'text-ink-2'

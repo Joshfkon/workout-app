@@ -29,7 +29,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Chest
@@ -37,7 +37,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </p>
       </button>
       <p
-        class="mt-1 text-[11px] text-ink-2"
+        class="mt-1 text-caption text-ink-2"
         data-testid="session-volume-line"
       >
         Projected volume
@@ -83,7 +83,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             <p
               aria-hidden="false"
               aria-live="polite"
-              class="col-start-1 row-start-1 text-[12px] leading-snug text-action "
+              class="col-start-1 row-start-1 text-caption leading-snug text-action "
             >
               <span
                 class="font-medium"
@@ -129,7 +129,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </div>
         <p
           aria-hidden="true"
-          class="px-1 text-[11px] leading-4 h-4 truncate text-action invisible"
+          class="px-1 text-caption leading-4 h-4 truncate text-action invisible"
           data-testid="weight-edit-recompute-note"
         />
         <div
@@ -176,7 +176,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 type="button"
               >
                 <span
-                  class="text-[22px] font-bold tabular-nums text-ink whitespace-nowrap"
+                  class="text-title font-bold tabular-nums text-ink whitespace-nowrap"
                 >
                   60
                 </span>
@@ -243,7 +243,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 type="button"
               >
                 <span
-                  class="text-[22px] font-bold tabular-nums text-ink whitespace-nowrap"
+                  class="text-title font-bold tabular-nums text-ink whitespace-nowrap"
                 >
                   10
                 </span>
@@ -298,12 +298,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               type="button"
             >
               <span
-                class="text-[16px] font-semibold leading-tight"
+                class="text-body font-semibold leading-tight"
               >
                 0
               </span>
               <span
-                class="text-[10px] leading-tight text-ink-2"
+                class="text-caption leading-tight text-ink-2"
               >
                 maxed
               </span>
@@ -315,12 +315,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               type="button"
             >
               <span
-                class="text-[16px] font-semibold leading-tight"
+                class="text-body font-semibold leading-tight"
               >
                 1
               </span>
               <span
-                class="text-[10px] leading-tight text-ink-2"
+                class="text-caption leading-tight text-ink-2"
               >
                 hard
               </span>
@@ -332,12 +332,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               type="button"
             >
               <span
-                class="text-[16px] font-semibold leading-tight"
+                class="text-body font-semibold leading-tight"
               >
                 2
               </span>
               <span
-                class="text-[10px] leading-tight opacity-80"
+                class="text-caption leading-tight opacity-80"
               >
                 good
               </span>
@@ -349,12 +349,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               type="button"
             >
               <span
-                class="text-[16px] font-semibold leading-tight"
+                class="text-body font-semibold leading-tight"
               >
                 3
               </span>
               <span
-                class="text-[10px] leading-tight text-ink-2"
+                class="text-caption leading-tight text-ink-2"
               >
                 easy
               </span>
@@ -366,12 +366,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               type="button"
             >
               <span
-                class="text-[16px] font-semibold leading-tight"
+                class="text-body font-semibold leading-tight"
               >
                 4+
               </span>
               <span
-                class="text-[10px] leading-tight text-ink-2"
+                class="text-caption leading-tight text-ink-2"
               >
                 cruise
               </span>
@@ -446,7 +446,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </div>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -473,7 +473,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -504,7 +504,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
       class="px-3 py-3 space-y-2"
     >
       <div
-        class="flex items-center gap-4 text-xs px-1"
+        class="flex items-center gap-4 text-caption px-1"
       />
     </div>
     <div
@@ -528,9 +528,9 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -555,7 +555,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -606,7 +606,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Back
@@ -642,7 +642,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -668,7 +668,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -694,7 +694,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -741,9 +741,9 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -768,7 +768,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -819,7 +819,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Chest
@@ -831,7 +831,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -858,7 +858,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -885,7 +885,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -933,9 +933,9 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -960,7 +960,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1011,7 +1011,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1023,7 +1023,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1050,7 +1050,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1077,7 +1077,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1125,9 +1125,9 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -1152,7 +1152,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1203,7 +1203,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1211,7 +1211,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         </p>
       </button>
       <p
-        class="mt-1 text-[11px] text-ink-2"
+        class="mt-1 text-caption text-ink-2"
         data-testid="session-volume-line"
       >
         Volume
@@ -1274,7 +1274,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             10
           </span>
           <span
-            class="ml-auto flex-shrink-0 text-[11px] text-ink-2"
+            class="ml-auto flex-shrink-0 text-caption text-ink-2"
           >
             <span
               title="3 reps in reserve"
@@ -1329,7 +1329,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             9
           </span>
           <span
-            class="ml-auto flex-shrink-0 text-[11px] text-ink-2"
+            class="ml-auto flex-shrink-0 text-caption text-ink-2"
           >
             <span
               title="2 reps in reserve"
@@ -1341,7 +1341,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         </div>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1389,9 +1389,9 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -1416,7 +1416,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1466,7 +1466,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         class="mt-1 flex items-center justify-between w-full gap-2 text-left"
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1497,7 +1497,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1524,7 +1524,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1551,7 +1551,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1599,9 +1599,9 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -1626,7 +1626,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1677,7 +1677,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1689,7 +1689,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1716,7 +1716,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1743,7 +1743,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1791,9 +1791,9 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -1818,7 +1818,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"
@@ -1869,7 +1869,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
       >
         <button
           aria-haspopup="dialog"
-          class="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-status-warn/10 text-status-warn hover:bg-status-warn/20 transition-colors"
+          class="rounded-full px-2.5 py-1 text-caption font-medium leading-none flex-shrink-0 bg-status-warn/10 text-status-warn hover:bg-status-warn/20 transition-colors"
         >
           Plateau
         </button>
@@ -1879,7 +1879,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         disabled=""
       >
         <p
-          class="min-w-0 text-[11px] text-ink-2 truncate"
+          class="min-w-0 text-caption text-ink-2 truncate"
         >
           <span>
             Chest
@@ -1891,7 +1891,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1918,7 +1918,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1945,7 +1945,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         </span>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
+        class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"
       >
         <span
           class="w-4 flex-shrink-0 text-center"
@@ -1993,9 +1993,9 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
                 class="font-medium"
               >
                 <span
-                  class="text-sm text-ink-2"
+                  class="text-subhead text-ink-2"
                 >
-                  Form Cues & Tips
+                  Form cues & tips
                 </span>
               </span>
               <svg
@@ -2020,7 +2020,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
       class="border-t border-sep p-4"
     >
       <button
-        class="flex items-center gap-2 text-sm text-ink-2 hover:text-ink transition-colors"
+        class="flex items-center gap-2 text-subhead text-ink-2 hover:text-ink transition-colors"
       >
         <svg
           class="w-4 h-4"

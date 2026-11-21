@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * "Scan Label" capture flow: photograph an FDA Nutrition Facts panel, OCR it
+ * "Scan label" capture flow: photograph an FDA Nutrition Facts panel, OCR it
  * on-device (tesseract.js WASM — works on web and inside the Capacitor
  * WebView), parse deterministically with `parseNutritionLabel`, and hand the
  * fields to the parent for review in the create-food form. Never saves
@@ -169,7 +169,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
   };
 
   // Opening the label scanner IS the request to scan: open the camera straight
-  // away instead of making the user tap "Open Camera" every time.
+  // away instead of making the user tap "Open camera" every time.
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (autoStartedRef.current) return;
@@ -373,7 +373,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
           <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m-6-8h6M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" />
           </svg>
-          <span className="font-medium text-ink">Scan Nutrition Label</span>
+          <span className="font-medium text-ink">Scan nutrition label</span>
         </div>
         <button onClick={onClose} className="p-1 text-ink-2 hover:text-ink" aria-label="Close label scanner">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -404,7 +404,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
               </svg>
             </div>
             <Button onClick={() => { void startCamera(); }} variant="primary" size="lg" data-testid="label-open-camera">
-              Open Camera
+              Open camera
             </Button>
             <Button
               onClick={() => photoInputRef.current?.click()}
@@ -413,9 +413,9 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
               className="mt-2"
               data-testid="label-take-photo"
             >
-              Take Photo Instead
+              Take photo instead
             </Button>
-            <p className="text-xs text-ink-3 mt-3 text-center">
+            <p className="text-caption text-ink-3 mt-3 text-center">
               Fit the Nutrition Facts panel in the frame — flat, well-lit, and filling most of the shot.
             </p>
           </div>
@@ -437,7 +437,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
                   style={{ boxShadow: '0 0 0 100vmax rgba(0,0,0,0.35)' }}
                 />
               </div>
-              <p className="absolute top-2 left-0 right-0 text-center text-white/90 text-xs px-4">
+              <p className="absolute top-2 left-0 right-0 text-center text-white/90 text-caption px-4">
                 Fit the Nutrition Facts panel inside the frame
               </p>
             </div>
@@ -459,17 +459,17 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
         {stage === 'ocr' && (
           <div className="flex flex-col items-center justify-center py-10" data-testid="label-ocr-progress">
             <LoadingAnimation type="dots" size="md" />
-            <p className="mt-3 text-ink-2 text-sm">
+            <p className="mt-3 text-ink-2 text-subhead">
               Reading label…{ocrProgress > 0 ? ` ${ocrProgress}%` : ''}
             </p>
-            <p className="mt-1 text-xs text-ink-3">Runs on your device — nothing is uploaded.</p>
+            <p className="mt-1 text-caption text-ink-3">Runs on your device — nothing is uploaded.</p>
           </div>
         )}
 
         {stage === 'ai' && (
           <div className="flex flex-col items-center justify-center py-10" data-testid="label-ai-progress">
             <LoadingAnimation type="dots" size="md" />
-            <p className="mt-3 text-ink-2 text-sm">Asking AI to read the label…</p>
+            <p className="mt-3 text-ink-2 text-subhead">Asking AI to read the label…</p>
           </div>
         )}
 
@@ -477,15 +477,15 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
           <div className="space-y-3" data-testid="label-scan-review">
             {error ? (
               <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
-                <p className="text-sm text-status-bad">{error}</p>
+                <p className="text-subhead text-status-bad">{error}</p>
               </div>
             ) : (
               <div className="p-3 rounded-lg bg-status-warn/10 border border-status-warn/20 space-y-1">
-                <p className="text-sm font-medium text-status-warn">
+                <p className="text-subhead font-medium text-status-warn">
                   Couldn&apos;t read the label confidently
                 </p>
                 {result?.warnings.map((warning) => (
-                  <p key={warning} className="text-xs text-status-warn/90">
+                  <p key={warning} className="text-caption text-status-warn/90">
                     {warning}
                   </p>
                 ))}
@@ -494,7 +494,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
 
             {/* What we did manage to read, so "use anyway" is an informed choice */}
             {result && result.hasCoreFields && (
-              <div className="p-3 bg-card/60 rounded-lg text-sm text-ink-2">
+              <div className="p-3 bg-card/60 rounded-lg text-subhead text-ink-2">
                 {result.fields.calories} cal · {result.fields.proteinG}g P ·{' '}
                 {result.fields.totalCarbsG}g C · {result.fields.totalFatG}g F
                 {result.fields.servingSizeText ? ` · ${result.fields.servingSizeText}` : ''}
@@ -512,7 +512,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
                 Try AI scan
               </Button>
               {!isOnline && (
-                <p className="text-xs text-ink-3 text-center">
+                <p className="text-caption text-ink-3 text-center">
                   AI scan needs an internet connection — you&apos;re offline. Use the values below or enter them manually.
                 </p>
               )}
@@ -535,7 +535,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
 
         {stage !== 'review' && error && (
           <div className="p-3 rounded-lg bg-sep/50">
-            <p className="text-sm text-ink-2">{error}</p>
+            <p className="text-subhead text-ink-2">{error}</p>
           </div>
         )}
       </div>

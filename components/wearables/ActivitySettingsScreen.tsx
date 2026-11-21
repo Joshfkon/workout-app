@@ -126,7 +126,7 @@ export function ActivitySettingsScreen() {
       {/* Calorie Target Adjustment */}
       <Card>
         <CardHeader>
-          <CardTitle>Calorie Target Adjustment</CardTitle>
+          <CardTitle>Calorie target adjustment</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {[
@@ -151,7 +151,7 @@ export function ActivitySettingsScreen() {
               />
               <div>
                 <div className="font-medium">{mode.label}</div>
-                <div className="text-sm text-ink-3">{mode.description}</div>
+                <div className="text-subhead text-ink-3">{mode.description}</div>
               </div>
             </label>
           ))}
@@ -161,7 +161,7 @@ export function ActivitySettingsScreen() {
       {/* Maximum Daily Adjustment */}
       <Card>
         <CardHeader>
-          <CardTitle>Maximum Daily Adjustment</CardTitle>
+          <CardTitle>Maximum daily adjustment</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center gap-3">
@@ -177,7 +177,7 @@ export function ActivitySettingsScreen() {
             />
             <span className="text-ink-2">calories</span>
           </div>
-          <p className="text-sm text-ink-3">
+          <p className="text-subhead text-ink-3">
             Even on very active/inactive days, your target will not change by more than
             this amount.
           </p>
@@ -187,7 +187,7 @@ export function ActivitySettingsScreen() {
       {/* Workout Calorie Source */}
       <Card>
         <CardHeader>
-          <CardTitle>Workout Calories</CardTitle>
+          <CardTitle>Workout calories</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <label className="flex items-start gap-3 cursor-pointer">
@@ -199,7 +199,7 @@ export function ActivitySettingsScreen() {
             />
             <div>
               <div className="font-medium">Use app workout estimates</div>
-              <div className="text-sm text-ink-3">
+              <div className="text-subhead text-ink-3">
                 Conservative calorie estimates based on your logged sets, rest times,
                 and workout duration.
               </div>
@@ -217,9 +217,9 @@ export function ActivitySettingsScreen() {
             />
             <div>
               <div className="font-medium">Use wearable workout calories</div>
-              <div className="text-sm text-ink-3">
+              <div className="text-subhead text-ink-3">
                 Use calories reported by your Apple Watch or other wearable.
-                <span className="text-yellow-500 block mt-1">
+                <span className="text-status-warn block mt-1">
                   Warning: Often overestimates resistance training by 50-100%.
                 </span>
               </div>
@@ -232,7 +232,7 @@ export function ActivitySettingsScreen() {
       {connections.length > 1 && (
         <Card>
           <CardHeader>
-            <CardTitle>Preferred Step Source</CardTitle>
+            <CardTitle>Preferred step source</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <select
@@ -252,7 +252,7 @@ export function ActivitySettingsScreen() {
                 </option>
               ))}
             </select>
-            <p className="text-sm text-ink-3">
+            <p className="text-subhead text-ink-3">
               If you have multiple devices, choose which one to use for step data.
             </p>
           </CardContent>
@@ -263,7 +263,7 @@ export function ActivitySettingsScreen() {
       {connections.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Connected Devices</CardTitle>
+            <CardTitle>Connected devices</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -273,7 +273,7 @@ export function ActivitySettingsScreen() {
                   className="flex items-center justify-between p-2 bg-fill rounded"
                 >
                   <span>{conn.deviceName || formatSourceName(conn.source)}</span>
-                  <span className="text-green-500 text-sm">Connected</span>
+                  <span className="text-status-ok text-subhead">Connected</span>
                 </div>
               ))}
             </div>
@@ -289,7 +289,7 @@ export function ActivitySettingsScreen() {
             disabled={saving}
             className="w-full"
           >
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       )}
@@ -304,7 +304,7 @@ function formatSourceName(source: WearableSource): string {
     fitbit: 'Fitbit',
     samsung_health: 'Samsung Health',
     garmin: 'Garmin',
-    manual: 'Manual Entry',
+    manual: 'Manual entry',
   };
   return names[source] || source;
 }

@@ -37,16 +37,16 @@ export function ShareWorkoutText({ input }: ShareWorkoutTextProps) {
         Copy summary
       </Button>
 
-      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Share Workout" size="sm">
+      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Share workout" size="sm">
         <div className="space-y-4">
-          <pre className="whitespace-pre-wrap break-words rounded-lg bg-card p-4 font-mono text-sm text-ink select-all shadow-card">
+          <pre className="whitespace-pre-wrap break-words rounded-lg bg-card p-4 font-mono text-subhead text-ink select-all shadow-card">
             {shareText}
           </pre>
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-ink">Cryptic mode</p>
-              <p className="text-xs text-ink-3">Hide exercise names — just flex the grid</p>
+              <p className="text-subhead font-medium text-ink">Cryptic mode</p>
+              <p className="text-caption text-ink-3">Hide exercise names — just flex the grid</p>
             </div>
             <Toggle checked={cryptic} onChange={setCryptic} />
           </div>

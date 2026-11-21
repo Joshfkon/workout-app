@@ -12,7 +12,7 @@ interface StickyMacroBarProps {
 function MacroChip({ letter, dotClass, verdict }: { letter: string; dotClass: string; verdict: MacroVerdict }) {
   if (verdict.state === 'none') return null;
   return (
-    <span className="flex items-center gap-1 rounded-full border border-sep bg-card/80 px-2 py-0.5 text-[11px] tabular-nums">
+    <span className="flex items-center gap-1 rounded-full border border-sep bg-card/80 px-2 py-0.5 text-caption tabular-nums">
       <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
       {verdict.state === 'hit' ? (
         <span className="text-status-ok font-medium">{letter} ✓</span>
@@ -41,7 +41,7 @@ function MacroDetailRow({
   const pct = Math.min((value / target) * 100, 100);
   return (
     <div>
-      <div className="text-[11px] text-ink-2 mb-1">
+      <div className="text-caption text-ink-2 mb-1">
         {label} {Math.round(value)} / {target}g
       </div>
       <div className="h-[3px] bg-fill rounded-full overflow-hidden">
@@ -118,17 +118,17 @@ export function StickyMacroBar({ summary, watchRef }: StickyMacroBarProps) {
             <div className="flex items-baseline gap-1.5 min-w-0">
               {overCalorieBudget ? (
                 <>
-                  <span className="text-[17px] font-bold text-status-bad tabular-nums">
+                  <span className="text-headline font-bold text-status-bad tabular-nums">
                     −{Math.abs(remainingCalories).toLocaleString()}
                   </span>
-                  <span className="text-[11px] text-status-bad">over</span>
+                  <span className="text-caption text-status-bad">over</span>
                 </>
               ) : (
                 <>
-                  <span className="text-[17px] font-bold text-action tabular-nums">
+                  <span className="text-headline font-bold text-action tabular-nums">
                     {remainingCalories.toLocaleString()}
                   </span>
-                  <span className="text-[11px] text-ink-2">kcal left</span>
+                  <span className="text-caption text-ink-2">kcal left</span>
                 </>
               )}
             </div>

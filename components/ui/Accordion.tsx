@@ -132,7 +132,7 @@ export function AccordionContent({ id, children, className }: AccordionContentPr
   return (
     <div
       className={cn(
-        'pb-4 text-sm text-ink-2 animate-slide-down',
+        'pb-4 text-subhead text-ink-2 animate-slide-down',
         className
       )}
     >

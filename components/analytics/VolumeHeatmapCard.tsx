@@ -62,7 +62,7 @@ export function VolumeHeatmapCard() {
       </div>
 
       <p
-        className={`mt-1 text-xs text-ink-3 ${isPlaceholderData ? 'animate-pulse' : ''}`}
+        className={`mt-1 text-caption text-ink-3 ${isPlaceholderData ? 'animate-pulse' : ''}`}
         data-testid="heatmap-caption"
       >
         {heatmapCaption(timeframe, heatmap)}

@@ -1293,7 +1293,7 @@ function HistoryPageContent() {
                             opt.key
                           )
                         }
-                        className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        className={`shrink-0 px-3 py-1 rounded-full text-caption font-medium transition-colors ${
                           isSelected
                             ? 'bg-action/20 text-action'
                             : 'bg-fill text-ink-2 hover:text-ink'
@@ -1400,7 +1400,7 @@ function HistoryPageContent() {
                   </div>
                   <div className="bg-fill rounded-lg p-3 text-center">
                     <p className="text-caption text-ink-3">Progress</p>
-                    <p className={`text-xl font-bold ${selectedExercise.progressPercent >= 0 ? 'text-status-ok' : 'text-status-bad'}`}>
+                    <p className={`text-headline font-bold ${selectedExercise.progressPercent >= 0 ? 'text-status-ok' : 'text-status-bad'}`}>
                       {selectedExercise.progressPercent >= 0 ? '+' : ''}{selectedExercise.progressPercent.toFixed(1)}%
                     </p>
                     <p className="text-caption text-ink-3">{selectedExercise.totalSetsAllTime} total sets</p>
@@ -1596,7 +1596,7 @@ function HistoryPageContent() {
                 if (mode === 'list') setSelectedDay(null);
               }}
               aria-pressed={viewMode === mode}
-              className={`px-5 min-h-[44px] rounded-lg text-sm font-medium capitalize transition-all ${
+              className={`px-5 min-h-[44px] rounded-lg text-subhead font-medium capitalize transition-all ${
                 viewMode === mode
                   ? 'bg-sep text-ink shadow-sm'
                   : 'text-ink-2 hover:text-ink'
@@ -1628,7 +1628,7 @@ function HistoryPageContent() {
                 onClick={() => setExerciseFilter(exerciseFilter === name ? null : name)}
                 aria-pressed={exerciseFilter === name}
                 aria-label={exerciseFilter === name ? `Remove ${name} filter` : `Filter by ${name}`}
-                className={`shrink-0 whitespace-nowrap min-h-[44px] px-4 rounded-full text-sm font-medium transition-colors ${
+                className={`shrink-0 whitespace-nowrap min-h-[44px] px-4 rounded-full text-subhead font-medium transition-colors ${
                   exerciseFilter === name
                     ? 'bg-action text-on-action'
                     : 'bg-fill text-ink-2 hover:bg-sep'
@@ -2035,7 +2035,7 @@ function HistoryPageContent() {
                                       </>
                                     )}
                                     {set.rpe && (
-                                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                      <span className={`text-caption px-1.5 py-0.5 rounded ${
                                         set.rpe >= 9 ? 'bg-status-bad/20 text-status-bad' :
                                         set.rpe >= 7 ? 'bg-status-warn/20 text-status-warn' :
                                         'bg-sep text-ink-2'

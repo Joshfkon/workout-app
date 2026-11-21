@@ -238,7 +238,7 @@ export function RowOverflowMenu({
             data-testid={`row-menu-item-${item.key}`}
             onClick={() => choose(item)}
             onMouseEnter={() => setActiveIndex(i)}
-            className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
+            className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-subhead transition-colors ${
               item.destructive
                 ? 'text-status-bad hover:bg-status-bad/10 focus:bg-status-bad/10'
                 : 'text-ink hover:bg-sep focus:bg-sep'

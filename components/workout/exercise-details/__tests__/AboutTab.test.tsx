@@ -30,7 +30,7 @@ describe('AboutTab', () => {
     
     const creditsList = screen.getByTestId('muscle-credits-list');
     expect(creditsList).toBeInTheDocument();
-    expect(screen.getByText('Volume Credits Per Set')).toBeInTheDocument();
+    expect(screen.getByText('Volume credits per set')).toBeInTheDocument();
     
     // Primary muscle should show 1.0 credit
     expect(creditsList).toHaveTextContent('Lats');

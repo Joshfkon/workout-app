@@ -104,7 +104,7 @@ export default function AICoachPage() {
     return (
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         <PageHeader
-          title="AI Coach"
+          title="AI coach"
           subtitle="Get personalized training advice based on your actual data"
         />
 
@@ -121,7 +121,7 @@ export default function AICoachPage() {
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <PageHeader
-        title="AI Coach"
+        title="AI coach"
         subtitle="Ask me anything about your training, nutrition, or progress"
         actions={
           <>
@@ -158,7 +158,7 @@ export default function AICoachPage() {
                 </p>
               )}
               <p>
-                <strong>Current Stats:</strong> {context.currentStats.weight}kg
+                <strong>Current stats:</strong> {context.currentStats.weight}kg
                 {context.currentStats.weightTrend && ` (${context.currentStats.weightTrend})`}
                 {context.currentStats.bodyFat && `, ${context.currentStats.bodyFat.toFixed(1)}% BF`}
               </p>
@@ -169,7 +169,7 @@ export default function AICoachPage() {
                 </p>
               )}
               <p>
-                <strong>Recent Lifts:</strong> {context.training.recentLifts.length} tracked
+                <strong>Recent lifts:</strong> {context.training.recentLifts.length} tracked
               </p>
             </div>
           </CardContent>

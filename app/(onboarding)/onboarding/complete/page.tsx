@@ -316,7 +316,7 @@ function CompleteContent() {
             <div className="flex-1 space-y-4">
               <div>
                 <p className="text-body text-ink-2">Strength level</p>
-                <p className={`text-3xl font-bold capitalize ${getStrengthLevelColor(profile.strengthLevel)}`}>
+                <p className={`text-large-title font-bold capitalize ${getStrengthLevelColor(profile.strengthLevel)}`}>
                   {formatStrengthLevel(profile.strengthLevel)}
                 </p>
               </div>

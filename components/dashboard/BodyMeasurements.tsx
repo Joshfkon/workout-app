@@ -147,14 +147,14 @@ function InfoIcon({ instructions }: { instructions: string }) {
         type="button"
         onClick={handleClick}
         onBlur={() => setTimeout(() => setShowTooltip(false), 150)}
-        className="w-4 h-4 rounded-full bg-sep hover:bg-sep text-ink-2 hover:text-ink text-[10px] font-medium flex items-center justify-center transition-colors"
+        className="w-4 h-4 rounded-full bg-sep hover:bg-sep text-ink-2 hover:text-ink text-caption font-medium flex items-center justify-center transition-colors"
         aria-label="Measurement instructions"
       >
         i
       </button>
       {showTooltip && (
         <div className={getTooltipClasses()}>
-          <p className="text-xs text-ink leading-relaxed">{instructions}</p>
+          <p className="text-caption text-ink leading-relaxed">{instructions}</p>
           <div className={getArrowClasses()}>
             <div className="border-4 border-transparent border-t-sep"></div>
           </div>
@@ -504,7 +504,7 @@ export function BodyMeasurements({
             <div className="flex bg-fill rounded-lg p-0.5">
               <button
                 onClick={() => setDisplayUnit('in')}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-caption rounded transition-colors ${
                   displayUnit === 'in' ? 'bg-action text-on-action' : 'text-ink-2'
                 }`}
               >
@@ -512,7 +512,7 @@ export function BodyMeasurements({
               </button>
               <button
                 onClick={() => setDisplayUnit('cm')}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-caption rounded transition-colors ${
                   displayUnit === 'cm' ? 'bg-action text-on-action' : 'text-ink-2'
                 }`}
               >
@@ -532,11 +532,11 @@ export function BodyMeasurements({
           <div className="space-y-4">
             {Object.entries(groupedFields).map(([group, fields]) => (
               <div key={group}>
-                <h4 className="text-xs font-medium text-ink-3 uppercase tracking-wide mb-2">{group}</h4>
+                <h4 className="text-caption font-medium text-ink-3 mb-2">{group}</h4>
                 <div className="grid grid-cols-2 gap-2">
                   {fields.map(field => (
                     <div key={field.key} className="flex items-center gap-2">
-                      <label className="text-xs text-ink-2 w-24 flex-shrink-0 flex items-center gap-1">
+                      <label className="text-caption text-ink-2 w-24 flex-shrink-0 flex items-center gap-1">
                         {field.label}
                         <InfoIcon instructions={field.instructions} />
                       </label>
@@ -552,9 +552,9 @@ export function BodyMeasurements({
                             setMeasurements(prev => ({ ...prev, [field.key]: storedVal }));
                           }}
                           placeholder="-"
-                          className="w-16 px-2 py-1 text-sm bg-card rounded text-ink text-center shadow-card"
+                          className="w-16 px-2 py-1 text-subhead bg-card rounded text-ink text-center shadow-card"
                         />
-                        <span className="text-xs text-ink-3">{displayUnit}</span>
+                        <span className="text-caption text-ink-3">{displayUnit}</span>
                       </div>
                     </div>
                   ))}
@@ -564,7 +564,7 @@ export function BodyMeasurements({
             
             <div className="flex gap-2 pt-2">
               <Button onClick={handleSave} isLoading={isSaving} className="flex-1">
-                Save Measurements
+                Save measurements
               </Button>
               <Button variant="secondary" onClick={() => setIsEditing(false)}>
                 Cancel
@@ -584,7 +584,7 @@ export function BodyMeasurements({
 
               return (
                 <div key={group}>
-                  <h4 className="text-xs font-medium text-ink-3 uppercase tracking-wide mb-1.5">{group}</h4>
+                  <h4 className="text-caption font-medium text-ink-3 mb-1.5">{group}</h4>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                     {visibleFields.map(field => {
                       const value = measurements[field.key];
@@ -592,13 +592,13 @@ export function BodyMeasurements({
                         // "Show all" mode: missing site with an add affordance.
                         return (
                           <div key={field.key} className="flex items-center justify-between py-0.5" data-testid={`measurement-missing-${field.key}`}>
-                            <span className="text-xs text-ink-3 flex items-center gap-1">
+                            <span className="text-caption text-ink-3 flex items-center gap-1">
                               {field.label}
                               <InfoIcon instructions={field.instructions} />
                             </span>
                             <button
                               onClick={() => setIsEditing(true)}
-                              className="text-[11px] text-action transition-colors"
+                              className="text-caption text-action transition-colors"
                             >
                               + Add
                             </button>
@@ -610,26 +610,26 @@ export function BodyMeasurements({
 
                       return (
                         <div key={field.key} className="flex items-center justify-between py-0.5">
-                          <span className="text-xs text-ink-2 flex items-center gap-1">
+                          <span className="text-caption text-ink-2 flex items-center gap-1">
                             {field.label}
                             <InfoIcon instructions={field.instructions} />
                           </span>
                           <div className="flex items-center gap-1">
-                            <span className="text-sm font-medium text-ink">
+                            <span className="text-subhead font-medium text-ink">
                               {getDisplayValue(value)} {displayUnit}
                             </span>
                             {outlier ? (
                               // >15% jump vs the prior entry: likely a typo or
                               // unit slip — flag it instead of charting a delta.
                               <span
-                                className="text-[10px] px-1 py-0.5 rounded bg-status-warn/15 text-status-warn"
+                                className="text-caption px-1 py-0.5 rounded bg-status-warn/15 text-status-warn"
                                 data-testid={`measurement-outlier-${field.key}`}
                                 title="This entry differs more than 15% from your previous one — double-check it."
                               >
                                 ⚠ check entry
                               </span>
                             ) : change && (
-                              <span className={`text-[10px] ${change.isPositive ? 'text-status-ok' : 'text-status-bad'}`}>
+                              <span className={`text-caption ${change.isPositive ? 'text-status-ok' : 'text-status-bad'}`}>
                                 {change.isPositive ? '↑' : '↓'}{change.value.toFixed(1)}
                               </span>
                             )}
@@ -645,7 +645,7 @@ export function BodyMeasurements({
             {MEASUREMENT_FIELDS.some((f) => measurements[f.key] == null) && (
               <button
                 onClick={() => setShowAllSites((s) => !s)}
-                className="w-full text-center text-xs text-action py-1"
+                className="w-full text-center text-caption text-action py-1"
                 data-testid="measurements-show-all-toggle"
               >
                 {showAllSites
@@ -655,7 +655,7 @@ export function BodyMeasurements({
             )}
 
             {lastMeasurement && (
-              <p className="text-[10px] text-ink-3 pt-1">
+              <p className="text-caption text-ink-3 pt-1">
                 Compared to {parseLocalDate(lastMeasurement.logged_at).toLocaleDateString()}
               </p>
             )}
@@ -668,7 +668,7 @@ export function BodyMeasurements({
                   className="w-full flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-ink-2">Proportions Analysis</span>
+                    <span className="text-subhead font-medium text-ink-2">Proportions analysis</span>
                     {enhancedAnalysis ? (
                       <Badge
                         variant={
@@ -697,7 +697,7 @@ export function BodyMeasurements({
                       </Badge>
                     )}
                   </div>
-                  <span className="text-ink-3 text-xs">{showAnalysis ? '▲' : '▼'}</span>
+                  <span className="text-ink-3 text-caption">{showAnalysis ? '▲' : '▼'}</span>
                 </button>
 
                 {showAnalysis && enhancedAnalysis && (
@@ -736,7 +736,7 @@ export function BodyMeasurements({
                     {/* Strength Imbalances (from lift ratios) */}
                     {imbalanceAnalysis.strengthImbalances.length > 0 && (
                       <div className="space-y-2">
-                        <h4 className="text-xs font-medium text-ink-2 uppercase tracking-wide">Strength Balance</h4>
+                        <h4 className="text-caption font-medium text-ink-2">Strength balance</h4>
                         {imbalanceAnalysis.strengthImbalances.map((imbalance, i) => (
                           <div
                             key={i}
@@ -749,7 +749,7 @@ export function BodyMeasurements({
                             }`}
                           >
                             <div className="flex items-start justify-between mb-1">
-                              <p className="text-sm font-medium text-ink">{imbalance.description}</p>
+                              <p className="text-subhead font-medium text-ink">{imbalance.description}</p>
                               <Badge
                                 variant={imbalance.severity === 'significant' ? 'danger' : imbalance.severity === 'moderate' ? 'warning' : 'default'}
                                 size="sm"
@@ -757,7 +757,7 @@ export function BodyMeasurements({
                                 {imbalance.severity}
                               </Badge>
                             </div>
-                            <p className="text-sm text-ink-2 mt-1">{imbalance.recommendation}</p>
+                            <p className="text-subhead text-ink-2 mt-1">{imbalance.recommendation}</p>
                           </div>
                         ))}
                       </div>
@@ -767,7 +767,7 @@ export function BodyMeasurements({
                     {imbalanceAnalysis.strengthImbalances.length === 0 &&
                       imbalanceAnalysis.laggingMuscles.length === 0 && (
                         <div className="p-3 bg-status-ok/10 border border-status-ok/20 rounded-lg text-center">
-                          <p className="text-sm text-status-ok">Great strength balance! Add body measurements for full proportions analysis.</p>
+                          <p className="text-subhead text-status-ok">Great strength balance! Add body measurements for full proportions analysis.</p>
                         </div>
                       )}
                   </div>
@@ -778,10 +778,10 @@ export function BodyMeasurements({
         ) : (
           <div className="space-y-4">
             <div className="text-center py-4">
-              <p className="text-ink-2 text-sm mb-2">No measurements logged yet</p>
-              <p className="text-xs text-ink-3 mb-3">Track your progress by logging body measurements</p>
+              <p className="text-ink-2 text-subhead mb-2">No measurements logged yet</p>
+              <p className="text-caption text-ink-3 mb-3">Track your progress by logging body measurements</p>
               <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                Log First Measurement
+                Log first measurement
               </Button>
             </div>
 
@@ -793,7 +793,7 @@ export function BodyMeasurements({
                   className="w-full flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-ink-2">Balance Analysis (from lifts)</span>
+                    <span className="text-subhead font-medium text-ink-2">Balance Analysis (from lifts)</span>
                     <Badge
                       variant={
                         imbalanceAnalysis.balanceScore >= 80
@@ -807,7 +807,7 @@ export function BodyMeasurements({
                       {imbalanceAnalysis.balanceScore}%
                     </Badge>
                   </div>
-                  <span className="text-ink-3 text-xs">{showAnalysis ? '▲' : '▼'}</span>
+                  <span className="text-ink-3 text-caption">{showAnalysis ? '▲' : '▼'}</span>
                 </button>
 
                 {showAnalysis && (
@@ -815,7 +815,7 @@ export function BodyMeasurements({
                     {/* Strength Imbalances (from lift ratios) */}
                     {imbalanceAnalysis.strengthImbalances.length > 0 && (
                       <div className="space-y-2">
-                        <h4 className="text-xs font-medium text-ink-2 uppercase tracking-wide">Strength Balance</h4>
+                        <h4 className="text-caption font-medium text-ink-2">Strength balance</h4>
                         {imbalanceAnalysis.strengthImbalances.map((imbalance, i) => (
                           <div
                             key={i}
@@ -828,7 +828,7 @@ export function BodyMeasurements({
                             }`}
                           >
                             <div className="flex items-start justify-between mb-1">
-                              <p className="text-sm font-medium text-ink">{imbalance.description}</p>
+                              <p className="text-subhead font-medium text-ink">{imbalance.description}</p>
                               <Badge
                                 variant={imbalance.severity === 'significant' ? 'danger' : imbalance.severity === 'moderate' ? 'warning' : 'default'}
                                 size="sm"
@@ -836,7 +836,7 @@ export function BodyMeasurements({
                                 {imbalance.severity}
                               </Badge>
                             </div>
-                            <p className="text-sm text-ink-2 mt-1">{imbalance.recommendation}</p>
+                            <p className="text-subhead text-ink-2 mt-1">{imbalance.recommendation}</p>
                           </div>
                         ))}
                       </div>
@@ -845,7 +845,7 @@ export function BodyMeasurements({
                     {/* Lagging Muscles from strength imbalances */}
                     {imbalanceAnalysis.laggingMuscles.length > 0 && (
                       <div className="p-2 bg-status-warn/10 border border-status-warn/20 rounded-lg">
-                        <p className="text-xs text-ink-2 mb-1.5">Needs Focus:</p>
+                        <p className="text-caption text-ink-2 mb-1.5">Needs focus:</p>
                         <div className="flex flex-wrap gap-1">
                           {imbalanceAnalysis.laggingMuscles.map(muscle => (
                             <Badge key={muscle} variant="warning" size="sm">
@@ -860,15 +860,15 @@ export function BodyMeasurements({
                     {imbalanceAnalysis.strengthImbalances.length === 0 &&
                       imbalanceAnalysis.laggingMuscles.length === 0 && (
                         <div className="p-3 bg-status-ok/10 border border-status-ok/20 rounded-lg text-center">
-                          <p className="text-sm text-status-ok">Great strength balance!</p>
-                          <p className="text-xs text-ink-3 mt-1">Add body measurements for full proportions analysis.</p>
+                          <p className="text-subhead text-status-ok">Great strength balance!</p>
+                          <p className="text-caption text-ink-3 mt-1">Add body measurements for full proportions analysis.</p>
                         </div>
                       )}
 
                     {/* Prompt to add measurements */}
                     {imbalanceAnalysis.strengthImbalances.length > 0 && (
                       <div className="p-2 bg-fill/50 rounded-lg">
-                        <p className="text-xs text-ink-2">
+                        <p className="text-caption text-ink-2">
                           Add body measurements above to unlock Classic Proportions (Adonis Ratios) and Superhero Benchmarks analysis.
                         </p>
                       </div>

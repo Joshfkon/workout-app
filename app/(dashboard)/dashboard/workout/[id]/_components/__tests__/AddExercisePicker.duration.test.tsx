@@ -69,6 +69,6 @@ describe('AddExercisePicker duration readout', () => {
 
   it('never displaces the modal title', () => {
     renderPicker({ sessionDuration: { totalLabel: '55 min', deltaLabel: '+10 min' } });
-    expect(screen.getByRole('heading', { name: 'Add Exercise' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Add exercise' })).toBeInTheDocument();
   });
 });

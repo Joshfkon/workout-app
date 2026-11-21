@@ -41,10 +41,10 @@ export function RecalcTargetsBanner({
       <div className="flex items-start gap-3">
         <span aria-hidden="true" className="text-status-warn mt-0.5">⚠</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-status-warn">
+          <p className="text-subhead font-medium text-status-warn">
             Targets use data you&rsquo;ve edited
           </p>
-          <p className="text-[13px] text-ink-2 mt-0.5">
+          <p className="text-subhead text-ink-2 mt-0.5">
             {staleCount} exercise{staleCount !== 1 ? 's' : ''} {staleCount !== 1 ? 'have' : 'has'} target
             weights based on past sets you changed after this workout was planned.
           </p>
@@ -53,7 +53,7 @@ export function RecalcTargetsBanner({
               type="button"
               onClick={() => setConfirming(true)}
               disabled={isApplying || changes.length === 0}
-              className="min-h-[44px] px-4 rounded-lg bg-action text-on-action text-sm font-semibold hover:bg-action transition-colors disabled:opacity-40"
+              className="min-h-[44px] px-4 rounded-lg bg-action text-on-action text-subhead font-semibold hover:bg-action transition-colors disabled:opacity-40"
             >
               {changes.length === 0 ? 'No changes to apply' : 'Recalculate'}
             </button>
@@ -61,7 +61,7 @@ export function RecalcTargetsBanner({
               type="button"
               onClick={onDismiss}
               disabled={isApplying}
-              className="min-h-[44px] px-2 text-sm text-ink-2 hover:text-ink"
+              className="min-h-[44px] px-2 text-subhead text-ink-2 hover:text-ink"
             >
               Keep as is
             </button>
@@ -73,13 +73,13 @@ export function RecalcTargetsBanner({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => !isApplying && setConfirming(false)} />
           <div className="relative w-full max-w-sm bg-card rounded-card p-5 shadow-card">
-            <h3 className="text-base font-semibold text-ink">Recalculate targets?</h3>
-            <p className="text-[13px] text-ink-2 mt-1">
+            <h3 className="text-body font-semibold text-ink">Recalculate targets?</h3>
+            <p className="text-subhead text-ink-2 mt-1">
               These target weights will be updated from your corrected history:
             </p>
             <ul className="mt-3 space-y-1.5 max-h-64 overflow-y-auto">
               {changes.map((c) => (
-                <li key={c.blockId} className="flex items-center justify-between text-sm">
+                <li key={c.blockId} className="flex items-center justify-between text-subhead">
                   <span className="text-ink truncate pr-2">{c.exerciseName}</span>
                   <span className="tabular-nums text-ink-2 flex-shrink-0">
                     {formatWeight(c.oldKg, unit, 0)} → <span className="text-action">{formatWeight(c.newKg, unit, 0)}</span>
@@ -92,7 +92,7 @@ export function RecalcTargetsBanner({
                 type="button"
                 onClick={() => setConfirming(false)}
                 disabled={isApplying}
-                className="flex-1 min-h-[44px] rounded-lg bg-fill text-ink text-sm font-medium"
+                className="flex-1 min-h-[44px] rounded-lg bg-fill text-ink text-subhead font-medium"
               >
                 Cancel
               </button>
@@ -100,7 +100,7 @@ export function RecalcTargetsBanner({
                 type="button"
                 onClick={() => { onApply(); setConfirming(false); }}
                 disabled={isApplying}
-                className="flex-1 min-h-[44px] rounded-lg bg-action text-on-action text-sm font-semibold disabled:opacity-40"
+                className="flex-1 min-h-[44px] rounded-lg bg-action text-on-action text-subhead font-semibold disabled:opacity-40"
               >
                 {isApplying ? 'Applying…' : `Update ${changes.length}`}
               </button>

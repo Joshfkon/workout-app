@@ -72,11 +72,11 @@ export function MealReminderPrompt() {
     <div className="flex items-start gap-3 rounded-card bg-card px-4 py-3.5 shadow-card" data-testid="meal-reminder-prompt">
       <IconBell size={18} className="mt-0.5 shrink-0 text-action" aria-hidden="true" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-ink">Remind me to log meals</p>
-        <p className="text-xs text-ink-2 mt-0.5">
+        <p className="text-subhead font-medium text-ink">Remind me to log meals</p>
+        <p className="text-caption text-ink-2 mt-0.5">
           A nudge at breakfast, lunch and dinner — only if you haven&apos;t logged that meal. Times can be changed in Settings.
         </p>
-        {notice && <p className="text-xs text-status-warn mt-1">{notice}</p>}
+        {notice && <p className="text-caption text-status-warn mt-1">{notice}</p>}
         <button
           type="button"
           onClick={() => void turnOn()}
