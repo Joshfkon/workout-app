@@ -1,5 +1,6 @@
 'use client';
 
+import { mealFromAddParam } from '@/lib/nutrition/addFoodLink';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
@@ -321,6 +322,17 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       setShowDescribeMeal(true);
       window.history.replaceState(null, '', pathname);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // "Log food" elsewhere in the app (Home) opens the SAME Add food sheet,
+  // with its recents and saved meals: ?add=breakfast|lunch|dinner|snack, or
+  // ?add=now for the meal that fits the time of day.
+  useEffect(() => {
+    const meal = mealFromAddParam(searchParams.get('add'), getMealTypeForNow());
+    if (!meal) return;
+    openAddFood(meal);
+    window.history.replaceState(null, '', pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 

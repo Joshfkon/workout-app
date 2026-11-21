@@ -10,8 +10,8 @@
  *
  * Weights are handled in grams internally; oz is a display unit converted with
  * {@link OZ_TO_G}. This util centralises the oz↔g constant and the
- * serving-size string parsing that used to be duplicated across AddFoodModal,
- * EditFoodModal and QuickFoodLogger.
+ * serving-size string parsing that used to be duplicated across AddFoodModal and
+ * EditFoodModal.
  */
 
 export const OZ_TO_G = 28.3495;
@@ -141,8 +141,8 @@ export function computeServing(
 
 /**
  * Extract grams from a stored serving_size string such as
- * "1 portion (85.048 g)", "100g" or "3 oz". Centralised here so add/edit and
- * QuickFoodLogger share one parser.
+ * "1 portion (85.048 g)", "100g" or "3 oz". Centralised here so add and edit
+ * share one parser.
  */
 export function parseServingWeight(
   servingSize: string | null | undefined
