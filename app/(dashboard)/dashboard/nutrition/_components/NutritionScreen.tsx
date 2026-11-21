@@ -48,6 +48,7 @@ import { ShareNutritionText } from '@/components/nutrition/ShareNutritionText';
 import { useDailyNutritionSummary } from '@/hooks/useDailyNutritionSummary';
 import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
 import { applyAdjustmentToMacros } from '@/lib/nutrition/step-calorie-adjustment';
+import { updateNutritionWidget } from '@/lib/integrations/liveActivity';
 import { DEFAULT_EATING_WINDOW, type EatingWindow } from '@/services/intakePacing';
 import {
   useNutritionDay,
@@ -1569,6 +1570,22 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   );
   const dailySummary = useDailyNutritionSummary(foodEntries, effectiveTargets);
   const dailyTotals = dailySummary.totals;
+
+  // iOS "Calories & protein" widget (no-op elsewhere). Only today's real
+  // rows count: not a past day, nor keepPreviousData's placeholder.
+  useEffect(() => {
+    const calories = effectiveTargets?.calories;
+    const protein = effectiveTargets?.protein;
+    if (calories == null || protein == null || selectedDate !== getLocalDateString()) return;
+    if (!dayQuery.isSuccess || dayQuery.isPlaceholderData) return;
+    void updateNutritionWidget({
+      caloriesLeft: calories - dailyTotals.calories,
+      caloriesTarget: calories,
+      proteinLeft: protein - dailyTotals.protein,
+      proteinTarget: protein,
+      path: '/dashboard/nutrition',
+    });
+  }, [effectiveTargets?.calories, effectiveTargets?.protein, selectedDate, dayQuery.isSuccess, dayQuery.isPlaceholderData, dailyTotals.calories, dailyTotals.protein]);
 
   // Eating window drives the nutrition share's intraday pacing. Read from the
   // nutrition_targets row (07:00–21:00 default when unset/unmigrated); the

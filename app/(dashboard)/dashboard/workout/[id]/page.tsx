@@ -1297,6 +1297,31 @@ export default function WorkoutPage() {
     [completedSets, allMotionCaptures, motionCoach, blocks, velocityRirProfiles, preferences.units, session?.id]
   );
 
+  // Lock-screen Live Activity labels: the exercise being rested from and the
+  // set that comes next. Once the block's sets are done, point at the next
+  // block's first set instead.
+  const currentBlockWorkingDone = currentBlockSets.filter(
+    (s) => !s.isWarmup && s.setType !== 'warmup'
+  ).length;
+  const nextBlockForActivity = blocks[currentBlockIndex + 1];
+  const restActivityContext = useMemo(() => {
+    if (!currentBlock) return undefined;
+    const total = currentBlock.targetSets;
+    if (currentBlockWorkingDone < total) {
+      return {
+        exerciseName: currentBlock.exercise?.name,
+        nextSet: `Set ${currentBlockWorkingDone + 1} of ${total}`,
+      };
+    }
+    if (nextBlockForActivity) {
+      return {
+        exerciseName: nextBlockForActivity.exercise?.name,
+        nextSet: `Next up · Set 1 of ${nextBlockForActivity.targetSets}`,
+      };
+    }
+    return { exerciseName: currentBlock.exercise?.name, nextSet: 'Last set done' };
+  }, [currentBlock, currentBlockWorkingDone, nextBlockForActivity]);
+
   // Memoize rest timer options to prevent hook reinitialization
   const restTimerOptions = useMemo(() => ({
     defaultSeconds: restTimerDuration ?? currentBlock?.targetRestSeconds ?? 180,
@@ -1308,7 +1333,8 @@ export default function WorkoutPage() {
       // block's rest).
       setRestTimerDuration(null);
     },
-  }), [restTimerDuration, currentBlock?.targetRestSeconds]);
+    activityContext: restActivityContext,
+  }), [restTimerDuration, currentBlock?.targetRestSeconds, restActivityContext]);
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
