@@ -76,22 +76,22 @@ export function CoachBlock({ feedback, text }: { feedback: CoachFeedback; text: 
   return (
     <div className="space-y-2" data-testid="coach-feedback">
       {feedback.unclearLine ? (
-        <p className="text-sm text-ink-2" data-testid="coach-unclear">
+        <p className="text-subhead text-ink-2" data-testid="coach-unclear">
           {feedback.unclearLine}
         </p>
       ) : text.verdict ? (
-        <p className="text-[15px] font-medium text-ink" data-testid="coach-verdict">
+        <p className="text-body font-medium text-ink" data-testid="coach-verdict">
           {text.verdict}
         </p>
       ) : null}
       {!feedback.unclearLine &&
         text.cues.map((cue) => (
-          <p key={cue} className="text-sm text-ink-2 pl-3 border-l-2 border-sep" data-testid="coach-cue">
+          <p key={cue} className="text-subhead text-ink-2 pl-3 border-l-2 border-sep" data-testid="coach-cue">
             {cue}
           </p>
         ))}
       {text.nextSetCall && (
-        <p className="text-sm font-medium text-action" data-testid="coach-next-set">
+        <p className="text-subhead font-medium text-action" data-testid="coach-next-set">
           {text.nextSetCall}
         </p>
       )}
@@ -110,7 +110,7 @@ export function VelocityBars({ perRep }: { perRep: RepVelocity[] }) {
   const maxRel = Math.max(1, ...perRep.map((p) => p.relative ?? 0));
   return (
     <div className="rounded-lg bg-card/60 p-3" data-testid="motion-velocity-bars">
-      <p className="mb-2 text-[10px] uppercase tracking-wide text-ink-3">
+      <p className="mb-2 text-caption text-ink-3">
         Velocity by rep · % of start
       </p>
       <div className="flex items-end gap-1" role="list" aria-label="Velocity by rep">
@@ -129,14 +129,14 @@ export function VelocityBars({ perRep }: { perRep: RepVelocity[] }) {
                 style={{ height: BAR_AREA_PX + (showPct ? 14 : 0) }}
               >
                 {showPct && (
-                  <span className="mb-0.5 text-[10px] leading-none text-ink-2">{pct ?? '—'}</span>
+                  <span className="mb-0.5 text-caption leading-none text-ink-2">{pct ?? '—'}</span>
                 )}
                 <div
                   className={`w-full max-w-[28px] rounded-t ${rel === null ? 'bg-sep' : ZONE_BAR[relZone(rel)]}`}
                   style={{ height: rel === null ? 3 : Math.max(3, (rel / maxRel) * BAR_AREA_PX) }}
                 />
               </div>
-              <span className="mt-1 text-[10px] leading-none text-ink-3">{p.n}</span>
+              <span className="mt-1 text-caption leading-none text-ink-3">{p.n}</span>
             </div>
           );
         })}
@@ -164,9 +164,9 @@ export function RepTable({
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
   return (
-    <table className="w-full table-fixed text-sm" data-testid="motion-analysis-rep-table">
+    <table className="w-full table-fixed text-subhead" data-testid="motion-analysis-rep-table">
       <thead>
-        <tr className="text-left text-xs text-ink-3">
+        <tr className="text-left text-caption text-ink-3">
           <th className="w-[18%] py-1 font-medium">Rep</th>
           <th className="w-[36%] py-1 font-medium">Tempo</th>
           <th className="w-[26%] py-1 font-medium">Velocity</th>
@@ -242,7 +242,7 @@ function RepDetail({ rep, gravityLabel }: { rep: CleanRep; gravityLabel: string 
     items.push([gravityLabel, rep.romGravityDeg === null ? '—' : `${rep.romGravityDeg.toFixed(0)}°`]);
   }
   return (
-    <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-lg bg-card/60 p-2.5 text-xs">
+    <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-lg bg-card/60 p-2.5 text-caption">
       {items.map(([k, val]) => (
         <div key={k} className="flex min-w-0 justify-between gap-2">
           <dt className="truncate text-ink-3">{k}</dt>
@@ -275,7 +275,7 @@ export function Collapsible({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between py-1 text-xs font-medium uppercase tracking-wide text-ink-3 hover:text-ink-2"
+        className="flex w-full items-center justify-between py-1 text-caption font-medium text-ink-3 hover:text-ink-2"
         aria-expanded={open}
         data-testid={`${testId}-toggle`}
       >
@@ -289,8 +289,8 @@ export function Collapsible({
 
 const Tile = ({ label, value, className = 'text-ink' }: { label: string; value: string; className?: string }) => (
   <div className="rounded-lg bg-card/60 p-2">
-    <p className="text-[10px] uppercase tracking-wide text-ink-3">{label}</p>
-    <p className={`text-sm font-semibold ${className}`}>{value}</p>
+    <p className="text-caption text-ink-3">{label}</p>
+    <p className={`text-subhead font-semibold ${className}`}>{value}</p>
   </div>
 );
 
@@ -333,7 +333,7 @@ export function Diagnostics({
         />
       </div>
 
-      <p className="text-xs text-ink-3" data-testid="motion-pc1-technical">
+      <p className="text-caption text-ink-3" data-testid="motion-pc1-technical">
         PC1 variance share {(cleaned.pc1ShareRaw * 100).toFixed(0)}% over the whole capture
         {cleaned.pc1ShareClean !== null && `, ${(cleaned.pc1ShareClean * 100).toFixed(0)}% over the clean reps`}
         {pc1 < min
@@ -342,7 +342,7 @@ export function Diagnostics({
       </p>
 
       {analysis && (
-        <p className="text-xs text-ink-2" data-testid="motion-stop-latency">
+        <p className="text-caption text-ink-2" data-testid="motion-stop-latency">
           Sensor latency at stop tap:{' '}
           {stopLatencyMs === null ? stopLatencyFallback : `${Math.round(stopLatencyMs)} ms`}
           {stopLatencyMs !== null && stopLatencyMs > TAP_LATENCY_WARN_MS && (
@@ -355,7 +355,7 @@ export function Diagnostics({
       )}
 
       {analysis?.gravityRomStatus === 'suppressed' && (
-        <p className="text-xs text-ink-3" data-testid="motion-gravity-rom-suppressed">
+        <p className="text-caption text-ink-3" data-testid="motion-gravity-rom-suppressed">
           The rotation axis is within {GRAVITY_ROM_SUPPRESS_BELOW_DEG}° of vertical, so the
           accelerometer cross-check can&apos;t resolve this rotation — gravity ROM is hidden.
         </p>
@@ -363,9 +363,9 @@ export function Diagnostics({
 
       {cleaningLog.length > 0 && (
         <div className="space-y-1" data-testid="motion-cleaning-log">
-          <p className="text-[10px] uppercase tracking-wide text-ink-3">Rep cleaning</p>
+          <p className="text-caption text-ink-3">Rep cleaning</p>
           {cleaningLog.map((line) => (
-            <p key={line} className="text-xs text-ink-2">
+            <p key={line} className="text-caption text-ink-2">
               {line}
             </p>
           ))}
@@ -376,7 +376,7 @@ export function Diagnostics({
         <button
           type="button"
           onClick={onDownloadCsv}
-          className="text-xs text-action"
+          className="text-caption text-action"
           data-testid="motion-download-csv"
         >
           {downloadLabel}

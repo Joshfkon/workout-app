@@ -79,7 +79,7 @@ function AxisIndicator({ axis }: { axis: Vec3 }) {
           </>
         )}
       </svg>
-      <div className="text-xs text-ink-2 space-y-0.5">
+      <div className="text-caption text-ink-2 space-y-0.5">
         <p>Rotation axis relative to the phone:</p>
         <p>
           in-screen {Math.round(planar * 100)}% · {axis.z >= 0 ? 'out of' : 'into'} screen {zPct}%
@@ -276,7 +276,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
           <div className="space-y-3">
             {!sweeping ? (
               <>
-                <ol className="text-sm text-ink-2 space-y-1.5 list-decimal list-inside">
+                <ol className="text-subhead text-ink-2 space-y-1.5 list-decimal list-inside">
                   <li>
                     Tap <span className="font-medium text-ink">Start</span> (phone in hand).
                   </li>
@@ -296,7 +296,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
               </>
             ) : (
               <>
-                <p className="text-sm text-ink-2">
+                <p className="text-subhead text-ink-2">
                   Recording… mount the phone, do 3 slow full-range reps, retrieve it, then stop.
                 </p>
                 <Button onClick={stopSweep} className="w-full" size="lg" data-testid="calibration-stop-sweep">
@@ -323,26 +323,26 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
                 <div className="p-3 rounded-lg bg-card/60 space-y-2">
                   <div className="flex items-baseline gap-4">
                     <div>
-                      <p className="text-xs text-ink-3">Calibration ROM</p>
-                      <p className="text-xl font-semibold text-action">
+                      <p className="text-caption text-ink-3">Calibration ROM</p>
+                      <p className="text-headline font-semibold text-action">
                         {eligibility.romDegrees!.toFixed(1)}°
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-ink-3">Axis quality</p>
-                      <p className="text-xl font-semibold text-ink">
+                      <p className="text-caption text-ink-3">Axis quality</p>
+                      <p className="text-headline font-semibold text-ink">
                         {eligibility.axisQuality! >= 1000 ? '999+' : eligibility.axisQuality!.toFixed(0)}
                       </p>
                     </div>
                   </div>
                   <AxisIndicator axis={eligibility.pivotAxis!} />
-                  <p className="text-xs text-ink-2">
+                  <p className="text-caption text-ink-2">
                     Sanity-check the ROM against the machine&apos;s real stroke. If it looks wrong,
                     redo the sweep — don&apos;t save a bad calibration.
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-status-warn/10 border border-status-warn/20">
-                  <p className="text-xs text-status-warn">
+                  <p className="text-caption text-status-warn">
                     This calibration is only valid for this exact setup. Changing the seat height or
                     moving the phone mount invalidates it — you&apos;ll need to calibrate again.
                   </p>
@@ -359,7 +359,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
             ) : (
               <>
                 <div className="p-3 rounded-lg bg-status-warn/10 border border-status-warn/20">
-                  <p className="text-sm text-status-warn" data-testid="calibration-ineligible-reason">
+                  <p className="text-subhead text-status-warn" data-testid="calibration-ineligible-reason">
                     Can&apos;t save as a machine calibration: {eligibility.reason}
                   </p>
                 </div>
@@ -373,7 +373,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
 
         {error && (
           <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
-            <p className="text-sm text-status-bad">{error}</p>
+            <p className="text-subhead text-status-bad">{error}</p>
           </div>
         )}
       </CardContent>

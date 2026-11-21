@@ -95,7 +95,7 @@ function PricingContent() {
     <div className="max-w-5xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-ink">Choose Your Plan</h1>
+        <h1 className="text-large-title text-ink">Choose your plan</h1>
         <p className="text-ink-2 mt-2 max-w-xl mx-auto">
           Unlock your full potential with HyperTrack. Choose the plan that fits your training goals.
         </p>
@@ -115,12 +115,12 @@ function PricingContent() {
                 <p className="font-medium text-ink">
                   You have <span className="text-status-warn">{trialDaysRemaining} days</span> left in your free trial
                 </p>
-                <p className="text-sm text-ink-2">
+                <p className="text-subhead text-ink-2">
                   Enjoy full Elite access while exploring all features
                 </p>
               </div>
             </div>
-            <Badge variant="warning">Trial Active</Badge>
+            <Badge variant="warning">Trial active</Badge>
           </CardContent>
         </Card>
       )}
@@ -132,7 +132,7 @@ function PricingContent() {
             ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
             : message.type === 'error'
             ? 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
-            : 'bg-info-500/10 border border-info-500/20 text-info-400'
+            : 'bg-action-tint text-action'
         }`}>
           {message.text}
         </div>
@@ -149,7 +149,7 @@ function PricingContent() {
             </div>
             <div>
               <h3 className="font-semibold text-ink">Have a Promo Code?</h3>
-              <p className="text-sm text-ink-2">Enter your code below to unlock premium features instantly</p>
+              <p className="text-subhead text-ink-2">Enter your code below to unlock premium features instantly</p>
             </div>
           </div>
           
@@ -171,7 +171,7 @@ function PricingContent() {
           </div>
 
           {promoResult && (
-            <div className={`mt-4 p-3 rounded-lg text-sm ${
+            <div className={`mt-4 p-3 rounded-lg text-subhead ${
               promoResult.success 
                 ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
                 : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
@@ -188,8 +188,8 @@ function PricingContent() {
       {isNative ? (
         <Card>
           <CardContent className="p-6 text-center space-y-2">
-            <h2 className="text-lg font-semibold text-ink">Plans &amp; billing are managed on the web</h2>
-            <p className="text-sm text-ink-2 max-w-md mx-auto">
+            <h2 className="text-headline font-semibold text-ink">Plans &amp; billing are managed on the web</h2>
+            <p className="text-subhead text-ink-2 max-w-md mx-auto">
               Already subscribed? Your plan is active here automatically. You can compare what each
               plan includes below, or redeem a promo code above.
             </p>
@@ -201,7 +201,7 @@ function PricingContent() {
             <div className="inline-flex items-center gap-2 p-1 bg-fill rounded-lg">
               <button
                 onClick={() => setBillingPeriod('monthly')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-md text-subhead font-medium transition-colors ${
                   billingPeriod === 'monthly'
                     ? 'bg-sep text-ink'
                     : 'text-ink-2 hover:text-ink'
@@ -211,7 +211,7 @@ function PricingContent() {
               </button>
               <button
                 onClick={() => setBillingPeriod('yearly')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-md text-subhead font-medium transition-colors ${
                   billingPeriod === 'yearly'
                     ? 'bg-sep text-ink'
                     : 'text-ink-2 hover:text-ink'
@@ -253,7 +253,7 @@ function PricingContent() {
       {/* Feature Comparison */}
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-xl font-bold text-ink mb-6 text-center">Feature Comparison</h2>
+          <h2 className="text-headline font-bold text-ink mb-6 text-center">Feature comparison</h2>
           
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -289,7 +289,7 @@ function PricingContent() {
         <>
           <Card>
             <CardContent className="p-6">
-              <h2 className="text-xl font-bold text-ink mb-6 text-center">Frequently Asked Questions</h2>
+              <h2 className="text-headline font-bold text-ink mb-6 text-center">Frequently asked questions</h2>
 
               <div className="space-y-4 max-w-2xl mx-auto">
                 <FaqItem
@@ -312,7 +312,7 @@ function PricingContent() {
             </CardContent>
           </Card>
 
-          <div className="text-center text-ink-2 text-sm">
+          <div className="text-center text-ink-2 text-subhead">
             <p>30-day money-back guarantee. No questions asked.</p>
           </div>
         </>
@@ -364,7 +364,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
   return (
     <div className="p-4 bg-fill/50 rounded-lg">
       <h3 className="font-medium text-ink mb-2">{question}</h3>
-      <p className="text-sm text-ink-2">{answer}</p>
+      <p className="text-subhead text-ink-2">{answer}</p>
     </div>
   );
 }
@@ -376,7 +376,7 @@ export default function PricingPage() {
     <Suspense fallback={
       <div className="max-w-5xl mx-auto space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-ink">Choose Your Plan</h1>
+          <h1 className="text-large-title text-ink">Choose your plan</h1>
           <p className="text-ink-2 mt-2">Loading pricing...</p>
         </div>
       </div>

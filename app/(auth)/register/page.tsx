@@ -132,7 +132,7 @@ export default function RegisterPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
+          <span className="text-title font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
@@ -144,12 +144,12 @@ export default function RegisterPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-ink">Confirm your email</h2>
+            <h2 className="text-headline font-bold text-ink">Confirm your email</h2>
             <p className="text-ink-2">
               We sent a confirmation link to{' '}
               <span className="text-ink font-medium">{sentTo}</span>
             </p>
-            <p className="text-sm text-ink-3">
+            <p className="text-subhead text-ink-3">
               Not there after a couple of minutes? Check your spam folder. You can also enter the
               code from the email instead of clicking the link.
             </p>
@@ -160,12 +160,12 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setSentTo(null)}
-                className="text-sm text-action font-medium underline"
+                className="text-subhead text-action font-medium underline"
               >
                 Wrong address? Change email
               </button>
             </div>
-            <p className="text-sm text-ink-2 pt-2">
+            <p className="text-subhead text-ink-2 pt-2">
               Already confirmed?{' '}
               <Link href="/login" className="text-action font-medium">
                 Sign in
@@ -176,7 +176,7 @@ export default function RegisterPage() {
       ) : (
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-ink">Create your account</h1>
+          <h1 className="text-title font-bold text-ink">Create your account</h1>
           <p className="text-ink-2 mt-1">Start your hypertrophy journey</p>
         </div>
 
@@ -213,7 +213,7 @@ export default function RegisterPage() {
           />
 
           <Select
-            label="Experience Level"
+            label="Experience level"
             value={experience}
             onChange={(e) => setExperience(e.target.value as Experience)}
             options={[
@@ -228,10 +228,10 @@ export default function RegisterPage() {
             <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
               {error === 'EMAIL_EXISTS' ? (
                 <div>
-                  <p className="text-sm text-status-bad font-medium">
+                  <p className="text-subhead text-status-bad font-medium">
                     An account with this email already exists.
                   </p>
-                  <p className="text-sm text-ink-2 mt-1">
+                  <p className="text-subhead text-ink-2 mt-1">
                     <Link href="/login" className="text-action underline">
                       Sign in instead
                     </Link>
@@ -242,18 +242,18 @@ export default function RegisterPage() {
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-status-bad">{error}</p>
+                <p className="text-subhead text-status-bad">{error}</p>
               )}
             </div>
           )}
 
           <Button type="submit" className="w-full" isLoading={isLoading}>
-            Create Account
+            Create account
           </Button>
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-ink-2">
+          <p className="text-subhead text-ink-2">
             Already have an account?{' '}
             <Link href="/login" className="text-action font-medium">
               Sign in
@@ -264,10 +264,10 @@ export default function RegisterPage() {
       )}
 
       <div className="mt-4 text-center space-y-2">
-        <p className="text-sm text-ink-3">
+        <p className="text-subhead text-ink-3">
           Get full Elite access for 14 days—no credit card required.
         </p>
-        <p className="text-xs text-ink-3">
+        <p className="text-caption text-ink-3">
           By signing up, you agree to our{' '}
           <Link href="/terms" className="text-ink-3 hover:text-ink-2 underline">
             Terms of Service

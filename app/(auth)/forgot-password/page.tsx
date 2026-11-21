@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
+          <span className="text-title font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
@@ -68,11 +68,11 @@ export default function ForgotPasswordPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-ink">Check your email</h2>
+            <h2 className="text-headline font-bold text-ink">Check your email</h2>
             <p className="text-ink-2">
               We&apos;ve sent a password reset link to <span className="text-ink font-medium">{email}</span>
             </p>
-            <p className="text-sm text-ink-3">
+            <p className="text-subhead text-ink-3">
               Didn&apos;t receive the email? Check your spam folder or try again. Reading the email
               on a different device? Enter the code from it instead of clicking the link.
             </p>
@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
         ) : (
           <>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-ink">Forgot password?</h1>
+              <h1 className="text-title font-bold text-ink">Forgot password?</h1>
               <p className="text-ink-2 mt-1">
                 No worries, we&apos;ll send you reset instructions.
               </p>
@@ -107,12 +107,12 @@ export default function ForgotPasswordPage() {
 
               {error && (
                 <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
-                  <p className="text-sm text-status-bad">{error}</p>
+                  <p className="text-subhead text-status-bad">{error}</p>
                 </div>
               )}
 
               <Button type="submit" className="w-full" isLoading={isLoading}>
-                Send Reset Link
+                Send reset link
               </Button>
             </form>
           </>
@@ -121,7 +121,7 @@ export default function ForgotPasswordPage() {
         <div className="mt-6 text-center">
           <Link 
             href="/login" 
-            className="inline-flex items-center text-sm text-action font-medium"
+            className="inline-flex items-center text-subhead text-action font-medium"
           >
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

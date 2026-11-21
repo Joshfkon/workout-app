@@ -76,7 +76,7 @@ export default function BloodPressurePage() {
     <div className="space-y-4 animate-fade-in pb-8">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-[17px] font-medium text-ink">Blood Pressure</h1>
+        <h1 className="text-headline font-medium text-ink">Blood pressure</h1>
         <Button size="sm" onClick={() => setShowLog(true)}>
           + Log reading
         </Button>
@@ -88,7 +88,7 @@ export default function BloodPressurePage() {
           <button
             key={p.id}
             onClick={() => setPeriod(p.id)}
-            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+            className={`px-3 py-1 text-caption rounded-md transition-colors ${
               period === p.id
                 ? 'bg-action text-on-action'
                 : 'text-ink-2 hover:text-ink'
@@ -109,7 +109,7 @@ export default function BloodPressurePage() {
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-ink-2 font-medium">No readings yet</p>
-            <p className="text-sm text-ink-3 mt-1 mb-4">
+            <p className="text-subhead text-ink-3 mt-1 mb-4">
               Log your first blood pressure reading to start tracking your trend.
             </p>
             <Button onClick={() => setShowLog(true)}>Log your first reading</Button>
@@ -123,16 +123,16 @@ export default function BloodPressurePage() {
               <CardContent>
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
-                    <p className="text-xs text-ink-3">Average this period</p>
-                    <p className="text-2xl font-bold text-ink tabular-nums">
+                    <p className="text-caption text-ink-3">Average this period</p>
+                    <p className="text-title font-bold text-ink tabular-nums">
                       {formatReading(summary.avgSystolic, summary.avgDiastolic)}
-                      <span className="ml-1.5 text-xs font-normal text-ink-3">
+                      <span className="ml-1.5 text-caption font-normal text-ink-3">
                         mmHg
                       </span>
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${TONE_BADGE[summary.category.tone]}`}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-medium ${TONE_BADGE[summary.category.tone]}`}
                   >
                     {summary.category.label}
                   </span>
@@ -153,7 +153,7 @@ export default function BloodPressurePage() {
                   <Stat label="Readings" value={String(summary.count)} />
                 </div>
                 {/* Non-diagnostic footnote. */}
-                <p className="text-[11px] text-ink-3 mt-3 leading-relaxed">
+                <p className="text-caption text-ink-3 mt-3 leading-relaxed">
                   Ranges are informational and not a diagnosis. Talk to a clinician
                   about persistent high readings or any concerning symptoms.
                 </p>
@@ -164,17 +164,17 @@ export default function BloodPressurePage() {
           {/* Trend chart */}
           <Card>
             <CardContent>
-              <p className="text-sm font-medium text-ink mb-2">Trend</p>
+              <p className="text-subhead font-medium text-ink mb-2">Trend</p>
               <BloodPressureGraph readings={filtered} period={period} />
             </CardContent>
           </Card>
 
           {/* History grouped by day */}
           <div className="space-y-3">
-            <h2 className="text-[15px] font-medium text-ink">History</h2>
+            <h2 className="text-body font-medium text-ink">History</h2>
             {days.length === 0 ? (
               <Card>
-                <CardContent className="py-6 text-center text-sm text-ink-2">
+                <CardContent className="py-6 text-center text-subhead text-ink-2">
                   No readings in this period.
                 </CardContent>
               </Card>
@@ -183,7 +183,7 @@ export default function BloodPressurePage() {
                 <Card key={day.localDay}>
                   <CardContent>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium text-ink">
+                      <p className="text-subhead font-medium text-ink">
                         {formatDate(day.localDay, {
                           weekday: 'short',
                           month: 'short',
@@ -191,7 +191,7 @@ export default function BloodPressurePage() {
                         })}
                       </p>
                       {day.readings.length > 1 && (
-                        <p className="text-xs text-ink-3">
+                        <p className="text-caption text-ink-3">
                           Daily avg{' '}
                           <span className="font-medium text-ink-2 tabular-nums">
                             {formatReading(day.average.systolic, day.average.diastolic)}
@@ -213,15 +213,15 @@ export default function BloodPressurePage() {
                                 aria-hidden="true"
                               />
                               <div className="min-w-0">
-                                <p className="text-sm text-ink tabular-nums">
+                                <p className="text-subhead text-ink tabular-nums">
                                   {formatReading(r.systolic, r.diastolic)}
                                   {r.pulse != null && (
-                                    <span className="ml-2 text-xs text-ink-3">
+                                    <span className="ml-2 text-caption text-ink-3">
                                       ♥ {r.pulse}
                                     </span>
                                   )}
                                 </p>
-                                <p className="text-xs text-ink-3 truncate">
+                                <p className="text-caption text-ink-3 truncate">
                                   {timeLabel(r.measuredAt)}
                                   {r.context && (
                                     <> · {BLOOD_PRESSURE_CONTEXT_LABELS[r.context]}</>
@@ -232,7 +232,7 @@ export default function BloodPressurePage() {
                             </div>
                             <button
                               onClick={() => setPendingDelete(r)}
-                              className="shrink-0 text-xs text-ink-3 hover:text-status-bad transition-colors"
+                              className="shrink-0 text-caption text-ink-3 hover:text-status-bad transition-colors"
                               aria-label="Delete reading"
                             >
                               Delete
@@ -266,8 +266,8 @@ export default function BloodPressurePage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-fill px-2 py-2">
-      <p className="text-[11px] text-ink-3">{label}</p>
-      <p className="text-sm font-semibold text-ink tabular-nums">{value}</p>
+      <p className="text-caption text-ink-3">{label}</p>
+      <p className="text-subhead font-semibold text-ink tabular-nums">{value}</p>
     </div>
   );
 }

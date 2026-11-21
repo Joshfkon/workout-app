@@ -136,7 +136,7 @@ export function CaptureAnalysisView({
 
       {/* Plain-language version; the technical PC1 note lives in diagnostics. */}
       {pc1 < MOTION_SET_CONFIG.gating.minPc1Share && (
-        <p className="text-xs text-status-warn" data-testid="motion-multi-axis-note">
+        <p className="text-caption text-status-warn" data-testid="motion-multi-axis-note">
           {MULTI_AXIS_REASON[0].toUpperCase() + MULTI_AXIS_REASON.slice(1)}.
         </p>
       )}
@@ -157,7 +157,7 @@ export function CaptureAnalysisView({
             }
           />
           {analysis?.romSuppressed && (
-            <p className="text-xs text-ink-3">
+            <p className="text-caption text-ink-3">
               No still reference anywhere in the capture, so absolute ROM is suppressed — rep
               count, tempo, and velocity are unaffected. If the phone was hand-held, that is
               expected.
@@ -165,7 +165,7 @@ export function CaptureAnalysisView({
           )}
         </>
       ) : (
-        <p className="text-sm text-ink-2">No working reps detected in this capture.</p>
+        <p className="text-subhead text-ink-2">No working reps detected in this capture.</p>
       )}
 
       {analysis && (
@@ -217,13 +217,13 @@ function SummaryHeader({
   const clean = issues !== null && issues.length === 0;
   return (
     <div className="space-y-1.5" data-testid="motion-analysis-header">
-      <p className="text-lg font-semibold text-ink" data-testid="motion-summary-line">
+      <p className="text-headline font-semibold text-ink" data-testid="motion-summary-line">
         {repCount} rep{repCount === 1 ? '' : 's'}
         {loss !== null && <> · {Math.round(loss * 100)}% velocity loss</>}
       </p>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {zone ? (
-          <span className={`text-sm font-medium ${ZONE_TEXT[zone]}`} data-testid="motion-summary-status">
+          <span className={`text-subhead font-medium ${ZONE_TEXT[zone]}`} data-testid="motion-summary-status">
             {ZONE_LABEL[zone]}
           </span>
         ) : (
@@ -233,7 +233,7 @@ function SummaryHeader({
           <button
             type="button"
             onClick={onBadgeClick}
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-caption font-medium ${
               clean
                 ? 'bg-status-ok/10 text-status-ok'
                 : 'bg-status-warn/10 text-status-warn border border-status-warn/20'

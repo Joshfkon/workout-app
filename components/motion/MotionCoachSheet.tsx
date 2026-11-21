@@ -91,17 +91,17 @@ export function MotionCoachSheet({
           <CoachBlock feedback={feedback} text={phrased ?? coachTemplateText(feedback, nextSetCall)} />
         ) : (
           <div className="space-y-2" data-testid="motion-legacy-capture">
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               This capture was recorded before the current rep analysis and its raw data
               wasn&apos;t kept, so there&apos;s no coach feedback for it.
             </p>
-            {nextSetCall && <p className="text-sm font-medium text-action">{nextSetCall}</p>}
+            {nextSetCall && <p className="text-subhead font-medium text-action">{nextSetCall}</p>}
           </div>
         )}
 
         <div className="space-y-4" data-testid="motion-sheet-details">
           {velocityRirLine && feedback?.confidence.confidence === 'ok' && (
-            <p className="text-xs text-ink-2" data-testid="velocity-rir-line">
+            <p className="text-caption text-ink-2" data-testid="velocity-rir-line">
               {velocityRirLine}
             </p>
           )}
@@ -125,7 +125,7 @@ export function MotionCoachSheet({
 function LegacyMetrics({ metrics }: { metrics: CaptureAnalysisMetrics }) {
   const deg = (radps: number) => Math.round(radps * RAD_TO_DEG);
   return (
-    <table className="w-full table-fixed text-xs" data-testid="motion-legacy-metrics">
+    <table className="w-full table-fixed text-caption" data-testid="motion-legacy-metrics">
       <thead>
         <tr className="text-left text-ink-3">
           <th className="py-1 font-medium">Rep</th>

@@ -71,7 +71,7 @@ function SleepTooltip({ active, payload, label }: TooltipProps<number, string>) 
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload as SleepTrendPoint;
   return (
-    <div className="bg-fill border border-sep rounded-lg px-3 py-2 text-xs">
+    <div className="bg-fill border border-sep rounded-lg px-3 py-2 text-caption">
       <p className="text-ink-2 font-medium mb-1">{formatTooltipDay(String(label))}</p>
       {point.hours != null ? (
         <p className="text-ink">
@@ -103,9 +103,9 @@ function StatTile({
 }) {
   return (
     <div className="bg-card rounded-card p-3 shadow-card">
-      <p className="text-xs text-ink-3 mb-1">{label}</p>
-      <div className="text-lg font-semibold text-ink">{children}</div>
-      {sub && <p className="text-[11px] text-ink-3 mt-0.5">{sub}</p>}
+      <p className="text-caption text-ink-3 mb-1">{label}</p>
+      <div className="text-headline font-semibold text-ink">{children}</div>
+      {sub && <p className="text-caption text-ink-3 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -153,7 +153,7 @@ export default function SleepPage() {
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
       <Link
         href="/dashboard"
-        className="text-sm text-ink-2 hover:text-ink inline-flex items-center gap-1"
+        className="text-subhead text-ink-2 hover:text-ink inline-flex items-center gap-1"
       >
         ← Back to Dashboard
       </Link>
@@ -182,8 +182,8 @@ export default function SleepPage() {
         <Card>
           <CardContent className="text-center py-10">
             <IconMoon size={28} className="mx-auto text-ink-3 mb-3" aria-hidden="true" />
-            <p className="text-sm text-ink-2 mb-1">No sleep logged yet</p>
-            <p className="text-xs text-ink-3 mb-4">
+            <p className="text-subhead text-ink-2 mb-1">No sleep logged yet</p>
+            <p className="text-caption text-ink-3 mb-4">
               Log a night to start tracking your average and trend.
             </p>
             <Button size="sm" onClick={() => setIsLogOpen(true)}>
@@ -234,7 +234,7 @@ export default function SleepPage() {
                     <button
                       key={r.days}
                       onClick={() => setRangeDays(r.days)}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+                      className={`px-2.5 py-1 text-caption font-medium rounded-lg transition-colors ${
                         rangeDays === r.days
                           ? 'bg-action text-on-action'
                           : 'bg-fill text-ink-2 hover:text-ink'
@@ -249,7 +249,7 @@ export default function SleepPage() {
             </CardHeader>
             <CardContent>
               {loggedInRange === 0 ? (
-                <p className="text-sm text-ink-3 text-center py-8">
+                <p className="text-subhead text-ink-3 text-center py-8">
                   No sleep logged in this range.
                 </p>
               ) : (
@@ -306,7 +306,7 @@ export default function SleepPage() {
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
-                  <p className="text-[11px] text-ink-3 mt-2">
+                  <p className="text-caption text-ink-3 mt-2">
                     Unlogged nights are gaps, not zeros — the average only counts logged nights.
                   </p>
                 </>
@@ -324,16 +324,16 @@ export default function SleepPage() {
                 <div className="grid grid-cols-3 gap-2">
                   {([...SLEEP_QUALITIES].reverse() as SleepQuality[]).map((q) => (
                     <div key={q} className="text-center p-2.5 bg-fill/50 rounded-lg">
-                      <div className="flex items-center justify-center gap-1.5 text-xs text-ink-2">
+                      <div className="flex items-center justify-center gap-1.5 text-caption text-ink-2">
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${SLEEP_QUALITY_DOT_CLASS[q]}`}
                           aria-hidden="true"
                         />
                         {SLEEP_QUALITY_LABELS[q]}
                       </div>
-                      <p className="text-lg font-semibold text-ink mt-0.5">
+                      <p className="text-headline font-semibold text-ink mt-0.5">
                         {stats.qualityCounts30[q]}
-                        <span className="text-xs text-ink-3 font-normal">
+                        <span className="text-caption text-ink-3 font-normal">
                           {' '}night{stats.qualityCounts30[q] === 1 ? '' : 's'}
                         </span>
                       </p>

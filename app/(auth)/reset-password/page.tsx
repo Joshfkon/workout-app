@@ -193,15 +193,15 @@ export default function ResetPasswordPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-ink">Link expired or already used</h2>
+          <h2 className="text-headline font-bold text-ink">Link expired or already used</h2>
           <p className="text-ink-2">
             This password reset link has expired or has already been used. Reset links are valid for 1 hour and can only be used once.
           </p>
           <div className="space-y-3 pt-2">
             <Link href="/forgot-password">
-              <Button className="w-full">Request New Link</Button>
+              <Button className="w-full">Request new link</Button>
             </Link>
-            <p className="text-xs text-ink-3">
+            <p className="text-caption text-ink-3">
               Tip: Click the link in your email within 1 hour of requesting it
             </p>
           </div>
@@ -220,7 +220,7 @@ export default function ResetPasswordPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
+          <span className="text-title font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
@@ -232,7 +232,7 @@ export default function ResetPasswordPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-ink">Password updated!</h2>
+            <h2 className="text-headline font-bold text-ink">Password updated!</h2>
             <p className="text-ink-2">
               Your password has been successfully reset. Redirecting you to the dashboard...
             </p>
@@ -240,7 +240,7 @@ export default function ResetPasswordPage() {
         ) : (
           <>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-ink">Set new password</h1>
+              <h1 className="text-title font-bold text-ink">Set new password</h1>
               <p className="text-ink-2 mt-1">
                 Enter your new password below
               </p>
@@ -248,7 +248,7 @@ export default function ResetPasswordPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input
-                label="New Password"
+                label="New password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -259,7 +259,7 @@ export default function ResetPasswordPage() {
               />
 
               <Input
-                label="Confirm Password"
+                label="Confirm password"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -270,12 +270,12 @@ export default function ResetPasswordPage() {
 
               {error && (
                 <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
-                  <p className="text-sm text-status-bad">{error}</p>
+                  <p className="text-subhead text-status-bad">{error}</p>
                 </div>
               )}
 
               <Button type="submit" className="w-full" isLoading={isLoading}>
-                Reset Password
+                Reset password
               </Button>
             </form>
           </>

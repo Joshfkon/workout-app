@@ -14,7 +14,7 @@ async function submit() {
   render(<RegisterPage />);
   await user.type(screen.getByLabelText('Email'), 'someone@example.com');
   await user.type(screen.getByLabelText('Password'), 'Sample-pass1');
-  await user.click(screen.getByRole('button', { name: 'Create Account' }));
+  await user.click(screen.getByRole('button', { name: 'Create account' }));
 }
 
 describe('RegisterPage — an email that is already registered', () => {
