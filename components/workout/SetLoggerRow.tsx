@@ -29,13 +29,8 @@ import type {
   BodyweightData,
   SetType,
 } from '@/types/schema';
-import { rirToRpe, calculateEffectiveLoad } from '@/types/schema';
-import {
-  convertWeight,
-  convertWeightForDisplay,
-  inputWeightToKg,
-  roundToIncrement,
-} from '@/lib/utils';
+import { convertWeightForDisplay } from '@/lib/utils';
+import { buildSetLogData, maxRepsFor, weightStepForDisplay } from '@/lib/workout/setLogData';
 import { lightHaptic } from '@/lib/integrations/notifications';
 
 type WeightMode = 'bodyweight' | 'weighted' | 'assisted';
@@ -243,7 +238,7 @@ export function SetLoggerRow({
   }, [setNumber]);
 
   const unitLabel = unit === 'lb' ? 'lbs' : 'kg';
-  const maxReps = isDurationBased ? 600 : 100;
+  const maxReps = maxRepsFor(Boolean(isDurationBased));
   const repsStep = isDurationBased ? 5 : 1;
 
   // ---- Hold timer (duration exercises) ----
@@ -298,17 +293,8 @@ export function SetLoggerRow({
     holdCommittedRef.current = false;
   }, [setNumber, isDurationBased, resetHoldTimer]);
 
-  // Weight step in DISPLAY units, derived from the exercise's minimum kg
-  // increment. For lb users the converted step snaps to real 2.5 lb plate
-  // math (2.5 kg -> 5 lb, 1.25 kg -> 2.5 lb) instead of 5.51 lb.
-  const weightStep = useMemo(() => {
-    const incKg = minIncrementKg && minIncrementKg > 0 ? minIncrementKg : 2.5;
-    if (unit === 'lb') {
-      const lbs = convertWeight(incKg, 'kg', 'lb');
-      return Math.max(2.5, roundToIncrement(lbs, 2.5));
-    }
-    return incKg;
-  }, [minIncrementKg, unit]);
+  // Weight step in DISPLAY units (shared with the Apple Watch logger).
+  const weightStep = useMemo(() => weightStepForDisplay(minIncrementKg, unit), [minIncrementKg, unit]);
 
   const isPlainBodyweight = isBodyweight && weightMode === 'bodyweight';
   const parsedWeight = parseFloat(weight);
@@ -341,63 +327,24 @@ export function SetLoggerRow({
   const handleLog = () => {
     if (!canLog) return;
 
-    const feedback: SetFeedback = {
-      repsInTank: selectedRir,
-      form: form ?? 'clean',
-      discomfort,
-      ...(rirFromSensor ? { rirSource: 'sensor' as const } : {}),
-    };
-    const rpe = rirToRpe(selectedRir);
-
-    let weightKg: number;
-    let bodyweightData: BodyweightData | undefined;
-
-    if (isBodyweight && userBodyweightKg) {
-      if (weightMode === 'weighted') {
-        const addedKg = inputWeightToKg(isNaN(weightNum) ? 0 : weightNum, unit);
-        bodyweightData = {
-          userBodyweightKg,
-          modification: 'weighted',
-          addedWeightKg: addedKg,
-          effectiveLoadKg: calculateEffectiveLoad(userBodyweightKg, 'weighted', addedKg),
-        };
-      } else if (weightMode === 'assisted') {
-        const assistKg = inputWeightToKg(isNaN(weightNum) ? 0 : weightNum, unit);
-        bodyweightData = {
-          userBodyweightKg,
-          modification: 'assisted',
-          assistanceWeightKg: assistKg,
-          assistanceType: 'machine',
-          effectiveLoadKg: calculateEffectiveLoad(userBodyweightKg, 'assisted', undefined, assistKg),
-        };
-      } else {
-        bodyweightData = {
-          userBodyweightKg,
-          modification: 'none',
-          effectiveLoadKg: userBodyweightKg,
-        };
-      }
-      weightKg = bodyweightData.effectiveLoadKg;
-    } else if (isPlainBodyweight) {
-      // Bodyweight movement with no weigh-in on record: there is no load to
-      // resolve and no field to type one into. Log the set at 0 rather than
-      // handing the persistence path a NaN it silently drops — the card's
-      // "log your bodyweight" hint is what fixes the missing load.
-      weightKg = 0;
-    } else {
-      weightKg = inputWeightToKg(weightNum, unit);
-    }
-
-    onLog({
-      weightKg,
+    // Built by the shared helper so a set logged from the Apple Watch is the
+    // same payload this row would produce (lib/workout/setLogData).
+    const data = buildSetLogData({
+      weight: weightNum,
       reps: repsNum,
-      rpe,
-      note: note.trim() || undefined,
-      feedback,
-      bodyweightData,
+      rir: selectedRir,
+      unit,
+      form,
+      discomfort,
+      rirFromSensor,
+      note,
       setType: selectedSetType,
-      rirExplicitlySelected: rirTouched,
+      isBodyweight,
+      weightMode,
+      userBodyweightKg,
     });
+
+    onLog({ ...data, rirExplicitlySelected: rirTouched });
 
     // Light haptic feedback on set complete (native only)
     void lightHaptic();
