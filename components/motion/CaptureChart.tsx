@@ -84,7 +84,7 @@ export function CaptureChart({ analysis }: CaptureChartProps) {
           ±{model.wMax.toFixed(1)} rad/s
         </text>
       </svg>
-      <p className="mt-1 text-[10px] text-ink-3">
+      <p className="mt-1 text-caption text-ink-3">
         <span className="text-action">■</span> concentric&nbsp;&nbsp;
         <span className="text-status-warn">■</span> eccentric&nbsp;&nbsp;— numbered lines mark rep starts
       </p>

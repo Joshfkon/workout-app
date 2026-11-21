@@ -159,19 +159,19 @@ export default function LoginPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
+          <span className="text-title font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-ink">Welcome back</h1>
+          <h1 className="text-title font-bold text-ink">Welcome back</h1>
           <p className="text-ink-2 mt-1">Sign in to continue your training</p>
         </div>
 
         {infoMessage && !needsConfirmation && (
           <div role="status" className="p-3 rounded-lg mb-4 bg-status-bad/10 border border-status-bad/20">
-            <p className="text-sm font-medium text-status-bad">{infoMessage}</p>
+            <p className="text-subhead font-medium text-status-bad">{infoMessage}</p>
           </div>
         )}
 
@@ -181,8 +181,8 @@ export default function LoginPage() {
             data-testid="confirm-email-panel"
             className="p-3 rounded-lg mb-4 bg-status-warn/10 border border-status-warn/20"
           >
-            <p className="text-sm font-medium text-status-warn">Confirm your email to sign in</p>
-            <p className="text-sm text-ink-2 mt-1">
+            <p className="text-subhead font-medium text-status-warn">Confirm your email to sign in</p>
+            <p className="text-subhead text-ink-2 mt-1">
               {email ? (
                 <>
                   We sent a confirmation link to{' '}
@@ -198,7 +198,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleResendConfirmation}
                 disabled={resendStatus === 'sending' || resendCooldown > 0}
-                className="text-sm text-action font-medium underline disabled:opacity-60 disabled:no-underline"
+                className="text-subhead text-action font-medium underline disabled:opacity-60 disabled:no-underline"
               >
                 {resendStatus === 'sending'
                   ? 'Sending…'
@@ -209,13 +209,13 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={goToVerifyCode}
-                className="text-sm text-action font-medium underline"
+                className="text-subhead text-action font-medium underline"
               >
                 Enter code instead
               </button>
             </div>
             {resendStatus === 'error' && (
-              <p className="text-xs text-status-bad mt-1">
+              <p className="text-caption text-status-bad mt-1">
                 {email
                   ? 'Could not resend the email. Please try again in a minute.'
                   : 'Enter your email above first, then tap resend.'}
@@ -246,7 +246,7 @@ export default function LoginPage() {
               autoComplete="current-password"
             />
             <div className="mt-1 text-right">
-              <Link href="/forgot-password" className="text-xs text-action">
+              <Link href="/forgot-password" className="text-caption text-action">
                 Forgot password?
               </Link>
             </div>
@@ -254,17 +254,17 @@ export default function LoginPage() {
 
           {error && !needsConfirmation && (
             <div data-testid="login-error" className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
-              <p className="text-sm text-status-bad">{error}</p>
+              <p className="text-subhead text-status-bad">{error}</p>
             </div>
           )}
 
           <Button type="submit" className="w-full" isLoading={isLoading}>
-            Sign In
+            Sign in
           </Button>
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-ink-2">
+          <p className="text-subhead text-ink-2">
             Don&apos;t have an account?{' '}
             <Link href="/register" className="text-action font-medium">
               Sign up

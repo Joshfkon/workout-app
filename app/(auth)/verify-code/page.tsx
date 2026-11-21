@@ -120,13 +120,13 @@ export default function VerifyCodePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
+          <span className="text-title font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-ink">
+          <h1 className="text-title font-bold text-ink">
             {kind === 'recovery' ? 'Enter your reset code' : 'Enter your confirmation code'}
           </h1>
           <p className="text-ink-2 mt-1">
@@ -136,7 +136,7 @@ export default function VerifyCodePage() {
 
         {banner && (
           <div role="status" className="p-3 rounded-lg mb-4 bg-status-warn/10 border border-status-warn/20">
-            <p className="text-sm text-status-warn">{banner}</p>
+            <p className="text-subhead text-status-warn">{banner}</p>
           </div>
         )}
 
@@ -164,17 +164,17 @@ export default function VerifyCodePage() {
 
           {error && (
             <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
-              <p className="text-sm text-status-bad">{error}</p>
+              <p className="text-subhead text-status-bad">{error}</p>
             </div>
           )}
 
           <Button type="submit" className="w-full" isLoading={isLoading}>
-            {kind === 'recovery' ? 'Verify & Set New Password' : 'Confirm Account'}
+            {kind === 'recovery' ? 'Verify & set new password' : 'Confirm account'}
           </Button>
         </form>
 
         <div className="mt-6 text-center space-y-2">
-          <p className="text-sm text-ink-2">
+          <p className="text-subhead text-ink-2">
             Don&apos;t have a code?{' '}
             <Link href={resendHref} className="text-action font-medium">
               {resendLabel}
@@ -182,7 +182,7 @@ export default function VerifyCodePage() {
           </p>
           <Link
             href="/login"
-            className="inline-flex items-center text-sm text-action font-medium"
+            className="inline-flex items-center text-subhead text-action font-medium"
           >
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

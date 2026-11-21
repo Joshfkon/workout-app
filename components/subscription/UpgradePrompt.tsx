@@ -16,22 +16,22 @@ interface UpgradePromptProps {
 
 const FEATURE_INFO: Record<Feature, { title: string; description: string; requiredTier: 'pro' | 'elite' }> = {
   mesocycleBuilder: {
-    title: 'AI Mesocycle Builder',
+    title: 'AI mesocycle builder',
     description: 'Create scientifically-optimized training programs with our AI-powered mesocycle builder.',
     requiredTier: 'pro',
   },
   coachingCalibration: {
-    title: 'Coaching Calibration',
+    title: 'Coaching calibration',
     description: 'Get personalized strength assessments and identify muscle imbalances with our coaching system.',
     requiredTier: 'elite',
   },
   advancedAnalytics: {
-    title: 'Advanced Analytics',
+    title: 'Advanced analytics',
     description: 'Track your progress with detailed charts, strength curves, and performance insights.',
     requiredTier: 'pro',
   },
   aiFeatures: {
-    title: 'AI Features',
+    title: 'AI features',
     description: 'Unlock smart weight suggestions, exercise recommendations, and personalized programming.',
     requiredTier: 'pro',
   },
@@ -41,7 +41,7 @@ const FEATURE_INFO: Record<Feature, { title: string; description: string; requir
     requiredTier: 'elite',
   },
   unlimitedWorkouts: {
-    title: 'Unlimited Workouts',
+    title: 'Unlimited workouts',
     description: 'Log unlimited workouts without restrictions.',
     requiredTier: 'pro',
   },
@@ -79,8 +79,8 @@ export function UpgradePrompt({
             </svg>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-ink">{displayTitle}</p>
-            <p className="text-xs text-ink-2">Included with the {tierName} plan</p>
+            <p className="text-subhead font-medium text-ink">{displayTitle}</p>
+            <p className="text-caption text-ink-2">Included with the {tierName} plan</p>
           </div>
         </div>
       );
@@ -94,9 +94,9 @@ export function UpgradePrompt({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h3 className="text-lg font-bold text-ink mb-2">{displayTitle}</h3>
-          <p className="text-sm text-ink-2 mb-4">{displayDescription}</p>
-          <p className="text-sm text-ink-2">
+          <h3 className="text-headline font-bold text-ink mb-2">{displayTitle}</h3>
+          <p className="text-subhead text-ink-2 mb-4">{displayDescription}</p>
+          <p className="text-subhead text-ink-2">
             This feature is included with the <strong>{tierName}</strong> plan.
           </p>
         </CardContent>
@@ -113,8 +113,8 @@ export function UpgradePrompt({
           </svg>
         </div>
         <div className="flex-1">
-          <p className="text-sm font-medium text-ink">{displayTitle}</p>
-          <p className="text-xs text-ink-2">Requires {displayTier === 'pro' ? 'Pro' : 'Elite'} plan</p>
+          <p className="text-subhead font-medium text-ink">{displayTitle}</p>
+          <p className="text-caption text-ink-2">Requires {displayTier === 'pro' ? 'Pro' : 'Elite'} plan</p>
         </div>
         <Link href="/dashboard/pricing">
           <Button size="sm" variant="primary">Upgrade</Button>
@@ -132,12 +132,12 @@ export function UpgradePrompt({
           </svg>
         </div>
         
-        <h3 className="text-lg font-bold text-ink mb-2">{displayTitle}</h3>
-        <p className="text-sm text-ink-2 mb-4">{displayDescription}</p>
+        <h3 className="text-headline font-bold text-ink mb-2">{displayTitle}</h3>
+        <p className="text-subhead text-ink-2 mb-4">{displayDescription}</p>
         
         {isTrialing && trialDaysRemaining > 0 ? (
           <div className="mb-4 p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg">
-            <p className="text-sm text-status-warn">
+            <p className="text-subhead text-status-warn">
               You have <strong>{trialDaysRemaining} days</strong> left in your trial to try this feature!
             </p>
           </div>
@@ -152,7 +152,7 @@ export function UpgradePrompt({
           </Button>
         </Link>
         
-        <p className="text-xs text-ink-3 mt-3">
+        <p className="text-caption text-ink-3 mt-3">
           Starting at ${displayTier === 'pro' ? '9.99' : '19.99'}/month
         </p>
       </CardContent>

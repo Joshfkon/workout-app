@@ -134,7 +134,7 @@ export default function AICoachPage() {
             </Button>
             {messages.length > 0 && (
               <Button variant="outline" size="sm" onClick={startNewConversation}>
-                New Chat
+                New chat
               </Button>
             )}
           </>
@@ -145,8 +145,8 @@ export default function AICoachPage() {
       {showContext && context && (
         <Card>
           <CardContent className="p-4">
-            <h3 className="text-sm font-semibold text-ink mb-2">Your Data Context</h3>
-            <div className="text-xs text-ink-2 space-y-1">
+            <h3 className="text-subhead font-semibold text-ink mb-2">Your data context</h3>
+            <div className="text-caption text-ink-2 space-y-1">
               <p>
                 <strong>User:</strong> {context.user.name} ({context.user.age}yo,{' '}
                 {context.user.sex}, {context.user.height}cm, {context.user.trainingAge}y training age)
@@ -197,10 +197,10 @@ export default function AICoachPage() {
             </div>
 
             <div>
-              <h3 className="text-lg sm:text-xl font-semibold text-ink mb-1 sm:mb-2">
-                Welcome to Your AI Coach
+              <h3 className="text-headline sm:text-headline font-semibold text-ink mb-1 sm:mb-2">
+                Welcome to your AI coach
               </h3>
-              <p className="text-sm sm:text-base text-ink-2 max-w-md px-4">
+              <p className="text-subhead sm:text-body text-ink-2 max-w-md px-4">
                 I have access to your training data, body composition, and current program.
                 Ask me anything about your progress, form, programming, or recovery.
               </p>
@@ -211,8 +211,8 @@ export default function AICoachPage() {
                 onClick={() => setInput("How's my progress looking?")}
                 className="p-3 sm:p-4 bg-fill hover:bg-sep border border-sep rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-ink">How&apos;s my progress?</p>
-                <p className="text-xs text-ink-2 mt-0.5 sm:mt-1">
+                <p className="text-subhead font-medium text-ink">How&apos;s my progress?</p>
+                <p className="text-caption text-ink-2 mt-0.5 sm:mt-1">
                   Get a summary of your recent performance
                 </p>
               </button>
@@ -223,8 +223,8 @@ export default function AICoachPage() {
                 }
                 className="p-3 sm:p-4 bg-fill hover:bg-sep border border-sep rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-ink">Deload or push?</p>
-                <p className="text-xs text-ink-2 mt-0.5 sm:mt-1">
+                <p className="text-subhead font-medium text-ink">Deload or push?</p>
+                <p className="text-caption text-ink-2 mt-0.5 sm:mt-1">
                   Get advice on when to take a deload week
                 </p>
               </button>
@@ -233,8 +233,8 @@ export default function AICoachPage() {
                 onClick={() => setInput('What exercises should I focus on for hypertrophy?')}
                 className="p-3 sm:p-4 bg-fill hover:bg-sep border border-sep rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-ink">Exercise selection</p>
-                <p className="text-xs text-ink-2 mt-0.5 sm:mt-1">
+                <p className="text-subhead font-medium text-ink">Exercise selection</p>
+                <p className="text-caption text-ink-2 mt-0.5 sm:mt-1">
                   Get recommendations on exercise choices
                 </p>
               </button>
@@ -245,8 +245,8 @@ export default function AICoachPage() {
                 }
                 className="p-3 sm:p-4 bg-fill hover:bg-sep border border-sep rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-ink">Phase adjustments</p>
-                <p className="text-xs text-ink-2 mt-0.5 sm:mt-1">
+                <p className="text-subhead font-medium text-ink">Phase adjustments</p>
+                <p className="text-caption text-ink-2 mt-0.5 sm:mt-1">
                   Optimize training for cut/bulk/maintenance
                 </p>
               </button>
@@ -273,7 +273,7 @@ export default function AICoachPage() {
                       </p>
                     ))}
                   </div>
-                  <div className="text-xs opacity-70 mt-2">
+                  <div className="text-caption opacity-70 mt-2">
                     {new Date(msg.timestamp).toLocaleTimeString()}
                   </div>
                 </div>
@@ -312,7 +312,7 @@ export default function AICoachPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Ask me anything about your training..."
-              className="flex-1 bg-card text-ink rounded-lg p-2.5 sm:p-3 resize-none focus:outline-none focus:ring-2 focus:ring-action text-sm sm:text-base shadow-card"
+              className="flex-1 bg-card text-ink rounded-lg p-2.5 sm:p-3 resize-none focus:outline-none focus:ring-2 focus:ring-action text-subhead sm:text-body shadow-card"
               rows={2}
               disabled={isLoading}
             />
@@ -325,7 +325,7 @@ export default function AICoachPage() {
             </Button>
           </div>
           {/* Keyboard hint is desktop-only copy (P2-8) */}
-          <p className="hidden sm:block text-xs text-ink-2 mt-2">
+          <p className="hidden sm:block text-caption text-ink-2 mt-2">
             Press Enter to send, Shift+Enter for new line
           </p>
         </CardContent>

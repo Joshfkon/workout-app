@@ -52,30 +52,30 @@ export function PricingCard({
       }`}
     >
       {isPopular && (
-        <div className="absolute top-0 right-0 bg-action text-on-action text-xs font-bold px-3 py-1 rounded-bl-lg">
-          MOST POPULAR
+        <div className="absolute top-0 right-0 bg-action text-on-action text-caption font-bold px-3 py-1 rounded-bl-lg">
+          Most popular
         </div>
       )}
       
       {isCurrentPlan && (
-        <div className="absolute top-0 right-0 bg-status-ok text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-          CURRENT PLAN
+        <div className="absolute top-0 right-0 bg-status-ok text-white text-caption font-bold px-3 py-1 rounded-bl-lg">
+          Current plan
         </div>
       )}
 
       <CardContent className="p-6">
         <div className="mb-4">
-          <h3 className="text-xl font-bold text-ink">{tierData.name}</h3>
-          <p className="text-sm text-ink-2 mt-1">{tierData.description}</p>
+          <h3 className="text-headline font-bold text-ink">{tierData.name}</h3>
+          <p className="text-subhead text-ink-2 mt-1">{tierData.description}</p>
         </div>
 
         <div className="mb-6">
           {tier === 'free' ? (
-            <div className="text-3xl font-bold text-ink">Free</div>
+            <div className="text-large-title font-bold text-ink">Free</div>
           ) : (
             <>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold text-ink">${price.amount}</span>
+                <span className="text-large-title font-bold text-ink">${price.amount}</span>
                 <span className="text-ink-2">{price.period}</span>
               </div>
               {billingPeriod === 'yearly' && 'savings' in price && (
@@ -83,7 +83,7 @@ export function PricingCard({
                   <Badge variant="success" size="sm">
                     Save {price.savings}% with yearly
                   </Badge>
-                  <p className="text-xs text-ink-3 mt-1">
+                  <p className="text-caption text-ink-3 mt-1">
                     ${price.yearly}/year billed annually
                   </p>
                 </div>
@@ -94,7 +94,7 @@ export function PricingCard({
 
         <ul className="space-y-3 mb-6">
           {tierData.features.map((feature, index) => (
-            <li key={index} className="flex items-start gap-2 text-sm">
+            <li key={index} className="flex items-start gap-2 text-subhead">
               <svg 
                 className="w-5 h-5 text-status-ok flex-shrink-0 mt-0.5" 
                 fill="none" 
@@ -116,16 +116,16 @@ export function PricingCard({
           isLoading={isLoading}
         >
           {isCurrentPlan 
-            ? 'Current Plan' 
+            ? 'Current plan' 
             : tier === 'free' 
-            ? 'Free Forever'
+            ? 'Free forever'
             : `Upgrade to ${tierData.name}`
           }
         </Button>
         
         {/* Billing disclosure for paid tiers */}
         {tier !== 'free' && !isCurrentPlan && (
-          <p className="text-xs text-ink-3 text-center mt-3 leading-relaxed">
+          <p className="text-caption text-ink-3 text-center mt-3 leading-relaxed">
             ${billingPeriod === 'yearly' ? price.amount : (tierData as typeof TIER_FEATURES.pro).monthlyPrice}{price.period}. Cancel anytime.
           </p>
         )}
