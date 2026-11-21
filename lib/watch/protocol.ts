@@ -44,6 +44,14 @@ export interface WatchActiveState {
    */
   canLog: boolean;
   allSetsDone: boolean;
+  /**
+   * Whether the watch may log this exercise's next set before the phone
+   * answers (phone app closed, logs queued). False when the phone decides what
+   * comes next itself — a superset rotates to the other exercise, a dropset
+   * prompt follows the set — so a queued "next set here" would be refused as
+   * stale and silently lost.
+   */
+  canQueueNext: boolean;
   setNumber: number;
   targetSets: number;
   /** Weight in DISPLAY units; null when the exercise has no load to enter (plain bodyweight). */
@@ -90,6 +98,8 @@ export interface ActiveLoggerSnapshot {
   isBodyweight: boolean;
   weightMode: LoggerWeightMode;
   userBodyweightKg?: number;
+  /** The phone moves somewhere else after this set (superset rotation, dropset prompt). */
+  nextSetElsewhere?: boolean;
 }
 
 /** Clamp a prescribed RIR to the 0-4 chip range (same rule as SetLoggerRow). */
@@ -132,6 +142,7 @@ export function buildWatchState(input: {
     return {
       ...common,
       canLog: false,
+      canQueueNext: false,
       allSetsDone: block.completedSets >= block.targetSets,
       setNumber: Math.min(block.completedSets + 1, Math.max(block.targetSets, 1)),
       targetSets: block.targetSets,
@@ -153,6 +164,7 @@ export function buildWatchState(input: {
   return {
     ...common,
     canLog: true,
+    canQueueNext: !logger.nextSetElsewhere,
     allSetsDone: false,
     setNumber: logger.setNumber,
     targetSets: logger.targetSets,

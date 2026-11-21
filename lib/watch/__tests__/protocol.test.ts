@@ -193,6 +193,13 @@ describe('buildWatchState', () => {
     expect(s).toMatchObject({ repsLabel: 'sec', repsStep: 5, maxReps: 600, reps: 45, targetRir: 4 });
   });
 
+  it('lets the watch queue the next set only when the phone stays on this exercise', () => {
+    expect(buildWatchState({ ...base, logger: logger() }).canQueueNext).toBe(true);
+    // Superset rotation / dropset prompt: the phone decides what's next.
+    expect(buildWatchState({ ...base, logger: logger({ nextSetElsewhere: true }) }).canQueueNext).toBe(false);
+    expect(buildWatchState({ ...base, logger: null }).canQueueNext).toBe(false);
+  });
+
   it('keeps the exercise on the watch when every planned set is done', () => {
     const s = buildWatchState({ ...base, block: { id: 'b1', targetSets: 4, completedSets: 4 }, logger: null });
     expect(s).toMatchObject({ active: true, blockId: 'b1', canLog: false, allSetsDone: true, setNumber: 4 });

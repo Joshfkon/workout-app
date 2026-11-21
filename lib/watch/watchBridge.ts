@@ -21,6 +21,9 @@ interface PluginListenerHandle {
 
 interface WatchBridgePlugin {
   sendState(options: { state: WatchWorkoutState }): Promise<void>;
+  /** Watch messages persisted natively and not yet acknowledged, oldest first. */
+  getPendingMessages(): Promise<{ messages: unknown[] }>;
+  ackMessage(options: { id: string }): Promise<void>;
   addListener(
     eventName: typeof WATCH_MESSAGE_EVENT,
     listener: (event: { message: unknown }) => void
@@ -56,6 +59,38 @@ export function sendWatchState(state: WatchWorkoutState): Promise<void> {
     );
   } catch {
     return Promise.resolve();
+  }
+}
+
+/**
+ * Tell the native side a message was handled (logged, or refused as stale) so
+ * it stops persisting it. Unhandled messages are replayed by
+ * `getPendingWatchMessages` the next time the workout page listens.
+ */
+export function ackWatchMessage(id: string): Promise<void> {
+  const p = getPlugin();
+  if (!p) return Promise.resolve();
+  try {
+    return Promise.resolve(p.ackMessage({ id })).then(
+      () => undefined,
+      () => undefined
+    );
+  } catch {
+    return Promise.resolve();
+  }
+}
+
+/** The persisted backlog (e.g. wrist logs received while the webview was gone). */
+export function getPendingWatchMessages(): Promise<unknown[]> {
+  const p = getPlugin();
+  if (!p) return Promise.resolve([]);
+  try {
+    return Promise.resolve(p.getPendingMessages()).then(
+      (r) => (Array.isArray(r?.messages) ? r.messages : []),
+      () => []
+    );
+  } catch {
+    return Promise.resolve([]);
   }
 }
 

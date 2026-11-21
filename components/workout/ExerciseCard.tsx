@@ -2263,6 +2263,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         isBodyweight: isBodyweightExercise,
         weightMode,
         userBodyweightKg,
+        nextSetElsewhere: Boolean(block.supersetGroupId) || (block.dropsetsPerSet ?? 0) > 0,
       },
       log: (data) => completeLoggedSetRef.current({ ...data, rirExplicitlySelected: true }),
     });
@@ -2280,6 +2281,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     isBodyweightExercise,
     weightMode,
     userBodyweightKg,
+    block.supersetGroupId,
+    block.dropsetsPerSet,
   ]);
   useEffect(() => {
     if (!watchLoggerVisible) clearActiveLogger(block.id);

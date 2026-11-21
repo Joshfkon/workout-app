@@ -21,6 +21,9 @@ final class WorkoutStore: NSObject, ObservableObject {
     @Published private(set) var restTotal: TimeInterval = 0
     @Published private(set) var handedOffFinish = false
     @Published private(set) var pendingLogs = 0
+    /// After a set whose follow-up the phone decides (superset, dropset), the
+    /// watch waits for the phone's next state instead of queuing more logs.
+    @Published private(set) var awaitingPhone = false
 
     /// Values the phone last sent for the current set, to tell a phone-side
     /// edit (adopt it) from our own unchanged edit.
@@ -30,6 +33,7 @@ final class WorkoutStore: NSObject, ObservableObject {
     private var lastPhoneRir: Int?
     private var lastLogAt: Date?
     private var lastBlockId: String?
+    private var awaitingFromKey: String?
     private var restHapticTask: Task<Void, Never>?
 
     override init() {
@@ -46,7 +50,7 @@ final class WorkoutStore: NSObject, ObservableObject {
     var weightStep: Double { max(phone.weightStep ?? 2.5, 0.25) }
     var repsStep: Double { Double(max(phone.repsStep ?? 1, 1)) }
     var maxReps: Double { Double(phone.maxReps ?? 100) }
-    var canLog: Bool { phone.canLog ?? false }
+    var canLog: Bool { (phone.canLog ?? false) && !awaitingPhone }
     var allSetsDone: Bool { phone.allSetsDone ?? false }
 
     // MARK: - Phone state
@@ -56,6 +60,7 @@ final class WorkoutStore: NSObject, ObservableObject {
         phone = state
         guard state.active, let blockId = state.blockId, let phoneSet = state.setNumber else {
             pendingLogs = 0
+            awaitingPhone = false
             stopRest()
             return
         }
@@ -65,8 +70,15 @@ final class WorkoutStore: NSObject, ObservableObject {
         // keeps our optimistic set number (and edits) instead of flickering back.
         let key = "\(blockId)#\(phoneSet)"
         let pendingIsFresh = lastLogAt.map { Date().timeIntervalSince($0) < 60 } ?? false
-        let behind = pendingLogs > 0 && pendingIsFresh && blockId == lastBlockId && phoneSet < setNumber
-        if !behind { pendingLogs = 0 }
+        // While waiting on a superset/dropset log, a snapshot still showing the
+        // set we just logged (e.g. a redelivered old context) is not an answer.
+        let stillOnLoggedSet = awaitingPhone && pendingIsFresh && key == awaitingFromKey
+        let behind = stillOnLoggedSet ||
+            (pendingLogs > 0 && pendingIsFresh && blockId == lastBlockId && phoneSet < setNumber)
+        if !behind {
+            pendingLogs = 0
+            awaitingPhone = false
+        }
         lastBlockId = blockId
 
         if !behind {
@@ -103,8 +115,14 @@ final class WorkoutStore: NSObject, ObservableObject {
         WKInterfaceDevice.current().play(.success)
         pendingLogs += 1
         lastLogAt = Date()
-        let target = phone.targetSets ?? setNumber
-        if setNumber < target { setNumber += 1 }
+        if phone.canQueueNext ?? false {
+            let target = phone.targetSets ?? setNumber
+            if setNumber < target { setNumber += 1 }
+        } else {
+            // The phone moves on its own (superset / dropset): wait for it.
+            awaitingPhone = true
+            awaitingFromKey = "\(blockId)#\(setNumber)"
+        }
         // Local rest until the phone's (effort-modulated) timer arrives.
         let rest = phone.defaultRestSeconds ?? 0
         if rest > 0 { startRest(until: Date().addingTimeInterval(rest), total: rest) }

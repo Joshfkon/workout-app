@@ -60,3 +60,26 @@ describe('watchBridge', () => {
     expect(remove).toHaveBeenCalled();
   });
 });
+
+describe('watchBridge persistence (ack / backlog)', () => {
+  it('acks a handled message by id and settles', async () => {
+    const { ackWatchMessage } = jest.requireActual<typeof import('../watchBridge')>('../watchBridge');
+    await expect(settleWithin(ackWatchMessage('m1'))).resolves.toBeUndefined();
+    expect(calls.find((c) => c.method === 'ackMessage')?.args[0]).toEqual({ id: 'm1' });
+  });
+
+  it('reads the persisted backlog, and an empty list when the plugin answers oddly', async () => {
+    const { getPendingWatchMessages } = jest.requireActual<typeof import('../watchBridge')>('../watchBridge');
+    await expect(settleWithin(getPendingWatchMessages())).resolves.toEqual([]);
+    expect(calls.some((c) => c.method === 'getPendingMessages')).toBe(true);
+  });
+
+  it('is a no-op off the iOS app', async () => {
+    native = false;
+    jest.resetModules();
+    const fresh = jest.requireActual<typeof import('../watchBridge')>('../watchBridge');
+    await expect(fresh.getPendingWatchMessages()).resolves.toEqual([]);
+    await expect(fresh.ackWatchMessage('x')).resolves.toBeUndefined();
+    native = true;
+  });
+});

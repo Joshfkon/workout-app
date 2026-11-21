@@ -19,7 +19,13 @@ import {
   type WatchRestState,
   type WatchWorkoutState,
 } from '@/lib/watch/protocol';
-import { addWatchMessageListener, isWatchBridgeAvailable, sendWatchState } from '@/lib/watch/watchBridge';
+import {
+  ackWatchMessage,
+  addWatchMessageListener,
+  getPendingWatchMessages,
+  isWatchBridgeAvailable,
+  sendWatchState,
+} from '@/lib/watch/watchBridge';
 
 export interface UseWatchBridgeOptions {
   /** False when there is no in-progress workout to mirror (loading, finished, summary). */
@@ -132,8 +138,19 @@ export function useWatchBridge(options: UseWatchBridgeOptions): void {
       resendState,
       waitForLoggerAdvance: (previous) => waitForLoggerAdvance(previous),
     });
-    return addWatchMessageListener((message) => {
-      void handle(message).catch((err) => console.error('Watch message failed:', err));
-    });
+    // Ack only once handled, so the native side keeps a message until then.
+    // A replayed backlog message that also arrives live is dropped by the
+    // handler's de-duplication.
+    const process = (message: unknown) => {
+      void handle(message)
+        .then(() => {
+          const id = (message as { id?: unknown } | null)?.id;
+          if (typeof id === 'string') void ackWatchMessage(id);
+        })
+        .catch((err) => console.error('Watch message failed:', err));
+    };
+    const unsubscribe = addWatchMessageListener(process);
+    void getPendingWatchMessages().then((backlog) => backlog.forEach(process));
+    return unsubscribe;
   }, [available, enabled, resendState]);
 }
