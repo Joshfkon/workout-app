@@ -1,78 +1,110 @@
 'use client';
 
 import Link from 'next/link';
+import type { Icon as TablerIcon } from '@tabler/icons-react';
+import {
+  IconAdjustments,
+  IconApple,
+  IconBolt,
+  IconBooks,
+  IconBrain,
+  IconChartBar,
+  IconCheck,
+  IconChevronRight,
+  IconCircleCheck,
+  IconCircleHalf2,
+  IconDice5,
+  IconFileText,
+  IconInfoCircle,
+  IconMinus,
+  IconPill,
+  IconRefreshAlert,
+  IconRepeat,
+  IconRobot,
+  IconTarget,
+  IconTrendingUp,
+  IconTrophy,
+} from '@tabler/icons-react';
 import { PublicAppShell } from '@/components/marketing/PublicAppShell';
+import {
+  ArticleHeader,
+  ArticlePage,
+  ArticleSection,
+  BulletList,
+  ContentCard,
+  IconBadge,
+} from '@/components/learn/ArticleKit';
 
 const features: Array<{
-  icon: string;
+  icon: TablerIcon;
   title: string;
   description: string;
   howItWorks: string;
   disclaimer?: string;
 }> = [
   {
-    icon: '🧠',
-    title: 'AI-Powered Mesocycle Planning',
+    icon: IconBrain,
+    title: 'AI-powered mesocycle planning',
     description: 'Unlike basic workout trackers, HyperTrack uses intelligent algorithms to design periodized training programs tailored to your goals, experience, recovery capacity, and available time.',
     howItWorks: 'We analyze your training frequency, session duration, experience level, sleep quality, and stress to recommend the optimal split, volume distribution, and periodization model.',
   },
   {
-    icon: '🤖',
-    title: 'AI Coaching & Personalized Notes',
+    icon: IconRobot,
+    title: 'AI coaching and personalized notes',
     description: 'Get real AI-powered coaching advice before every workout. Our system analyzes your history, body composition, and current mesocycle phase to give context-aware guidance.',
-    howItWorks: 'Using Claude AI, we generate personalized coach notes that consider your workout type, week in mesocycle, recent performance, body composition goals, and training history—like having a knowledgeable coach in your pocket.',
+    howItWorks: 'Using Grok from xAI, we generate personalized coach notes that consider your workout type, week in mesocycle, recent performance, body composition goals, and training history, like having a knowledgeable coach in your pocket.',
     disclaimer: 'AI-generated coaching is informational and educational. It is not a substitute for professional coaching, medical advice, or personalized training supervision.',
   },
   {
-    icon: '🍎',
-    title: 'Complete Nutrition Tracking',
+    icon: IconApple,
+    title: 'Complete nutrition tracking',
     description: 'Track your nutrition with our integrated food database powered by USDA FoodData Central. Log meals, scan barcodes, calculate macros, and auto-adjust targets as your body changes.',
     howItWorks: 'Search 300,000+ foods from the USDA database. Use our smart macro calculator that factors in your goals, activity level, and even GLP-1 medications. Your macro targets automatically recalculate when you log new weight.',
     disclaimer: 'Nutrition recommendations are general guidelines based on common research-backed approaches. They are not medical or dietitian advice. Consult a healthcare provider for personalized nutrition guidance.',
   },
   {
-    icon: '⚡',
-    title: 'Auto-Regulation & Fatigue Management',
-    description: 'Our fatigue budget system tracks both systemic (CNS) and local muscle fatigue, adjusting your workout in real-time.',
+    icon: IconBolt,
+    title: 'Auto-regulation and fatigue management',
+    description: 'Our fatigue budget system tracks both systemic (CNS) and local muscle fatigue, adjusting your workout in real time.',
     howItWorks: 'Each exercise has a fatigue "cost". Compounds cost more (8-12 points) than isolations (3-5 points). When your weekly budget depletes, we suggest deloads before you burn out.',
   },
   {
-    icon: '🎯',
-    title: 'S-Tier Exercise Selection',
-    description: 'Not all exercises are created equal. Our database rates every exercise by hypertrophy effectiveness (S/A/B/C tier) based on Stimulus-to-Fatigue Ratio.',
+    icon: IconTarget,
+    title: 'S-tier exercise selection',
+    description: 'Not all exercises are created equal. Our database rates every exercise by hypertrophy effectiveness (S/A/B/C tier) based on stimulus-to-fatigue ratio.',
     howItWorks: 'When building your mesocycle, we prioritize S-tier exercises (high stimulus, low fatigue) like cable work and machines, especially later in mesocycles when fatigue accumulates. Compounds are reserved for when you\'re fresh.',
   },
   {
-    icon: '🔄',
-    title: 'Smart Rep Range System',
+    icon: IconRepeat,
+    title: 'Smart rep range system',
     description: 'Rep ranges adapt based on muscle fiber type dominance, exercise position in workout, periodization phase, and your experience level.',
     howItWorks: 'Fast-twitch muscles (hamstrings, triceps) get 4-8 reps. Slow-twitch (calves, delts) get 12-20. Mixed-fiber (chest, back) get 8-12. Compounds start workouts heavier; isolations finish lighter.',
   },
   {
-    icon: '📊',
-    title: 'DEXA Tracking & FFMI Analysis',
-    description: 'Track body composition scans over time. Calculate your Fat-Free Mass Index to see where you stand against natural limits.',
-    howItWorks: 'Enter your DEXA scan data (or estimates). We calculate FFMI (Lean Mass / Height²) and compare you to natural benchmarks (21-25 range). AI coaching suggests bulk, cut, or recomp.',
+    icon: IconChartBar,
+    title: 'DEXA tracking and FFMI analysis',
+    description: 'Track body composition scans over time. Calculate your fat-free mass index (FFMI) to see where you stand against natural limits.',
+    howItWorks: 'Enter your DEXA scan data (or estimates). We calculate FFMI (lean mass / height²) and compare you to natural benchmarks (21-25 range). AI coaching suggests bulk, cut, or recomp.',
     disclaimer: 'FFMI analysis and body composition metrics are informational tools, not medical assessments. Natural limit estimates are based on population studies and may not apply to every individual.',
   },
   {
-    icon: '💊',
-    title: 'GLP-1 & Peptide Support',
+    icon: IconPill,
+    title: 'GLP-1 and peptide support',
     description: 'On Ozempic, Mounjaro, or other GLP-1 medications? Our macro calculator adjusts protein targets to prevent muscle loss during aggressive cuts.',
     howItWorks: 'Select your medication and we automatically increase protein recommendations (up to 1.2g/lb) and allow larger caloric deficits while keeping you in a safe, muscle-preserving range.',
     disclaimer: 'This feature provides nutrition guidance for those already prescribed GLP-1 medications by their doctor. It is not medical advice. Always follow your healthcare provider\'s instructions and discuss dietary changes with them.',
   },
   {
-    icon: '🔄',
-    title: 'Reactive Deload Detection',
+    icon: IconRefreshAlert,
+    title: 'Reactive deload detection',
     description: 'HyperTrack monitors performance trends, sleep quality, motivation, and joint health to automatically suggest deloads before you overtrain.',
-    howItWorks: 'If RPE consistently hits 9.5+, sleep drops below 2/5, or you miss rep targets for 2+ sessions, we trigger an early deload instead of waiting for a fixed schedule.',
+    howItWorks: 'If RPE (how hard a set felt, out of 10) consistently hits 9.5+, sleep drops below 2/5, or you miss rep targets for 2+ sessions, we trigger an early deload instead of waiting for a fixed schedule.',
   },
   {
-    icon: '📈',
-    title: 'E1RM Tracking & Plateau Detection',
-    description: 'Track estimated one-rep max trends for every exercise. Our algorithms detect stagnation early and suggest interventions.',
-    howItWorks: 'Using the Brzycki formula, we calculate E1RM from every working set. When your E1RM flatlines for 3+ sessions, we flag a plateau and suggest exercise swaps or intensity techniques.',
+    icon: IconTrendingUp,
+    title: 'e1RM tracking and plateau detection',
+    description: 'Track estimated one-rep max (e1RM: the most you could lift once, estimated from a set of several reps) trends for every exercise. Our algorithms detect stagnation early and suggest interventions.',
+    howItWorks: 'Using the Brzycki formula, we calculate e1RM from every working set. When your e1RM flatlines for 3+ sessions, we flag a plateau and suggest exercise swaps or intensity techniques.',
   },
 ];
 
@@ -85,427 +117,404 @@ const scienceConcepts: Array<{
   application: string;
 }> = [
   {
-    title: 'Volume Landmarks (MEV, MAV, MRV)',
+    title: 'Volume landmarks (MEV, MAV, MRV)',
     source: 'Renaissance Periodization',
     citation: 'Israetel, M., Hoffman, J., Smith, C. (2015). Scientific Principles of Strength Training. Renaissance Periodization.',
-    explanation: 'MEV (Minimum Effective Volume) is the least you need to grow. MAV (Maximum Adaptive Volume) is the sweet spot for gains. MRV (Maximum Recoverable Volume) is the ceiling—go beyond it and you regress.',
-    application: 'We track your weekly sets per muscle and keep you in the productive zone—typically 10-20 sets/week for most muscles, adjusted for your recovery capacity.',
+    explanation: 'MEV (minimum effective volume) is the least you need to grow. MAV (maximum adaptive volume) is the sweet spot for gains. MRV (maximum recoverable volume) is the ceiling: go beyond it and you regress.',
+    application: 'We track your weekly sets per muscle and keep you in the productive zone, typically 10-20 sets/week for most muscles, adjusted for your recovery capacity.',
   },
   {
-    title: 'Stimulus-to-Fatigue Ratio (SFR)',
+    title: 'Stimulus-to-fatigue ratio (SFR)',
     source: 'Renaissance Periodization',
     citation: 'Israetel, M. (2017). Training Volume Landmarks for Muscle Growth. Renaissance Periodization.',
     explanation: 'Not all exercises are equal. A machine fly gives great chest stimulus with minimal fatigue to recover from. A barbell bench press stimulates chest but also taxes shoulders, triceps, and CNS.',
-    application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in mesocycles when fatigue is high, saving low-SFR compounds for when you&apos;re fresh.',
+    application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in mesocycles when fatigue is high, saving low-SFR compounds for when you\'re fresh.',
   },
   {
-    title: 'Evidence-Based Protein Requirements',
-    source: 'Peer-Reviewed Research',
+    title: 'Evidence-based protein requirements',
+    source: 'Peer-reviewed research',
     citation: 'Morton, R.W., et al. (2018). A systematic review, meta-analysis and meta-regression of the effect of protein supplementation on resistance training-induced gains in muscle mass and strength in healthy adults. British Journal of Sports Medicine, 52(6), 376-384.',
     doi: 'https://doi.org/10.1136/bjsports-2017-097608',
     explanation: 'A meta-analysis of resistance training studies found that gains in fat-free mass and strength plateaued beyond approximately 1.6 g/kg/day total protein intake, with confidence intervals extending to ~2.2 g/kg/day.',
     application: 'Our macro calculator uses 1g/lb (2.2g/kg) as a starting point, which is consistent with this research. Higher intakes may be used when supported by individual goals and preferences.',
   },
   {
-    title: 'Muscle Fiber Type & Rep Ranges',
-    source: 'Exercise Physiology',
+    title: 'Muscle fiber type and rep ranges',
+    source: 'Exercise physiology',
     citation: 'Schoenfeld, B.J., et al. (2021). Resistance Training Recommendations to Maximize Muscle Hypertrophy in an Athletic Population. International Journal of Strength and Conditioning, 1(1).',
     doi: 'https://doi.org/10.47206/ijsc.v1i1.81',
     explanation: 'Different muscles may have varying proportions of fast-twitch (explosive, fatigable) and slow-twitch (endurance, resistant) fibers. Research suggests a wide rep range (6-20+) can be effective for hypertrophy.',
     application: 'We program varied rep ranges: typically lower reps (4-8) for posterior chain work, moderate (8-12) for mixed-fiber muscles, and higher (12-20+) for slow-twitch dominant muscles, while acknowledging individual variation.',
   },
   {
-    title: 'Autoregulation with RPE/RIR',
-    source: 'Strength & Conditioning',
+    title: 'Autoregulation with RPE and RIR',
+    source: 'Strength and conditioning',
     citation: 'Helms, E.R., et al. (2016). Application of the Repetitions in Reserve-Based Rating of Perceived Exertion Scale for Resistance Training. Strength & Conditioning Journal, 38(4), 42-49.',
     doi: 'https://doi.org/10.1519/ssc.0000000000000218',
-    explanation: 'RPE (Rate of Perceived Exertion) and RIR (Reps in Reserve) allow training to appropriate intensity based on daily readiness, rather than fixed percentages that may not account for recovery state.',
+    explanation: 'RPE (rate of perceived exertion) and RIR (reps in reserve: how many more reps you could have done before failing) let you train at the right intensity for your daily readiness, rather than fixed percentages that may not account for recovery state.',
     application: 'We guide progression through RIR: start mesocycles conservatively at 3 RIR, progress to 1 RIR, with final sets potentially reaching 0 RIR. This systematic approach helps manage fatigue.',
   },
   {
-    title: 'Energy Balance & Metabolic Adaptation',
-    source: 'Nutrition Research',
+    title: 'Energy balance and metabolic adaptation',
+    source: 'Nutrition research',
     citation: 'Trexler, E.T., Smith-Ryan, A.E., & Norton, L.E. (2014). Metabolic adaptation to weight loss: implications for the athlete. Journal of the International Society of Sports Nutrition, 11(1), 7.',
     doi: 'https://doi.org/10.1186/1550-2783-11-7',
-    explanation: 'Total Daily Energy Expenditure (TDEE) includes basal metabolic rate, activity, and exercise. During prolonged caloric restriction, metabolic adaptation can reduce TDEE. Regular monitoring helps adjust targets.',
+    explanation: 'Total daily energy expenditure (TDEE), the calories you burn in a day, includes basal metabolic rate, activity, and exercise. During prolonged caloric restriction, metabolic adaptation can reduce TDEE. Regular monitoring helps adjust targets.',
     application: 'Our calculator estimates TDEE from your stats and activity level. When you log new weight, we can help recalculate your targets to support continued progress.',
   },
   {
-    title: 'Periodization Models',
-    source: 'Training Science',
+    title: 'Periodization models',
+    source: 'Training science',
     citation: 'Grgic, J., et al. (2017). Effects of linear and daily undulating periodized resistance training programs on measures of muscle hypertrophy: a systematic review and meta-analysis. PeerJ, 5, e3695.',
     doi: 'https://doi.org/10.7717/peerj.3695',
     explanation: 'Periodization involves systematically varying training variables over time. Research comparing linear and daily undulating models found both produce similar hypertrophy outcomes when training volume is equated.',
     application: 'Our mesocycle builder incorporates periodization principles to help vary intensity and volume across training phases for sustainable progress.',
   },
   {
-    title: 'Progressive Overload',
-    source: 'Fundamental Principle',
+    title: 'Progressive overload',
+    source: 'Fundamental principle',
     citation: 'Schoenfeld, B.J. (2010). The mechanisms of muscle hypertrophy and their application to resistance training. Journal of Strength & Conditioning Research, 24(10), 2857-2872.',
     doi: 'https://doi.org/10.1519/jsc.0b013e3181e840f3',
-    explanation: 'Progressive overload—gradually increasing training demands—is a foundational principle for continued adaptation. This can involve increasing weight, reps, sets, or improving technique over time.',
+    explanation: 'Progressive overload, gradually increasing training demands, is a foundational principle for continued adaptation. This can involve increasing weight, reps, sets, or improving technique over time.',
     application: 'We track progression over time and suggest incremental increases when performance indicates readiness, such as adding 1-2 reps or modest weight increases when you hit target rep ranges with good form.',
   },
 ];
 
-const comparisonTable = [
-  { feature: 'AI Mesocycle Generation', hypertracker: true, others: false },
-  { feature: 'AI Coaching Notes', hypertracker: true, others: false },
-  { feature: 'Integrated Nutrition Tracking', hypertracker: true, others: 'partial' },
-  { feature: 'Smart Macro Calculator', hypertracker: true, others: false },
-  { feature: 'GLP-1/Peptide Support', hypertracker: true, others: false },
-  { feature: 'Auto-Update Macros on Weight Change', hypertracker: true, others: false },
-  { feature: 'S-Tier Exercise Scoring', hypertracker: true, others: false },
-  { feature: 'Fatigue Budget System', hypertracker: true, others: false },
-  { feature: 'Fiber Type Optimization', hypertracker: true, others: false },
-  { feature: 'DEXA/FFMI Tracking', hypertracker: true, others: false },
-  { feature: 'Reactive Deload Detection', hypertracker: true, others: false },
-  { feature: 'Set Quality Analysis', hypertracker: true, others: false },
-  { feature: 'Regional Body Comp Analysis', hypertracker: true, others: false },
-  { feature: 'Smart Weight Recommendations', hypertracker: true, others: 'partial' },
-  { feature: 'Basic Workout Logging', hypertracker: true, others: true },
+const comparisonTable: Array<{ feature: string; hypertracker: true; others: boolean | 'partial' }> = [
+  { feature: 'AI mesocycle generation', hypertracker: true, others: false },
+  { feature: 'AI coaching notes', hypertracker: true, others: false },
+  { feature: 'Integrated nutrition tracking', hypertracker: true, others: 'partial' },
+  { feature: 'Smart macro calculator', hypertracker: true, others: false },
+  { feature: 'GLP-1 and peptide support', hypertracker: true, others: false },
+  { feature: 'Auto-update macros on weight change', hypertracker: true, others: false },
+  { feature: 'S-tier exercise scoring', hypertracker: true, others: false },
+  { feature: 'Fatigue budget system', hypertracker: true, others: false },
+  { feature: 'Fiber type optimization', hypertracker: true, others: false },
+  { feature: 'DEXA and FFMI tracking', hypertracker: true, others: false },
+  { feature: 'Reactive deload detection', hypertracker: true, others: false },
+  { feature: 'Set quality analysis', hypertracker: true, others: false },
+  { feature: 'Regional body comp analysis', hypertracker: true, others: false },
+  { feature: 'Smart weight recommendations', hypertracker: true, others: 'partial' },
+  { feature: 'Basic workout logging', hypertracker: true, others: true },
 ];
+
+const problems: Array<{ icon: TablerIcon; title: string; body: string }> = [
+  {
+    icon: IconFileText,
+    title: 'They are just digital notepads',
+    body: 'Log your sets, see a chart, repeat. No intelligence, no optimization, no understanding of why you\'re doing what you\'re doing.',
+  },
+  {
+    icon: IconDice5,
+    title: 'Random workout generators',
+    body: 'Some apps generate workouts, but without understanding periodization, fatigue accumulation, or your specific needs. It\'s fitness roulette.',
+  },
+  {
+    icon: IconRepeat,
+    title: 'One-size-fits-all volume',
+    body: '"Do 3x10 for everything" ignores that muscles respond differently, people recover differently, and goals require different approaches.',
+  },
+];
+
+const audiences: Array<{ icon: TablerIcon; title: string; body: string }> = [
+  {
+    icon: IconTrophy,
+    title: 'Intermediate lifters',
+    body: 'Past the beginner gains, ready to maximize the next phase with intelligent programming.',
+  },
+  {
+    icon: IconBooks,
+    title: 'Science-based lifters',
+    body: 'You\'ve read the research and want an app that actually implements it. No bro-science.',
+  },
+  {
+    icon: IconAdjustments,
+    title: 'Optimization nerds',
+    body: 'You want to squeeze every drop of gains from your training. Efficiency over effort.',
+  },
+];
+
+const onThisPage = [
+  { href: '#features', label: 'Features that matter' },
+  { href: '#science', label: 'Scientific foundation' },
+  { href: '#comparison', label: 'How we compare' },
+  { href: '#sources', label: 'Sources and disclaimers' },
+];
+
+function OthersCell({ value }: { value: boolean | 'partial' }) {
+  if (value === true) {
+    return (
+      <>
+        <IconCheck size={20} className="mx-auto text-ink-2" aria-hidden="true" />
+        <span className="sr-only">Yes</span>
+      </>
+    );
+  }
+  if (value === 'partial') {
+    return (
+      <>
+        <IconCircleHalf2 size={20} className="mx-auto text-ink-3" aria-hidden="true" />
+        <span className="sr-only">Partial</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <IconMinus size={20} className="mx-auto text-ink-3" aria-hidden="true" />
+      <span className="sr-only">No</span>
+    </>
+  );
+}
 
 export default function LearnPage() {
   return (
     <PublicAppShell>
-      {/* Hero */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-action/15 via-transparent to-transparent" />
-          <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-radial from-action/20 via-transparent to-transparent" />
+      <ArticlePage className="px-4 pt-8">
+        {/* Hero */}
+        <div className="space-y-4">
+          <ArticleHeader
+            backHref=""
+            title="The science behind HyperTrack"
+            subtitle="We didn't just build another workout logger. We encoded decades of exercise science and nutrition research into AI-powered algorithms that optimize your training, diet, and recovery in real time."
+          />
+
+          <ContentCard>
+            <h2 className="pb-1 text-headline text-ink">On this page</h2>
+            <nav className="divide-y divide-sep">
+              {onThisPage.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="flex min-h-[44px] items-center justify-between gap-2 text-body text-action"
+                >
+                  {item.label}
+                  <IconChevronRight size={18} className="shrink-0 text-ink-3" aria-hidden="true" />
+                </a>
+              ))}
+            </nav>
+          </ContentCard>
         </div>
-        
-        <div className="relative max-w-6xl mx-auto px-4 py-20">
-          <h1 className="text-4xl md:text-6xl font-black text-ink mb-6">
-            The Science Behind{' '}
-            <span className="text-ink">
-              HyperTrack
-            </span>
-          </h1>
-          <p className="text-xl text-ink-2 max-w-3xl">
-            We didn&apos;t just build another workout logger. We encoded decades of exercise science and nutrition research 
-            into AI-powered algorithms that optimize your training, diet, and recovery in real-time.
-          </p>
 
-          {/* Quick Navigation */}
-          <div className="mt-8 p-6 bg-card/50 rounded-xl border border-sep">
-            <h2 className="text-sm font-semibold text-ink-2 mb-3 uppercase tracking-wider">On This Page</h2>
-            <div className="grid md:grid-cols-2 gap-2 text-sm">
-              <a href="#features" className="text-ink-2 hover:text-action transition-colors">→ Features That Matter</a>
-              <a href="#science" className="text-ink-2 hover:text-action transition-colors">→ Scientific Foundation</a>
-              <a href="#comparison" className="text-ink-2 hover:text-action transition-colors">→ How We Compare</a>
-              <a href="#sources" className="text-ink-2 hover:text-action transition-colors">→ Sources & Disclaimers</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 pb-20 space-y-20">
-        
-        {/* The Problem */}
-        <section className="py-12 border-b border-sep">
-          <h2 className="text-3xl font-bold text-ink mb-6">The Problem with Most Workout Apps</h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="p-6 bg-card/50 rounded-xl border border-sep">
-              <div className="w-12 h-12 mb-4 rounded-lg bg-fill flex items-center justify-center">
-                <svg className="w-6 h-6 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-ink mb-2">They&apos;re Just Digital Notepads</h3>
-              <p className="text-ink-2 text-sm">
-                Log your sets, see a chart, repeat. No intelligence, no optimization, no understanding of WHY you&apos;re doing what you&apos;re doing.
-              </p>
-            </div>
-            <div className="p-6 bg-card/50 rounded-xl border border-sep">
-              <div className="w-12 h-12 mb-4 rounded-lg bg-fill flex items-center justify-center">
-                <svg className="w-6 h-6 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-ink mb-2">Random Workout Generators</h3>
-              <p className="text-ink-2 text-sm">
-                Some apps generate workouts, but without understanding periodization, fatigue accumulation, or your specific needs. It&apos;s fitness roulette.
-              </p>
-            </div>
-            <div className="p-6 bg-card/50 rounded-xl border border-sep">
-              <div className="w-12 h-12 mb-4 rounded-lg bg-fill flex items-center justify-center">
-                <svg className="w-6 h-6 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-ink mb-2">One-Size-Fits-All Volume</h3>
-              <p className="text-ink-2 text-sm">
-                &quot;Do 3x10 for everything&quot; ignores that muscles respond differently, people recover differently, and goals require different approaches.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Features Deep Dive */}
-        <section id="features">
-          <h2 className="text-3xl font-bold text-ink mb-8 text-center">Features That Actually Matter</h2>
-          <div className="space-y-8">
-            {features.map((feature, idx) => (
-              <div 
-                key={feature.title}
-                className={`p-8 rounded-2xl border ${
-                  idx % 2 === 0 
-                    ? 'bg-action/5 to-transparent border-action/20' 
-                    : 'bg-action/5 border-action/20'
-                }`}
-              >
-                <div className="flex items-start gap-6">
-                  <div className="text-5xl shrink-0">{feature.icon}</div>
-                  <div>
-                    <h3 className="text-xl font-bold text-ink mb-2">{feature.title}</h3>
-                    <p className="text-ink-2 mb-4">{feature.description}</p>
-                    <div className="p-4 bg-card/50 rounded-lg border border-sep">
-                      <p className="text-sm text-ink-2">
-                        <span className="font-semibold text-action">How it works: </span>
-                        {feature.howItWorks}
-                      </p>
-                    </div>
-                    {feature.disclaimer && (
-                      <div className="mt-3 p-3 bg-status-warn/10 rounded-lg border border-status-warn/20 flex gap-2">
-                        <svg className="w-4 h-4 text-status-warn shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-xs text-ink-2">{feature.disclaimer}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+        {/* The problem */}
+        <ArticleSection title="The problem with most workout apps">
+          <div className="grid gap-3 md:grid-cols-3">
+            {problems.map((p) => (
+              <ContentCard key={p.title} className="space-y-2">
+                <IconBadge icon={p.icon} />
+                <h3 className="text-headline text-ink">{p.title}</h3>
+                <p className="text-subhead text-ink-2">{p.body}</p>
+              </ContentCard>
             ))}
           </div>
+        </ArticleSection>
+
+        {/* Features */}
+        <section id="features" className="scroll-mt-20 space-y-3">
+          <h2 className="text-title text-ink">Features that actually matter</h2>
+          {features.map((feature) => (
+            <ContentCard key={feature.title}>
+              <div className="flex items-start gap-3">
+                <IconBadge icon={feature.icon} />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <h3 className="text-headline text-ink">{feature.title}</h3>
+                  <p className="text-body text-ink-2">{feature.description}</p>
+                  <p className="text-subhead text-ink-2">
+                    <span className="font-semibold text-action">How it works: </span>
+                    {feature.howItWorks}
+                  </p>
+                  {feature.disclaimer && (
+                    <div className="flex gap-2 rounded-xl bg-fill p-3">
+                      <IconInfoCircle size={18} className="mt-px shrink-0 text-ink-3" aria-hidden="true" />
+                      <p className="text-caption text-ink-2">{feature.disclaimer}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </ContentCard>
+          ))}
         </section>
 
-        {/* The Science */}
-        <section id="science">
-          <h2 className="text-3xl font-bold text-ink mb-4 text-center">Built on Real Science</h2>
-          <p className="text-center text-ink-2 mb-12 max-w-2xl mx-auto">
+        {/* The science */}
+        <section id="science" className="scroll-mt-20 space-y-3">
+          <h2 className="text-title text-ink">Built on real science</h2>
+          <p className="text-body text-ink-2">
             Our features are informed by peer-reviewed research and established training methodologies. See citations below.
           </p>
-          
-          <div className="grid gap-6">
-            {scienceConcepts.map((concept) => (
-              <div key={concept.title} className="p-6 bg-card/50 rounded-xl border border-sep hover:border-sep transition-colors">
-                <div className="flex items-start justify-between gap-4 mb-3">
-                  <h3 className="text-lg font-bold text-ink">{concept.title}</h3>
-                  <span className="px-3 py-1 bg-fill rounded-full text-xs text-ink-2 shrink-0">
-                    {concept.source}
-                  </span>
-                </div>
-                <p className="text-ink-2 mb-3">{concept.explanation}</p>
-                {concept.citation && (
-                  <p className="text-xs text-ink-3 mb-3 italic">
-                    <span className="font-semibold">Citation: </span>
-                    {concept.citation}
-                    {concept.doi && (
-                      <>
-                        {' '}
-                        <Link 
-                          href={concept.doi} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-action underline"
-                        >
-                          [DOI]
-                        </Link>
-                      </>
-                    )}
-                  </p>
-                )}
-                <div className="flex items-start gap-2 p-3 bg-action/10 rounded-lg border border-action/20">
-                  <svg className="w-5 h-5 text-action shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-sm text-action">
-                    <span className="font-semibold">In HyperTrack:</span> {concept.application}
-                  </p>
-                </div>
+          {scienceConcepts.map((concept) => (
+            <ContentCard key={concept.title} className="space-y-3">
+              <div className="space-y-1">
+                <h3 className="text-headline text-ink">{concept.title}</h3>
+                <span className="inline-block rounded-full bg-fill px-2 py-0.5 text-caption text-ink-2">
+                  {concept.source}
+                </span>
               </div>
-            ))}
-          </div>
+              <p className="text-body text-ink-2">{concept.explanation}</p>
+              {concept.citation && (
+                <p className="text-caption italic text-ink-3">
+                  <span className="font-semibold">Citation: </span>
+                  {concept.citation}
+                  {concept.doi && (
+                    <>
+                      {' '}
+                      <Link
+                        href={concept.doi}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-action underline"
+                      >
+                        [DOI]
+                      </Link>
+                    </>
+                  )}
+                </p>
+              )}
+              <div className="flex items-start gap-2 rounded-xl bg-action-tint p-3">
+                <IconCircleCheck size={20} className="mt-px shrink-0 text-action" aria-hidden="true" />
+                <p className="text-subhead text-ink">
+                  <span className="font-semibold text-action">In HyperTrack:</span> {concept.application}
+                </p>
+              </div>
+            </ContentCard>
+          ))}
         </section>
 
         {/* Comparison */}
-        <section id="comparison">
-          <h2 className="text-3xl font-bold text-ink mb-8 text-center">How We Compare</h2>
-          <div className="overflow-hidden rounded-xl border border-sep">
-            <table className="w-full">
+        <section id="comparison" className="scroll-mt-20 space-y-3">
+          <h2 className="text-title text-ink">How we compare</h2>
+          <ContentCard className="px-0 py-1">
+            <table className="w-full text-left">
               <thead>
-                <tr className="bg-fill/70">
-                  <th className="text-left p-4 text-ink-2 font-medium">Feature</th>
-                  <th className="text-center p-4 text-action font-bold">HyperTrack</th>
-                  <th className="text-center p-4 text-ink-2 font-medium">Other Apps</th>
+                <tr className="text-subhead">
+                  <th scope="col" className="px-4 py-3 font-medium text-ink-2">Feature</th>
+                  <th scope="col" className="w-24 px-2 py-3 text-center font-semibold text-action">HyperTrack</th>
+                  <th scope="col" className="w-24 px-2 py-3 text-center font-medium text-ink-2">Other apps</th>
                 </tr>
               </thead>
-              <tbody>
-                {comparisonTable.map((row, idx) => (
-                  <tr 
-                    key={row.feature} 
-                    className={idx % 2 === 0 ? 'bg-card/30' : 'bg-card/10'}
-                  >
-                    <td className="p-4 text-ink-2">{row.feature}</td>
-                    <td className="p-4 text-center">
-                      <span className="text-status-ok text-xl">✓</span>
+              <tbody className="divide-y divide-sep">
+                {comparisonTable.map((row) => (
+                  <tr key={row.feature}>
+                    <td className="px-4 py-3 text-subhead text-ink">{row.feature}</td>
+                    <td className="px-2 py-3 text-center">
+                      <IconCheck size={20} className="mx-auto text-action" aria-hidden="true" />
+                      <span className="sr-only">Yes</span>
                     </td>
-                    <td className="p-4 text-center">
-                      {row.others === true ? (
-                        <span className="text-status-ok text-xl">✓</span>
-                      ) : row.others === 'partial' ? (
-                        <span className="text-status-warn">◐</span>
-                      ) : (
-                        <span className="text-ink-3">—</span>
-                      )}
+                    <td className="px-2 py-3 text-center">
+                      <OthersCell value={row.others} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </ContentCard>
         </section>
 
-        {/* Sources & Disclaimers */}
-        <section id="sources" className="py-12 border-t border-sep">
-          <h2 className="text-3xl font-bold text-ink mb-6 text-center">Sources & Disclaimers</h2>
-          
-          <div className="space-y-6 max-w-4xl mx-auto">
-            {/* General Disclaimer */}
-            <div className="p-6 bg-card/50 rounded-xl border border-sep">
-              <h3 className="text-lg font-semibold text-ink mb-3">General Disclaimer</h3>
-              <p className="text-sm text-ink-2 mb-3">
-                HyperTrack is a training and nutrition tracking tool designed for informational and educational purposes. 
-                It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified 
-                healthcare professionals, registered dietitians, or certified personal trainers before starting any new training 
-                program, dietary regimen, or supplementation.
-              </p>
-              <p className="text-sm text-ink-2">
-                Individual results may vary. The recommendations and calculations provided by HyperTrack are based on general 
-                research findings and population-level data, which may not apply to every individual.
-              </p>
-            </div>
+        {/* Sources and disclaimers */}
+        <section id="sources" className="scroll-mt-20 space-y-3">
+          <h2 className="text-title text-ink">Sources and disclaimers</h2>
 
-            {/* AI & Automation */}
-            <div className="p-6 bg-card/50 rounded-xl border border-sep">
-              <h3 className="text-lg font-semibold text-ink mb-3">AI-Generated Content</h3>
-              <p className="text-sm text-ink-2">
-                Our AI coaching features use Claude AI to generate personalized guidance. While informed by training science, 
-                AI outputs are probabilistic and may occasionally contain errors. AI coaching does not replace human coaching, 
-                supervision, or professional expertise. For detailed information about data handling, see our{' '}
-                <Link href="/privacy" className="text-action underline">
-                  Privacy Policy
-                </Link>.
-              </p>
-            </div>
+          <ContentCard className="space-y-3">
+            <h3 className="text-headline text-ink">General disclaimer</h3>
+            <p className="text-subhead text-ink-2">
+              HyperTrack is a training and nutrition tracking tool designed for informational and educational purposes.
+              It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified
+              healthcare professionals, registered dietitians, or certified personal trainers before starting any new training
+              program, dietary regimen, or supplementation.
+            </p>
+            <p className="text-subhead text-ink-2">
+              Individual results may vary. The recommendations and calculations provided by HyperTrack are based on general
+              research findings and population-level data, which may not apply to every individual.
+            </p>
+          </ContentCard>
 
-            {/* Health & Medical */}
-            <div className="p-6 bg-card/50 rounded-xl border border-sep">
-              <h3 className="text-lg font-semibold text-ink mb-3">Health & Medical Information</h3>
-              <p className="text-sm text-ink-2 mb-3">
-                Features related to body composition (DEXA, FFMI), nutrition targets, and medication support (GLP-1) provide 
-                general information only. They are not medical assessments, diagnoses, or prescriptions.
-              </p>
-              <p className="text-sm text-ink-2">
-                If you are taking prescription medications, have existing health conditions, or are under medical supervision, 
-                consult your healthcare provider before making dietary or training changes. For our full terms, see our{' '}
-                <Link href="/terms" className="text-action underline">
-                  Terms of Service
-                </Link>.
-              </p>
-            </div>
+          <ContentCard className="space-y-3">
+            <h3 className="text-headline text-ink">AI-generated content</h3>
+            <p className="text-subhead text-ink-2">
+              Our AI coaching features use Grok from xAI to generate personalized guidance. While informed by training science,
+              AI outputs are probabilistic and may occasionally contain errors. AI coaching does not replace human coaching,
+              supervision, or professional expertise. For detailed information about data handling, see our{' '}
+              <Link href="/privacy" className="text-action underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
+          </ContentCard>
 
-            {/* Research Sources */}
-            <div className="p-6 bg-card/50 rounded-xl border border-sep">
-              <h3 className="text-lg font-semibold text-ink mb-3">Research & Methodology</h3>
-              <p className="text-sm text-ink-2 mb-4">
-                Our features are informed by exercise science research, established training methodologies, and industry 
-                best practices. Citations are provided where specific claims reference published work. Training science is 
-                an evolving field; our understanding continues to improve as new research emerges.
-              </p>
-              <div className="space-y-2 text-xs text-ink-3">
-                <p className="font-semibold text-ink-2">Key Sources & Resources:</p>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Renaissance Periodization — Volume landmarks, stimulus-to-fatigue ratio research</li>
-                  <li>Stronger By Science — Evidence reviews and training science</li>
-                  <li>Brad Schoenfeld, PhD — Hypertrophy mechanisms and training research</li>
-                  <li>Eric Helms, PhD — Natural bodybuilding and training optimization</li>
-                  <li>British Journal of Sports Medicine, Journal of Strength & Conditioning Research, and other peer-reviewed journals</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          <ContentCard className="space-y-3">
+            <h3 className="text-headline text-ink">Health and medical information</h3>
+            <p className="text-subhead text-ink-2">
+              Features related to body composition (DEXA, FFMI), nutrition targets, and medication support (GLP-1) provide
+              general information only. They are not medical assessments, diagnoses, or prescriptions.
+            </p>
+            <p className="text-subhead text-ink-2">
+              If you are taking prescription medications, have existing health conditions, or are under medical supervision,
+              consult your healthcare provider before making dietary or training changes. For our full terms, see our{' '}
+              <Link href="/terms" className="text-action underline">
+                Terms of Service
+              </Link>
+              .
+            </p>
+          </ContentCard>
+
+          <ContentCard className="space-y-3">
+            <h3 className="text-headline text-ink">Research and methodology</h3>
+            <p className="text-subhead text-ink-2">
+              Our features are informed by exercise science research, established training methodologies, and industry
+              best practices. Citations are provided where specific claims reference published work. Training science is
+              an evolving field; our understanding continues to improve as new research emerges.
+            </p>
+            <p className="text-subhead font-semibold text-ink">Key sources and resources</p>
+            <BulletList
+              className="text-subhead"
+              items={[
+                'Renaissance Periodization: volume landmarks, stimulus-to-fatigue ratio research',
+                'Stronger By Science: evidence reviews and training science',
+                'Brad Schoenfeld, PhD: hypertrophy mechanisms and training research',
+                'Eric Helms, PhD: natural bodybuilding and training optimization',
+                'British Journal of Sports Medicine, Journal of Strength & Conditioning Research, and other peer-reviewed journals',
+              ]}
+            />
+          </ContentCard>
         </section>
 
-        {/* Who It's For */}
-        <section className="text-center">
-          <h2 className="text-3xl font-bold text-ink mb-8">Who Is HyperTrack For?</h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-6">
-              <div className="bg-action/20 w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center">
-                <span className="text-4xl">🏆</span>
-              </div>
-              <h3 className="text-xl font-semibold text-ink mb-2">Intermediate Lifters</h3>
-              <p className="text-ink-2">
-                Past the beginner gains, ready to maximize the next phase with intelligent programming.
-              </p>
-            </div>
-            <div className="p-6">
-              <div className="bg-action/20 w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center">
-                <span className="text-4xl">📚</span>
-              </div>
-              <h3 className="text-xl font-semibold text-ink mb-2">Science-Based Lifters</h3>
-              <p className="text-ink-2">
-                You&apos;ve read the research and want an app that actually implements it. No bro-science.
-              </p>
-            </div>
-            <div className="p-6">
-              <div className="bg-action/20 w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center">
-                <span className="text-4xl">⚙️</span>
-              </div>
-              <h3 className="text-xl font-semibold text-ink mb-2">Optimization Nerds</h3>
-              <p className="text-ink-2">
-                You want to squeeze every drop of gains from your training. Efficiency over effort.
-              </p>
-            </div>
+        {/* Who it's for */}
+        <ArticleSection title="Who is HyperTrack for?">
+          <div className="grid gap-3 md:grid-cols-3">
+            {audiences.map((a) => (
+              <ContentCard key={a.title} className="space-y-2">
+                <IconBadge icon={a.icon} />
+                <h3 className="text-headline text-ink">{a.title}</h3>
+                <p className="text-subhead text-ink-2">{a.body}</p>
+              </ContentCard>
+            ))}
           </div>
-        </section>
+        </ArticleSection>
 
         {/* CTA */}
-        <section className="bg-action/10 text-center py-12 px-8 rounded-2xl border border-action/20">
-          <h2 className="text-3xl font-bold text-ink mb-4">Ready to Train Smarter?</h2>
-          <p className="text-ink-2 mb-8 max-w-xl mx-auto">
-            Stop leaving gains on the table with outdated training methods. 
-            Join the evidence-based lifting revolution.
+        <ContentCard className="space-y-3 text-center">
+          <h2 className="text-title text-ink">Ready to train smarter?</h2>
+          <p className="text-body text-ink-2">
+            Stop leaving gains on the table with outdated training methods. Join the evidence-based lifting revolution.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-center">
             <Link
               href="/register"
-              className="px-8 py-4 bg-action hover:bg-action text-on-action font-semibold rounded-xl transition-colors shadow-lg shadow-action/25"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-button bg-action px-6 text-body font-semibold text-on-action"
             >
-              Get Started Free
+              Get started free
             </Link>
             <Link
               href="/login"
-              className="px-8 py-4 bg-fill hover:bg-sep text-ink font-semibold rounded-xl transition-colors"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-button bg-fill px-6 text-body font-semibold text-ink"
             >
-              Sign In
+              Sign in
             </Link>
           </div>
-        </section>
-      </div>
+        </ContentCard>
 
-      {/* Footer */}
-      <div className="border-t border-sep py-8 text-center">
-        <p className="text-sm text-ink-3">
-          HyperTrack © {new Date().getFullYear()} • Built with ❤️ for the lifting community
+        <p className="text-center text-caption text-ink-3">
+          HyperTrack © {new Date().getFullYear()} · Built for the lifting community
         </p>
-      </div>
+      </ArticlePage>
     </PublicAppShell>
   );
 }
-
