@@ -3791,7 +3791,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                             className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                               isWarmupCompleted
                                 ? 'bg-amber-500 border-amber-500'
-                                : 'border-sep'
+                                : 'border-ink-3'
                             }`}
                           >
                             {isWarmupCompleted && (
