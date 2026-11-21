@@ -58,6 +58,8 @@ export interface ImportResult {
    * the user so.
    */
   newExercises?: number;
+  /** Workouts already in history (re-import) that were left alone. */
+  duplicates?: number;
 }
 
 export interface ParsedStrongWorkout {
