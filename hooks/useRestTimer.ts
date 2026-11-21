@@ -39,6 +39,11 @@ interface TimerState {
   isRunning: boolean;
 }
 
+/** True when the user can actually see the app (not backgrounded / locked). */
+function isPageVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+}
+
 /**
  * Drop any persisted rest countdown and its pending native notification.
  * For code that ends a workout WITHOUT the workout page mounted (discarding
@@ -216,10 +221,14 @@ export function useRestTimer({
         
         if (!hasPlayedAlarm.current) {
           hasPlayedAlarm.current = true;
-          // Foreground completion: in-app alarm fires, so cancel the redundant
-          // native notification we scheduled at start().
-          void cancelRestCompleteNotification();
-          playAlarm();
+          // Only a VISIBLE page is a foreground completion. iOS keeps the web
+          // view's JS running for a while after the user switches apps or
+          // locks the screen; cancelling the native notification then (and
+          // beeping into a hidden page) meant no alert at all.
+          if (isPageVisible()) {
+            void cancelRestCompleteNotification();
+            playAlarm();
+          }
           onCompleteRef.current?.();
         }
       } else {
@@ -336,10 +345,14 @@ export function useRestTimer({
 
         if (!hasPlayedAlarm.current) {
           hasPlayedAlarm.current = true;
-          // Foreground completion: in-app alarm fires, so cancel the redundant
-          // native notification we scheduled at start().
-          void cancelRestCompleteNotification();
-          playAlarm();
+          // Only a VISIBLE page is a foreground completion. iOS keeps the web
+          // view's JS running for a while after the user switches apps or
+          // locks the screen; cancelling the native notification then (and
+          // beeping into a hidden page) meant no alert at all.
+          if (isPageVisible()) {
+            void cancelRestCompleteNotification();
+            playAlarm();
+          }
           onCompleteRef.current?.();
         }
       } else {

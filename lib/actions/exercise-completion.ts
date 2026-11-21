@@ -159,7 +159,7 @@ export async function completeExerciseWithAI(
 
     // Call API
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-latest',
+      model: 'claude-haiku-4-5', // claude-3-5-haiku is retired; same tier as the other extraction calls
       max_tokens: 1500,
       system:
         'You are an exercise science expert. Respond only with valid JSON, no markdown or additional text.',

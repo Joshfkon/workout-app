@@ -104,6 +104,10 @@ export async function scheduleRestCompleteNotification(fireAtMs: number): Promis
           body: "Time's up - back to your set!",
           schedule: { at: new Date(fireAtMs), allowWhileIdle: true },
           sound: 'default',
+          // Break through Focus modes (a gym / Fitness Focus is common). Needs
+          // the time-sensitive entitlement in App.entitlements; without it iOS
+          // treats this as a normal ("active") notification.
+          interruptionLevel: 'timeSensitive',
         },
       ],
     });
