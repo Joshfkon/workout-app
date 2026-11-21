@@ -153,7 +153,7 @@ export function WarmupProtocol({
                     className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                       isCompleted
                         ? 'bg-status-ok border-status-ok'
-                        : 'border-sep'
+                        : 'border-ink-3'
                     }`}
                   >
                     {isCompleted && (
