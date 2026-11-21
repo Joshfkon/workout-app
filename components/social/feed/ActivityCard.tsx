@@ -9,6 +9,15 @@ import { formatWeight } from '@/lib/utils';
 import { ReactionBar } from './ReactionBar';
 import { CommentSection } from './CommentSection';
 import { ContentActionsMenu } from '@/components/social/moderation';
+import {
+  IconBarbell,
+  IconChartLine,
+  IconFlame,
+  IconMedal,
+  IconTrophy,
+  IconUser,
+  type Icon,
+} from '@tabler/icons-react';
 import type { ActivityWithProfile, WorkoutCompletedData, PersonalRecordData, StreakMilestoneData } from '@/types/social';
 
 // A single workout longer than this is almost certainly a session that was left
@@ -26,6 +35,14 @@ function formatWorkoutDuration(minutes: number | null | undefined): string | nul
   const m = mins % 60;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
+
+const ACTIVITY_ICONS: Record<string, Icon> = {
+  workout_completed: IconBarbell,
+  personal_record: IconTrophy,
+  streak_milestone: IconFlame,
+  badge_earned: IconMedal,
+  mesocycle_completed: IconChartLine,
+};
 
 export interface ActivityCardProps {
   activity: ActivityWithProfile;
@@ -62,22 +79,7 @@ function ActivityCardComponent({
     }
   };
 
-  const getActivityIcon = () => {
-    switch (activity.activity_type) {
-      case 'workout_completed':
-        return '🏋️';
-      case 'personal_record':
-        return '🏆';
-      case 'streak_milestone':
-        return '🔥';
-      case 'badge_earned':
-        return '🎖️';
-      case 'mesocycle_completed':
-        return '📈';
-      default:
-        return '💪';
-    }
-  };
+  const ActivityIcon: Icon = ACTIVITY_ICONS[activity.activity_type] ?? IconUser;
 
   return (
     <Card className="overflow-hidden">
@@ -100,9 +102,9 @@ function ActivityCardComponent({
               >
                 {displayName}
               </Link>
-              <span className="text-lg">{getActivityIcon()}</span>
+              <ActivityIcon className="h-4 w-4 flex-shrink-0 text-ink-3" stroke={1.75} aria-hidden="true" />
             </div>
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               {formatRelativeTime(activity.created_at)}
             </p>
           </div>
@@ -155,7 +157,7 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
       </p>
 
       {/* Stats row */}
-      <div className="flex gap-4 text-sm">
+      <div className="flex gap-4 text-subhead">
         {formatWorkoutDuration(data.duration_minutes) && (
           <div>
             <span className="text-ink-2">Duration:</span>{' '}
@@ -176,7 +178,7 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
       {data.exercises && data.exercises.length > 0 && (
         <div className="bg-fill rounded-lg p-3 space-y-2">
           {data.exercises.map((exercise, idx) => (
-            <div key={idx} className="flex items-center justify-between text-sm">
+            <div key={idx} className="flex items-center justify-between text-subhead">
               <span className="text-ink">{exercise.name}</span>
               <span className="text-ink-2">
                 {exercise.is_duration
@@ -190,13 +192,21 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
 
       {/* RPE if available */}
       {data.session_rpe && (
-        <p className="text-sm text-ink-2">
-          Session RPE: <span className="text-ink">{data.session_rpe}/10</span>
+        <p className="text-subhead text-ink-2">
+          Effort: <span className="text-ink">{data.session_rpe}/10</span>
         </p>
       )}
     </div>
   );
 }
+
+const PR_TYPE_LABEL: Record<PersonalRecordData['pr_type'], string> = {
+  weight: 'weight',
+  reps: 'rep',
+  volume: 'volume',
+  e1rm: 'estimated max',
+  duration: 'duration',
+};
 
 // Personal record content
 function PRContent({ data, units }: { data: PersonalRecordData; units: 'kg' | 'lb' }) {
@@ -217,14 +227,14 @@ function PRContent({ data, units }: { data: PersonalRecordData; units: 'kg' | 'l
   return (
     <div className="space-y-2">
       <p className="text-ink">
-        New <span className="font-semibold text-action">{data.pr_type.toUpperCase()}</span> PR on{' '}
-        <span className="font-semibold">{data.exercise_name}</span>!
+        New {PR_TYPE_LABEL[data.pr_type] ?? data.pr_type} PR on{' '}
+        <span className="font-semibold">{data.exercise_name}</span>
       </p>
 
       <div className="flex items-center gap-3">
-        <span className="text-3xl font-bold text-action">{formatValue()}</span>
+        <span className="text-large-title tabular-nums text-action">{formatValue()}</span>
         {formatImprovement() && (
-          <span className="text-status-ok text-sm font-medium">
+          <span className="text-status-ok text-subhead font-medium">
             {formatImprovement()}
           </span>
         )}
@@ -238,20 +248,20 @@ function StreakContent({ data }: { data: StreakMilestoneData }) {
   const getMilestoneText = () => {
     switch (data.milestone_type) {
       case 'week':
-        return `${data.streak_days} day streak! 🔥`;
+        return `${data.streak_days} day streak`;
       case 'month':
-        return `${data.streak_days} days strong! 💪`;
+        return `${data.streak_days} days strong`;
       case 'hundred':
-        return `${data.streak_days} day milestone! 🏆`;
+        return `${data.streak_days} day milestone`;
       default:
-        return `${data.streak_days} day streak!`;
+        return `${data.streak_days} day streak`;
     }
   };
 
   return (
     <div className="text-center py-2">
-      <p className="text-2xl font-bold text-ink">{getMilestoneText()}</p>
-      <p className="text-sm text-ink-2 mt-1">Consistency is key!</p>
+      <p className="text-title tabular-nums text-ink">{getMilestoneText()}</p>
+      <p className="text-subhead text-ink-2 mt-1">Consistency is key.</p>
     </div>
   );
 }

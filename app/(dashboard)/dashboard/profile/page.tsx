@@ -102,7 +102,7 @@ export default function MyProfilePage() {
       <div className="max-w-lg mx-auto px-4 py-8">
         <Card>
           <CardHeader>
-            <CardTitle>Create Your Profile</CardTitle>
+            <CardTitle>Create your profile</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-ink-2 mb-6">
@@ -110,7 +110,7 @@ export default function MyProfilePage() {
             </p>
             <Link href="/dashboard/profile/setup">
               <Button variant="primary" className="w-full">
-                Create Profile
+                Create profile
               </Button>
             </Link>
           </CardContent>
@@ -137,7 +137,7 @@ export default function MyProfilePage() {
           />
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold text-ink truncate">
+            <h1 className="text-title font-bold text-ink truncate">
               {displayName}
             </h1>
             <p className="text-ink-2">@{profile.username}</p>
@@ -146,7 +146,7 @@ export default function MyProfilePage() {
               <p className="mt-3 text-ink-2">{profile.bio}</p>
             )}
 
-            <div className="flex flex-wrap gap-2 mt-3 text-sm text-ink-2">
+            <div className="flex flex-wrap gap-2 mt-3 text-subhead text-ink-2">
               {profile.training_experience && (
                 <span className="capitalize">{profile.training_experience}</span>
               )}
@@ -161,7 +161,7 @@ export default function MyProfilePage() {
 
           <Link href="/dashboard/profile/edit">
             <Button variant="outline" size="sm">
-              Edit Profile
+              Edit profile
             </Button>
           </Link>
         </div>
@@ -169,10 +169,10 @@ export default function MyProfilePage() {
         {/* Stats */}
         <div className="flex items-center justify-around mt-6 pt-6 border-t border-sep">
           <div className="text-center">
-            <p className="text-2xl font-bold text-ink">
+            <p className="text-title font-bold text-ink">
               {formatSocialCount(profile.workout_count)}
             </p>
-            <p className="text-sm text-ink-2">Workouts</p>
+            <p className="text-subhead text-ink-2">Workouts</p>
           </div>
 
           <div className="w-px h-10 bg-fill" />
@@ -181,10 +181,10 @@ export default function MyProfilePage() {
             href={`${getProfileUrl(profile.username)}/followers`}
             className="text-center hover:opacity-80 transition-opacity"
           >
-            <p className="text-2xl font-bold text-ink">
+            <p className="text-title font-bold text-ink">
               {formatSocialCount(profile.follower_count)}
             </p>
-            <p className="text-sm text-ink-2">Followers</p>
+            <p className="text-subhead text-ink-2">Followers</p>
           </Link>
 
           <div className="w-px h-10 bg-fill" />
@@ -193,10 +193,10 @@ export default function MyProfilePage() {
             href={`${getProfileUrl(profile.username)}/following`}
             className="text-center hover:opacity-80 transition-opacity"
           >
-            <p className="text-2xl font-bold text-ink">
+            <p className="text-title font-bold text-ink">
               {formatSocialCount(profile.following_count)}
             </p>
-            <p className="text-sm text-ink-2">Following</p>
+            <p className="text-subhead text-ink-2">Following</p>
           </Link>
         </div>
       </Card>
@@ -215,12 +215,12 @@ export default function MyProfilePage() {
                   className="flex items-center gap-2 px-3 py-2 bg-fill rounded-lg"
                   title={badge.description}
                 >
-                  <span className="text-xl">{badge.icon}</span>
+                  <span className="text-headline">{badge.icon}</span>
                   <div>
-                    <p className="text-sm font-medium text-ink">
+                    <p className="text-subhead font-medium text-ink">
                       {badge.name}
                     </p>
-                    <p className="text-xs text-ink-2">
+                    <p className="text-caption text-ink-2">
                       {badge.description}
                     </p>
                   </div>
@@ -235,36 +235,36 @@ export default function MyProfilePage() {
       {stats && (
         <Card>
           <CardHeader>
-            <CardTitle>Training Stats</CardTitle>
+            <CardTitle>Training stats</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-fill rounded-lg">
-                <p className="text-2xl font-bold text-ink">
+                <p className="text-title font-bold text-ink">
                   {stats.total_workouts}
                 </p>
-                <p className="text-sm text-ink-2">Total Workouts</p>
+                <p className="text-subhead text-ink-2">Total workouts</p>
               </div>
 
               <div className="p-4 bg-fill rounded-lg">
-                <p className="text-2xl font-bold text-ink">
+                <p className="text-title font-bold text-ink">
                   {stats.total_sets.toLocaleString()}
                 </p>
-                <p className="text-sm text-ink-2">Total Sets</p>
+                <p className="text-subhead text-ink-2">Total sets</p>
               </div>
 
               <div className="p-4 bg-fill rounded-lg">
-                <p className="text-2xl font-bold text-ink">
+                <p className="text-title font-bold text-ink">
                   {formatWeight(stats.total_volume_kg, units, 0)}
                 </p>
-                <p className="text-sm text-ink-2">Total Volume</p>
+                <p className="text-subhead text-ink-2">Total volume</p>
               </div>
 
               <div className="p-4 bg-fill rounded-lg">
-                <p className="text-2xl font-bold text-ink">
+                <p className="text-title font-bold text-ink">
                   {stats.current_streak}
                 </p>
-                <p className="text-sm text-ink-2">Day Streak</p>
+                <p className="text-subhead text-ink-2">Day streak</p>
               </div>
             </div>
           </CardContent>
@@ -278,8 +278,8 @@ export default function MyProfilePage() {
       <Card>
         <CardContent className="flex items-center justify-between py-4">
           <div>
-            <p className="font-medium text-ink">Privacy Settings</p>
-            <p className="text-sm text-ink-2">
+            <p className="font-medium text-ink">Privacy settings</p>
+            <p className="text-subhead text-ink-2">
               Profile is {profile.profile_visibility}
             </p>
           </div>
@@ -295,8 +295,8 @@ export default function MyProfilePage() {
       <Card>
         <CardContent className="flex items-center justify-between py-4">
           <div>
-            <p className="font-medium text-ink">Share Profile</p>
-            <p className="text-sm text-ink-2">
+            <p className="font-medium text-ink">Share profile</p>
+            <p className="text-subhead text-ink-2">
               hypertrack.app{getProfileUrl(profile.username)}
             </p>
           </div>
@@ -309,7 +309,7 @@ export default function MyProfilePage() {
               );
             }}
           >
-            Copy Link
+            Copy link
           </Button>
         </CardContent>
       </Card>

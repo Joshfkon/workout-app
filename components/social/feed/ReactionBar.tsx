@@ -77,11 +77,11 @@ function ReactionBarComponent({
               isAnimating && 'scale-110'
             )}
           >
-            <span className={cn('text-lg', isAnimating && 'animate-bounce')}>
+            <span className={cn('text-headline', isAnimating && 'animate-bounce')}>
               {userReaction ? getReactionEmoji(userReaction.reaction_type as ReactionType) : '❤️'}
             </span>
             {reactionCount > 0 && (
-              <span className="text-sm">{formatSocialCount(reactionCount)}</span>
+              <span className="text-subhead">{formatSocialCount(reactionCount)}</span>
             )}
           </button>
 
@@ -98,7 +98,7 @@ function ReactionBarComponent({
                     userReaction?.reaction_type === type && 'bg-sep'
                   )}
                 >
-                  <span className="text-xl">{getReactionEmoji(type)}</span>
+                  <span className="text-headline">{getReactionEmoji(type)}</span>
                 </button>
               ))}
             </div>
@@ -124,7 +124,7 @@ function ReactionBarComponent({
             />
           </svg>
           {commentCount > 0 && (
-            <span className="text-sm">{formatSocialCount(commentCount)}</span>
+            <span className="text-subhead">{formatSocialCount(commentCount)}</span>
           )}
         </button>
       </div>

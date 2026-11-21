@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Sheet } from '@/components/ui/Sheet';
+import { IconUser } from '@tabler/icons-react';
 import {
   validateUsername,
   generateUsernameSuggestions,
@@ -198,33 +200,25 @@ export function ProfilePromptModal({
     router.push('/dashboard/profile/setup');
   };
 
-  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-card rounded-card overflow-hidden animate-fade-in shadow-card">
-        <div className="p-6">
+    <Sheet
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel={needsProfile ? 'Create your profile' : 'Personalize your profile'}
+      size="md"
+      data-testid="profile-prompt-sheet"
+    >
+        <div>
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-action/20 flex items-center justify-center">
-              <svg
-                className="w-8 h-8 text-action"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
-              </svg>
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-action-tint flex items-center justify-center">
+              <IconUser className="w-8 h-8 text-action" stroke={1.75} aria-hidden="true" />
             </div>
-            <h2 className="text-xl font-bold text-ink">
-              {needsProfile ? 'Create Your Profile' : 'Personalize Your Profile'}
+            <h2 className="text-title text-ink">
+              {needsProfile ? 'Create your profile' : 'Personalize your profile'}
             </h2>
-            <p className="text-sm text-ink-2 mt-2">
+            <p className="text-subhead text-ink-2 mt-2">
               {needsProfile
                 ? 'Set up your profile to share workouts and connect with other lifters.'
                 : 'Update your username to make it easier for friends to find you.'}
@@ -256,14 +250,14 @@ export function ProfilePromptModal({
               {/* Suggestions */}
               {suggestions.length > 0 && (hasAnonymousUsername || needsProfile || !username) && (
                 <div className="mt-2">
-                  <p className="text-xs text-ink-3 mb-1.5">Suggestions:</p>
+                  <p className="text-caption text-ink-3 mb-1.5">Suggestions</p>
                   <div className="flex flex-wrap gap-1.5">
                     {suggestions.slice(0, 3).map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion)}
-                        className="px-2.5 py-1 text-xs bg-fill hover:bg-sep text-ink-2 rounded-full transition-colors"
+                        className="px-2.5 py-1 text-caption bg-fill hover:bg-sep text-ink-2 rounded-full transition-colors"
                       >
                         @{suggestion}
                       </button>
@@ -275,10 +269,10 @@ export function ProfilePromptModal({
 
             {/* Display Name */}
             <Input
-              label="Display Name"
+              label="Display name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Your Name (optional)"
+              placeholder="Your name (optional)"
             />
           </div>
 
@@ -291,7 +285,7 @@ export function ProfilePromptModal({
               disabled={!username || !usernameAvailable || saving}
               isLoading={saving}
             >
-              {needsProfile ? 'Create Profile' : 'Save Changes'}
+              {needsProfile ? 'Create profile' : 'Save changes'}
             </Button>
 
             <div className="flex gap-3">
@@ -300,25 +294,24 @@ export function ProfilePromptModal({
                 className="flex-1"
                 onClick={onClose}
               >
-                {hasAnonymousUsername ? 'Keep Anonymous' : 'Maybe Later'}
+                {hasAnonymousUsername ? 'Keep anonymous' : 'Maybe later'}
               </Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 className="flex-1"
                 onClick={handleGoToFullSetup}
               >
-                Full Setup
+                Full setup
               </Button>
             </div>
           </div>
 
           {hasAnonymousUsername && (
-            <p className="text-xs text-ink-3 text-center mt-4">
-              You can share workouts anonymously with your current username
+            <p className="text-caption text-ink-3 text-center mt-4">
+              You can share workouts anonymously with your current username.
             </p>
           )}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }

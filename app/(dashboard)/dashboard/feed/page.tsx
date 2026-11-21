@@ -13,10 +13,10 @@ import { ModerationNotice } from '@/components/social/moderation';
 import { Avatar, ProfilePromptModal } from '@/components/social/profile';
 import { isAnonymousUsername } from '@/lib/social';
 import { SharedWorkoutCard } from '@/components/social/sharing/SharedWorkoutCard';
+import { CopyWorkoutSheet } from '@/components/social/sharing/CopyWorkoutSheet';
 import { useActivityFeed } from '@/hooks/useActivityFeed';
 import { useReactions } from '@/hooks/useReactions';
 import { useSharedWorkouts } from '@/hooks/useSharedWorkouts';
-import { copySharedWorkout } from '@/lib/workout-sharing';
 import { useUserStore } from '@/stores';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { createClient } from '@/lib/supabase/client';
@@ -27,6 +27,7 @@ import type { UserProfile, ProfileStats } from '@/types/social';
 import { LeaderboardTable, UserRankCard } from '@/components/social/leaderboards';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { fetchLifetimeSetStats } from '@/app/(dashboard)/dashboard/profile/_lib/lifetimeSetStats';
+import { IconBarbell, IconUsers, IconWorld } from '@tabler/icons-react';
 
 type TabType = 'following' | 'discover' | 'discover_workouts' | 'leaderboards' | 'profile';
 
@@ -53,22 +54,22 @@ const LEADERBOARD_TABS: Array<{
 }> = [
   {
     id: 'total_volume_week',
-    label: 'Weekly Volume',
+    label: 'Weekly volume',
     description: 'Total weight lifted this week',
   },
   {
     id: 'workouts_completed_week',
-    label: 'Weekly Workouts',
+    label: 'Weekly workouts',
     description: 'Workouts completed this week',
   },
   {
     id: 'total_volume_month',
-    label: 'Monthly Volume',
+    label: 'Monthly volume',
     description: 'Total weight lifted this month',
   },
   {
     id: 'workouts_completed_month',
-    label: 'Monthly Workouts',
+    label: 'Monthly workouts',
     description: 'Workouts completed this month',
   },
 ];
@@ -306,7 +307,7 @@ export default function FeedPage() {
         <div className="max-w-lg mx-auto py-8">
           <Card>
             <CardHeader>
-              <CardTitle>Create Your Profile</CardTitle>
+              <CardTitle>Create your profile</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-ink-2 mb-6">
@@ -314,7 +315,7 @@ export default function FeedPage() {
               </p>
               <Link href="/dashboard/profile/setup">
                 <Button variant="primary" className="w-full">
-                  Create Profile
+                  Create profile
                 </Button>
               </Link>
             </CardContent>
@@ -341,7 +342,7 @@ export default function FeedPage() {
             />
 
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold text-ink truncate">
+              <h1 className="text-title font-bold text-ink truncate">
                 {displayName}
               </h1>
               <p className="text-ink-2">@{profile.username}</p>
@@ -350,7 +351,7 @@ export default function FeedPage() {
                 <p className="mt-3 text-ink-2">{profile.bio}</p>
               )}
 
-              <div className="flex flex-wrap gap-2 mt-3 text-sm text-ink-2">
+              <div className="flex flex-wrap gap-2 mt-3 text-subhead text-ink-2">
                 {profile.training_experience && (
                   <span className="capitalize">{profile.training_experience}</span>
                 )}
@@ -365,7 +366,7 @@ export default function FeedPage() {
 
             <Link href="/dashboard/profile/edit">
               <Button variant="outline" size="sm">
-                Edit Profile
+                Edit profile
               </Button>
             </Link>
           </div>
@@ -373,10 +374,10 @@ export default function FeedPage() {
           {/* Stats */}
           <div className="flex items-center justify-around mt-6 pt-6 border-t border-sep">
             <div className="text-center">
-              <p className="text-2xl font-bold text-ink">
+              <p className="text-title font-bold text-ink">
                 {formatSocialCount(profile.workout_count)}
               </p>
-              <p className="text-sm text-ink-2">Workouts</p>
+              <p className="text-subhead text-ink-2">Workouts</p>
             </div>
 
             <div className="w-px h-10 bg-fill" />
@@ -385,10 +386,10 @@ export default function FeedPage() {
               href={`${getProfileUrl(profile.username)}/followers`}
               className="text-center hover:opacity-80 transition-opacity"
             >
-              <p className="text-2xl font-bold text-ink">
+              <p className="text-title font-bold text-ink">
                 {formatSocialCount(profile.follower_count)}
               </p>
-              <p className="text-sm text-ink-2">Followers</p>
+              <p className="text-subhead text-ink-2">Followers</p>
             </Link>
 
             <div className="w-px h-10 bg-fill" />
@@ -397,10 +398,10 @@ export default function FeedPage() {
               href={`${getProfileUrl(profile.username)}/following`}
               className="text-center hover:opacity-80 transition-opacity"
             >
-              <p className="text-2xl font-bold text-ink">
+              <p className="text-title font-bold text-ink">
                 {formatSocialCount(profile.following_count)}
               </p>
-              <p className="text-sm text-ink-2">Following</p>
+              <p className="text-subhead text-ink-2">Following</p>
             </Link>
           </div>
         </Card>
@@ -419,12 +420,12 @@ export default function FeedPage() {
                     className="flex items-center gap-2 px-3 py-2 bg-fill rounded-lg"
                     title={badge.description}
                   >
-                    <span className="text-xl">{badge.icon}</span>
+                    <span className="text-headline">{badge.icon}</span>
                     <div>
-                      <p className="text-sm font-medium text-ink">
+                      <p className="text-subhead font-medium text-ink">
                         {badge.name}
                       </p>
-                      <p className="text-xs text-ink-2">
+                      <p className="text-caption text-ink-2">
                         {badge.description}
                       </p>
                     </div>
@@ -439,36 +440,36 @@ export default function FeedPage() {
         {stats && (
           <Card>
             <CardHeader>
-              <CardTitle>Training Stats</CardTitle>
+              <CardTitle>Training stats</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-fill rounded-lg">
-                  <p className="text-2xl font-bold text-ink">
+                  <p className="text-title font-bold text-ink">
                     {stats.total_workouts}
                   </p>
-                  <p className="text-sm text-ink-2">Total Workouts</p>
+                  <p className="text-subhead text-ink-2">Total workouts</p>
                 </div>
 
                 <div className="p-4 bg-fill rounded-lg">
-                  <p className="text-2xl font-bold text-ink">
+                  <p className="text-title font-bold text-ink">
                     {stats.total_sets.toLocaleString()}
                   </p>
-                  <p className="text-sm text-ink-2">Total Sets</p>
+                  <p className="text-subhead text-ink-2">Total sets</p>
                 </div>
 
                 <div className="p-4 bg-fill rounded-lg">
-                  <p className="text-2xl font-bold text-ink">
+                  <p className="text-title font-bold text-ink">
                     {formatWeight(stats.total_volume_kg, units, 0)}
                   </p>
-                  <p className="text-sm text-ink-2">Total Volume</p>
+                  <p className="text-subhead text-ink-2">Total volume</p>
                 </div>
 
                 <div className="p-4 bg-fill rounded-lg">
-                  <p className="text-2xl font-bold text-ink">
+                  <p className="text-title font-bold text-ink">
                     {stats.current_streak}
                   </p>
-                  <p className="text-sm text-ink-2">Day Streak</p>
+                  <p className="text-subhead text-ink-2">Day streak</p>
                 </div>
               </div>
             </CardContent>
@@ -479,8 +480,8 @@ export default function FeedPage() {
         <Card>
           <CardContent className="flex items-center justify-between py-4">
             <div>
-              <p className="font-medium text-ink">Privacy Settings</p>
-              <p className="text-sm text-ink-2">
+              <p className="font-medium text-ink">Privacy settings</p>
+              <p className="text-subhead text-ink-2">
                 Profile is {profile.profile_visibility}
               </p>
             </div>
@@ -496,8 +497,8 @@ export default function FeedPage() {
         <Card>
           <CardContent className="flex items-center justify-between py-4">
             <div>
-              <p className="font-medium text-ink">Share Profile</p>
-              <p className="text-sm text-ink-2">
+              <p className="font-medium text-ink">Share profile</p>
+              <p className="text-subhead text-ink-2">
                 hypertrack.app{getProfileUrl(profile.username)}
               </p>
             </div>
@@ -510,7 +511,7 @@ export default function FeedPage() {
                 );
               }}
             >
-              Copy Link
+              Copy link
             </Button>
           </CardContent>
         </Card>
@@ -530,7 +531,7 @@ export default function FeedPage() {
               key={tab.id}
               onClick={() => setSelectedLeaderboardType(tab.id)}
               className={cn(
-                'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
+                'px-3 py-1.5 rounded-full text-caption font-medium whitespace-nowrap transition-colors',
                 selectedLeaderboardType === tab.id
                   ? 'bg-action text-on-action'
                   : 'bg-fill text-ink-2 hover:text-ink'
@@ -543,7 +544,7 @@ export default function FeedPage() {
 
         {/* Description */}
         {selectedTab && (
-          <p className="text-ink-2 text-sm">{selectedTab.description}</p>
+          <p className="text-ink-2 text-subhead">{selectedTab.description}</p>
         )}
 
         {/* User's rank card */}
@@ -553,8 +554,8 @@ export default function FeedPage() {
         {leaderboardError && (
           <Card>
             <CardContent className="text-center py-8">
-              <p className="text-error-400 mb-4">{leaderboardError}</p>
-              <Button onClick={refreshLeaderboard}>Try Again</Button>
+              <p className="text-status-bad mb-4">{leaderboardError}</p>
+              <Button onClick={refreshLeaderboard}>Try again</Button>
             </CardContent>
           </Card>
         )}
@@ -563,10 +564,7 @@ export default function FeedPage() {
         {!leaderboardError && (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <span className="text-2xl">🏆</span>
-                Top Lifters
-              </CardTitle>
+              <CardTitle>Top lifters</CardTitle>
             </CardHeader>
             <CardContent>
               <LeaderboardTable
@@ -599,7 +597,7 @@ export default function FeedPage() {
                   d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-sm text-ink-2">
+              <div className="text-subhead text-ink-2">
                 <p className="font-medium text-ink-2 mb-1">How rankings work</p>
                 <p>
                   Leaderboards update throughout the week as you complete workouts.
@@ -666,13 +664,13 @@ export default function FeedPage() {
               key={option}
               onClick={() => setSortBy(option)}
               className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize',
+                'px-4 py-2 rounded-full text-subhead font-medium transition-colors capitalize',
                 sortBy === option
                   ? 'bg-action text-on-action'
                   : 'bg-fill text-ink-2 hover:text-ink'
               )}
             >
-              {option === 'saves' ? 'Most Saved' : option === 'popular' ? 'Most Viewed' : 'Recent'}
+              {option === 'saves' ? 'Most saved' : option === 'popular' ? 'Most viewed' : 'Recent'}
             </button>
           ))}
         </div>
@@ -682,20 +680,20 @@ export default function FeedPage() {
           <div className="p-4 bg-card rounded-lg space-y-4 shadow-card">
             {/* Type filter */}
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-2">Type</label>
+              <label className="block text-subhead font-medium text-ink-2 mb-2">Type</label>
               <div className="flex flex-wrap gap-2">
                 {(['all', 'single_workout', 'template', 'program'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setShareType(type)}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
+                      'px-3 py-1.5 rounded-lg text-subhead transition-colors capitalize',
                       shareType === type
                         ? 'bg-action text-on-action'
                         : 'bg-fill text-ink-2 hover:text-ink'
                     )}
                   >
-                    {type === 'all' ? 'All Types' : type.replace('_', ' ')}
+                    {type === 'all' ? 'All types' : type.replace('_', ' ')}
                   </button>
                 ))}
               </div>
@@ -703,20 +701,20 @@ export default function FeedPage() {
 
             {/* Difficulty filter */}
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-2">Difficulty</label>
+              <label className="block text-subhead font-medium text-ink-2 mb-2">Difficulty</label>
               <div className="flex flex-wrap gap-2">
                 {(['all', 'beginner', 'intermediate', 'advanced'] as const).map((diff) => (
                   <button
                     key={diff}
                     onClick={() => setDifficulty(diff)}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
+                      'px-3 py-1.5 rounded-lg text-subhead transition-colors capitalize',
                       difficulty === diff
                         ? 'bg-action text-on-action'
                         : 'bg-fill text-ink-2 hover:text-ink'
                     )}
                   >
-                    {diff === 'all' ? 'All Levels' : diff}
+                    {diff === 'all' ? 'All levels' : diff}
                   </button>
                 ))}
               </div>
@@ -724,14 +722,14 @@ export default function FeedPage() {
 
             {/* Muscle groups filter */}
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-2">Muscle Groups</label>
+              <label className="block text-subhead font-medium text-ink-2 mb-2">Muscle groups</label>
               <div className="flex flex-wrap gap-2">
                 {MUSCLE_GROUPS.map((muscle) => (
                   <button
                     key={muscle}
                     onClick={() => toggleMuscle(muscle)}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
+                      'px-3 py-1.5 rounded-lg text-subhead transition-colors capitalize',
                       selectedMuscles.includes(muscle)
                         ? 'bg-action text-on-action'
                         : 'bg-fill text-ink-2 hover:text-ink'
@@ -747,7 +745,7 @@ export default function FeedPage() {
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="text-sm text-action transition-colors"
+                className="text-subhead text-action transition-colors"
               >
                 Clear all filters
               </button>
@@ -757,15 +755,15 @@ export default function FeedPage() {
 
         {workoutsError && (
           <div className="text-center py-8">
-            <p className="text-error-400 mb-4">{workoutsError}</p>
-            <Button onClick={refreshWorkouts}>Try Again</Button>
+            <p className="text-status-bad mb-4">{workoutsError}</p>
+            <Button onClick={refreshWorkouts}>Try again</Button>
           </div>
         )}
 
         {!workoutsError && workouts.length === 0 && !workoutsLoading && (
           <div className="text-center py-16">
-            <p className="text-5xl mb-4">🏋️</p>
-            <h2 className="text-xl font-semibold text-ink mb-2">
+            <IconBarbell className="mx-auto mb-4 h-10 w-10 text-ink-3" stroke={1.75} aria-hidden="true" />
+            <h2 className="text-headline font-semibold text-ink mb-2">
               No workouts found
             </h2>
             <p className="text-ink-2 max-w-sm mx-auto">
@@ -779,7 +777,7 @@ export default function FeedPage() {
                 className="mt-6"
                 onClick={clearFilters}
               >
-                Clear Filters
+                Clear filters
               </Button>
             )}
           </div>
@@ -809,7 +807,7 @@ export default function FeedPage() {
         {!workoutsLoading && hasMoreWorkouts && workouts.length > 0 && (
           <div className="flex justify-center py-8">
             <Button variant="outline" onClick={loadMoreWorkouts}>
-              Load More
+              Load more
             </Button>
           </div>
         )}
@@ -831,17 +829,15 @@ export default function FeedPage() {
       <>
         {error && (
           <div className="text-center py-8">
-            <p className="text-error-400 mb-4">{error}</p>
-            <Button onClick={refresh}>Try Again</Button>
+            <p className="text-status-bad mb-4">{error}</p>
+            <Button onClick={refresh}>Try again</Button>
           </div>
         )}
 
         {!error && activities.length === 0 && !feedLoading && (
           <div className="text-center py-16">
-            <p className="text-5xl mb-4">
-              {activeTab === 'following' ? '👥' : '🌎'}
-            </p>
-            <h2 className="text-xl font-semibold text-ink mb-2">
+            {activeTab === 'following' ? <IconUsers className="mx-auto mb-4 h-10 w-10 text-ink-3" stroke={1.75} aria-hidden="true" /> : <IconWorld className="mx-auto mb-4 h-10 w-10 text-ink-3" stroke={1.75} aria-hidden="true" />}
+            <h2 className="text-headline font-semibold text-ink mb-2">
               {activeTab === 'following'
                 ? 'No activities yet'
                 : 'Nothing to discover'}
@@ -857,7 +853,7 @@ export default function FeedPage() {
                 className="mt-6"
                 onClick={() => setActiveTab('discover')}
               >
-                Discover Lifters
+                Discover lifters
               </Button>
             )}
           </div>
@@ -894,7 +890,7 @@ export default function FeedPage() {
               variant="outline"
               onClick={loadMore}
             >
-              Load More
+              Load more
             </Button>
           </div>
         )}
@@ -921,8 +917,8 @@ export default function FeedPage() {
             : activeTab === 'leaderboards'
               ? 'Leaderboards'
               : activeTab === 'discover_workouts'
-                ? 'Discover Workouts'
-                : 'Activity Feed'
+                ? 'Discover workouts'
+                : 'Activity feed'
         }
         actions={
           activeTab !== 'profile' && (
@@ -955,7 +951,7 @@ export default function FeedPage() {
         <button
           onClick={() => setActiveTab('following')}
           className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            'px-4 py-2 rounded-full text-subhead font-medium transition-colors whitespace-nowrap',
             activeTab === 'following'
               ? 'bg-action text-on-action'
               : 'bg-fill text-ink-2 hover:text-ink'
@@ -966,7 +962,7 @@ export default function FeedPage() {
         <button
           onClick={() => setActiveTab('discover')}
           className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            'px-4 py-2 rounded-full text-subhead font-medium transition-colors whitespace-nowrap',
             activeTab === 'discover'
               ? 'bg-action text-on-action'
               : 'bg-fill text-ink-2 hover:text-ink'
@@ -977,7 +973,7 @@ export default function FeedPage() {
         <button
           onClick={() => setActiveTab('discover_workouts')}
           className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            'px-4 py-2 rounded-full text-subhead font-medium transition-colors whitespace-nowrap',
             activeTab === 'discover_workouts'
               ? 'bg-action text-on-action'
               : 'bg-fill text-ink-2 hover:text-ink'
@@ -988,7 +984,7 @@ export default function FeedPage() {
         <button
           onClick={() => setActiveTab('leaderboards')}
           className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            'px-4 py-2 rounded-full text-subhead font-medium transition-colors whitespace-nowrap',
             activeTab === 'leaderboards'
               ? 'bg-action text-on-action'
               : 'bg-fill text-ink-2 hover:text-ink'
@@ -999,7 +995,7 @@ export default function FeedPage() {
         <button
           onClick={() => setActiveTab('profile')}
           className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            'px-4 py-2 rounded-full text-subhead font-medium transition-colors whitespace-nowrap',
             activeTab === 'profile'
               ? 'bg-action text-on-action'
               : 'bg-fill text-ink-2 hover:text-ink'
@@ -1018,13 +1014,7 @@ export default function FeedPage() {
             ? renderDiscoverWorkoutsContent()
             : renderFeedContent()}
 
-      {/* Copy Modal */}
-      {copyModalWorkout && (
-        <CopyWorkoutModal
-          workout={copyModalWorkout}
-          onClose={() => setCopyModalWorkout(null)}
-        />
-      )}
+      <CopyWorkoutSheet workout={copyModalWorkout} onClose={() => setCopyModalWorkout(null)} />
 
       {/* Profile Prompt Modal */}
       <ProfilePromptModal
@@ -1040,99 +1030,6 @@ export default function FeedPage() {
         userEmail={userEmail}
         userName={userDisplayName}
       />
-    </div>
-  );
-}
-
-// Copy modal for copying shared workouts
-function CopyWorkoutModal({
-  workout,
-  onClose,
-}: {
-  workout: SharedWorkoutWithProfile;
-  onClose: () => void;
-}) {
-  const [isCopying, setIsCopying] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleCopy = async () => {
-    setIsCopying(true);
-    setError(null);
-
-    const supabase = createClient();
-    const result = await copySharedWorkout(workout.id, supabase);
-
-    if (result.success) {
-      setSuccess(true);
-      setTimeout(onClose, 1500);
-    } else {
-      setError(result.error || 'Failed to copy workout');
-      setIsCopying(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-card rounded-card overflow-hidden shadow-card">
-        <div className="p-6">
-          <h2 className="text-lg font-semibold text-ink mb-2">
-            Copy Workout
-          </h2>
-          <p className="text-sm text-ink-2 mb-4">
-            This will add &quot;{workout.title}&quot; to your workout templates.
-          </p>
-
-          {/* Exercise preview */}
-          <div className="bg-fill/50 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
-            <p className="text-xs font-medium text-ink-2 mb-2">Exercises included:</p>
-            <div className="space-y-1">
-              {workout.workout_data?.exercises?.map((exercise, index) => (
-                <div key={index} className="flex justify-between text-sm">
-                  <span className="text-ink">{exercise.exercise_name}</span>
-                  <span className="text-ink-2">
-                    {exercise.sets} x {exercise.rep_range[0]}-{exercise.rep_range[1]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 bg-error-900/20 border border-error-500 rounded-lg">
-              <p className="text-sm text-error-400">{error}</p>
-            </div>
-          )}
-
-          {success ? (
-            <div className="flex items-center justify-center gap-2 py-4 text-status-ok">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span>Workout copied successfully!</span>
-            </div>
-          ) : (
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                disabled={isCopying}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleCopy}
-                disabled={isCopying}
-                className="flex-1"
-              >
-                {isCopying ? 'Copying...' : 'Copy to My Workouts'}
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

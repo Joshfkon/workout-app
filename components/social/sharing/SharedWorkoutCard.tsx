@@ -22,7 +22,7 @@ interface SharedWorkoutCardProps {
 const difficultyColors: Record<Difficulty, string> = {
   beginner: 'bg-status-ok/20 text-status-ok',
   intermediate: 'bg-status-warn/20 text-status-warn',
-  advanced: 'bg-error-500/20 text-error-400',
+  advanced: 'bg-status-bad-tint text-status-bad',
 };
 
 export function SharedWorkoutCard({
@@ -59,11 +59,11 @@ export function SharedWorkoutCard({
             <div className="min-w-0">
               <Link
                 href={`/dashboard/profile/${workout.user_profile.username}`}
-                className="text-sm font-medium text-ink hover:text-ink"
+                className="text-subhead font-medium text-ink hover:text-ink"
               >
                 {workout.user_profile.display_name || workout.user_profile.username}
               </Link>
-              <p className="text-xs text-ink-3">
+              <p className="text-caption text-ink-3">
                 @{workout.user_profile.username} &middot; {formatDistanceToNow(workout.created_at)}
               </p>
             </div>
@@ -72,14 +72,14 @@ export function SharedWorkoutCard({
             {workout.difficulty && (
               <span
                 className={cn(
-                  'px-2 py-0.5 rounded-full text-xs font-medium capitalize',
+                  'px-2 py-0.5 rounded-full text-caption font-medium capitalize',
                   difficultyColors[workout.difficulty]
                 )}
               >
                 {workout.difficulty}
               </span>
             )}
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-fill text-ink-2 capitalize">
+            <span className="px-2 py-0.5 rounded-full text-caption font-medium bg-fill text-ink-2 capitalize">
               {workout.share_type.replace('_', ' ')}
             </span>
             <ContentActionsMenu
@@ -95,19 +95,19 @@ export function SharedWorkoutCard({
         <div className="mt-3">
           <Link
             href={`/dashboard/discover/${workout.id}`}
-            className="text-lg font-semibold text-ink hover:text-action transition-colors"
+            className="text-headline font-semibold text-ink hover:text-action transition-colors"
           >
             {workout.title}
           </Link>
           {workout.description && (
-            <p className="mt-1 text-sm text-ink-2 line-clamp-2">
+            <p className="mt-1 text-subhead text-ink-2 line-clamp-2">
               {workout.description}
             </p>
           )}
         </div>
 
         {/* Stats */}
-        <div className="mt-4 flex items-center gap-4 text-sm text-ink-2">
+        <div className="mt-4 flex items-center gap-4 text-subhead text-ink-2">
           <div className="flex items-center gap-1.5">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -134,13 +134,13 @@ export function SharedWorkoutCard({
             {workout.target_muscle_groups.slice(0, 5).map((muscle) => (
               <span
                 key={muscle}
-                className="px-2 py-0.5 rounded-full text-xs bg-action/10 text-action capitalize"
+                className="px-2 py-0.5 rounded-full text-caption bg-action/10 text-action capitalize"
               >
                 {muscle}
               </span>
             ))}
             {workout.target_muscle_groups.length > 5 && (
-              <span className="px-2 py-0.5 rounded-full text-xs bg-fill text-ink-2">
+              <span className="px-2 py-0.5 rounded-full text-caption bg-fill text-ink-2">
                 +{workout.target_muscle_groups.length - 5} more
               </span>
             )}
@@ -150,12 +150,12 @@ export function SharedWorkoutCard({
         {/* Expandable exercise list */}
         {isExpanded && workout.workout_data?.exercises && (
           <div className="mt-4 p-3 bg-fill/50 rounded-lg">
-            <p className="text-xs font-medium text-ink-2 mb-2">Exercises</p>
+            <p className="text-caption font-medium text-ink-2 mb-2">Exercises</p>
             <div className="space-y-2">
               {workout.workout_data.exercises.map((exercise, index) => (
                 <div
                   key={index}
-                  className="flex items-center justify-between text-sm"
+                  className="flex items-center justify-between text-subhead"
                 >
                   <span className="text-ink">{exercise.exercise_name}</span>
                   <span className="text-ink-2">
@@ -171,7 +171,7 @@ export function SharedWorkoutCard({
 
       {/* Footer actions */}
       <div className="px-4 py-3 bg-fill/30 border-t border-sep flex items-center justify-between">
-        <div className="flex items-center gap-4 text-xs text-ink-3">
+        <div className="flex items-center gap-4 text-caption text-ink-3">
           <span className="flex items-center gap-1">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -189,14 +189,14 @@ export function SharedWorkoutCard({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="px-3 py-1.5 text-xs font-medium text-ink-2 hover:text-ink transition-colors"
+            className="px-3 py-1.5 text-caption font-medium text-ink-2 hover:text-ink transition-colors"
           >
             {isExpanded ? 'Less' : 'More'}
           </button>
           {onCopy && (
             <button
               onClick={() => onCopy(workout)}
-              className="px-3 py-1.5 text-xs font-medium bg-sep hover:bg-sep text-ink rounded-lg transition-colors"
+              className="px-3 py-1.5 text-caption font-medium bg-sep hover:bg-sep text-ink rounded-lg transition-colors"
             >
               Copy
             </button>

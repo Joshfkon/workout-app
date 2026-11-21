@@ -66,21 +66,21 @@ export function CommentItem({ comment, currentUserId, onReply, onDelete, depth =
             <div className="flex-1 min-w-0">
               <Link
                 href={comment.user_profile ? getProfileUrl(comment.user_profile.username) : '#'}
-                className="font-medium text-ink hover:underline text-sm"
+                className="font-medium text-ink hover:underline text-subhead"
               >
                 {displayName}
               </Link>
-              <p className="text-sm text-ink-2 mt-1 whitespace-pre-wrap break-words">
+              <p className="text-subhead text-ink-2 mt-1 whitespace-pre-wrap break-words">
                 {comment.content}
               </p>
               <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs text-ink-2">
+                <span className="text-caption text-ink-2">
                   {formatRelativeTime(comment.created_at)}
                 </span>
                 {currentUserId && depth < maxDepth && onReply && (
                   <button
                     onClick={() => setIsReplying(!isReplying)}
-                    className="text-xs text-ink-2 hover:text-ink transition-colors"
+                    className="text-caption text-ink-2 hover:text-ink transition-colors"
                   >
                     Reply
                   </button>
@@ -89,7 +89,7 @@ export function CommentItem({ comment, currentUserId, onReply, onDelete, depth =
                   <button
                     onClick={handleDelete}
                     disabled={isDeleting}
-                    className="text-xs text-ink-2 hover:text-error-400 transition-colors disabled:opacity-50"
+                    className="text-caption text-ink-2 hover:text-status-bad transition-colors disabled:opacity-50"
                   >
                     {isDeleting ? 'Deleting...' : 'Delete'}
                   </button>

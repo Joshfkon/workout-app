@@ -7,6 +7,7 @@ import { ProfileCard } from './profile/ProfileCard';
 import { debounce } from '@/lib/utils';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import type { UserProfile } from '@/types/social';
+import { IconSearch, IconUsers } from '@tabler/icons-react';
 
 interface UserSearchProps {
   onSelectUser?: (profile: UserProfile) => void;
@@ -134,18 +135,18 @@ export function UserSearch({
       {/* Empty state */}
       {hasSearched && results.length === 0 && query.length >= 2 && (
         <div className="mt-8 text-center text-ink-2">
-          <p className="text-4xl mb-3">🔍</p>
-          <p>No users found for &quot;{query}&quot;</p>
-          <p className="text-sm mt-1">Try a different search term</p>
+          <IconSearch className="mx-auto mb-3 h-8 w-8 text-ink-3" stroke={1.75} aria-hidden="true" />
+          <p className="text-body">No users found for &quot;{query}&quot;</p>
+          <p className="text-subhead mt-1">Try a different search term</p>
         </div>
       )}
 
       {/* Hint */}
       {!hasSearched && !query && (
         <div className="mt-8 text-center text-ink-2">
-          <p className="text-4xl mb-3">👥</p>
-          <p>Search for other lifters</p>
-          <p className="text-sm mt-1">Find friends by username or name</p>
+          <IconUsers className="mx-auto mb-3 h-8 w-8 text-ink-3" stroke={1.75} aria-hidden="true" />
+          <p className="text-body">Search for other lifters</p>
+          <p className="text-subhead mt-1">Find friends by username or name</p>
         </div>
       )}
     </div>

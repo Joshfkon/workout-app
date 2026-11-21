@@ -15,6 +15,7 @@ import { formatSocialCount } from '@/lib/social';
 import { formatWeight } from '@/lib/utils';
 import { useUserStore } from '@/stores/userStore';
 import type { UserProfile, FollowRelationship } from '@/types/social';
+import { IconLock, IconUser } from '@tabler/icons-react';
 
 export default function UserProfilePage() {
   useDocumentTitle('User Profile');
@@ -184,9 +185,9 @@ export default function UserProfilePage() {
       <div className="max-w-lg mx-auto px-4 py-8">
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-6xl mb-4">👤</p>
-            <h2 className="text-xl font-semibold text-ink mb-2">
-              User Not Found
+            <IconUser className="mx-auto mb-4 h-10 w-10 text-ink-3" stroke={1.75} aria-hidden="true" />
+            <h2 className="text-headline font-semibold text-ink mb-2">
+              User not found
             </h2>
             <p className="text-ink-2 mb-6">
               The user @{username} doesn&apos;t exist or their profile is private.
@@ -222,7 +223,7 @@ export default function UserProfilePage() {
       return (
         <Link href="/dashboard/profile/edit">
           <Button variant="outline" size="sm">
-            Edit Profile
+            Edit profile
           </Button>
         </Link>
       );
@@ -279,11 +280,11 @@ export default function UserProfilePage() {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-ink truncate">
+              <h1 className="text-title font-bold text-ink truncate">
                 {displayName}
               </h1>
               {followRelationship.is_followed_by && !isOwnProfile && (
-                <span className="px-2 py-0.5 text-xs bg-fill text-ink-2 rounded">
+                <span className="px-2 py-0.5 text-caption bg-fill text-ink-2 rounded">
                   Follows you
                 </span>
               )}
@@ -294,7 +295,7 @@ export default function UserProfilePage() {
               <p className="mt-3 text-ink-2">{profile.bio}</p>
             )}
 
-            <div className="flex flex-wrap gap-2 mt-3 text-sm text-ink-2">
+            <div className="flex flex-wrap gap-2 mt-3 text-subhead text-ink-2">
               {profile.training_experience && (
                 <span className="capitalize">{profile.training_experience}</span>
               )}
@@ -322,28 +323,28 @@ export default function UserProfilePage() {
         {!isPrivateAndNotFollowing && (
           <div className="flex items-center justify-around mt-6 pt-6 border-t border-sep">
             <div className="text-center">
-              <p className="text-2xl font-bold text-ink">
+              <p className="text-title font-bold text-ink">
                 {profile.show_stats ? formatSocialCount(profile.workout_count) : '-'}
               </p>
-              <p className="text-sm text-ink-2">Workouts</p>
+              <p className="text-subhead text-ink-2">Workouts</p>
             </div>
 
             <div className="w-px h-10 bg-fill" />
 
             <div className="text-center">
-              <p className="text-2xl font-bold text-ink">
+              <p className="text-title font-bold text-ink">
                 {formatSocialCount(profile.follower_count)}
               </p>
-              <p className="text-sm text-ink-2">Followers</p>
+              <p className="text-subhead text-ink-2">Followers</p>
             </div>
 
             <div className="w-px h-10 bg-fill" />
 
             <div className="text-center">
-              <p className="text-2xl font-bold text-ink">
+              <p className="text-title font-bold text-ink">
                 {formatSocialCount(profile.following_count)}
               </p>
-              <p className="text-sm text-ink-2">Following</p>
+              <p className="text-subhead text-ink-2">Following</p>
             </div>
           </div>
         )}
@@ -353,9 +354,9 @@ export default function UserProfilePage() {
       {isPrivateAndNotFollowing && (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-4xl mb-3">🔒</p>
-            <h3 className="text-lg font-semibold text-ink mb-2">
-              This Account is Private
+            <IconLock className="mx-auto mb-4 h-10 w-10 text-ink-3" stroke={1.75} aria-hidden="true" />
+            <h3 className="text-headline font-semibold text-ink mb-2">
+              This account is private
             </h3>
             <p className="text-ink-2">
               Follow this account to see their workouts and activity.
@@ -378,9 +379,9 @@ export default function UserProfilePage() {
                   className="flex items-center gap-2 px-3 py-2 bg-fill rounded-lg"
                   title={badge.description}
                 >
-                  <span className="text-xl">{badge.icon}</span>
+                  <span className="text-headline">{badge.icon}</span>
                   <div>
-                    <p className="text-sm font-medium text-ink">
+                    <p className="text-subhead font-medium text-ink">
                       {badge.name}
                     </p>
                   </div>
@@ -395,22 +396,22 @@ export default function UserProfilePage() {
       {!isPrivateAndNotFollowing && profile.show_stats && (
         <Card>
           <CardHeader>
-            <CardTitle>Training Stats</CardTitle>
+            <CardTitle>Training stats</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-fill rounded-lg">
-                <p className="text-2xl font-bold text-ink">
+                <p className="text-title font-bold text-ink">
                   {profile.workout_count}
                 </p>
-                <p className="text-sm text-ink-2">Total Workouts</p>
+                <p className="text-subhead text-ink-2">Total workouts</p>
               </div>
 
               <div className="p-4 bg-fill rounded-lg">
-                <p className="text-2xl font-bold text-ink">
+                <p className="text-title font-bold text-ink">
                   {formatWeight(profile.total_volume_kg, units, 0)}
                 </p>
-                <p className="text-sm text-ink-2">Total Volume</p>
+                <p className="text-subhead text-ink-2">Total volume</p>
               </div>
             </div>
           </CardContent>
@@ -421,7 +422,7 @@ export default function UserProfilePage() {
       {!isPrivateAndNotFollowing && profile.show_workouts && (
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle>Recent activity</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-center text-ink-2 py-8">

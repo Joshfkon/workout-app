@@ -13,17 +13,9 @@ interface LeaderboardEntryProps {
   isCurrentUser?: boolean;
 }
 
-function getRankBadge(rank: number): { emoji: string; className: string } | null {
-  switch (rank) {
-    case 1:
-      return { emoji: '🥇', className: 'bg-yellow-500/20 text-yellow-400' };
-    case 2:
-      return { emoji: '🥈', className: 'bg-gray-400/20 text-gray-300' };
-    case 3:
-      return { emoji: '🥉', className: 'bg-amber-600/20 text-amber-500' };
-    default:
-      return null;
-  }
+/** The podium (top three) gets a tinted rank pill; everyone else a plain number. */
+function isPodium(rank: number): boolean {
+  return rank >= 1 && rank <= 3;
 }
 
 function formatScore(score: number, type: LeaderboardType, units: 'kg' | 'lb'): string {
@@ -49,7 +41,6 @@ export function LeaderboardEntry({
   units,
   isCurrentUser = false,
 }: LeaderboardEntryProps) {
-  const rankBadge = getRankBadge(entry.rank);
   const rankChange = entry.rank_change;
 
   return (
@@ -57,16 +48,21 @@ export function LeaderboardEntry({
       className={cn(
         'flex items-center gap-3 p-3 rounded-lg transition-colors',
         isCurrentUser
-          ? 'bg-action/10 border border-action/30'
+          ? 'bg-action-tint'
           : 'bg-fill/50 hover:bg-fill'
       )}
     >
       {/* Rank */}
       <div className="w-10 flex-shrink-0 text-center">
-        {rankBadge ? (
-          <span className="text-2xl">{rankBadge.emoji}</span>
+        {isPodium(entry.rank) ? (
+          <span
+            className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-action-tint text-headline tabular-nums text-action"
+            aria-label={`Rank ${entry.rank}`}
+          >
+            {entry.rank}
+          </span>
         ) : (
-          <span className="text-lg font-bold text-ink-2">#{entry.rank}</span>
+          <span className="text-headline tabular-nums text-ink-2">#{entry.rank}</span>
         )}
       </div>
 
@@ -81,26 +77,26 @@ export function LeaderboardEntry({
           size="sm"
         />
         <div className="min-w-0">
-          <p className="font-medium text-ink truncate">
+          <p className="text-body font-medium text-ink truncate">
             {entry.user_profile.display_name || entry.user_profile.username}
             {isCurrentUser && (
-              <span className="ml-2 text-xs text-action">(You)</span>
+              <span className="ml-2 text-caption text-action">(You)</span>
             )}
           </p>
-          <p className="text-xs text-ink-3">@{entry.user_profile.username}</p>
+          <p className="text-caption text-ink-3">@{entry.user_profile.username}</p>
         </div>
       </Link>
 
       {/* Score */}
       <div className="text-right">
-        <p className="font-bold text-ink">
+        <p className="text-headline tabular-nums text-ink">
           {formatScore(entry.score, type, units)}
         </p>
         {rankChange !== 0 && (
           <p
             className={cn(
-              'text-xs flex items-center justify-end gap-0.5',
-              rankChange > 0 ? 'text-status-ok' : 'text-error-400'
+              'text-caption flex items-center justify-end gap-0.5',
+              rankChange > 0 ? 'text-status-ok' : 'text-status-bad'
             )}
           >
             {rankChange > 0 ? (

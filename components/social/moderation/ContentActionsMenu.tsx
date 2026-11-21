@@ -169,7 +169,7 @@ export function ContentActionsMenu({
                 Block {who}
               </Button>
             )}
-            {error && <p className="text-sm text-error-400">{error}</p>}
+            {error && <p className="text-subhead text-status-bad">{error}</p>}
           </div>
         )}
 
@@ -183,7 +183,7 @@ export function ContentActionsMenu({
               onChange={(e) => setReason(e.target.value as ReportReason)}
             />
             <div>
-              <label htmlFor={`report-note-${targetId}`} className="block text-sm font-medium text-ink mb-1.5">
+              <label htmlFor={`report-note-${targetId}`} className="block text-subhead font-medium text-ink mb-1.5">
                 Details (optional)
               </label>
               <textarea
@@ -196,8 +196,8 @@ export function ContentActionsMenu({
                 placeholder="Anything that helps us review this"
               />
             </div>
-            {error && <p className="text-sm text-error-400">{error}</p>}
-            <p className="text-xs text-ink-2">
+            {error && <p className="text-subhead text-status-bad">{error}</p>}
+            <p className="text-caption text-ink-2">
               Reports are reviewed within 24 hours. Content that breaks our rules is removed and the
               account behind it may be suspended.
             </p>
@@ -214,14 +214,14 @@ export function ContentActionsMenu({
 
         {step === 'reported' && (
           <div className="space-y-4">
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               Thanks. We review reports within 24 hours. You can also reach us at{' '}
               <a href={`mailto:${MODERATION_CONTACT_EMAIL}`} className="text-action hover:underline">
                 {MODERATION_CONTACT_EMAIL}
               </a>
               .
             </p>
-            {error && <p className="text-sm text-error-400">{error}</p>}
+            {error && <p className="text-subhead text-status-bad">{error}</p>}
             <ModalFooter>
               {!alreadyBlocked && (
                 <Button variant="danger" onClick={handleBlock} isLoading={isSubmitting}>
@@ -237,11 +237,11 @@ export function ContentActionsMenu({
 
         {step === 'confirm-block' && (
           <div className="space-y-4">
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               You will no longer see their posts, comments, profile or shared workouts, and you will
               stop following each other. They are not told that you blocked them.
             </p>
-            {error && <p className="text-sm text-error-400">{error}</p>}
+            {error && <p className="text-subhead text-status-bad">{error}</p>}
             <ModalFooter>
               <Button variant="secondary" onClick={close} disabled={isSubmitting}>
                 Cancel
@@ -255,7 +255,7 @@ export function ContentActionsMenu({
 
         {step === 'blocked' && (
           <div className="space-y-4">
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               You won&apos;t see content from {who} any more. You can unblock them from their profile.
             </p>
             <ModalFooter>
