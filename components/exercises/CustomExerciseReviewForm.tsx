@@ -98,10 +98,10 @@ export function CustomExerciseReviewForm({
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
-        <h2 className="text-xl font-semibold text-ink">
+        <h2 className="text-headline font-semibold text-ink">
           Ready to save
         </h2>
-        <p className="text-sm text-ink-2 mt-1">
+        <p className="text-subhead text-ink-2 mt-1">
           AI completed the exercise details. Review the summary and save, or adjust details if needed.
         </p>
       </div>
@@ -110,11 +110,11 @@ export function CustomExerciseReviewForm({
       <div className="bg-fill rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-ink-2">Exercise Name</p>
-            <p className="text-lg font-medium text-ink">{formData.name}</p>
+            <p className="text-subhead text-ink-2">Exercise name</p>
+            <p className="text-headline font-medium text-ink">{formData.name}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-ink-2">Equipment</p>
+            <p className="text-subhead text-ink-2">Equipment</p>
             <p className="text-ink capitalize">{formData.equipment}</p>
           </div>
         </div>
@@ -124,8 +124,8 @@ export function CustomExerciseReviewForm({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {summaryFacts.map(({ label, value }) => (
           <div key={label} className="bg-fill/60 rounded-lg px-3 py-2">
-            <p className="text-xs text-ink-3">{label}</p>
-            <p className="text-sm font-medium text-ink">{value}</p>
+            <p className="text-caption text-ink-3">{label}</p>
+            <p className="text-subhead font-medium text-ink">{value}</p>
           </div>
         ))}
       </div>
@@ -142,7 +142,7 @@ export function CustomExerciseReviewForm({
           <p className="text-status-warn font-medium">
             AI review didn&apos;t run — these are defaults
           </p>
-          <p className="text-sm text-status-warn/80 mt-1">
+          <p className="text-subhead text-status-warn/80 mt-1">
             The muscle assignments below were not reviewed. Check the muscles
             section before saving; the exercise will also be flagged for an AI
             review on the Exercises page once it&apos;s available.
@@ -162,7 +162,7 @@ export function CustomExerciseReviewForm({
           <p className="text-status-bad font-medium mb-2">
             Please fix the following errors:
           </p>
-          <ul className="list-disc list-inside text-sm text-status-bad space-y-1">
+          <ul className="list-disc list-inside text-subhead text-status-bad space-y-1">
             {validation.errors.map((error, i) => (
               <li key={i}>{error}</li>
             ))}
@@ -174,7 +174,7 @@ export function CustomExerciseReviewForm({
       {validation && validation.warnings.length > 0 && (
         <div className="bg-status-warn/15 border border-status-warn rounded-lg p-4">
           <p className="text-status-warn font-medium mb-2">Suggestions:</p>
-          <ul className="list-disc list-inside text-sm text-status-warn space-y-1">
+          <ul className="list-disc list-inside text-subhead text-status-warn space-y-1">
             {validation.warnings.map((warning, i) => (
               <li key={i}>{warning}</li>
             ))}
@@ -189,7 +189,7 @@ export function CustomExerciseReviewForm({
         onClick={() => setShowDetails((prev) => !prev)}
         disabled={hasErrors}
         className="w-full flex items-center justify-between rounded-lg border border-sep
-          bg-fill/50 px-4 py-3 text-sm font-medium text-ink
+          bg-fill/50 px-4 py-3 text-subhead font-medium text-ink
           hover:bg-fill transition-colors disabled:opacity-60 disabled:cursor-default"
       >
         <span>{detailsVisible ? 'Hide advanced details' : 'Adjust advanced details (optional)'}</span>
@@ -211,7 +211,7 @@ export function CustomExerciseReviewForm({
           <AccordionTrigger id="muscles">
             <span className="flex items-center gap-2">
               Muscles
-              <span className="text-sm text-ink-3">
+              <span className="text-subhead text-ink-3">
                 ({formData.secondaryMuscles.length} secondary,{' '}
                 {formData.stabilizers.length} stabilizers)
               </span>
@@ -220,7 +220,7 @@ export function CustomExerciseReviewForm({
           <AccordionContent id="muscles">
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-ink-2 mb-1">Primary</p>
+                <p className="text-subhead text-ink-2 mb-1">Primary</p>
                 <p className="text-ink capitalize">
                   {formData.primaryMuscle}
                 </p>
@@ -228,7 +228,7 @@ export function CustomExerciseReviewForm({
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-ink-2">Secondary Muscles</p>
+                  <p className="text-subhead text-ink-2">Secondary muscles</p>
                   <button
                     type="button"
                     onClick={() =>
@@ -236,7 +236,7 @@ export function CustomExerciseReviewForm({
                         editingSection === 'secondary' ? null : 'secondary'
                       )
                     }
-                    className="text-xs text-action"
+                    className="text-caption text-action"
                   >
                     {editingSection === 'secondary' ? 'Done' : 'Edit'}
                   </button>
@@ -260,7 +260,7 @@ export function CustomExerciseReviewForm({
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-ink-2">Stabilizer Muscles</p>
+                  <p className="text-subhead text-ink-2">Stabilizer muscles</p>
                   <button
                     type="button"
                     onClick={() =>
@@ -268,7 +268,7 @@ export function CustomExerciseReviewForm({
                         editingSection === 'stabilizers' ? null : 'stabilizers'
                       )
                     }
-                    className="text-xs text-action"
+                    className="text-caption text-action"
                   >
                     {editingSection === 'stabilizers' ? 'Done' : 'Edit'}
                   </button>
@@ -295,25 +295,25 @@ export function CustomExerciseReviewForm({
 
         {/* Movement Properties Section */}
         <AccordionItem id="movement">
-          <AccordionTrigger id="movement">Movement Properties</AccordionTrigger>
+          <AccordionTrigger id="movement">Movement properties</AccordionTrigger>
           <AccordionContent id="movement">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-ink-2 mb-1">Pattern</p>
+                <p className="text-subhead text-ink-2 mb-1">Pattern</p>
                 <Select
                   options={[
-                    { value: 'horizontal_push', label: 'Horizontal Push' },
-                    { value: 'horizontal_pull', label: 'Horizontal Pull' },
-                    { value: 'vertical_push', label: 'Vertical Push' },
-                    { value: 'vertical_pull', label: 'Vertical Pull' },
-                    { value: 'hip_hinge', label: 'Hip Hinge' },
+                    { value: 'horizontal_push', label: 'Horizontal push' },
+                    { value: 'horizontal_pull', label: 'Horizontal pull' },
+                    { value: 'vertical_push', label: 'Vertical push' },
+                    { value: 'vertical_pull', label: 'Vertical pull' },
+                    { value: 'hip_hinge', label: 'Hip hinge' },
                     { value: 'squat', label: 'Squat' },
                     { value: 'lunge', label: 'Lunge' },
-                    { value: 'knee_flexion', label: 'Knee Flexion' },
-                    { value: 'elbow_flexion', label: 'Elbow Flexion' },
-                    { value: 'elbow_extension', label: 'Elbow Extension' },
-                    { value: 'shoulder_isolation', label: 'Shoulder Isolation' },
-                    { value: 'calf_raise', label: 'Calf Raise' },
+                    { value: 'knee_flexion', label: 'Knee flexion' },
+                    { value: 'elbow_flexion', label: 'Elbow flexion' },
+                    { value: 'elbow_extension', label: 'Elbow extension' },
+                    { value: 'shoulder_isolation', label: 'Shoulder isolation' },
+                    { value: 'calf_raise', label: 'Calf raise' },
                     { value: 'core', label: 'Core' },
                     { value: 'isolation', label: 'Isolation' },
                     { value: 'carry', label: 'Carry' },
@@ -324,7 +324,7 @@ export function CustomExerciseReviewForm({
               </div>
 
               <div>
-                <p className="text-sm text-ink-2 mb-1">Mechanic</p>
+                <p className="text-subhead text-ink-2 mb-1">Mechanic</p>
                 <Select
                   options={[
                     { value: 'compound', label: 'Compound' },
@@ -338,7 +338,7 @@ export function CustomExerciseReviewForm({
               </div>
 
               <div>
-                <p className="text-sm text-ink-2 mb-1">Difficulty</p>
+                <p className="text-subhead text-ink-2 mb-1">Difficulty</p>
                 <Select
                   options={[
                     { value: 'beginner', label: 'Beginner' },
@@ -351,7 +351,7 @@ export function CustomExerciseReviewForm({
               </div>
 
               <div>
-                <p className="text-sm text-ink-2 mb-1">Fatigue Rating</p>
+                <p className="text-subhead text-ink-2 mb-1">Fatigue rating</p>
                 <Select
                   options={[
                     { value: '1', label: 'Low (1/3)' },
@@ -374,7 +374,7 @@ export function CustomExerciseReviewForm({
           <AccordionContent id="loading">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-ink-2 mb-1">Rep Range</p>
+                <p className="text-subhead text-ink-2 mb-1">Rep range</p>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
@@ -407,7 +407,7 @@ export function CustomExerciseReviewForm({
               </div>
 
               <div>
-                <p className="text-sm text-ink-2 mb-1">Default RIR</p>
+                <p className="text-subhead text-ink-2 mb-1">Default RIR</p>
                 <Input
                   type="number"
                   value={formData.defaultRir}
@@ -418,7 +418,7 @@ export function CustomExerciseReviewForm({
               </div>
 
               <div className="col-span-2">
-                <p className="text-sm text-ink-2 mb-1">
+                <p className="text-subhead text-ink-2 mb-1">
                   Min Weight Increment (kg)
                 </p>
                 <Input
@@ -441,7 +441,7 @@ export function CustomExerciseReviewForm({
           <AccordionContent id="safety">
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-ink-2 mb-1">Spinal Loading</p>
+                <p className="text-subhead text-ink-2 mb-1">Spinal loading</p>
                 <Select
                   options={[
                     { value: 'none', label: 'None' },
@@ -455,7 +455,7 @@ export function CustomExerciseReviewForm({
               </div>
 
               <div>
-                <p className="text-sm text-ink-2 mb-2">Spinal Requirements</p>
+                <p className="text-subhead text-ink-2 mb-2">Spinal requirements</p>
                 <div className="space-y-2">
                   {[
                     { key: 'requiresBackArch', label: 'Requires back arch' },
@@ -473,14 +473,14 @@ export function CustomExerciseReviewForm({
                         className="w-4 h-4 rounded bg-fill border-sep
                           text-action focus:ring-action"
                       />
-                      <span className="text-sm text-ink-2">{label}</span>
+                      <span className="text-subhead text-ink-2">{label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div>
-                <p className="text-sm text-ink-2 mb-2">Position Stress</p>
+                <p className="text-subhead text-ink-2 mb-2">Position stress</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { key: 'lowerBack', label: 'Lower Back' },
@@ -505,20 +505,20 @@ export function CustomExerciseReviewForm({
                         className="w-4 h-4 rounded bg-fill border-sep
                           text-action focus:ring-action"
                       />
-                      <span className="text-sm text-ink-2">{label}</span>
+                      <span className="text-subhead text-ink-2">{label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div>
-                <p className="text-sm text-ink-2 mb-2">Contraindications</p>
+                <p className="text-subhead text-ink-2 mb-2">Contraindications</p>
                 <div className="flex flex-wrap gap-2">
                   {formData.contraindications.map((c, i) => (
                     <span
                       key={i}
                       className="inline-flex items-center gap-1 px-2 py-1 bg-status-bad/15
-                        text-status-bad text-sm rounded"
+                        text-status-bad text-subhead rounded"
                     >
                       {c.replace(/_/g, ' ')}
                       <button
@@ -539,15 +539,15 @@ export function CustomExerciseReviewForm({
                 <Select
                   options={[
                     { value: '', label: 'Add contraindication...' },
-                    { value: 'herniated_disc', label: 'Herniated Disc' },
-                    { value: 'lower_back_strain', label: 'Lower Back Strain' },
-                    { value: 'shoulder_impingement', label: 'Shoulder Impingement' },
-                    { value: 'rotator_cuff_injury', label: 'Rotator Cuff Injury' },
-                    { value: 'knee_injury', label: 'Knee Injury' },
-                    { value: 'wrist_injury', label: 'Wrist Injury' },
-                    { value: 'elbow_injury', label: 'Elbow Injury' },
-                    { value: 'hip_injury', label: 'Hip Injury' },
-                    { value: 'neck_injury', label: 'Neck Injury' },
+                    { value: 'herniated_disc', label: 'Herniated disc' },
+                    { value: 'lower_back_strain', label: 'Lower back strain' },
+                    { value: 'shoulder_impingement', label: 'Shoulder impingement' },
+                    { value: 'rotator_cuff_injury', label: 'Rotator cuff injury' },
+                    { value: 'knee_injury', label: 'Knee injury' },
+                    { value: 'wrist_injury', label: 'Wrist injury' },
+                    { value: 'elbow_injury', label: 'Elbow injury' },
+                    { value: 'hip_injury', label: 'Hip injury' },
+                    { value: 'neck_injury', label: 'Neck injury' },
                   ]}
                   value=""
                   onChange={(e) => {
@@ -572,9 +572,9 @@ export function CustomExerciseReviewForm({
         <AccordionItem id="hypertrophy">
           <AccordionTrigger id="hypertrophy">
             <span className="flex items-center gap-2">
-              Hypertrophy Rating
+              Hypertrophy rating
               <span
-                className={`px-2 py-0.5 text-sm font-medium rounded ${
+                className={`px-2 py-0.5 text-subhead font-medium rounded ${
                   formData.hypertrophyScore.tier === 'S'
                     ? 'bg-status-ok/15 text-status-ok'
                     : formData.hypertrophyScore.tier === 'A'
@@ -589,7 +589,7 @@ export function CustomExerciseReviewForm({
           <AccordionContent id="hypertrophy">
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-ink-2 mb-1">Overall Tier</p>
+                <p className="text-subhead text-ink-2 mb-1">Overall tier</p>
                 <Select
                   options={[
                     { value: 'S', label: 'S - Best in Class' },
@@ -610,14 +610,14 @@ export function CustomExerciseReviewForm({
               </div>
 
               {[
-                { key: 'stretchUnderLoad', label: 'Stretch Under Load' },
-                { key: 'resistanceProfile', label: 'Resistance Profile' },
-                { key: 'progressionEase', label: 'Progression Ease' },
+                { key: 'stretchUnderLoad', label: 'Stretch under load' },
+                { key: 'resistanceProfile', label: 'Resistance profile' },
+                { key: 'progressionEase', label: 'Progression ease' },
               ].map(({ key, label }) => (
                 <div key={key}>
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm text-ink-2">{label}</p>
-                    <span className="text-sm text-ink-2">
+                    <p className="text-subhead text-ink-2">{label}</p>
+                    <span className="text-subhead text-ink-2">
                       {formData.hypertrophyScore[key as keyof typeof formData.hypertrophyScore]}/5
                     </span>
                   </div>
@@ -645,8 +645,8 @@ export function CustomExerciseReviewForm({
         <AccordionItem id="form">
           <AccordionTrigger id="form">
             <span className="flex items-center gap-2">
-              Form Cues
-              <span className="text-sm text-ink-3">
+              Form cues
+              <span className="text-subhead text-ink-3">
                 ({formData.formCues.length} cues)
               </span>
             </span>
@@ -674,7 +674,7 @@ export function CustomExerciseReviewForm({
           disabled={!validation?.valid}
           className="flex-1"
         >
-          {isSaving ? 'Saving...' : 'Save Exercise'}
+          {isSaving ? 'Saving...' : 'Save exercise'}
         </Button>
       </div>
     </div>

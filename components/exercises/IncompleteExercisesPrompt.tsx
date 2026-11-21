@@ -79,9 +79,9 @@ export function IncompleteExercisesPrompt({
 
           <div className="flex-1">
             <h3 className="font-medium text-status-warn">
-              Incomplete Custom Exercises
+              Incomplete custom exercises
             </h3>
-            <p className="text-sm text-ink-2 mt-1">
+            <p className="text-subhead text-ink-2 mt-1">
               You have {exercises.length} custom exercise
               {exercises.length === 1 ? '' : 's'} with incomplete data. This may
               affect injury detection and exercise suggestions.
@@ -95,8 +95,8 @@ export function IncompleteExercisesPrompt({
                   className="flex items-center justify-between py-2 border-b border-sep/50 last:border-0"
                 >
                   <div>
-                    <p className="text-sm text-ink">{exercise.name}</p>
-                    <p className="text-xs text-ink-3">
+                    <p className="text-subhead text-ink">{exercise.name}</p>
+                    <p className="text-caption text-ink-3">
                       Missing: {exercise.missingFields.slice(0, 2).join(', ')}
                       {exercise.missingFields.length > 2 &&
                         ` +${exercise.missingFields.length - 2} more`}
@@ -112,7 +112,7 @@ export function IncompleteExercisesPrompt({
                 </div>
               ))}
               {exercises.length > 3 && (
-                <p className="text-xs text-ink-3 text-center pt-2">
+                <p className="text-caption text-ink-3 text-center pt-2">
                   +{exercises.length - 3} more exercises
                 </p>
               )}

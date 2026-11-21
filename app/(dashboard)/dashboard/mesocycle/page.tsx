@@ -44,6 +44,7 @@ import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { MESOCYCLE_PLAN_QUERY_PREFIX } from '@/hooks/useMesocyclePlan';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
+import { IconBarbell, IconMoon } from '@tabler/icons-react';
 
 function getDefaultPreferredDays(daysPerWeek: number): WorkoutDay[] {
   return getTrainingDays(daysPerWeek).map(numberToDayName);
@@ -673,17 +674,17 @@ export default function MesocyclePage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-ink">Mesocycle</h1>
+            <h1 className="text-title font-bold text-ink">Mesocycle</h1>
             <div className="group relative">
-              <button className="w-5 h-5 rounded-full bg-sep hover:bg-sep text-ink-2 text-xs flex items-center justify-center">
+              <button className="w-5 h-5 rounded-full bg-sep hover:bg-sep text-ink-2 text-caption flex items-center justify-center">
                 ?
               </button>
               <div className="absolute left-0 top-7 w-72 p-3 bg-fill border border-sep rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                <p className="text-sm font-medium text-ink mb-1">What is a Mesocycle?</p>
-                <p className="text-xs text-ink-2">
+                <p className="text-subhead font-medium text-ink mb-1">What is a Mesocycle?</p>
+                <p className="text-caption text-ink-2">
                   A <span className="text-action">mesocycle</span> is a training block lasting 4-8 weeks, designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
                 </p>
-                <p className="text-xs text-ink-3 mt-2">
+                <p className="text-caption text-ink-3 mt-2">
                   Think of it as a &ldquo;chapter&rdquo; in your training story—focused, structured, and building toward the next phase.
                 </p>
               </div>
@@ -696,7 +697,7 @@ export default function MesocyclePage() {
             <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            New Mesocycle
+            New mesocycle
           </Button>
         </Link>
       </div>
@@ -745,12 +746,12 @@ export default function MesocyclePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-ink">No active mesocycle</h2>
+          <h2 className="text-headline font-semibold text-ink">No active mesocycle</h2>
           <p className="text-ink-3 mt-2 max-w-md mx-auto">
             Create a mesocycle to plan your training with progressive overload and scheduled deloads.
           </p>
           <Link href="/dashboard/mesocycle/new">
-            <Button className="mt-6">Create Your First Mesocycle</Button>
+            <Button className="mt-6">Create your first mesocycle</Button>
           </Link>
         </Card>
       ) : (
@@ -762,10 +763,10 @@ export default function MesocyclePage() {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="text-3xl">🏋️</span>
+                      <IconBarbell className="h-8 w-8 flex-shrink-0" stroke={1.75} aria-hidden="true" />
                       <div>
-                        <p className="text-sm text-action font-medium">Today&apos;s Workout</p>
-                        <h2 className="text-xl font-bold text-ink">{cardDayName}</h2>
+                        <p className="text-subhead text-action font-medium">Today&apos;s Workout</p>
+                        <h2 className="text-headline font-bold text-ink">{cardDayName}</h2>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-3">
@@ -775,7 +776,7 @@ export default function MesocyclePage() {
                         </Badge>
                       ))}
                     </div>
-                    <div className="flex items-center gap-3 mt-3 text-sm">
+                    <div className="flex items-center gap-3 mt-3 text-subhead">
                       <span className="text-ink-2">
                         Week {activeMesocycle.current_week} • Session {sessionIndexFromCompleted(completedSessions, activeMesocycle.days_per_week) + 1} of {activeMesocycle.days_per_week}
                       </span>
@@ -794,7 +795,7 @@ export default function MesocyclePage() {
                     </div>
                     {estimatedSessionTime && estimatedSessionTime > (activeMesocycle.session_duration_minutes || 60) * 1.1 && (
                       <div className="mt-2 p-2 bg-status-warn/10 border border-status-warn/20 rounded-lg">
-                        <p className="text-xs text-status-warn">
+                        <p className="text-caption text-status-warn">
                           This session may exceed your {activeMesocycle.session_duration_minutes || 60} min target by ~{Math.round(estimatedSessionTime - (activeMesocycle.session_duration_minutes || 60))} min.
                           Consider adjusting session duration or reducing exercises.
                         </p>
@@ -811,7 +812,7 @@ export default function MesocyclePage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Start Workout
+                    Start workout
                   </Button>
                 </div>
 
@@ -823,7 +824,7 @@ export default function MesocyclePage() {
                     <button
                       onClick={() => setShowTodayExercises(v => !v)}
                       aria-expanded={showTodayExercises}
-                      className="flex items-center gap-1 text-sm font-medium text-action transition-colors"
+                      className="flex items-center gap-1 text-subhead font-medium text-action transition-colors"
                     >
                       {showTodayExercises ? 'Hide exercises' : 'Preview exercises'}
                       <svg
@@ -837,7 +838,7 @@ export default function MesocyclePage() {
                     </button>
                     <Link
                       href="/dashboard/mesocycle/plan"
-                      className="text-sm font-medium text-ink-2 hover:text-ink transition-colors"
+                      className="text-subhead font-medium text-ink-2 hover:text-ink transition-colors"
                     >
                       View full plan →
                     </Link>
@@ -848,12 +849,12 @@ export default function MesocyclePage() {
                       {todayExercises.length > 0 ? (
                         <>
                           <SessionExerciseList exercises={todayExercises} showNotes />
-                          <p className="text-xs text-ink-3 mt-2">
+                          <p className="text-caption text-ink-3 mt-2">
                             Weights are suggested from your history when you start.
                           </p>
                         </>
                       ) : (
-                        <p className="text-sm text-ink-2">
+                        <p className="text-subhead text-ink-2">
                           Exercises for this session are chosen when you start it.
                         </p>
                       )}
@@ -865,17 +866,17 @@ export default function MesocyclePage() {
           ) : (
             <Card className="border border-sep">
               <CardContent className="p-6 text-center">
-                <span className="text-4xl block mb-3">😴</span>
-                <h3 className="text-lg font-semibold text-ink">Rest Day</h3>
+                <IconMoon className="h-10 w-10 flex-shrink-0 mx-auto mb-3 text-ink-3" stroke={1.75} aria-hidden="true" />
+                <h3 className="text-headline font-semibold text-ink">Rest day</h3>
                 <p className="text-ink-2 mt-1">
                   No workout scheduled for today. Recovery is part of the process!
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
                   <Link href="/dashboard/workout/new">
-                    <Button variant="secondary">Start Ad-hoc Workout</Button>
+                    <Button variant="secondary">Start ad-hoc workout</Button>
                   </Link>
                   <Link href="/dashboard/mesocycle/plan">
-                    <Button variant="outline">View Full Plan</Button>
+                    <Button variant="outline">View full plan</Button>
                   </Link>
                 </div>
               </CardContent>
@@ -900,7 +901,7 @@ export default function MesocyclePage() {
                       <CardTitle>{activeMesocycle.name}</CardTitle>
                       <RenameButton onClick={() => startRename(activeMesocycle)} />
                     </div>
-                    <p className="text-ink-2 text-sm mt-1">{activeMesocycle.split_type}</p>
+                    <p className="text-ink-2 text-subhead mt-1">{activeMesocycle.split_type}</p>
                   </div>
                 )}
                 <Badge variant="success">Active</Badge>
@@ -909,16 +910,16 @@ export default function MesocyclePage() {
             <CardContent>
               <div className="grid gap-4 grid-cols-2 sm:grid-cols-5">
                 <div className="text-center p-4 bg-fill/50 rounded-lg">
-                  <p className="text-2xl font-bold text-ink">
+                  <p className="text-title font-bold text-ink">
                     {activeMesocycle.current_week}/{activeMesocycle.total_weeks}
                   </p>
-                  <p className="text-sm text-ink-3">Current Week</p>
+                  <p className="text-subhead text-ink-3">Current week</p>
                 </div>
                 <div className="text-center p-4 bg-fill/50 rounded-lg">
-                  <p className="text-2xl font-bold text-ink">
+                  <p className="text-title font-bold text-ink">
                     {formatDaysPerWeek(sessionsPerWeek(activeSchedule))}
                   </p>
-                  <p className="text-sm text-ink-3">Sessions/Week</p>
+                  <p className="text-subhead text-ink-3">Sessions/Week</p>
                 </div>
                 <div
                   className="text-center p-4 bg-fill/50 rounded-lg cursor-pointer hover:bg-sep/50 transition-colors"
@@ -935,25 +936,25 @@ export default function MesocyclePage() {
                   }}
                   title="Click to edit session duration and training schedule"
                 >
-                  <p className="text-2xl font-bold text-ink">{activeMesocycle.session_duration_minutes || 60}</p>
-                  <p className="text-sm text-ink-3">Min/Session</p>
-                  <p className="text-xs text-action mt-1">Edit</p>
+                  <p className="text-title font-bold text-ink">{activeMesocycle.session_duration_minutes || 60}</p>
+                  <p className="text-subhead text-ink-3">Min/Session</p>
+                  <p className="text-caption text-action mt-1">Edit</p>
                 </div>
                 <div className="text-center p-4 bg-fill/50 rounded-lg">
-                  <p className="text-2xl font-bold text-ink">{activeMesocycle.deload_week}</p>
-                  <p className="text-sm text-ink-3">Deload Week</p>
+                  <p className="text-title font-bold text-ink">{activeMesocycle.deload_week}</p>
+                  <p className="text-subhead text-ink-3">Deload week</p>
                 </div>
                 <div className="text-center p-4 bg-fill/50 rounded-lg col-span-2 sm:col-span-1">
-                  <p className="text-2xl font-bold text-action">
+                  <p className="text-title font-bold text-action">
                     {Math.round((activeMesocycle.current_week / activeMesocycle.total_weeks) * 100)}%
                   </p>
-                  <p className="text-sm text-ink-3">Complete</p>
+                  <p className="text-subhead text-ink-3">Complete</p>
                 </div>
               </div>
 
               {/* Progress bar */}
               <div className="mt-6">
-                <div className="flex justify-between text-sm text-ink-2 mb-2">
+                <div className="flex justify-between text-subhead text-ink-2 mb-2">
                   <span>Progress</span>
                   <span>Week {activeMesocycle.current_week} of {activeMesocycle.total_weeks}</span>
                 </div>
@@ -968,12 +969,12 @@ export default function MesocyclePage() {
               {/* Edit Session Duration */}
               {isEditingDuration && (
                 <div className="mt-6 p-4 bg-fill/50 rounded-lg border border-action/30">
-                  <h4 className="text-sm font-medium text-ink-2 mb-4">Edit Schedule</h4>
-                  <p className="text-xs text-ink-2 mb-4">
+                  <h4 className="text-subhead font-medium text-ink-2 mb-4">Edit schedule</h4>
+                  <p className="text-caption text-ink-2 mb-4">
                     Changing your time or training schedule will regenerate your workout program and move future planned sessions to fit the updated schedule.
                   </p>
                   <div className="mb-4">
-                    <div className="flex justify-between text-sm text-ink-2 mb-2">
+                    <div className="flex justify-between text-subhead text-ink-2 mb-2">
                       <span>Time per session</span>
                       <span className="text-action font-medium">{editDuration} min</span>
                     </div>
@@ -984,16 +985,16 @@ export default function MesocyclePage() {
                       max={120}
                       step={5}
                     />
-                    <div className="flex justify-between text-xs text-ink-3 mt-1">
+                    <div className="flex justify-between text-caption text-ink-3 mt-1">
                       <span>15 min</span>
                       <span>120 min</span>
                     </div>
                   </div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-ink mb-2">
+                    <label className="block text-subhead font-medium text-ink mb-2">
                       When do you train?
                     </label>
-                    <p className="text-xs text-ink-3 mb-2">
+                    <p className="text-caption text-ink-3 mb-2">
                       {editScheduleMode === 'fixed_days'
                         ? `Pick ${mesoCalendarDays(activeMesocycle)} days that match your new schedule.`
                         : 'Sessions roll through the week from this block’s start date.'}
@@ -1056,14 +1057,14 @@ export default function MesocyclePage() {
                   every-N-days cadence renders as truthfully as fixed days. */}
               <div className="mt-6 pt-6 border-t border-sep">
                 <div className="flex items-baseline justify-between mb-3 gap-2">
-                  <h4 className="text-sm font-medium text-ink-2">Next 7 Days</h4>
+                  <h4 className="text-subhead font-medium text-ink-2">Next 7 days</h4>
                   <div className="flex items-baseline gap-3 min-w-0">
-                    <span className="text-xs text-ink-3 truncate">
+                    <span className="text-caption text-ink-3 truncate">
                       {describeTrainingSchedule(activeSchedule, { short: true })}
                     </span>
                     <Link
                       href="/dashboard/mesocycle/plan"
-                      className="text-sm font-medium text-action transition-colors whitespace-nowrap"
+                      className="text-subhead font-medium text-action transition-colors whitespace-nowrap"
                     >
                       View full plan →
                     </Link>
@@ -1093,20 +1094,20 @@ export default function MesocyclePage() {
                               : 'bg-card/30'
                         }`}
                       >
-                        <p className={`text-xs font-medium ${isToday ? 'text-action' : 'text-ink-3'}`}>
+                        <p className={`text-caption font-medium ${isToday ? 'text-action' : 'text-ink-3'}`}>
                           {isToday
                             ? 'Today'
                             : date.toLocaleDateString('en-US', { weekday: 'short' })}
                         </p>
                         {workout ? (
                           <p
-                            className="text-xs text-ink-2 mt-1 truncate"
+                            className="text-caption text-ink-2 mt-1 truncate"
                             title={dayWorkouts.map((w) => w.dayName).join(' + ')}
                           >
                             {dayWorkouts.map((w) => w.dayName.split(' ')[0]).join(' + ')}
                           </p>
                         ) : (
-                          <p className="text-xs text-ink-3 mt-1">Rest</p>
+                          <p className="text-caption text-ink-3 mt-1">Rest</p>
                         )}
                       </div>
                     );
@@ -1126,15 +1127,15 @@ export default function MesocyclePage() {
               <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
-              How Your Program Works
+              How your program works
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* Split Logic */}
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink mb-2">🗓️ {activeMesocycle.split_type} Split</h3>
-                <p className="text-sm text-ink-2">
+                <h3 className="font-medium text-ink mb-2">{activeMesocycle.split_type} split</h3>
+                <p className="text-subhead text-ink-2">
                   {activeMesocycle.split_type === 'Full Body' 
                     ? 'Each workout hits all muscle groups. This maximizes training frequency (2-3x/week per muscle) which is great for strength and hypertrophy.'
                     : activeMesocycle.split_type === 'Upper/Lower'
@@ -1147,11 +1148,11 @@ export default function MesocyclePage() {
 
               {/* Rep Ranges */}
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink mb-2">🎯 Smart Rep Ranges</h3>
-                <p className="text-sm text-ink-2 mb-2">
+                <h3 className="font-medium text-ink mb-2">Smart rep ranges</h3>
+                <p className="text-subhead text-ink-2 mb-2">
                   Rep ranges vary based on muscle fiber composition:
                 </p>
-                <ul className="text-xs text-ink-3 space-y-1">
+                <ul className="text-caption text-ink-3 space-y-1">
                   <li>• <span className="text-status-bad">Hamstrings/Triceps:</span> Lower reps (fast-twitch)</li>
                   <li>• <span className="text-status-warn">Chest/Back/Quads:</span> Moderate reps (mixed)</li>
                   <li>• <span className="text-status-ok">Calves/Delts/Core:</span> Higher reps (slow-twitch)</li>
@@ -1160,8 +1161,8 @@ export default function MesocyclePage() {
 
               {/* Progressive Overload */}
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink mb-2">📈 Weekly Progression</h3>
-                <p className="text-sm text-ink-2">
+                <h3 className="font-medium text-ink mb-2">Weekly progression</h3>
+                <p className="text-subhead text-ink-2">
                   Each week, we aim to add 1-2 reps or 2.5% weight to key lifts. This progressive overload drives adaptation.
                 </p>
                 <div className="flex gap-2 mt-2">
@@ -1179,47 +1180,47 @@ export default function MesocyclePage() {
                     />
                   ))}
                 </div>
-                <p className="text-xs text-ink-3 mt-1">
+                <p className="text-caption text-ink-3 mt-1">
                   Weeks 1-{activeMesocycle.total_weeks - 1}: Build • Week {activeMesocycle.total_weeks}: Deload
                 </p>
               </div>
 
               {/* Volume */}
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink mb-2">💪 Volume Targets</h3>
-                <p className="text-sm text-ink-2 mb-2">
+                <h3 className="font-medium text-ink mb-2">Volume targets</h3>
+                <p className="text-subhead text-ink-2 mb-2">
                   Weekly sets per muscle group:
                 </p>
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 text-caption">
                   <span className="px-2 py-1 bg-sep rounded">MV: 6</span>
                   <span className="text-ink-3">→</span>
                   <span className="px-2 py-1 bg-status-ok/20 text-status-ok rounded">Target: 10-20</span>
                   <span className="text-ink-3">→</span>
                   <span className="px-2 py-1 bg-sep rounded">MRV: 20+</span>
                 </div>
-                <p className="text-xs text-ink-3 mt-2">
+                <p className="text-caption text-ink-3 mt-2">
                   MV = Minimum Viable • MRV = Maximum Recoverable
                 </p>
               </div>
 
               {/* Fatigue */}
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink mb-2">⚡ Fatigue Tracking</h3>
-                <p className="text-sm text-ink-2">
+                <h3 className="font-medium text-ink mb-2">Fatigue tracking</h3>
+                <p className="text-subhead text-ink-2">
                   We monitor systemic and local fatigue. High RPE, poor sleep, or missed reps trigger adaptive responses.
                 </p>
-                <div className="mt-2 p-2 bg-card/50 rounded text-xs text-ink-3">
+                <div className="mt-2 p-2 bg-card/50 rounded text-caption text-ink-3">
                   <strong className="text-ink-2">Auto-deload triggers:</strong> Performance drop, RPE 9.5+, poor recovery
                 </div>
               </div>
 
               {/* Deload */}
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink mb-2">😴 Deload Week</h3>
-                <p className="text-sm text-ink-2">
+                <h3 className="font-medium text-ink mb-2">Deload week</h3>
+                <p className="text-subhead text-ink-2">
                   Week {activeMesocycle.deload_week} reduces volume by 50% while maintaining intensity. This lets accumulated fatigue dissipate.
                 </p>
-                <div className="mt-2 flex gap-2 text-xs">
+                <div className="mt-2 flex gap-2 text-caption">
                   <span className="px-2 py-1 bg-sep rounded">Volume: -50%</span>
                   <span className="px-2 py-1 bg-sep rounded">Intensity: Same</span>
                 </div>
@@ -1241,20 +1242,20 @@ export default function MesocyclePage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink">📈 Progressive Overload</h3>
-                <p className="text-sm text-ink-3 mt-1">
+                <h3 className="font-medium text-ink">Progressive overload</h3>
+                <p className="text-subhead text-ink-3 mt-1">
                   Gradually increase volume and intensity week over week
                 </p>
               </div>
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink">😴 Planned Deloads</h3>
-                <p className="text-sm text-ink-3 mt-1">
+                <h3 className="font-medium text-ink">Planned deloads</h3>
+                <p className="text-subhead text-ink-3 mt-1">
                   Scheduled recovery weeks to manage fatigue
                 </p>
               </div>
               <div className="p-4 bg-fill/50 rounded-lg">
-                <h3 className="font-medium text-ink">🎯 Auto-Regulation</h3>
-                <p className="text-sm text-ink-3 mt-1">
+                <h3 className="font-medium text-ink">Auto-regulation</h3>
+                <p className="text-subhead text-ink-3 mt-1">
                   Adjust based on readiness and performance
                 </p>
               </div>
@@ -1267,7 +1268,7 @@ export default function MesocyclePage() {
       {pastMesocycles.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Past Mesocycles</CardTitle>
+            <CardTitle>Past mesocycles</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -1284,7 +1285,7 @@ export default function MesocyclePage() {
                   ) : (
                   <div>
                     <p className="font-medium text-ink">{meso.name}</p>
-                    <p className="text-sm text-ink-3">
+                    <p className="text-subhead text-ink-3">
                       {meso.split_type} • {meso.total_weeks} weeks • {new Date(meso.created_at).toLocaleDateString()}
                     </p>
                   </div>
@@ -1292,7 +1293,7 @@ export default function MesocyclePage() {
                   <div className="flex items-center gap-2">
                     <Link
                       href={`/dashboard/mesocycle/plan?id=${meso.id}`}
-                      className="text-sm font-medium text-action transition-colors"
+                      className="text-subhead font-medium text-action transition-colors"
                     >
                       View
                     </Link>

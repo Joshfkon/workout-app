@@ -40,7 +40,7 @@ export function MuscleSelector({
         key={value}
         type="button"
         onClick={() => toggleMuscle(value)}
-        className={`${isFine ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-sm'} rounded-lg transition-all duration-200
+        className={`${isFine ? 'px-2.5 py-1 text-caption' : 'px-3 py-1.5 text-subhead'} rounded-lg transition-all duration-200
           ${
             isSelected
               ? 'bg-action text-on-action'
@@ -74,7 +74,7 @@ export function MuscleSelector({
         ))}
       </div>
       {splitWarnings.length > 0 && (
-        <p className="mt-2 text-xs text-status-warn">{splitWarnings[0]}</p>
+        <p className="mt-2 text-caption text-status-warn">{splitWarnings[0]}</p>
       )}
     </div>
   );

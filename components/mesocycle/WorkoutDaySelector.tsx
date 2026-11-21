@@ -218,7 +218,7 @@ export function WorkoutDaySelector({
                 onClick={() => onChange(preset.days)}
                 aria-pressed={isActive}
                 title={preset.hint}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                className={`px-3 py-1.5 text-caption font-medium rounded-full transition-colors ${
                   isActive
                     ? 'bg-action text-on-action'
                     : 'bg-fill text-ink-2 hover:bg-sep'
@@ -233,7 +233,7 @@ export function WorkoutDaySelector({
             onClick={() => onChange(shiftDays(selectedDays, 1))}
             disabled={!canShift}
             title="Move every selected day one day later"
-            className="px-3 py-1.5 text-xs font-medium rounded-full bg-fill text-ink-2 hover:bg-sep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-caption font-medium rounded-full bg-fill text-ink-2 hover:bg-sep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Shift +1 day
           </button>
@@ -260,7 +260,7 @@ export function WorkoutDaySelector({
                 }
               `}
             >
-              <span className="block text-xs sm:text-sm font-medium">
+              <span className="block text-caption sm:text-subhead font-medium">
                 {getShortDay(day)}
               </span>
             </button>
@@ -270,19 +270,19 @@ export function WorkoutDaySelector({
 
       {/* Selection status */}
       <div className="flex items-center justify-between">
-        <span className={`text-sm ${error ? 'text-status-warn' : 'text-ink-2'}`}>
+        <span className={`text-subhead ${error ? 'text-status-warn' : 'text-ink-2'}`}>
           {selectedDays.length}/{daysPerWeek} days selected
         </span>
         {error && (
-          <span className="text-xs text-status-warn">{error}</span>
+          <span className="text-caption text-status-warn">{error}</span>
         )}
       </div>
 
       {/* Selected days preview */}
       {selectedDays.length > 0 && (
         <div className="p-3 bg-fill/50 rounded-lg">
-          <p className="text-xs text-ink-3 mb-1">Your workout schedule:</p>
-          <p className="text-sm text-ink font-medium">
+          <p className="text-caption text-ink-3 mb-1">Your workout schedule:</p>
+          <p className="text-subhead text-ink font-medium">
             {sortDays(selectedDays).join(', ')}
           </p>
         </div>

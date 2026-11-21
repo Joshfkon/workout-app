@@ -69,7 +69,7 @@ function BackLink() {
   return (
     <Link
       href="/dashboard/mesocycle"
-      className="inline-flex items-center gap-1 text-[13px] font-medium text-ink-2 hover:text-ink transition-colors"
+      className="inline-flex items-center gap-1 text-subhead font-medium text-ink-2 hover:text-ink transition-colors"
     >
       <IconChevronLeft size={16} aria-hidden="true" />
       Mesocycle
@@ -93,7 +93,7 @@ function Chip({
   } as const;
   return (
     <span
-      className={`px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${tones[tone]}`}
+      className={`px-2 py-0.5 rounded-full text-caption font-medium whitespace-nowrap ${tones[tone]}`}
     >
       {children}
     </span>
@@ -132,13 +132,13 @@ function SessionCard({
         aria-expanded={isOpen}
         className="w-full flex items-center gap-3 p-3 text-left hover:bg-fill/40 transition-colors"
       >
-        <span className="w-10 flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+        <span className="w-10 flex-shrink-0 text-caption font-semibold text-ink-3">
           {entry.weekdayLabel ?? `S${entry.index + 1}`}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span
-              className={`text-[15px] font-semibold truncate ${
+              className={`text-body font-semibold truncate ${
                 status === 'done' ? 'text-ink-2' : 'text-ink'
               }`}
             >
@@ -149,7 +149,7 @@ function SessionCard({
               <IconCircleCheck size={15} className="text-status-ok flex-shrink-0" aria-label="Completed" />
             )}
           </span>
-          <span className="block text-[12px] text-ink-3 mt-0.5">{meta}</span>
+          <span className="block text-caption text-ink-3 mt-0.5">{meta}</span>
         </span>
         <IconChevronDown
           size={18}
@@ -163,12 +163,12 @@ function SessionCard({
           {session.exercises.length > 0 ? (
             <SessionExerciseList exercises={session.exercises} showNotes />
           ) : (
-            <p className="text-[13px] text-ink-2">
+            <p className="text-subhead text-ink-2">
               Exercises for this session are chosen when you start it.
             </p>
           )}
           {session.warmup.length > 0 && (
-            <p className="text-[11px] text-ink-3">
+            <p className="text-caption text-ink-3">
               <span className="text-ink-2">Warm-up:</span> {session.warmup.join(' · ')}
             </p>
           )}
@@ -198,12 +198,12 @@ function WeekDetail({
     <div className="space-y-3">
       <div className={`${CARD_CLASS} p-4`}>
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-[17px] font-bold text-ink">Week {week.weekNumber}</h2>
+          <h2 className="text-headline font-bold text-ink">Week {week.weekNumber}</h2>
           {week.status === 'current' && <Chip tone="primary">This week</Chip>}
           {week.isDeload && <Chip tone="warning">Deload</Chip>}
           {week.status === 'done' && <Chip tone="success">Done</Chip>}
         </div>
-        <p className="text-[13px] text-ink-2 mt-1">
+        <p className="text-subhead text-ink-2 mt-1">
           {[
             week.focus || null,
             `${week.sessions.length} ${week.sessions.length === 1 ? 'session' : 'sessions'}`,
@@ -214,7 +214,7 @@ function WeekDetail({
             .join(' · ')}
         </p>
         {hasModifiers && (
-          <p className="text-[12px] text-ink-3 mt-1">
+          <p className="text-caption text-ink-3 mt-1">
             Volume {Math.round(week.volumeModifier * 100)}% · intensity{' '}
             {Math.round(week.intensityModifier * 100)}% of baseline
           </p>
@@ -225,7 +225,7 @@ function WeekDetail({
             {week.setsByMuscle.map(({ muscle, sets }) => (
               <span
                 key={muscle}
-                className="px-2 py-1 rounded-lg bg-fill text-[11px] text-ink-2"
+                className="px-2 py-1 rounded-lg bg-fill text-caption text-ink-2"
               >
                 {muscleDisplayName(muscle)}{' '}
                 <span className="text-ink-3 tabular-nums">{sets}</span>
@@ -304,11 +304,11 @@ function PlanContent() {
       <div className="max-w-lg mx-auto space-y-4">
         <BackLink />
         <div className={`${CARD_CLASS} p-6 text-center`}>
-          <p className="text-[15px] text-ink">Couldn&apos;t load your plan</p>
+          <p className="text-body text-ink">Couldn&apos;t load your plan</p>
           <button
             type="button"
             onClick={() => refetch()}
-            className="mt-4 px-4 py-2 rounded-xl bg-fill text-[13px] font-medium text-ink hover:bg-sep transition-colors"
+            className="mt-4 px-4 py-2 rounded-xl bg-fill text-subhead font-medium text-ink hover:bg-sep transition-colors"
           >
             Try again
           </button>
@@ -322,14 +322,14 @@ function PlanContent() {
       <div className="max-w-lg mx-auto space-y-4">
         <BackLink />
         <div className={`${CARD_CLASS} p-6 text-center`}>
-          <h1 className="text-[17px] font-bold text-ink">No plan to preview</h1>
-          <p className="text-[13px] text-ink-2 mt-1">
+          <h1 className="text-headline font-bold text-ink">No plan to preview</h1>
+          <p className="text-subhead text-ink-2 mt-1">
             Plan a mesocycle and you&apos;ll be able to read every week of it here before you
             train.
           </p>
           <Link
             href="/dashboard/mesocycle/new"
-            className="inline-block mt-4 px-4 py-2.5 rounded-xl bg-action text-on-action text-[14px] font-semibold hover:opacity-90 transition-opacity"
+            className="inline-block mt-4 px-4 py-2.5 rounded-xl bg-action text-on-action text-body font-semibold hover:opacity-90 transition-opacity"
           >
             Plan a mesocycle
           </Link>
@@ -347,13 +347,13 @@ function PlanContent() {
 
       {/* Block header */}
       <div className={`${CARD_CLASS} p-4`}>
-        <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-ink-3">
+        <p className="text-caption font-semibold text-ink-3">
           {mesocycle.state === 'active' ? 'Your plan' : `${mesocycle.state} plan`}
         </p>
-        <h1 className="text-[24px] leading-tight font-bold text-ink mt-1">
+        <h1 className="text-title font-bold text-ink mt-1">
           {mesocycle.name}
         </h1>
-        <p className="text-[13px] text-ink-2 mt-1">
+        <p className="text-subhead text-ink-2 mt-1">
           {[
             mesocycle.split_type,
             // An interval block isn't N×/week — say the cadence it really runs.
@@ -370,7 +370,7 @@ function PlanContent() {
         </p>
         {plannedTotal > 0 && (
           <div className="mt-3">
-            <div className="flex justify-between text-[12px] text-ink-3 mb-1">
+            <div className="flex justify-between text-caption text-ink-3 mb-1">
               <span>
                 {Math.min(completed, plannedTotal)} of {plannedTotal} sessions done
               </span>
@@ -390,19 +390,19 @@ function PlanContent() {
 
       {weeks.length === 0 ? (
         <div className={`${CARD_CLASS} p-4`}>
-          <p className="text-[15px] font-semibold text-ink">
+          <p className="text-body font-semibold text-ink">
             This block has no stored program
           </p>
-          <p className="text-[13px] text-ink-2 mt-1">
+          <p className="text-subhead text-ink-2 mt-1">
             It was created before plans were saved week by week, so its exercises are chosen when
             each workout starts. Regenerating the schedule from the Mesocycle page will build a
             full plan you can read here.
           </p>
           <Link
             href="/dashboard/mesocycle"
-            className="inline-block mt-3 text-[13px] font-medium text-action transition-colors"
+            className="inline-block mt-3 text-subhead font-medium text-action transition-colors"
           >
-            Go to Mesocycle
+            Go to mesocycle
           </Link>
         </div>
       ) : (
@@ -425,7 +425,7 @@ function PlanContent() {
                     }`}
                   >
                     <span
-                      className={`flex items-center justify-center gap-1 text-[13px] font-semibold ${
+                      className={`flex items-center justify-center gap-1 text-subhead font-semibold ${
                         isActive
                           ? 'text-action'
                           : week.status === 'done'
@@ -442,7 +442,7 @@ function PlanContent() {
                         />
                       )}
                     </span>
-                    <span className="block text-[10px] text-ink-3 mt-0.5">
+                    <span className="block text-caption text-ink-3 mt-0.5">
                       {week.isDeload ? 'deload' : `${week.totalSets} sets`}
                     </span>
                   </button>
@@ -452,7 +452,7 @@ function PlanContent() {
             <button
               type="button"
               onClick={toggleExpandAll}
-              className="ml-auto flex-shrink-0 text-[12px] font-medium text-action transition-colors"
+              className="ml-auto flex-shrink-0 text-caption font-medium text-action transition-colors"
             >
               {expandAll ? 'Collapse all' : 'Expand all'}
             </button>
@@ -462,7 +462,7 @@ function PlanContent() {
             <WeekDetail week={activeWeek} isOpen={isOpen} onToggleSession={toggleSession} />
           )}
 
-          <p className="text-[11px] text-ink-3 px-1">
+          <p className="text-caption text-ink-3 px-1">
             Sets and rep ranges are the plan. Weights are suggested from your history when you
             start each session, and volume adapts to your feedback week to week.
           </p>
@@ -470,9 +470,9 @@ function PlanContent() {
           {mesocycle.state === 'active' && (
             <Link
               href="/dashboard/train"
-              className="block w-full py-3 rounded-xl text-center bg-action text-on-action text-[15px] font-semibold hover:opacity-90 transition-opacity"
+              className="block w-full py-3 rounded-xl text-center bg-action text-on-action text-body font-semibold hover:opacity-90 transition-opacity"
             >
-              Go to Train
+              Go to train
             </Link>
           )}
         </>

@@ -16,7 +16,8 @@ import type { WorkoutTemplate, WorkoutTemplateExercise, WorkoutFolder } from '@/
 
 const templateDetailKey = (id: string) => ['templateDetail', id] as const;
 import Link from 'next/link';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { Sheet } from '@/components/ui/Sheet';
+import { IconBarbell } from '@tabler/icons-react';
 
 interface Exercise {
   id: string;
@@ -61,10 +62,6 @@ export default function TemplateDetailPage() {
   const units = preferences.units;
 
   // Keyboard-aware insets for the two input-bearing modals
-  const { inset: addExerciseKbInset, scrollContainerRef: addExerciseModalRef } =
-    useKeyboardInset<HTMLDivElement>(showAddExercise);
-  const { inset: editExerciseKbInset, scrollContainerRef: editExerciseModalRef } =
-    useKeyboardInset<HTMLDivElement>(!!editingExercise);
   
   // Collapse/expand state
   const [collapsedExercises, setCollapsedExercises] = useState<Set<string>>(new Set());
@@ -581,7 +578,7 @@ export default function TemplateDetailPage() {
         <div>
           <Link 
             href="/dashboard/templates" 
-            className="text-sm text-ink-2 hover:text-ink mb-1 inline-block"
+            className="text-subhead text-ink-2 hover:text-ink mb-1 inline-block"
           >
             ← Back to Templates
           </Link>
@@ -590,11 +587,11 @@ export default function TemplateDetailPage() {
               type="text"
               value={templateName}
               onChange={(e) => setTemplateName(e.target.value)}
-              className="text-2xl font-bold bg-fill border border-sep rounded-lg px-2 py-1 text-ink w-full"
+              className="text-title font-bold bg-fill border border-sep rounded-lg px-2 py-1 text-ink w-full"
               autoFocus
             />
           ) : (
-            <h1 className="text-2xl font-bold text-ink">{template.name}</h1>
+            <h1 className="text-title font-bold text-ink">{template.name}</h1>
           )}
         </div>
         <div className="flex gap-2">
@@ -621,7 +618,7 @@ export default function TemplateDetailPage() {
                   ? 'Starting...'
                   : exercises.length === 0
                     ? 'Add exercises first'
-                    : 'Start Workout'}
+                    : 'Start workout'}
               </Button>
             </>
           )}
@@ -629,7 +626,7 @@ export default function TemplateDetailPage() {
       </div>
 
       {error && (
-        <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
+        <div className="p-3 text-subhead text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
           {error}
         </div>
       )}
@@ -639,7 +636,7 @@ export default function TemplateDetailPage() {
         <Card>
           <CardContent className="p-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-1">
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
                 Folder
               </label>
               <select
@@ -656,7 +653,7 @@ export default function TemplateDetailPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-1">
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
                 Notes
               </label>
               <textarea
@@ -695,18 +692,18 @@ export default function TemplateDetailPage() {
         <CardContent>
           {exercises.length === 0 ? (
             <div className="py-8 text-center">
-              <span className="text-4xl mb-4 block">🏋️</span>
+              <IconBarbell className="h-10 w-10 flex-shrink-0 mb-4 mx-auto text-ink-3" stroke={1.75} aria-hidden="true" />
               <p className="text-ink-2 mb-4">No exercises in this template yet</p>
               <Button variant="primary" onClick={() => setShowAddExercise(true)}>
-                Add Your First Exercise
+                Add your first exercise
               </Button>
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs text-ink-3 mb-3">💡 Long-press and drag to reorder • Tap to expand/collapse</p>
+              <p className="text-caption text-ink-3 mb-3">Long-press and drag to reorder • Tap to expand/collapse</p>
 
               {arrangeNote && (
-                <p className="text-xs text-ink-2 mb-2" data-testid="auto-arrange-note">
+                <p className="text-caption text-ink-2 mb-2" data-testid="auto-arrange-note">
                   {arrangeNote}
                 </p>
               )}
@@ -718,7 +715,7 @@ export default function TemplateDetailPage() {
                   className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-action/40 bg-action/10 px-3 py-2"
                   data-testid="auto-arrange-preview-banner"
                 >
-                  <p className="text-xs text-action">
+                  <p className="text-caption text-action">
                     Preview: compounds first, grip work last, muscle groups
                     interleaved. Nothing is saved until you apply.
                   </p>
@@ -739,7 +736,7 @@ export default function TemplateDetailPage() {
                   className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-sep bg-fill/60 px-3 py-2"
                   data-testid="auto-arrange-undo-banner"
                 >
-                  <p className="text-xs text-ink-2">Order updated.</p>
+                  <p className="text-caption text-ink-2">Order updated.</p>
                   <Button variant="ghost" size="sm" onClick={undoArrangement}>
                     Undo
                   </Button>
@@ -798,7 +795,7 @@ export default function TemplateDetailPage() {
                         {previewOrder && (() => {
                           const was = exercises.findIndex((e) => e.id === exercise.id);
                           return was !== index ? (
-                            <p className="text-[10px] text-action/80">moved from #{was + 1}</p>
+                            <p className="text-caption text-action/80">moved from #{was + 1}</p>
                           ) : null;
                         })()}
                       </div>
@@ -830,27 +827,27 @@ export default function TemplateDetailPage() {
                       <div className="p-4 bg-fill/30 border-t border-sep space-y-3">
                         <div className="grid grid-cols-3 gap-4 text-center">
                           <div>
-                            <p className="text-2xl font-bold text-ink">{exercise.default_sets}</p>
-                            <p className="text-xs text-ink-3 uppercase">Sets</p>
+                            <p className="text-title font-bold text-ink">{exercise.default_sets}</p>
+                            <p className="text-caption text-ink-3">Sets</p>
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-ink">{exercise.default_reps}</p>
-                            <p className="text-xs text-ink-3 uppercase">Reps</p>
+                            <p className="text-title font-bold text-ink">{exercise.default_reps}</p>
+                            <p className="text-caption text-ink-3">Reps</p>
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-ink">
+                            <p className="text-title font-bold text-ink">
                               {exercise.default_weight
                                 ? convertWeightForDisplay(exercise.default_weight, units, 1)
                                 : '—'}
                             </p>
-                            <p className="text-xs text-ink-3 uppercase">
+                            <p className="text-caption text-ink-3">
                               {units === 'lb' ? 'lbs' : 'kg'}
                             </p>
                           </div>
                         </div>
                         
                         {exercise.notes && (
-                          <p className="text-sm text-ink-2 italic">{exercise.notes}</p>
+                          <p className="text-subhead text-ink-2 italic">{exercise.notes}</p>
                         )}
 
                         <div className="flex gap-2 pt-2">
@@ -881,168 +878,144 @@ export default function TemplateDetailPage() {
       </Card>
 
       {/* Add Exercise Modal */}
-      {showAddExercise && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          style={{
-            // Re-center above the on-screen keyboard; safe-area stays additive.
-            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${addExerciseKbInset}px)`,
-          }}
-        >
-          <div
-            ref={addExerciseModalRef}
-            className="bg-card rounded-card w-full max-w-lg flex flex-col shadow-card"
-            style={{ maxHeight: `min(80vh, calc(100vh - 2rem - ${addExerciseKbInset}px))` }}
-          >
-            <div className="p-4 border-b border-sep">
-              <h2 className="text-lg font-semibold text-ink">Add Exercise</h2>
+      <Sheet
+        isOpen={showAddExercise}
+        onClose={() => {
+          setShowAddExercise(false);
+          setExerciseSearch('');
+        }}
+        title="Add exercise"
+        size="lg"
+        data-testid="add-exercise-sheet"
+      >
+        <input
+          type="text"
+          value={exerciseSearch}
+          onChange={(e) => setExerciseSearch(e.target.value)}
+          placeholder="Search exercises…"
+          aria-label="Search exercises"
+          className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+          autoFocus
+        />
+        <div className="-mx-2 mt-3">
+          {searchResults.map((exercise) => (
+            <button
+              key={exercise.id}
+              onClick={() => handleAddExercise(exercise)}
+              className="w-full p-3 text-left hover:bg-fill rounded-lg transition-colors"
+            >
+              <p className="font-medium text-ink">{exercise.name}</p>
+              <p className="text-subhead text-ink-3">
+                {exercise.primary_muscle} • {exercise.equipment}
+              </p>
+            </button>
+          ))}
+          {searchResults.length === 0 && (
+            <p className="text-center text-ink-2 py-8">No exercises found</p>
+          )}
+        </div>
+      </Sheet>
+
+      {/* Edit exercise */}
+      <Sheet
+        isOpen={!!editingExercise}
+        onClose={() => setEditingExercise(null)}
+        title={editingExercise ? `Edit ${editingExercise.exercise_name}` : undefined}
+        size="md"
+        data-testid="edit-template-exercise-sheet"
+        footer={
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={() => setEditingExercise(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" className="flex-1" onClick={handleUpdateExercise}>
+              Save
+            </Button>
+          </div>
+        }
+      >
+        {editingExercise && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
+                Sets
+              </label>
               <input
-                type="text"
-                value={exerciseSearch}
-                onChange={(e) => setExerciseSearch(e.target.value)}
-                placeholder="Search exercises..."
-                className="w-full mt-3 px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                autoFocus
+                type="number"
+                min="1"
+                value={editingExercise.default_sets}
+                onChange={(e) => setEditingExercise({
+                  ...editingExercise,
+                  default_sets: parseInt(e.target.value) || 3,
+                })}
+                className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
               />
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
-              {searchResults.map((exercise) => (
-                <button
-                  key={exercise.id}
-                  onClick={() => handleAddExercise(exercise)}
-                  className="w-full p-3 text-left hover:bg-fill rounded-lg transition-colors"
-                >
-                  <p className="font-medium text-ink">{exercise.name}</p>
-                  <p className="text-sm text-ink-3">
-                    {exercise.primary_muscle} • {exercise.equipment}
-                  </p>
-                </button>
-              ))}
-              {searchResults.length === 0 && (
-                <p className="text-center text-ink-2 py-8">No exercises found</p>
-              )}
-            </div>
-            <div className="p-4 border-t border-sep">
-              <Button variant="ghost" className="w-full" onClick={() => {
-                setShowAddExercise(false);
-                setExerciseSearch('');
-              }}>
-                Cancel
-              </Button>
+            <div>
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
+                Reps
+              </label>
+              <input
+                type="text"
+                value={editingExercise.default_reps}
+                onChange={(e) => setEditingExercise({
+                  ...editingExercise,
+                  default_reps: e.target.value,
+                })}
+                placeholder="8-12"
+                className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+              />
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Edit Exercise Modal */}
-      {editingExercise && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          style={{
-            // Re-center above the on-screen keyboard; safe-area stays additive.
-            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${editExerciseKbInset}px)`,
-          }}
-        >
-          <div
-            ref={editExerciseModalRef}
-            className="bg-card rounded-card w-full max-w-md overflow-y-auto shadow-card"
-            style={{ maxHeight: `calc(100vh - 2rem - ${editExerciseKbInset}px)` }}
-          >
-            <div className="p-4 border-b border-sep">
-              <h2 className="text-lg font-semibold text-ink">
-                Edit {editingExercise.exercise_name}
-              </h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
+                Default weight ({units === 'lb' ? 'lbs' : 'kg'})
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                value={editingWeightInput}
+                onChange={(e) => setEditingWeightInput(e.target.value)}
+                placeholder="Optional"
+                className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+              />
             </div>
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">
-                    Sets
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={editingExercise.default_sets}
-                    onChange={(e) => setEditingExercise({
-                      ...editingExercise,
-                      default_sets: parseInt(e.target.value) || 3,
-                    })}
-                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">
-                    Reps
-                  </label>
-                  <input
-                    type="text"
-                    value={editingExercise.default_reps}
-                    onChange={(e) => setEditingExercise({
-                      ...editingExercise,
-                      default_reps: e.target.value,
-                    })}
-                    placeholder="8-12"
-                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">
-                    Default Weight ({units === 'lb' ? 'lbs' : 'kg'})
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={editingWeightInput}
-                    onChange={(e) => setEditingWeightInput(e.target.value)}
-                    placeholder="Optional"
-                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">
-                    Rest (seconds)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="15"
-                    value={editingExercise.default_rest_seconds}
-                    onChange={(e) => setEditingExercise({
-                      ...editingExercise,
-                      default_rest_seconds: parseInt(e.target.value) || 90,
-                    })}
-                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={editingExercise.notes || ''}
-                  onChange={(e) => setEditingExercise({
-                    ...editingExercise,
-                    notes: e.target.value || null,
-                  })}
-                  placeholder="Form cues, variations, etc."
-                  className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink min-h-[60px]"
-                />
-              </div>
-            </div>
-            <div className="p-4 border-t border-sep flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setEditingExercise(null)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleUpdateExercise}>
-                Save
-              </Button>
+            <div>
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
+                Rest (seconds)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="15"
+                value={editingExercise.default_rest_seconds}
+                onChange={(e) => setEditingExercise({
+                  ...editingExercise,
+                  default_rest_seconds: parseInt(e.target.value) || 90,
+                })}
+                className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+              />
             </div>
           </div>
+          <div>
+            <label className="block text-subhead font-medium text-ink-2 mb-1">
+              Notes
+            </label>
+            <textarea
+              value={editingExercise.notes || ''}
+              onChange={(e) => setEditingExercise({
+                ...editingExercise,
+                notes: e.target.value || null,
+              })}
+              placeholder="Form cues, variations, etc."
+              className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action min-h-[60px]"
+            />
+          </div>
         </div>
-      )}
+        )}
+      </Sheet>
     </div>
   );
 }

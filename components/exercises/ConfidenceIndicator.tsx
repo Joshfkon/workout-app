@@ -77,18 +77,18 @@ export function ConfidenceIndicator({ confidence, notes }: ConfidenceIndicatorPr
 
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className={`text-sm font-medium ${info.color}`}>
+            <span className={`text-subhead font-medium ${info.color}`}>
               AI Confidence: {confidence.charAt(0).toUpperCase() + confidence.slice(1)}
             </span>
           </div>
-          <p className="text-sm text-ink-2 mt-0.5">{info.message}</p>
+          <p className="text-subhead text-ink-2 mt-0.5">{info.message}</p>
         </div>
       </div>
 
       {notes && (
         <div className="mt-3 pt-3 border-t border-sep">
-          <p className="text-xs text-ink-3 mb-1">AI Notes:</p>
-          <p className="text-sm text-ink-2">{notes}</p>
+          <p className="text-caption text-ink-3 mb-1">AI Notes:</p>
+          <p className="text-subhead text-ink-2">{notes}</p>
         </div>
       )}
     </div>

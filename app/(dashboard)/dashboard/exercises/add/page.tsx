@@ -58,7 +58,7 @@ export default function AddExercisePage() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-ink">Add Custom Exercise</h1>
+        <h1 className="text-title font-bold text-ink">Add custom exercise</h1>
         <p className="text-ink-2 mt-1">
           Enter basic information and let AI fill in the details, or review and adjust as needed
         </p>

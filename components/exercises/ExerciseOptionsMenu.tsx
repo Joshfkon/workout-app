@@ -93,9 +93,9 @@ export function ExerciseOptionsMenu({
       style={{ top: menuPosition.top, left: menuPosition.left }}
     >
       <div className="px-3 py-2 border-b border-sep">
-        <p className="text-sm font-medium text-ink truncate">{exerciseName}</p>
+        <p className="text-subhead font-medium text-ink truncate">{exerciseName}</p>
         {status !== 'active' && (
-          <p className="text-xs text-ink-3 mt-0.5">
+          <p className="text-caption text-ink-3 mt-0.5">
             {status === 'do_not_suggest' ? 'Not suggesting' : 'Archived'}
           </p>
         )}
@@ -105,19 +105,19 @@ export function ExerciseOptionsMenu({
         {onAddToWorkout && (
           <button
             onClick={() => handleAction(onAddToWorkout)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-ink hover:bg-fill transition-colors"
           >
             <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add to Workout
+            Add to workout
           </button>
         )}
 
         {onViewHistory && (
           <button
             onClick={() => handleAction(onViewHistory)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-ink hover:bg-fill transition-colors"
           >
             <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -127,7 +127,7 @@ export function ExerciseOptionsMenu({
                 d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
               />
             </svg>
-            View History
+            View history
           </button>
         )}
       </div>
@@ -137,7 +137,7 @@ export function ExerciseOptionsMenu({
           <>
             <button
               onClick={() => handleAction(onMute)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-ink hover:bg-fill transition-colors"
             >
               <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -157,7 +157,7 @@ export function ExerciseOptionsMenu({
             </button>
             <button
               onClick={() => handleAction(onArchive)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-ink hover:bg-fill transition-colors"
             >
               <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -176,16 +176,16 @@ export function ExerciseOptionsMenu({
           <>
             <button
               onClick={() => handleAction(onRestore)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-400 hover:bg-fill transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-status-ok hover:bg-fill transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Allow Suggestions Again
+              Allow suggestions again
             </button>
             <button
               onClick={() => handleAction(onArchive)}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-fill transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-ink hover:bg-fill transition-colors"
             >
               <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -203,7 +203,7 @@ export function ExerciseOptionsMenu({
         {status === 'archived' && (
           <button
             onClick={() => handleAction(onRestore)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-400 hover:bg-fill transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-status-ok hover:bg-fill transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -222,7 +222,7 @@ export function ExerciseOptionsMenu({
         <div className="border-t border-sep py-1">
           <button
             onClick={() => handleAction(onDelete)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-status-bad hover:bg-status-bad/10 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-subhead text-status-bad hover:bg-status-bad/10 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -232,7 +232,7 @@ export function ExerciseOptionsMenu({
                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
               />
             </svg>
-            Delete Exercise
+            Delete exercise
           </button>
         </div>
       )}

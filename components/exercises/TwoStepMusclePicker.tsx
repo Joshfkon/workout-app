@@ -117,7 +117,7 @@ export function TwoStepMusclePicker({
       {showSubMuscles && (
         <div>
           <Select
-            label="Specific Muscle"
+            label="Specific muscle"
             options={[
               ...(canSelectWholeGroup
                 ? [{ value: activeGroup.value, label: wholeGroupLabel }]
@@ -134,14 +134,14 @@ export function TwoStepMusclePicker({
             required={required}
           />
           {value && coarseSplitWarning(value) && (
-            <p className="mt-1.5 text-sm text-status-warn">{coarseSplitWarning(value)}</p>
+            <p className="mt-1.5 text-subhead text-status-warn">{coarseSplitWarning(value)}</p>
           )}
         </div>
       )}
 
       {/* Show split warning if whole group is selected */}
       {!showSubMuscles && value && coarseSplitWarning(value) && (
-        <p className="mt-1.5 text-sm text-status-warn">{coarseSplitWarning(value)}</p>
+        <p className="mt-1.5 text-subhead text-status-warn">{coarseSplitWarning(value)}</p>
       )}
     </div>
   );

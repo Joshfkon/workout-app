@@ -41,7 +41,9 @@ import {
 } from '@/lib/actions/exercise-completion';
 import { IncompleteExercisesPrompt } from '@/components/exercises/IncompleteExercisesPrompt';
 import { updateExerciseRow } from '@/lib/exercises/updateExerciseRow';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { Sheet } from '@/components/ui/Sheet';
+import { tierBadgeClasses, ratingFillClass } from '@/components/exercises/tierBadge';
+import { IconSearch } from '@tabler/icons-react';
 
 // Dynamic import for charts - only loaded when user expands an exercise
 const ExerciseHistoryCharts = dynamic(
@@ -77,37 +79,24 @@ interface Exercise {
   progression_ease?: number;
 }
 
-// Get color classes for hypertrophy tier badge
-function getTierColorClasses(tier: string): string {
-  switch (tier) {
-    case 'S': return 'bg-amber-500 text-black font-bold';
-    case 'A': return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-    case 'B': return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
-    case 'C': return 'bg-sep text-ink-2';
-    case 'D': return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
-    case 'F': return 'bg-red-500/20 text-red-400 border border-red-500/30';
-    default: return 'bg-sep text-ink-2';
-  }
-}
-
 // Rating bar component
 function RatingBar({ label, value, maxValue = 5 }: { label: string; value: number; maxValue?: number }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-ink-3 w-20">{label}</span>
+      <span className="text-caption text-ink-3 w-20">{label}</span>
       <div className="flex gap-0.5">
         {[1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
             className={`w-4 h-2 rounded-sm ${
               i <= value
-                ? value >= 4 ? 'bg-emerald-500' : value >= 3 ? 'bg-blue-500' : 'bg-amber-500'
+                ? ratingFillClass(value)
                 : 'bg-sep'
             }`}
           />
         ))}
       </div>
-      <span className="text-xs text-ink-2">{value}/{maxValue}</span>
+      <span className="text-caption text-ink-2">{value}/{maxValue}</span>
     </div>
   );
 }
@@ -149,8 +138,6 @@ export default function ExercisesPage() {
 
   // Edit exercise state
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
-  const { inset: editKbInset, scrollContainerRef: editModalRef } =
-    useKeyboardInset<HTMLDivElement>(!!editingExercise);
   const [editData, setEditData] = useState<{
     primaryMuscle: string;
     isBodyweight: boolean;
@@ -555,7 +542,7 @@ export default function ExercisesPage() {
       // RLS on the write itself is the real auth check.
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        setSaveResult({ success: false, message: '❌ You must be logged in to edit exercises' });
+        setSaveResult({ success: false, message: 'You must be logged in to edit exercises' });
         return;
       }
 
@@ -593,8 +580,8 @@ export default function ExercisesPage() {
           success: false,
           message:
             result.outcome === 'blocked'
-              ? `❌ ${result.message}`
-              : `❌ Failed to update exercise: ${result.message || 'Please try again.'}`,
+              ? `${result.message}`
+              : `Failed to update exercise: ${result.message || 'Please try again.'}`,
         });
         return;
       }
@@ -622,8 +609,8 @@ export default function ExercisesPage() {
         success: true,
         message:
           result.outcome === 'updated_catalog'
-            ? '✅ Shared exercise updated for all users (audited).'
-            : '✅ Exercise updated successfully!',
+            ? 'Shared exercise updated for all users (audited).'
+            : 'Exercise updated successfully!',
       });
       
       // Close modal after a short delay
@@ -634,7 +621,7 @@ export default function ExercisesPage() {
       }, 1500);
     } catch (error: any) {
       console.error('Failed to update exercise:', error);
-      setSaveResult({ success: false, message: `❌ Failed to update exercise: ${error?.message || 'Please try again.'}` });
+      setSaveResult({ success: false, message: `Failed to update exercise: ${error?.message || 'Please try again.'}` });
     } finally {
       setIsSaving(false);
     }
@@ -734,7 +721,7 @@ export default function ExercisesPage() {
   return (
     <div className="px-4 space-y-6">
       <PageHeader
-        title="Exercise Library"
+        title="Exercise library"
         subtitle={isCatalogLoading ? 'Loading...' : `${exercises.length} exercises available`}
         actions={
           <div className="flex gap-3">
@@ -792,7 +779,7 @@ export default function ExercisesPage() {
               <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Add Custom
+              Add custom
             </Button>
           </Link>
         </div>
@@ -803,10 +790,10 @@ export default function ExercisesPage() {
       {batchProgress && (
         <div className="bg-action/10 border border-action/20 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-action">
+            <p className="text-subhead font-medium text-action">
               Processing: {batchProgress.exerciseName}
             </p>
-            <p className="text-xs text-action">
+            <p className="text-caption text-action">
               {batchProgress.current} / {batchProgress.total}
             </p>
           </div>
@@ -821,17 +808,15 @@ export default function ExercisesPage() {
 
       {/* Batch completion result */}
       {batchResult && !isBatchCompleting && (
-        <div className={`rounded-lg p-4 ${
-          batchResult.errors > 0 
-            ? 'bg-orange-500/10 border border-orange-500/20' 
-            : 'bg-emerald-500/10 border border-emerald-500/20'
+        <div className={`rounded-card p-4 ${
+          batchResult.errors > 0 ? 'bg-status-warn-tint' : 'bg-status-ok-tint'
         }`}>
-          <p className={`text-sm font-medium mb-2 ${
-            batchResult.errors > 0 ? 'text-orange-300' : 'text-emerald-300'
+          <p className={`text-subhead font-medium mb-2 ${
+            batchResult.errors > 0 ? 'text-status-warn' : 'text-status-ok'
           }`}>
-            Batch completion finished!
+            Batch completion finished
           </p>
-          <div className="text-xs space-y-1 text-ink-2">
+          <div className="text-caption space-y-1 text-ink-2">
             <p>Processed: {batchResult.processed}</p>
             <p>Updated: {batchResult.updated}</p>
             <p>Skipped: {batchResult.skipped}</p>
@@ -852,7 +837,7 @@ export default function ExercisesPage() {
       )}
       {isCompletingIncomplete && (
         <div className="bg-action/10 border border-action/20 rounded-lg p-4">
-          <p className="text-sm text-action">Running AI review on incomplete exercises…</p>
+          <p className="text-subhead text-action">Running AI review on incomplete exercises…</p>
         </div>
       )}
 
@@ -874,10 +859,10 @@ export default function ExercisesPage() {
 
       {/* Status filter */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-ink-3 uppercase tracking-wide">Status:</span>
+        <span className="text-caption text-ink-3">Status</span>
         <button
           onClick={() => setStatusFilter('all')}
-          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+          className={`px-3 py-1.5 rounded-full text-subhead transition-colors ${
             statusFilter === 'all'
               ? 'bg-action text-on-action'
               : 'bg-fill text-ink-2 hover:bg-sep'
@@ -887,7 +872,7 @@ export default function ExercisesPage() {
         </button>
         <button
           onClick={() => setStatusFilter('active')}
-          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+          className={`px-3 py-1.5 rounded-full text-subhead transition-colors ${
             statusFilter === 'active'
               ? 'bg-action text-on-action'
               : 'bg-fill text-ink-2 hover:bg-sep'
@@ -897,9 +882,9 @@ export default function ExercisesPage() {
         </button>
         <button
           onClick={() => setStatusFilter('muted')}
-          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+          className={`px-3 py-1.5 rounded-full text-subhead transition-colors ${
             statusFilter === 'muted'
-              ? 'bg-amber-500 text-white'
+              ? 'bg-status-warn text-white'
               : 'bg-fill text-ink-2 hover:bg-sep'
           }`}
         >
@@ -907,7 +892,7 @@ export default function ExercisesPage() {
         </button>
         <button
           onClick={() => setStatusFilter('archived')}
-          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+          className={`px-3 py-1.5 rounded-full text-subhead transition-colors ${
             statusFilter === 'archived'
               ? 'bg-sep text-ink'
               : 'bg-fill text-ink-2 hover:bg-sep'
@@ -920,11 +905,11 @@ export default function ExercisesPage() {
       {/* Muscle filter chips — single-row scroller on mobile so the list
           isn't buried under a wall of wrapped chips; wraps on desktop. */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-ink-3 uppercase tracking-wide shrink-0">Muscle:</span>
+        <span className="text-caption text-ink-3 shrink-0">Muscle</span>
         <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           <button
             onClick={() => setSelectedMuscle(null)}
-            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-subhead transition-colors ${
               !selectedMuscle
                 ? 'bg-action text-on-action'
                 : 'bg-fill text-ink-2 hover:bg-sep'
@@ -939,7 +924,7 @@ export default function ExercisesPage() {
             <button
               key={option.value}
               onClick={() => setSelectedMuscle(option.value)}
-              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-subhead transition-colors ${
                 selectedMuscle === option.value
                   ? 'bg-action text-on-action'
                   : 'bg-fill text-ink-2 hover:bg-sep'
@@ -953,11 +938,11 @@ export default function ExercisesPage() {
 
       {/* Equipment filter chips — same single-row-scroller treatment. */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-ink-3 uppercase tracking-wide shrink-0">Equipment:</span>
+        <span className="text-caption text-ink-3 shrink-0">Equipment</span>
         <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           <button
             onClick={() => setSelectedEquipment(null)}
-            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-subhead transition-colors ${
               !selectedEquipment
                 ? 'bg-action text-on-action'
                 : 'bg-fill text-ink-2 hover:bg-sep'
@@ -969,7 +954,7 @@ export default function ExercisesPage() {
             <button
               key={eq.value}
               onClick={() => setSelectedEquipment(eq.value)}
-              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-subhead transition-colors ${
                 selectedEquipment === eq.value
                   ? 'bg-action text-on-action'
                   : 'bg-fill text-ink-2 hover:bg-sep'
@@ -1014,13 +999,13 @@ export default function ExercisesPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium text-ink" data-testid="library-exercise-name" data-exercise-id={exercise.id}>{exercise.name}</h3>
                       {exercise.hypertrophy_tier && (
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-caption font-semibold ${tierBadgeClasses(exercise.hypertrophy_tier)}`}>
                           {exercise.hypertrophy_tier}
                         </span>
                       )}
                       {/* Status indicators */}
                       {exerciseStatus === 'do_not_suggest' && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-caption bg-status-warn-tint text-status-warn">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
@@ -1029,7 +1014,7 @@ export default function ExercisesPage() {
                         </span>
                       )}
                       {exerciseStatus === 'archived' && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-sep text-ink-2 border border-sep">
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-caption bg-sep text-ink-2 border border-sep">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                           </svg>
@@ -1038,7 +1023,7 @@ export default function ExercisesPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-ink-3 capitalize">
+                      <span className="text-subhead text-ink-3 capitalize">
                         {exercise.primary_muscle}
                       </span>
                       <span className="text-ink-3">•</span>
@@ -1048,7 +1033,7 @@ export default function ExercisesPage() {
                       {history && history.totalSessions > 0 && (
                         <>
                           <span className="text-ink-3">•</span>
-                          <span className="text-xs text-action">
+                          <span className="text-caption text-action">
                             {history.totalSessions} sessions
                           </span>
                         </>
@@ -1056,7 +1041,7 @@ export default function ExercisesPage() {
                       {exerciseStatus === 'archived' && search.length > 0 && (
                         <>
                           <span className="text-ink-3">•</span>
-                          <span className="text-xs text-ink-3">
+                          <span className="text-caption text-ink-3">
                             Found in search
                           </span>
                         </>
@@ -1116,23 +1101,23 @@ export default function ExercisesPage() {
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {exercise.exercise_type === 'duration_based' ? (
                           <div className="bg-fill/50 rounded-lg p-3 text-center">
-                            <p className="text-xs text-ink-3 uppercase">Best Hold</p>
-                            <p className="text-lg font-bold text-action">
+                            <p className="text-caption text-ink-3">Best hold</p>
+                            <p className="text-headline font-bold text-action">
                               {history.personalRecord ? `${history.personalRecord.reps}s` : '—'}
                             </p>
                           </div>
                         ) : (
                           <div className="bg-fill/50 rounded-lg p-3 text-center">
-                            <p className="text-xs text-ink-3 uppercase">Est 1RM</p>
-                            <p className="text-lg font-bold text-action">
+                            <p className="text-caption text-ink-3">Est 1RM</p>
+                            <p className="text-headline font-bold text-action">
                               {formatWeight(history.estimatedE1RM, unit)} {unit}
                             </p>
                           </div>
                         )}
                         {history.personalRecord && (
                           <div className="bg-fill/50 rounded-lg p-3 text-center">
-                            <p className="text-xs text-ink-3 uppercase">PR</p>
-                            <p className="text-lg font-bold text-status-ok">
+                            <p className="text-caption text-ink-3">PR</p>
+                            <p className="text-headline font-bold text-status-ok">
                               {exercise.exercise_type === 'duration_based'
                                 ? `${history.personalRecord.reps}s @ ${formatWeight(history.personalRecord.weightKg, unit)}`
                                 : `${formatWeight(history.personalRecord.weightKg, unit)} × ${history.personalRecord.reps}`}
@@ -1140,14 +1125,14 @@ export default function ExercisesPage() {
                           </div>
                         )}
                         <div className="bg-fill/50 rounded-lg p-3 text-center">
-                          <p className="text-xs text-ink-3 uppercase">Sessions</p>
-                          <p className="text-lg font-bold text-ink">
+                          <p className="text-caption text-ink-3">Sessions</p>
+                          <p className="text-headline font-bold text-ink">
                             {history.totalSessions}
                           </p>
                         </div>
                         <div className="bg-fill/50 rounded-lg p-3 text-center">
-                          <p className="text-xs text-ink-3 uppercase">Last Done</p>
-                          <p className="text-sm font-medium text-ink-2">
+                          <p className="text-caption text-ink-3">Last done</p>
+                          <p className="text-subhead font-medium text-ink-2">
                             {(() => {
                               const date = new Date(history.lastWorkoutDate);
                               return `${date.getMonth() + 1}/${date.getDate()}`;
@@ -1167,7 +1152,7 @@ export default function ExercisesPage() {
                             <>
                               <button
                                 onClick={() => setActiveChart('e1rm')}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                className={`px-3 py-1.5 rounded-lg text-subhead font-medium transition-colors ${
                                   activeChart === 'e1rm'
                                     ? 'bg-action text-on-action'
                                     : 'bg-sep text-ink-2 hover:text-ink'
@@ -1177,7 +1162,7 @@ export default function ExercisesPage() {
                               </button>
                               <button
                                 onClick={() => setActiveChart('volume')}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                className={`px-3 py-1.5 rounded-lg text-subhead font-medium transition-colors ${
                                   activeChart === 'volume'
                                     ? 'bg-action text-on-action'
                                     : 'bg-sep text-ink-2 hover:text-ink'
@@ -1189,13 +1174,13 @@ export default function ExercisesPage() {
                           )}
                           <button
                             onClick={() => setActiveChart('best')}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            className={`px-3 py-1.5 rounded-lg text-subhead font-medium transition-colors ${
                               activeChart === 'best' || exercise.exercise_type === 'duration_based'
                                 ? 'bg-action text-on-action'
                                 : 'bg-sep text-ink-2 hover:text-ink'
                             }`}
                           >
-                            Best Set
+                            Best set
                           </button>
                         </div>
 
@@ -1212,7 +1197,7 @@ export default function ExercisesPage() {
                     {/* Not enough data for charts */}
                     {!isLoadingThis && history && history.totalSessions > 0 && !hasChartData && (
                       <div className="bg-fill/30 rounded-lg p-4 text-center">
-                        <p className="text-ink-3 text-sm">
+                        <p className="text-ink-3 text-subhead">
                           Complete at least 2 workouts with this exercise to see progress charts
                         </p>
                       </div>
@@ -1221,14 +1206,14 @@ export default function ExercisesPage() {
                     {/* Last workout sets */}
                     {!isLoadingThis && history && history.lastWorkoutSets.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
-                          Last Workout Sets
+                        <p className="text-caption font-medium text-ink-2 mb-2">
+                          Last workout sets
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {history.lastWorkoutSets.map((set, idx) => (
                             <span 
                               key={idx}
-                              className="px-3 py-1.5 bg-fill rounded-lg text-sm text-ink-2"
+                              className="px-3 py-1.5 bg-fill rounded-lg text-subhead text-ink-2"
                             >
                               {formatWeight(set.weightKg, unit)} × {set.reps}
                               {set.rpe && <span className="text-ink-3 ml-1">@{set.rpe}</span>}
@@ -1244,8 +1229,8 @@ export default function ExercisesPage() {
                         <svg className="w-12 h-12 mx-auto text-ink-3 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                         </svg>
-                        <p className="text-ink-2 text-sm">No workout history for this exercise yet</p>
-                        <p className="text-ink-3 text-xs mt-1">Add it to a workout to start tracking progress!</p>
+                        <p className="text-ink-2 text-subhead">No workout history for this exercise yet</p>
+                        <p className="text-ink-3 text-caption mt-1">Add it to a workout to start tracking progress!</p>
                       </div>
                     )}
 
@@ -1253,13 +1238,13 @@ export default function ExercisesPage() {
                     {(exercise.hypertrophy_tier || exercise.stretch_under_load || exercise.resistance_profile || exercise.progression_ease) && (
                       <div className="bg-fill/30 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
-                          <p className="text-xs font-medium text-ink-2 uppercase tracking-wider">
-                            Hypertrophy Effectiveness
+                          <p className="text-caption font-medium text-ink-2">
+                            Hypertrophy effectiveness
                           </p>
                           {exercise.hypertrophy_tier && (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-ink-3">Tier</span>
-                              <span className={`px-2 py-0.5 rounded text-sm font-bold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
+                              <span className="text-caption text-ink-3">Tier</span>
+                              <span className={`px-2 py-0.5 rounded text-subhead font-bold ${tierBadgeClasses(exercise.hypertrophy_tier)}`}>
                                 {exercise.hypertrophy_tier}
                               </span>
                             </div>
@@ -1285,7 +1270,7 @@ export default function ExercisesPage() {
                             />
                           )}
                         </div>
-                        <p className="text-xs text-ink-3 mt-3">
+                        <p className="text-caption text-ink-3 mt-3">
                           Based on Jeff Nippard&apos;s evidence-based exercise rankings
                         </p>
                       </div>
@@ -1296,8 +1281,8 @@ export default function ExercisesPage() {
                       {/* Secondary muscles */}
                       {exercise.secondary_muscles && exercise.secondary_muscles.length > 0 && (
                         <div>
-                          <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
-                            Secondary Muscles
+                          <p className="text-caption font-medium text-ink-2 mb-2">
+                            Secondary muscles
                           </p>
                           <div className="flex flex-wrap gap-1">
                             {exercise.secondary_muscles.map((muscle, idx) => (
@@ -1312,7 +1297,7 @@ export default function ExercisesPage() {
                       {/* Equipment */}
                       {exercise.equipment_required && exercise.equipment_required.length > 0 && (
                         <div>
-                          <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
+                          <p className="text-caption font-medium text-ink-2 mb-2">
                             Equipment
                           </p>
                           <div className="flex flex-wrap gap-1">
@@ -1338,8 +1323,8 @@ export default function ExercisesPage() {
 
                       return (
                         <div>
-                          <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
-                            Exercise Demo
+                          <p className="text-caption font-medium text-ink-2 mb-2">
+                            Exercise demo
                           </p>
                           {isVideo && (
                             <div className="relative rounded-lg overflow-hidden bg-card aspect-video shadow-card">
@@ -1391,12 +1376,12 @@ export default function ExercisesPage() {
                     {/* Form cues */}
                     {exercise.form_cues && exercise.form_cues.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
-                          Form Cues
+                        <p className="text-caption font-medium text-ink-2 mb-2">
+                          Form cues
                         </p>
                         <ul className="space-y-1">
                           {exercise.form_cues.map((cue, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-sm text-ink-2">
+                            <li key={idx} className="flex items-start gap-2 text-subhead text-ink-2">
                               <span className="text-action">•</span>
                               {cue}
                             </li>
@@ -1408,12 +1393,12 @@ export default function ExercisesPage() {
                     {/* Common mistakes */}
                     {exercise.common_mistakes && exercise.common_mistakes.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
-                          Common Mistakes
+                        <p className="text-caption font-medium text-ink-2 mb-2">
+                          Common mistakes
                         </p>
                         <ul className="space-y-1">
                           {exercise.common_mistakes.map((mistake, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-sm text-status-bad/80">
+                            <li key={idx} className="flex items-start gap-2 text-subhead text-status-bad/80">
                               <span>✗</span>
                               {mistake}
                             </li>
@@ -1428,21 +1413,21 @@ export default function ExercisesPage() {
                         href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-3 py-2 bg-fill hover:bg-sep rounded-lg text-sm text-ink-2 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-fill hover:bg-sep rounded-lg text-subhead text-ink-2 transition-colors"
                       >
                         <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                         </svg>
-                        Watch Form
+                        Watch form
                       </a>
                       <Link 
                         href="/dashboard/workout/new"
-                        className="flex items-center gap-1.5 px-3 py-2 bg-action hover:bg-action rounded-lg text-sm text-on-action transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-action hover:bg-action rounded-lg text-subhead text-on-action transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
-                        Add to Workout
+                        Add to workout
                       </Link>
                     </div>
                   </div>
@@ -1455,42 +1440,24 @@ export default function ExercisesPage() {
 
       {!isCatalogLoading && filteredExercises.length === 0 && (
         <EmptyState
-          icon="🔍"
+          icon={<IconSearch className="h-8 w-8" stroke={1.75} />}
           title="No exercises found"
           description="Try adjusting your search or filters"
         />
       )}
 
-      {/* Edit Exercise Modal */}
-      {editingExercise && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          style={{
-            // Re-center above the on-screen keyboard; safe-area stays additive.
-            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${editKbInset}px)`,
-          }}
-        >
-          <Card
-            ref={editModalRef}
-            className="w-full max-w-md overflow-y-auto"
-            style={{ maxHeight: `calc(100vh - 2rem - ${editKbInset}px)` }}
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-ink">Edit Exercise</h3>
-                <button
-                  onClick={() => setEditingExercise(null)}
-                  className="p-1 text-ink-2 hover:text-ink transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
+      {/* Edit exercise */}
+      <Sheet
+        isOpen={!!editingExercise}
+        onClose={() => setEditingExercise(null)}
+        title="Edit exercise"
+        size="md"
+        data-testid="edit-exercise-sheet"
+      >
+        {editingExercise && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-ink-2 mb-1">Exercise Name</label>
+                  <label className="block text-subhead text-ink-2 mb-1">Exercise name</label>
                   <p className="text-ink font-medium">{editingExercise.name}</p>
                 </div>
 
@@ -1508,7 +1475,7 @@ export default function ExercisesPage() {
                     className="p-3 bg-status-warn/15 border border-status-warn rounded-lg"
                     data-testid="catalog-exercise-notice"
                   >
-                    <p className="text-sm text-status-warn">
+                    <p className="text-subhead text-status-warn">
                       Shared exercise (not created by you) — saving edits it
                       for every user (previous values are kept in the audit
                       trail).
@@ -1520,7 +1487,7 @@ export default function ExercisesPage() {
                   <>
                     {/* Primary Muscle Group */}
                     <div>
-                      <label className="block text-sm text-ink-2 mb-2">Primary Muscle Group</label>
+                      <label className="block text-subhead text-ink-2 mb-2">Primary muscle group</label>
                       {/* Groups AND their subdivisions: a coarse tag splits its
                           credit across every head, so an exercise that actually
                           targets one (Obliques, Side Delts, the tricep heads)
@@ -1530,7 +1497,7 @@ export default function ExercisesPage() {
                           <button
                             key={option.value}
                             onClick={() => setEditData({ ...editData, primaryMuscle: option.value })}
-                            className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                            className={`px-3 py-2 rounded-lg text-subhead transition-colors ${
                               editData.primaryMuscle === option.value
                                 ? 'bg-action text-on-action'
                                 : 'bg-fill text-ink-2 hover:bg-sep'
@@ -1541,7 +1508,7 @@ export default function ExercisesPage() {
                         ))}
                       </div>
                       {coarseSplitWarning(editData.primaryMuscle) && (
-                        <p className="text-xs text-amber-400/90 mt-2">
+                        <p className="text-caption text-status-warn mt-2">
                           {coarseSplitWarning(editData.primaryMuscle)}
                         </p>
                       )}
@@ -1556,17 +1523,17 @@ export default function ExercisesPage() {
                           onChange={(e) => setEditData({ ...editData, isBodyweight: e.target.checked })}
                           className="w-4 h-4 rounded border-sep bg-card text-action focus:ring-action"
                         />
-                        <span className="text-sm text-ink">Bodyweight Exercise</span>
+                        <span className="text-subhead text-ink">Bodyweight exercise</span>
                       </label>
                       
                       {editData.isBodyweight && (
                         <div className="ml-6 space-y-3">
                           <div>
-                            <label className="block text-xs font-medium text-ink-2 mb-1">Bodyweight Type</label>
+                            <label className="block text-caption font-medium text-ink-2 mb-1">Bodyweight type</label>
                             <select
                               value={editData.bodyweightType || ''}
                               onChange={(e) => setEditData({ ...editData, bodyweightType: e.target.value as any || null })}
-                              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                             >
                               <option value="">Not specified</option>
                               <option value="pure">Pure (always bodyweight)</option>
@@ -1578,11 +1545,11 @@ export default function ExercisesPage() {
                           
                           {(editData.bodyweightType === 'assisted_possible' || editData.bodyweightType === 'both') && (
                             <div>
-                              <label className="block text-xs font-medium text-ink-2 mb-1">Assistance Type</label>
+                              <label className="block text-caption font-medium text-ink-2 mb-1">Assistance type</label>
                               <select
                                 value={editData.assistanceType || ''}
                                 onChange={(e) => setEditData({ ...editData, assistanceType: e.target.value as any || null })}
-                                className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                                className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                               >
                                 <option value="">Not specified</option>
                                 <option value="machine">Machine</option>
@@ -1597,11 +1564,11 @@ export default function ExercisesPage() {
 
                     {/* Equipment */}
                     <div>
-                      <label className="block text-sm text-ink-2 mb-1">Equipment</label>
+                      <label className="block text-subhead text-ink-2 mb-1">Equipment</label>
                       <select
                         value={editData.equipment}
                         onChange={(e) => setEditData({ ...editData, equipment: e.target.value })}
-                        className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                        className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                       >
                         <option value="barbell">Barbell</option>
                         <option value="dumbbell">Dumbbell</option>
@@ -1616,24 +1583,24 @@ export default function ExercisesPage() {
 
                     {/* Movement Pattern */}
                     <div>
-                      <label className="block text-sm text-ink-2 mb-1">Movement Pattern</label>
+                      <label className="block text-subhead text-ink-2 mb-1">Movement pattern</label>
                       <select
                         value={editData.movementPattern}
                         onChange={(e) => setEditData({ ...editData, movementPattern: e.target.value })}
-                        className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                        className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                       >
-                        <option value="horizontal_push">Horizontal Push</option>
-                        <option value="horizontal_pull">Horizontal Pull</option>
-                        <option value="vertical_push">Vertical Push</option>
-                        <option value="vertical_pull">Vertical Pull</option>
-                        <option value="hip_hinge">Hip Hinge</option>
+                        <option value="horizontal_push">Horizontal push</option>
+                        <option value="horizontal_pull">Horizontal pull</option>
+                        <option value="vertical_push">Vertical push</option>
+                        <option value="vertical_pull">Vertical pull</option>
+                        <option value="hip_hinge">Hip hinge</option>
                         <option value="squat">Squat</option>
                         <option value="lunge">Lunge</option>
-                        <option value="knee_flexion">Knee Flexion</option>
-                        <option value="elbow_flexion">Elbow Flexion</option>
-                        <option value="elbow_extension">Elbow Extension</option>
-                        <option value="shoulder_isolation">Shoulder Isolation</option>
-                        <option value="calf_raise">Calf Raise</option>
+                        <option value="knee_flexion">Knee flexion</option>
+                        <option value="elbow_flexion">Elbow flexion</option>
+                        <option value="elbow_extension">Elbow extension</option>
+                        <option value="shoulder_isolation">Shoulder isolation</option>
+                        <option value="calf_raise">Calf raise</option>
                         <option value="core">Core</option>
                         <option value="isolation">Isolation</option>
                         <option value="carry">Carry</option>
@@ -1646,9 +1613,9 @@ export default function ExercisesPage() {
                       <button
                         type="button"
                         onClick={() => setShowAdvancedFields(!showAdvancedFields)}
-                        className="flex items-center justify-between w-full text-sm text-ink-2 hover:text-ink transition-colors"
+                        className="flex items-center justify-between w-full text-subhead text-ink-2 hover:text-ink transition-colors"
                       >
-                        <span>Advanced Fields</span>
+                        <span>Advanced fields</span>
                         <svg 
                           className={`w-4 h-4 transition-transform ${showAdvancedFields ? 'rotate-180' : ''}`}
                           fill="none" 
@@ -1665,7 +1632,7 @@ export default function ExercisesPage() {
                       <div className="space-y-4 pt-2 border-t border-sep">
                         {/* Equipment Required (Multi-select) */}
                         <div>
-                          <label className="block text-sm font-medium text-ink-2 mb-2">
+                          <label className="block text-subhead font-medium text-ink-2 mb-2">
                             Equipment Required (select all that apply)
                           </label>
                           <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-fill/50 rounded-lg">
@@ -1692,12 +1659,12 @@ export default function ExercisesPage() {
                                   }}
                                   className="w-4 h-4 text-action bg-sep border-sep rounded focus:ring-action"
                                 />
-                                <span className="text-sm text-ink-2">{eq.name}</span>
+                                <span className="text-subhead text-ink-2">{eq.name}</span>
                               </label>
                             ))}
                           </div>
                           {editData.equipmentRequired.length > 0 && (
-                            <p className="text-xs text-ink-3 mt-1">
+                            <p className="text-caption text-ink-3 mt-1">
                               Selected: {editData.equipmentRequired.join(', ')}
                             </p>
                           )}
@@ -1705,8 +1672,8 @@ export default function ExercisesPage() {
 
                         {/* Secondary Muscles */}
                         <div>
-                          <label className="block text-sm font-medium text-ink-2 mb-2">
-                            Secondary Muscles
+                          <label className="block text-subhead font-medium text-ink-2 mb-2">
+                            Secondary muscles
                           </label>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-fill/50 rounded-lg">
                             {ALL_MUSCLE_TAG_OPTIONS.filter(o => o.value !== editData.primaryMuscle).map((option) => (
@@ -1732,7 +1699,7 @@ export default function ExercisesPage() {
                                   }}
                                   className="w-4 h-4 text-action bg-sep border-sep rounded focus:ring-action"
                                 />
-                                <span className="text-xs text-ink-2">{option.label}</span>
+                                <span className="text-caption text-ink-2">{option.label}</span>
                               </label>
                             ))}
                           </div>
@@ -1740,11 +1707,11 @@ export default function ExercisesPage() {
 
                         {/* Hypertrophy Tier */}
                         <div>
-                          <label className="block text-sm text-ink-2 mb-1">Hypertrophy Tier</label>
+                          <label className="block text-subhead text-ink-2 mb-1">Hypertrophy tier</label>
                           <select
                             value={editData.hypertrophyTier || ''}
                             onChange={(e) => setEditData(prev => prev ? ({ ...prev, hypertrophyTier: e.target.value as any || undefined }) : null)}
-                            className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                            className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                           >
                             <option value="">Not set</option>
                             <option value="S">S (Best)</option>
@@ -1759,7 +1726,7 @@ export default function ExercisesPage() {
                         {/* Rep Range */}
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-sm text-ink-2 mb-1">Default Rep Range (Min)</label>
+                            <label className="block text-subhead text-ink-2 mb-1">Default Rep Range (Min)</label>
                             <input
                               type="number"
                               value={editData.defaultRepRangeMin?.toString() || ''}
@@ -1768,11 +1735,11 @@ export default function ExercisesPage() {
                                 defaultRepRangeMin: e.target.value ? parseInt(e.target.value) : undefined 
                               }) : null)}
                               placeholder="8"
-                              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm text-ink-2 mb-1">Default Rep Range (Max)</label>
+                            <label className="block text-subhead text-ink-2 mb-1">Default Rep Range (Max)</label>
                             <input
                               type="number"
                               value={editData.defaultRepRangeMax?.toString() || ''}
@@ -1781,14 +1748,14 @@ export default function ExercisesPage() {
                                 defaultRepRangeMax: e.target.value ? parseInt(e.target.value) : undefined 
                               }) : null)}
                               placeholder="12"
-                              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                             />
                           </div>
                         </div>
 
                         {/* Default RIR */}
                         <div>
-                          <label className="block text-sm text-ink-2 mb-1">Default RIR (Reps In Reserve)</label>
+                          <label className="block text-subhead text-ink-2 mb-1">Default RIR (Reps In Reserve)</label>
                           <input
                             type="number"
                             value={editData.defaultRir?.toString() || ''}
@@ -1797,13 +1764,13 @@ export default function ExercisesPage() {
                               defaultRir: e.target.value ? parseInt(e.target.value) : undefined 
                             }) : null)}
                             placeholder="2"
-                            className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+                            className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
                           />
                         </div>
 
                         {/* Setup Note */}
                         <div>
-                          <label className="block text-sm text-ink-2 mb-1">Setup Note</label>
+                          <label className="block text-subhead text-ink-2 mb-1">Setup note</label>
                           <textarea
                             value={editData.setupNote || ''}
                             onChange={(e) => setEditData(prev => prev ? ({ ...prev, setupNote: e.target.value }) : null)}
@@ -1818,7 +1785,7 @@ export default function ExercisesPage() {
                 )}
 
                 {saveResult && (
-                  <div className={`p-3 rounded-lg text-sm ${
+                  <div className={`p-3 rounded-lg text-subhead ${
                     saveResult.success 
                       ? 'bg-status-ok/10 text-status-ok border border-status-ok/20'
                       : 'bg-status-bad/10 text-status-bad border border-status-bad/20'
@@ -1848,15 +1815,13 @@ export default function ExercisesPage() {
                         Saving...
                       </>
                     ) : (
-                      'Save Changes'
+                      'Save changes'
                     )}
                   </Button>
                 </div>
               </div>
-            </div>
-          </Card>
-        </div>
-      )}
+        )}
+      </Sheet>
 
       {/* Exercise Status Modal */}
       {statusModalExercise && (
@@ -1875,44 +1840,35 @@ export default function ExercisesPage() {
         />
       )}
 
-      {/* Delete Exercise Confirmation Modal */}
-      {deletingExercise && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <Card className="w-full max-w-md">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-ink">Delete Exercise</h3>
-                <button
-                  onClick={() => {
-                    setDeletingExercise(null);
-                    setDeleteError(null);
-                  }}
-                  className="p-1 text-ink-2 hover:text-ink transition-colors"
-                  disabled={isDeleting}
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
+      {/* Delete exercise */}
+      <Sheet
+        isOpen={!!deletingExercise}
+        onClose={isDeleting ? () => {} : () => {
+          setDeletingExercise(null);
+          setDeleteError(null);
+        }}
+        title="Delete exercise"
+        size="md"
+        data-testid="delete-exercise-sheet"
+      >
+        {deletingExercise && (
               <div className="space-y-4">
                 <div>
                   <p className="text-ink mb-2">
                     Are you sure you want to delete <span className="font-semibold">{deletingExercise.name}</span>?
                   </p>
                   {!deletingExercise.isCustom && (
-                    <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                      ⚠️ This is not a custom exercise. Deleting it may affect other users or system functionality.
+                    <p className="text-subhead text-status-warn bg-status-warn-tint rounded-card p-3">
+                      This is not a custom exercise. Deleting it may affect other users or system functionality.
                     </p>
                   )}
-                  <p className="text-sm text-ink-2 mt-2">
+                  <p className="text-subhead text-ink-2 mt-2">
                     This action cannot be undone. All exercise data, including workout history, will be permanently deleted.
                   </p>
                 </div>
 
                 {deleteError && (
-                  <div className="p-3 bg-status-bad/10 text-status-bad border border-status-bad/20 rounded-lg text-sm">
+                  <div className="p-3 bg-status-bad-tint text-status-bad rounded-card text-subhead">
                     {deleteError}
                   </div>
                 )}
@@ -1941,15 +1897,13 @@ export default function ExercisesPage() {
                         Deleting...
                       </>
                     ) : (
-                      'Delete Exercise'
+                      'Delete exercise'
                     )}
                   </Button>
                 </div>
               </div>
-            </div>
-          </Card>
-        </div>
-      )}
+        )}
+      </Sheet>
     </div>
   );
 }
