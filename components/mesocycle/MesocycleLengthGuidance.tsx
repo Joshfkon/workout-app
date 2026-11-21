@@ -56,7 +56,7 @@ export function MesocycleLengthGuidance({
         </svg>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-ink leading-relaxed">
+          <p className="text-subhead text-ink leading-relaxed">
             {reasoning}
           </p>
 
@@ -65,7 +65,7 @@ export function MesocycleLengthGuidance({
             {onAcceptRecommendation && (
               <button
                 onClick={() => onAcceptRecommendation(suggestedWeeks)}
-                className="text-sm font-medium text-status-warn hover:text-status-warn transition-colors"
+                className="text-subhead font-medium text-status-warn hover:text-status-warn transition-colors"
               >
                 Adjust to {recommendedRange.min === recommendedRange.max
                   ? `${recommendedRange.min} weeks`
@@ -74,7 +74,7 @@ export function MesocycleLengthGuidance({
             )}
             <button
               onClick={() => setDismissed(true)}
-              className="text-sm text-ink-2 hover:text-ink-2 transition-colors"
+              className="text-subhead text-ink-2 hover:text-ink-2 transition-colors"
             >
               Keep {guidance.selectedWeeks} weeks
             </button>

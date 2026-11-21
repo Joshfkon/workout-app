@@ -285,22 +285,22 @@ export function CreateCustomExercise({
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-medium text-action mb-1">
-                Exercise Saved
+              <h4 className="text-subhead font-medium text-action mb-1">
+                Exercise saved
               </h4>
-              <p className="text-sm text-ink-2 mb-3">
+              <p className="text-subhead text-ink-2 mb-3">
                 No secondary muscles were added yet. You can refine this later from the exercise library.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={handleEditExercise}
-                  className="text-sm font-medium text-action transition-colors"
+                  className="text-subhead font-medium text-action transition-colors"
                 >
-                  Edit Exercise
+                  Edit exercise
                 </button>
                 <button
                   onClick={handleDismissNudge}
-                  className="text-sm font-medium text-ink-2 hover:text-ink-2 transition-colors"
+                  className="text-subhead font-medium text-ink-2 hover:text-ink-2 transition-colors"
                 >
                   Continue
                 </button>

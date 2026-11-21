@@ -73,7 +73,7 @@ export function ExerciseStatusModal({
     <Modal isOpen={isOpen} onClose={handleClose} title={title} description={description} size="sm">
       <div className="space-y-4">
         <div>
-          <p className="text-sm text-ink-2 mb-3">Reason (optional):</p>
+          <p className="text-subhead text-ink-2 mb-3">Reason (optional):</p>
           <div className="space-y-2">
             {REASON_OPTIONS.map((option) => (
               <label
@@ -93,7 +93,7 @@ export function ExerciseStatusModal({
                   className="mt-0.5 w-4 h-4 text-action bg-fill border-sep focus:ring-action focus:ring-offset-card"
                 />
                 <div>
-                  <p className="text-sm text-ink">{option.label}</p>
+                  <p className="text-subhead text-ink">{option.label}</p>
                 </div>
               </label>
             ))}
@@ -102,7 +102,7 @@ export function ExerciseStatusModal({
 
         {selectedReason === 'other' && (
           <div>
-            <label className="block text-sm text-ink-2 mb-2">
+            <label className="block text-subhead text-ink-2 mb-2">
               Add a note (optional):
             </label>
             <textarea
@@ -166,12 +166,12 @@ export function ResetPreferencesModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Reset All Exercise Preferences"
+      title="Reset all exercise preferences"
       size="sm"
     >
       <div className="space-y-4">
-        <p className="text-sm text-ink-2">This will:</p>
-        <ul className="list-disc list-inside text-sm text-ink-2 space-y-1">
+        <p className="text-subhead text-ink-2">This will:</p>
+        <ul className="list-disc list-inside text-subhead text-ink-2 space-y-1">
           {archivedCount > 0 && (
             <li>Unarchive {archivedCount} exercise{archivedCount > 1 ? 's' : ''}</li>
           )}
@@ -179,7 +179,7 @@ export function ResetPreferencesModal({
             <li>Re-enable suggestions for {doNotSuggestCount} exercise{doNotSuggestCount > 1 ? 's' : ''}</li>
           )}
         </ul>
-        <p className="text-sm text-ink-3">Your workout history is not affected.</p>
+        <p className="text-subhead text-ink-3">Your workout history is not affected.</p>
 
         <ModalFooter>
           <Button variant="ghost" onClick={onClose} disabled={isSubmitting}>

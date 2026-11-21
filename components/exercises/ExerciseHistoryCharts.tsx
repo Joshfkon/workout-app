@@ -49,44 +49,44 @@ export function ExerciseHistoryCharts({
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--ht-sep))" />
               <XAxis
                 dataKey="date"
-                stroke="#9ca3af"
+                stroke="rgb(var(--ht-ink-3))"
                 fontSize={11}
-                tick={{ fill: '#9ca3af' }}
+                tick={{ fill: 'rgb(var(--ht-ink-3))' }}
               />
               <YAxis
-                stroke="#9ca3af"
+                stroke="rgb(var(--ht-ink-3))"
                 fontSize={11}
-                tick={{ fill: '#9ca3af' }}
+                tick={{ fill: 'rgb(var(--ht-ink-3))' }}
                 domain={['dataMin - 5', 'dataMax + 5']}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1f2937',
-                  border: '1px solid #374151',
+                  backgroundColor: 'rgb(var(--ht-card))',
+                  border: '1px solid rgb(var(--ht-sep))',
                   borderRadius: '8px',
-                  color: '#f3f4f6',
+                  color: 'rgb(var(--ht-ink))',
                 }}
                 formatter={(value: number) => [`${value} ${unit}`, 'Est 1RM']}
               />
               <Line
                 type="monotone"
                 dataKey="e1rm"
-                stroke="#8b5cf6"
+                stroke="rgb(var(--ht-action))"
                 strokeWidth={2}
-                dot={{ r: 4, fill: '#8b5cf6' }}
-                activeDot={{ r: 6, fill: '#a78bfa' }}
+                dot={{ r: 4, fill: 'rgb(var(--ht-action))' }}
+                activeDot={{ r: 6, fill: 'rgb(var(--ht-action))' }}
               />
               {personalRecord && (
                 <ReferenceLine
                   y={Math.round(convertWeight(personalRecord.e1rm, 'kg', unit))}
-                  stroke="#22c55e"
+                  stroke="rgb(var(--ht-ok))"
                   strokeDasharray="5 5"
                   label={{
                     value: 'PR',
-                    fill: '#22c55e',
+                    fill: 'rgb(var(--ht-ok))',
                     fontSize: 11,
                     position: 'right',
                   }}
@@ -102,24 +102,24 @@ export function ExerciseHistoryCharts({
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--ht-sep))" />
               <XAxis
                 dataKey="date"
-                stroke="#9ca3af"
+                stroke="rgb(var(--ht-ink-3))"
                 fontSize={11}
-                tick={{ fill: '#9ca3af' }}
+                tick={{ fill: 'rgb(var(--ht-ink-3))' }}
               />
               <YAxis
-                stroke="#9ca3af"
+                stroke="rgb(var(--ht-ink-3))"
                 fontSize={11}
-                tick={{ fill: '#9ca3af' }}
+                tick={{ fill: 'rgb(var(--ht-ink-3))' }}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1f2937',
-                  border: '1px solid #374151',
+                  backgroundColor: 'rgb(var(--ht-card))',
+                  border: '1px solid rgb(var(--ht-sep))',
                   borderRadius: '8px',
-                  color: '#f3f4f6',
+                  color: 'rgb(var(--ht-ink))',
                 }}
                 formatter={(value: number) => [
                   `${value.toLocaleString()} ${unit}`,
@@ -128,14 +128,14 @@ export function ExerciseHistoryCharts({
               />
               <defs>
                 <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="5%" stopColor="rgb(var(--ht-action))" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="rgb(var(--ht-action))" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <Area
                 type="monotone"
                 dataKey="volume"
-                stroke="#3b82f6"
+                stroke="rgb(var(--ht-action))"
                 strokeWidth={2}
                 fill="url(#volumeGradient)"
               />
@@ -149,33 +149,33 @@ export function ExerciseHistoryCharts({
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--ht-sep))" />
               <XAxis
                 dataKey="date"
-                stroke="#9ca3af"
+                stroke="rgb(var(--ht-ink-3))"
                 fontSize={11}
-                tick={{ fill: '#9ca3af' }}
+                tick={{ fill: 'rgb(var(--ht-ink-3))' }}
               />
               <YAxis
                 yAxisId="weight"
-                stroke="#f59e0b"
+                stroke="rgb(var(--ht-action))"
                 fontSize={11}
-                tick={{ fill: '#f59e0b' }}
+                tick={{ fill: 'rgb(var(--ht-action))' }}
                 orientation="left"
               />
               <YAxis
                 yAxisId="reps"
-                stroke="#10b981"
+                stroke="rgb(var(--ht-ink-2))"
                 fontSize={11}
-                tick={{ fill: '#10b981' }}
+                tick={{ fill: 'rgb(var(--ht-ink-2))' }}
                 orientation="right"
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1f2937',
-                  border: '1px solid #374151',
+                  backgroundColor: 'rgb(var(--ht-card))',
+                  border: '1px solid rgb(var(--ht-sep))',
                   borderRadius: '8px',
-                  color: '#f3f4f6',
+                  color: 'rgb(var(--ht-ink))',
                 }}
                 formatter={(value: number, name: string) => {
                   if (name === 'bestWeight') return [`${value} ${unit}`, 'Weight'];
@@ -186,29 +186,29 @@ export function ExerciseHistoryCharts({
                 yAxisId="weight"
                 type="monotone"
                 dataKey="bestWeight"
-                stroke="#f59e0b"
+                stroke="rgb(var(--ht-action))"
                 strokeWidth={2}
-                dot={{ r: 4, fill: '#f59e0b' }}
+                dot={{ r: 4, fill: 'rgb(var(--ht-action))' }}
                 name="bestWeight"
               />
               <Line
                 yAxisId="reps"
                 type="monotone"
                 dataKey="bestReps"
-                stroke="#10b981"
+                stroke="rgb(var(--ht-ink-2))"
                 strokeWidth={2}
-                dot={{ r: 4, fill: '#10b981' }}
+                dot={{ r: 4, fill: 'rgb(var(--ht-ink-2))' }}
                 name="bestReps"
               />
             </LineChart>
           </ResponsiveContainer>
-          <div className="flex justify-center gap-6 mt-2 text-xs">
+          <div className="flex justify-center gap-6 mt-2 text-caption">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+              <span className="w-3 h-3 rounded-full bg-action"></span>
               <span className="text-ink-2">Weight ({unit})</span>
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+              <span className="w-3 h-3 rounded-full bg-ink-2"></span>
               <span className="text-ink-2">Reps</span>
             </span>
           </div>

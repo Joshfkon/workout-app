@@ -46,7 +46,7 @@ export function FormCuesEditor({
       {cues.map((cue, index) => (
         <div key={index} className="flex items-start gap-2">
           <span className="flex-shrink-0 w-6 h-6 rounded-full bg-sep
-            flex items-center justify-center text-xs text-ink-2 mt-2">
+            flex items-center justify-center text-caption text-ink-2 mt-2">
             {index + 1}
           </span>
           <div className="flex-1">
@@ -84,7 +84,7 @@ export function FormCuesEditor({
       {cues.length < maxCues && (
         <div className="flex items-start gap-2">
           <span className="flex-shrink-0 w-6 h-6 rounded-full bg-sep/50
-            flex items-center justify-center text-xs text-ink-3 mt-2">
+            flex items-center justify-center text-caption text-ink-3 mt-2">
             +
           </span>
           <div className="flex-1">
@@ -114,7 +114,7 @@ export function FormCuesEditor({
       )}
 
       {cues.length >= maxCues && (
-        <p className="text-xs text-ink-3 text-center">
+        <p className="text-caption text-ink-3 text-center">
           Maximum {maxCues} form cues
         </p>
       )}

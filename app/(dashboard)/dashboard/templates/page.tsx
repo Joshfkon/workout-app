@@ -15,7 +15,8 @@ import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/
 const TEMPLATES_LIST_KEY = ['templates', 'list'] as const;
 import Link from 'next/link';
 import { STARTER_TEMPLATES, starterTemplateHref } from '@/lib/content/starterTemplates';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { Sheet } from '@/components/ui/Sheet';
+import { IconClipboardList, IconClock, IconFolder, IconFolderPlus } from '@tabler/icons-react';
 
 interface FolderWithTemplates extends WorkoutFolder {
   templates: (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[];
@@ -58,14 +59,10 @@ export default function TemplatesPage() {
   const [openFolderMenu, setOpenFolderMenu] = useState<string | null>(null);
   const [openTemplateMenu, setOpenTemplateMenu] = useState<string | null>(null);
 
-  // Template whose "Start Workout" tap is in flight (null = none)
+  // Template whose "Start workout" tap is in flight (null = none)
   const [startingTemplateId, setStartingTemplateId] = useState<string | null>(null);
 
   // Keyboard-aware insets for the two input-bearing modals
-  const { inset: folderKbInset, scrollContainerRef: folderModalRef } =
-    useKeyboardInset<HTMLDivElement>(showCreateFolder || !!editingFolder);
-  const { inset: templateKbInset, scrollContainerRef: templateModalRef } =
-    useKeyboardInset<HTMLDivElement>(showCreateTemplate);
 
   const supabase = createUntypedClient();
   const queryClient = useQueryClient();
@@ -340,8 +337,9 @@ export default function TemplatesPage() {
           <Button
             variant="outline"
             onClick={() => setShowCreateFolder(true)}
+            aria-label="New folder"
           >
-            📁
+            <IconFolderPlus className="h-5 w-5" stroke={1.75} aria-hidden="true" />
           </Button>
         </div>
         }
@@ -354,7 +352,7 @@ export default function TemplatesPage() {
       <div>
         <div className="flex items-baseline justify-between mb-2">
           <SectionLabel>Quick start</SectionLabel>
-          <span className="text-xs text-ink-3">No template needed</span>
+          <span className="text-caption text-ink-3">No template needed</span>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
           {STARTER_TEMPLATES.map((t) => (
@@ -363,16 +361,16 @@ export default function TemplatesPage() {
               href={starterTemplateHref(t)}
               className="shrink-0 w-44 p-4 rounded-xl bg-fill border border-sep hover:border-action hover:bg-sep transition-colors"
             >
-              <span className="text-2xl block mb-2">{t.emoji}</span>
+              <span className="text-title block mb-2">{t.emoji}</span>
               <span className="block font-semibold text-ink">{t.name}</span>
-              <span className="block text-xs text-ink-2 mt-1 leading-snug">{t.description}</span>
+              <span className="block text-caption text-ink-2 mt-1 leading-snug">{t.description}</span>
             </Link>
           ))}
         </div>
       </div>
 
       {error && (
-        <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
+        <div className="p-3 text-subhead text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
           {error}
         </div>
       )}
@@ -387,12 +385,12 @@ export default function TemplatesPage() {
                 onClick={() => toggleFolder(folder.id)}
                 className="flex items-center gap-2 text-left group"
               >
-                <span style={{ color: folder.color }}>📁</span>
+                <IconFolder className="h-4 w-4 flex-shrink-0" style={{ color: folder.color }} stroke={1.75} aria-hidden="true" />
                 <span className="font-semibold text-ink group-hover:text-action transition-colors">
                   {folder.name}
                 </span>
-                <span className="text-sm text-ink-3">({folder.templates.length})</span>
-                <span className="text-ink-3 text-sm">
+                <span className="text-subhead text-ink-3">({folder.templates.length})</span>
+                <span className="text-ink-3 text-subhead">
                   {folder.isExpanded ? '▼' : '▶'}
                 </span>
               </button>
@@ -412,9 +410,9 @@ export default function TemplatesPage() {
                         setFolderColor(folder.color);
                         setOpenFolderMenu(null);
                       }}
-                      className="w-full px-4 py-2 text-left text-sm text-ink hover:bg-sep first:rounded-t-lg"
+                      className="w-full px-4 py-2 text-left text-subhead text-ink hover:bg-sep first:rounded-t-lg"
                     >
-                      Edit Folder
+                      Edit folder
                     </button>
                     <button
                       onClick={() => {
@@ -422,15 +420,15 @@ export default function TemplatesPage() {
                         setShowCreateTemplate(true);
                         setOpenFolderMenu(null);
                       }}
-                      className="w-full px-4 py-2 text-left text-sm text-ink hover:bg-sep"
+                      className="w-full px-4 py-2 text-left text-subhead text-ink hover:bg-sep"
                     >
-                      Add Template
+                      Add template
                     </button>
                     <button
                       onClick={() => handleDeleteFolder(folder.id)}
-                      className="w-full px-4 py-2 text-left text-sm text-status-bad hover:bg-sep last:rounded-b-lg"
+                      className="w-full px-4 py-2 text-left text-subhead text-status-bad hover:bg-sep last:rounded-b-lg"
                     >
-                      Delete Folder
+                      Delete folder
                     </button>
                   </div>
                 )}
@@ -454,7 +452,7 @@ export default function TemplatesPage() {
                   />
                 ))}
                 {folder.templates.length === 0 && (
-                  <p className="text-sm text-ink-3 py-4">No templates in this folder</p>
+                  <p className="text-subhead text-ink-3 py-4">No templates in this folder</p>
                 )}
               </div>
             )}
@@ -465,7 +463,7 @@ export default function TemplatesPage() {
         {unfolderedTemplates.length > 0 && (
           <div className="space-y-2">
             {folders.length > 0 && (
-              <p className="text-sm text-ink-3 font-medium">Other Templates</p>
+              <p className="text-subhead text-ink-3 font-medium">Other templates</p>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {unfolderedTemplates.map((template) => (
@@ -488,164 +486,159 @@ export default function TemplatesPage() {
         {/* Empty State */}
         {folders.length === 0 && unfolderedTemplates.length === 0 && (
           <EmptyState
-            icon="📋"
-            title="No Templates Yet"
+            icon={<IconClipboardList className="h-8 w-8" stroke={1.75} />}
+            title="No templates yet"
             description="Create workout templates to quickly start your favorite routines"
             action={
               <Button variant="primary" onClick={() => setShowCreateTemplate(true)}>
-                Create Your First Template
+                Create your first template
               </Button>
             }
           />
         )}
       </div>
 
-      {/* Create Folder Modal */}
-      {(showCreateFolder || editingFolder) && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          style={{
-            // Re-center above the on-screen keyboard; safe-area stays additive.
-            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${folderKbInset}px)`,
-          }}
-        >
-          <div
-            ref={folderModalRef}
-            className="bg-card rounded-card w-full max-w-md overflow-y-auto shadow-card"
-            style={{ maxHeight: `calc(100vh - 2rem - ${folderKbInset}px)` }}
-          >
-            <div className="p-4 border-b border-sep">
-              <h2 className="text-lg font-semibold text-ink">
-                {editingFolder ? 'Edit Folder' : 'Create Folder'}
-              </h2>
-            </div>
-            <form onSubmit={editingFolder ? handleUpdateFolder : handleCreateFolder}>
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">
-                    Folder Name
-                  </label>
-                  <input
-                    type="text"
-                    value={folderName}
-                    onChange={(e) => setFolderName(e.target.value)}
-                    placeholder="e.g., Push Pull Legs"
-                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                    autoFocus
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-2">
-                    Color
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    {FOLDER_COLORS.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setFolderColor(color)}
-                        className={`w-8 h-8 rounded-full transition-transform ${
-                          folderColor === color ? 'ring-2 ring-white ring-offset-2 ring-offset-card scale-110' : ''
-                        }`}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="p-4 border-t border-sep flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
+      {/* Create / edit folder */}
+      <Sheet
+        isOpen={showCreateFolder || !!editingFolder}
+        onClose={() => {
                     setShowCreateFolder(false);
                     setEditingFolder(null);
                     setFolderName('');
                   }}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" disabled={isSubmitting || !folderName.trim()}>
-                  {isSubmitting ? 'Saving...' : editingFolder ? 'Update' : 'Create'}
-                </Button>
-              </div>
-            </form>
+        title={editingFolder ? 'Edit folder' : 'New folder'}
+        size="md"
+        data-testid="folder-sheet"
+        footer={
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => {
+                    setShowCreateFolder(false);
+                    setEditingFolder(null);
+                    setFolderName('');
+                  }}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="folder-form"
+              variant="primary"
+              className="flex-1"
+              disabled={isSubmitting || !folderName.trim()}
+            >
+              {isSubmitting ? 'Saving…' : editingFolder ? 'Save' : 'Create'}
+            </Button>
           </div>
-        </div>
-      )}
-
-      {/* Create Template Modal */}
-      {showCreateTemplate && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          style={{
-            // Re-center above the on-screen keyboard; safe-area stays additive.
-            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${templateKbInset}px)`,
-          }}
+        }
+      >
+        <form
+          id="folder-form"
+          onSubmit={editingFolder ? handleUpdateFolder : handleCreateFolder}
+          className="space-y-4"
         >
-          <div
-            ref={templateModalRef}
-            className="bg-card rounded-card w-full max-w-md overflow-y-auto shadow-card"
-            style={{ maxHeight: `calc(100vh - 2rem - ${templateKbInset}px)` }}
-          >
-            <div className="p-4 border-b border-sep">
-              <h2 className="text-lg font-semibold text-ink">Create Template</h2>
-            </div>
-            <form onSubmit={handleCreateTemplate}>
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">
-                    Template Name
-                  </label>
-                  <input
-                    type="text"
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    placeholder="e.g., Push Day, Upper Body"
-                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                    autoFocus
-                  />
-                </div>
-                {folders.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-ink-2 mb-1">
-                      Folder (optional)
-                    </label>
-                    <select
-                      value={templateFolderId || ''}
-                      onChange={(e) => setTemplateFolderId(e.target.value || null)}
-                      className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
-                    >
-                      <option value="">No folder</option>
-                      {folders.map((folder) => (
-                        <option key={folder.id} value={folder.id}>
-                          {folder.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-              <div className="p-4 border-t border-sep flex justify-end gap-2">
-                <Button
+          <div>
+            <label htmlFor="folder-name" className="block text-subhead font-medium text-ink-2 mb-1">
+              Folder name
+            </label>
+            <input
+              id="folder-name"
+              type="text"
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              placeholder="e.g., Push pull legs"
+              className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+              autoFocus
+            />
+          </div>
+          <div>
+            <p className="text-subhead font-medium text-ink-2 mb-2">Color</p>
+            <div className="flex gap-2 flex-wrap">
+              {FOLDER_COLORS.map((color) => (
+                <button
+                  key={color}
                   type="button"
-                  variant="ghost"
-                  onClick={() => {
+                  onClick={() => setFolderColor(color)}
+                  aria-label={`Folder color ${color}`}
+                  aria-pressed={folderColor === color}
+                  className={`w-8 h-8 rounded-full transition-transform ${
+                    folderColor === color ? 'ring-2 ring-ink ring-offset-2 ring-offset-card scale-110' : ''
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </div>
+        </form>
+      </Sheet>
+
+      {/* Create template */}
+      <Sheet
+        isOpen={showCreateTemplate}
+        onClose={() => {
                     setShowCreateTemplate(false);
                     setTemplateName('');
                     setTemplateFolderId(null);
                   }}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" disabled={isSubmitting || !templateName.trim()}>
-                  {isSubmitting ? 'Creating...' : 'Create'}
-                </Button>
-              </div>
-            </form>
+        title="New template"
+        size="md"
+        data-testid="template-sheet"
+        footer={
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => {
+                    setShowCreateTemplate(false);
+                    setTemplateName('');
+                    setTemplateFolderId(null);
+                  }}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="template-form"
+              variant="primary"
+              className="flex-1"
+              disabled={isSubmitting || !templateName.trim()}
+            >
+              {isSubmitting ? 'Creating…' : 'Create'}
+            </Button>
           </div>
-        </div>
-      )}
+        }
+      >
+        <form id="template-form" onSubmit={handleCreateTemplate} className="space-y-4">
+          <div>
+            <label htmlFor="template-name" className="block text-subhead font-medium text-ink-2 mb-1">
+              Template name
+            </label>
+            <input
+              id="template-name"
+              type="text"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              placeholder="e.g., Push day, Upper body"
+              className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+              autoFocus
+            />
+          </div>
+          {folders.length > 0 && (
+            <div>
+              <label htmlFor="template-folder" className="block text-subhead font-medium text-ink-2 mb-1">
+                Folder (optional)
+              </label>
+              <select
+                id="template-folder"
+                value={templateFolderId || ''}
+                onChange={(e) => setTemplateFolderId(e.target.value || null)}
+                className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+              >
+                <option value="">No folder</option>
+                {folders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>
+                    {folder.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </form>
+      </Sheet>
 
       {/* Click outside to close menus */}
       {(openFolderMenu || openTemplateMenu) && (
@@ -705,24 +698,24 @@ function TemplateCard({
               <div className="absolute right-0 top-full mt-1 bg-fill border border-sep rounded-lg shadow-xl z-20 min-w-[140px]">
                 <Link
                   href={`/dashboard/templates/${template.id}`}
-                  className="block px-4 py-2 text-sm text-ink hover:bg-sep first:rounded-t-lg"
+                  className="block px-4 py-2 text-subhead text-ink hover:bg-sep first:rounded-t-lg"
                 >
-                  Edit Template
+                  Edit template
                 </Link>
                 <button
                   onClick={onStartWorkout}
                   disabled={isStarting || template.exercises.length === 0}
-                  className="w-full px-4 py-2 text-left text-sm text-ink hover:bg-sep disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="w-full px-4 py-2 text-left text-subhead text-ink hover:bg-sep disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   {isStarting
                     ? 'Starting...'
                     : template.exercises.length === 0
                       ? 'Add exercises first'
-                      : 'Start Workout'}
+                      : 'Start workout'}
                 </button>
                 <button
                   onClick={onDelete}
-                  className="w-full px-4 py-2 text-left text-sm text-status-bad hover:bg-sep last:rounded-b-lg"
+                  className="w-full px-4 py-2 text-left text-subhead text-status-bad hover:bg-sep last:rounded-b-lg"
                 >
                   Delete
                 </button>
@@ -730,11 +723,11 @@ function TemplateCard({
             )}
           </div>
         </div>
-        <p className="text-sm text-ink-2 mb-3 line-clamp-2">
+        <p className="text-subhead text-ink-2 mb-3 line-clamp-2">
           {formatExerciseList(template.exercises)}
         </p>
-        <div className="flex items-center gap-1 text-xs text-ink-3">
-          <span>🕐</span>
+        <div className="flex items-center gap-1 text-caption text-ink-3">
+          <IconClock className="h-4 w-4 flex-shrink-0" stroke={1.75} aria-hidden="true" />
           <span>{formatDate(template.last_performed_at)}</span>
         </div>
       </CardContent>

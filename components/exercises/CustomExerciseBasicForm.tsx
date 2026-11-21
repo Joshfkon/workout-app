@@ -206,17 +206,17 @@ export function CustomExerciseBasicForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-ink">
-          Create Custom Exercise
+        <h2 className="text-headline font-semibold text-ink">
+          Create custom exercise
         </h2>
-        <p className="text-sm text-ink-2 mt-1">
+        <p className="text-subhead text-ink-2 mt-1">
           Just the basics — AI fills in the rest, and you can fine-tune anything next.
         </p>
       </div>
 
       <div className="space-y-4">
         <Input
-          label="Exercise Name"
+          label="Exercise name"
           placeholder="e.g., Seated Calf Raise Machine"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -230,7 +230,7 @@ export function CustomExerciseBasicForm({
             className="rounded-lg border border-status-warn/60 bg-status-warn/15 p-3"
             data-testid="dup-exercise-suggestions"
           >
-            <p className="text-sm font-medium text-status-warn mb-2">
+            <p className="text-subhead font-medium text-status-warn mb-2">
               Similar existing {dupMatches.length === 1 ? 'exercise' : 'exercises'} — reuse one to
               keep your history together?
             </p>
@@ -240,16 +240,16 @@ export function CustomExerciseBasicForm({
                   key={match.exercise.id}
                   className="flex items-center justify-between gap-3"
                 >
-                  <span className="text-sm text-ink truncate">
+                  <span className="text-subhead text-ink truncate">
                     {match.exercise.name}
                     {match.exercise.isCustom && (
-                      <span className="text-xs text-ink-3 ml-1">(custom)</span>
+                      <span className="text-caption text-ink-3 ml-1">(custom)</span>
                     )}
                   </span>
                   <button
                     type="button"
                     onClick={() => onUseExisting(match.exercise.id)}
-                    className="flex-shrink-0 text-xs font-medium text-action hover:text-action
+                    className="flex-shrink-0 text-caption font-medium text-action hover:text-action
                       rounded-md border border-action/60 px-2.5 py-1 transition-colors"
                   >
                     Use this instead
@@ -261,7 +261,7 @@ export function CustomExerciseBasicForm({
         )}
 
         <TwoStepMusclePicker
-          label="Primary Muscle"
+          label="Primary muscle"
           value={primaryMuscle}
           onChange={setPrimaryMuscle}
           error={errors.primaryMuscle}
@@ -281,7 +281,7 @@ export function CustomExerciseBasicForm({
         />
 
         <div>
-          <label className="block text-sm font-medium text-ink mb-1.5">
+          <label className="block text-subhead font-medium text-ink mb-1.5">
             Description <span className="text-ink-3 font-normal">(optional)</span>
           </label>
           <textarea
@@ -294,15 +294,15 @@ export function CustomExerciseBasicForm({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
-          <p className="mt-1.5 text-sm text-ink-3">
+          <p className="mt-1.5 text-subhead text-ink-3">
             A quick note helps the AI get the details right.
           </p>
         </div>
 
         {showLocationPicker && (
           <div>
-            <label className="block text-sm font-medium text-ink mb-1.5">
-              Available At
+            <label className="block text-subhead font-medium text-ink mb-1.5">
+              Available at
             </label>
             <div className="space-y-2">
               {gymLocations.map((location) => {
@@ -329,7 +329,7 @@ export function CustomExerciseBasicForm({
                     <span className="text-ink">
                       {location.name}
                       {location.is_default && (
-                        <span className="text-xs text-ink-3 ml-1">(Default)</span>
+                        <span className="text-caption text-ink-3 ml-1">(Default)</span>
                       )}
                     </span>
                   </label>
@@ -337,9 +337,9 @@ export function CustomExerciseBasicForm({
               })}
             </div>
             {errors.locations ? (
-              <p className="mt-1.5 text-sm text-status-bad">{errors.locations}</p>
+              <p className="mt-1.5 text-subhead text-status-bad">{errors.locations}</p>
             ) : (
-              <p className="mt-1.5 text-sm text-ink-3">
+              <p className="mt-1.5 text-subhead text-ink-3">
                 Uncheck gyms that don&apos;t have the equipment for this exercise.
               </p>
             )}
@@ -366,14 +366,14 @@ export function CustomExerciseBasicForm({
           {isVariation && (
             <div className="mt-4">
               <Select
-                label="Base Exercise"
+                label="Base exercise"
                 options={variationOptions}
                 value={variationOf}
                 onChange={(e) => setVariationOf(e.target.value)}
                 placeholder="Select base exercise"
                 error={errors.variationOf}
               />
-              <p className="mt-1.5 text-sm text-ink-3">
+              <p className="mt-1.5 text-subhead text-ink-3">
                 AI will inherit properties from the base exercise and adjust for your variation.
               </p>
             </div>
