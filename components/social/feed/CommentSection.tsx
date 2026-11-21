@@ -59,7 +59,7 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
       <div className="px-4 pb-3">
         <button
           onClick={() => setIsExpanded(true)}
-          className="text-sm text-ink-2 hover:text-ink transition-colors"
+          className="text-subhead text-ink-2 hover:text-ink transition-colors"
         >
           Add a comment...
         </button>
@@ -74,7 +74,7 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
         <div className="px-4 py-3">
           <button
             onClick={() => setIsExpanded(true)}
-            className="text-sm text-ink-2 hover:text-ink transition-colors"
+            className="text-subhead text-ink-2 hover:text-ink transition-colors"
           >
             View {commentCount} {commentCount === 1 ? 'comment' : 'comments'}
           </button>
@@ -102,7 +102,7 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
               ))}
             </div>
           ) : (
-            <p className="text-sm text-ink-2 text-center py-4">No comments yet</p>
+            <p className="text-subhead text-ink-2 text-center py-4">No comments yet</p>
           )}
 
           {/* Comment input */}
@@ -119,7 +119,7 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
               variant="ghost"
               size="sm"
               onClick={() => setIsExpanded(false)}
-              className="text-sm"
+              className="text-subhead"
             >
               Hide comments
             </Button>

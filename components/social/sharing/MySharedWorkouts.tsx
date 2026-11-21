@@ -81,14 +81,14 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Shared Workouts</CardTitle>
+          <CardTitle>Shared workouts</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-4">
             <p className="text-ink-2 mb-4">
               You haven&apos;t shared any workouts yet.
             </p>
-            <p className="text-sm text-ink-3">
+            <p className="text-subhead text-ink-3">
               Share your workouts after completing them to help others train better!
             </p>
           </div>
@@ -100,9 +100,9 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Shared Workouts</CardTitle>
+        <CardTitle>Shared workouts</CardTitle>
         <Link href="/dashboard/profile/shared">
-          <Button variant="ghost" size="sm">View All</Button>
+          <Button variant="ghost" size="sm">View all</Button>
         </Link>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -110,20 +110,20 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
         {stats && (
           <div className="grid grid-cols-4 gap-2 p-3 bg-fill rounded-lg mb-4">
             <div className="text-center">
-              <p className="text-lg font-bold text-ink">{stats.total_shared}</p>
-              <p className="text-xs text-ink-2">Shared</p>
+              <p className="text-headline font-bold text-ink">{stats.total_shared}</p>
+              <p className="text-caption text-ink-2">Shared</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-bold text-ink">{stats.total_views}</p>
-              <p className="text-xs text-ink-2">Views</p>
+              <p className="text-headline font-bold text-ink">{stats.total_views}</p>
+              <p className="text-caption text-ink-2">Views</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-bold text-ink">{stats.total_saves}</p>
-              <p className="text-xs text-ink-2">Saves</p>
+              <p className="text-headline font-bold text-ink">{stats.total_saves}</p>
+              <p className="text-caption text-ink-2">Saves</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-bold text-ink">{stats.total_copies}</p>
-              <p className="text-xs text-ink-2">Copies</p>
+              <p className="text-headline font-bold text-ink">{stats.total_copies}</p>
+              <p className="text-caption text-ink-2">Copies</p>
             </div>
           </div>
         )}
@@ -141,12 +141,12 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
                   <p className="font-medium text-ink truncate">
                     {workout.title}
                   </p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-ink-2">
+                  <div className="flex items-center gap-3 mt-1 text-caption text-ink-2">
                     <span>{formatDistanceToNow(workout.created_at)}</span>
                     <span className="capitalize">{workout.share_type.replace('_', ' ')}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-ink-2 ml-4">
+                <div className="flex items-center gap-3 text-caption text-ink-2 ml-4">
                   <span className="flex items-center gap-1">
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

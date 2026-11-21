@@ -23,11 +23,11 @@ export interface AvatarProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const sizeClasses = {
-  xs: 'w-6 h-6 text-xs',
-  sm: 'w-8 h-8 text-sm',
-  md: 'w-10 h-10 text-sm',
-  lg: 'w-14 h-14 text-lg',
-  xl: 'w-20 h-20 text-xl',
+  xs: 'w-6 h-6 text-caption',
+  sm: 'w-8 h-8 text-subhead',
+  md: 'w-10 h-10 text-subhead',
+  lg: 'w-14 h-14 text-headline',
+  xl: 'w-20 h-20 text-headline',
 };
 
 const Avatar = forwardRef<HTMLDivElement, AvatarProps>(

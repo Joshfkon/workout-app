@@ -2,6 +2,7 @@
 
 import { LeaderboardEntry } from './LeaderboardEntry';
 import { Button } from '@/components/ui/Button';
+import { IconTrophy } from '@tabler/icons-react';
 import type { LeaderboardEntryWithProfile, LeaderboardType } from '@/types/social';
 
 interface LeaderboardTableProps {
@@ -26,12 +27,12 @@ export function LeaderboardTable({
   if (entries.length === 0 && !isLoading) {
     return (
       <div className="text-center py-12">
-        <p className="text-5xl mb-4">🏆</p>
-        <h3 className="text-lg font-semibold text-ink mb-2">
+        <IconTrophy className="mx-auto mb-4 h-10 w-10 text-ink-3" stroke={1.75} aria-hidden="true" />
+        <h3 className="text-headline text-ink mb-2">
           No rankings yet
         </h3>
-        <p className="text-ink-2 max-w-sm mx-auto">
-          Complete workouts this week to appear on the leaderboard!
+        <p className="text-subhead text-ink-2 max-w-sm mx-auto">
+          Complete workouts this week to appear on the leaderboard.
         </p>
       </div>
     );
@@ -58,7 +59,7 @@ export function LeaderboardTable({
       {!isLoading && hasMore && onLoadMore && (
         <div className="flex justify-center pt-4">
           <Button variant="outline" size="sm" onClick={onLoadMore}>
-            Load More
+            Load more
           </Button>
         </div>
       )}

@@ -3,14 +3,14 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { SharedWorkoutCard } from '@/components/social/sharing/SharedWorkoutCard';
+import { CopyWorkoutSheet } from '@/components/social/sharing/CopyWorkoutSheet';
 import { ModerationNotice } from '@/components/social/moderation';
 import { useSharedWorkouts } from '@/hooks/useSharedWorkouts';
-import { copySharedWorkout } from '@/lib/workout-sharing';
 import { cn } from '@/lib/utils';
 import type { ShareType, Difficulty, SharedWorkoutWithProfile } from '@/types/social';
+import { IconBarbell } from '@tabler/icons-react';
 
 type SortOption = 'recent' | 'popular' | 'saves';
 
@@ -82,7 +82,7 @@ export default function DiscoverPage() {
       <header className="sticky top-0 z-10 bg-canvas/95 backdrop-blur-sm border-b border-sep">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-ink">Discover Workouts</h1>
+            <h1 className="text-large-title text-ink">Discover workouts</h1>
             <Button
               variant="ghost"
               size="sm"
@@ -155,13 +155,13 @@ export default function DiscoverPage() {
                 key={option}
                 onClick={() => setSortBy(option)}
                 className={cn(
-                  'px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize',
+                  'px-4 py-2 rounded-full text-subhead font-medium transition-colors capitalize',
                   sortBy === option
                     ? 'bg-action text-on-action'
                     : 'bg-fill text-ink-2 hover:text-ink'
                 )}
               >
-                {option === 'saves' ? 'Most Saved' : option === 'popular' ? 'Most Viewed' : 'Recent'}
+                {option === 'saves' ? 'Most saved' : option === 'popular' ? 'Most viewed' : 'Recent'}
               </button>
             ))}
           </div>
@@ -171,20 +171,20 @@ export default function DiscoverPage() {
             <div className="mt-4 p-4 bg-card rounded-lg space-y-4 shadow-card">
               {/* Type filter */}
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-2">Type</label>
+                <label className="block text-subhead font-medium text-ink-2 mb-2">Type</label>
                 <div className="flex flex-wrap gap-2">
                   {(['all', 'single_workout', 'template', 'program'] as const).map((type) => (
                     <button
                       key={type}
                       onClick={() => setShareType(type)}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
+                        'px-3 py-1.5 rounded-lg text-subhead transition-colors capitalize',
                         shareType === type
                           ? 'bg-action text-on-action'
                           : 'bg-fill text-ink-2 hover:text-ink'
                       )}
                     >
-                      {type === 'all' ? 'All Types' : type.replace('_', ' ')}
+                      {type === 'all' ? 'All types' : type.replace('_', ' ')}
                     </button>
                   ))}
                 </div>
@@ -192,20 +192,20 @@ export default function DiscoverPage() {
 
               {/* Difficulty filter */}
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-2">Difficulty</label>
+                <label className="block text-subhead font-medium text-ink-2 mb-2">Difficulty</label>
                 <div className="flex flex-wrap gap-2">
                   {(['all', 'beginner', 'intermediate', 'advanced'] as const).map((diff) => (
                     <button
                       key={diff}
                       onClick={() => setDifficulty(diff)}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
+                        'px-3 py-1.5 rounded-lg text-subhead transition-colors capitalize',
                         difficulty === diff
                           ? 'bg-action text-on-action'
                           : 'bg-fill text-ink-2 hover:text-ink'
                       )}
                     >
-                      {diff === 'all' ? 'All Levels' : diff}
+                      {diff === 'all' ? 'All levels' : diff}
                     </button>
                   ))}
                 </div>
@@ -213,14 +213,14 @@ export default function DiscoverPage() {
 
               {/* Muscle groups filter */}
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-2">Muscle Groups</label>
+                <label className="block text-subhead font-medium text-ink-2 mb-2">Muscle groups</label>
                 <div className="flex flex-wrap gap-2">
                   {MUSCLE_GROUPS.map((muscle) => (
                     <button
                       key={muscle}
                       onClick={() => toggleMuscle(muscle)}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
+                        'px-3 py-1.5 rounded-lg text-subhead transition-colors capitalize',
                         selectedMuscles.includes(muscle)
                           ? 'bg-action text-on-action'
                           : 'bg-fill text-ink-2 hover:text-ink'
@@ -236,7 +236,7 @@ export default function DiscoverPage() {
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
-                  className="text-sm text-action transition-colors"
+                  className="text-subhead text-action transition-colors"
                 >
                   Clear all filters
                 </button>
@@ -250,15 +250,15 @@ export default function DiscoverPage() {
       <main className="max-w-4xl mx-auto px-4 py-6">
         {error && (
           <div className="text-center py-8">
-            <p className="text-error-400 mb-4">{error}</p>
-            <Button onClick={refresh}>Try Again</Button>
+            <p className="text-status-bad mb-4">{error}</p>
+            <Button onClick={refresh}>Try again</Button>
           </div>
         )}
 
         {!error && workouts.length === 0 && !isLoading && (
           <div className="text-center py-16">
-            <p className="text-5xl mb-4">🏋️</p>
-            <h2 className="text-xl font-semibold text-ink mb-2">
+            <IconBarbell className="mx-auto mb-4 h-10 w-10 text-ink-3" stroke={1.75} aria-hidden="true" />
+            <h2 className="text-headline font-semibold text-ink mb-2">
               No workouts found
             </h2>
             <p className="text-ink-2 max-w-sm mx-auto">
@@ -272,7 +272,7 @@ export default function DiscoverPage() {
                 className="mt-6"
                 onClick={clearFilters}
               >
-                Clear Filters
+                Clear filters
               </Button>
             )}
           </div>
@@ -302,7 +302,7 @@ export default function DiscoverPage() {
         {!isLoading && hasMore && workouts.length > 0 && (
           <div className="flex justify-center py-8">
             <Button variant="outline" onClick={loadMore}>
-              Load More
+              Load more
             </Button>
           </div>
         )}
@@ -317,106 +317,7 @@ export default function DiscoverPage() {
         {workouts.length > 0 && <ModerationNotice className="pb-6" />}
       </main>
 
-      {/* Copy Modal */}
-      {copyModalWorkout && (
-        <CopyWorkoutModal
-          workout={copyModalWorkout}
-          onClose={() => setCopyModalWorkout(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-// Copy modal for copying shared workouts
-function CopyWorkoutModal({
-  workout,
-  onClose,
-}: {
-  workout: SharedWorkoutWithProfile;
-  onClose: () => void;
-}) {
-  const [isCopying, setIsCopying] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleCopy = async () => {
-    setIsCopying(true);
-    setError(null);
-
-    const supabase = createClient();
-    const result = await copySharedWorkout(workout.id, supabase);
-
-    if (result.success) {
-      setSuccess(true);
-      setTimeout(onClose, 1500);
-    } else {
-      setError(result.error || 'Failed to copy workout');
-      setIsCopying(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-card rounded-card overflow-hidden shadow-card">
-        <div className="p-6">
-          <h2 className="text-lg font-semibold text-ink mb-2">
-            Copy Workout
-          </h2>
-          <p className="text-sm text-ink-2 mb-4">
-            This will add &quot;{workout.title}&quot; to your workout templates.
-          </p>
-
-          {/* Exercise preview */}
-          <div className="bg-fill/50 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
-            <p className="text-xs font-medium text-ink-2 mb-2">Exercises included:</p>
-            <div className="space-y-1">
-              {workout.workout_data?.exercises?.map((exercise, index) => (
-                <div key={index} className="flex justify-between text-sm">
-                  <span className="text-ink">{exercise.exercise_name}</span>
-                  <span className="text-ink-2">
-                    {exercise.sets} x {exercise.rep_range[0]}-{exercise.rep_range[1]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 bg-error-900/20 border border-error-500 rounded-lg">
-              <p className="text-sm text-error-400">{error}</p>
-            </div>
-          )}
-
-          {success ? (
-            <div className="flex items-center justify-center gap-2 py-4 text-status-ok">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span>Workout copied successfully!</span>
-            </div>
-          ) : (
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                disabled={isCopying}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleCopy}
-                disabled={isCopying}
-                className="flex-1"
-              >
-                {isCopying ? 'Copying...' : 'Copy to My Workouts'}
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
+      <CopyWorkoutSheet workout={copyModalWorkout} onClose={() => setCopyModalWorkout(null)} />
     </div>
   );
 }

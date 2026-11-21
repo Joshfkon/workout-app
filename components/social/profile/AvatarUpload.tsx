@@ -207,7 +207,7 @@ function AvatarUploadComponent({
           onClick={handleClick}
           disabled={isUploading}
         >
-          {displayUrl ? 'Change Photo' : 'Upload Photo'}
+          {displayUrl ? 'Change photo' : 'Upload photo'}
         </Button>
 
         {displayUrl && (
@@ -222,7 +222,7 @@ function AvatarUploadComponent({
         )}
       </div>
 
-      <p className="text-xs text-ink-3 text-center">
+      <p className="text-caption text-ink-3 text-center">
         JPEG, PNG, WebP or GIF. Max 5MB.
       </p>
     </div>

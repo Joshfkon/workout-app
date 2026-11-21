@@ -11,7 +11,7 @@ import { Avatar } from '@/components/social/profile';
 import type { UserProfile, ProfileVisibility, TrainingExperience } from '@/types/social';
 
 export default function ProfileEditPage() {
-  useDocumentTitle('Edit Profile');
+  useDocumentTitle('Edit profile');
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -122,14 +122,14 @@ export default function ProfileEditPage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Edit Profile</CardTitle>
+          <CardTitle>Edit profile</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Display Name */}
             <div>
-              <label className="block text-sm font-medium text-ink mb-2">
-                Display Name
+              <label className="block text-subhead font-medium text-ink mb-2">
+                Display name
               </label>
               <input
                 type="text"
@@ -143,7 +143,7 @@ export default function ProfileEditPage() {
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-medium text-ink mb-2">
+              <label className="block text-subhead font-medium text-ink mb-2">
                 Bio
               </label>
               <textarea
@@ -154,17 +154,17 @@ export default function ProfileEditPage() {
                 placeholder="Tell us about yourself..."
                 maxLength={500}
               />
-              <p className="text-xs text-ink-2 mt-1">{bio.length}/500</p>
+              <p className="text-caption text-ink-2 mt-1">{bio.length}/500</p>
             </div>
 
             {/* Privacy Settings */}
             <div className="border-t border-sep pt-6">
-              <h3 className="text-lg font-semibold text-ink mb-4">Privacy Settings</h3>
+              <h3 className="text-headline font-semibold text-ink mb-4">Privacy settings</h3>
 
               {/* Profile Visibility */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-ink mb-2">
-                  Profile Visibility
+                <label className="block text-subhead font-medium text-ink mb-2">
+                  Profile visibility
                 </label>
                 <div className="space-y-2">
                   <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
@@ -178,7 +178,7 @@ export default function ProfileEditPage() {
                     />
                     <div>
                       <p className="text-ink font-medium">Public</p>
-                      <p className="text-xs text-ink-2">Anyone can view your profile and workouts</p>
+                      <p className="text-caption text-ink-2">Anyone can view your profile and workouts</p>
                     </div>
                   </label>
                   <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
@@ -191,8 +191,8 @@ export default function ProfileEditPage() {
                       className="w-4 h-4 text-action"
                     />
                     <div>
-                      <p className="text-ink font-medium">Followers Only</p>
-                      <p className="text-xs text-ink-2">Only people you follow can view your profile</p>
+                      <p className="text-ink font-medium">Followers only</p>
+                      <p className="text-caption text-ink-2">Only people you follow can view your profile</p>
                     </div>
                   </label>
                   <label className="flex items-center gap-3 p-3 bg-fill rounded-lg cursor-pointer hover:bg-sep transition-colors">
@@ -206,7 +206,7 @@ export default function ProfileEditPage() {
                     />
                     <div>
                       <p className="text-ink font-medium">Private</p>
-                      <p className="text-xs text-ink-2">Only you can view your profile</p>
+                      <p className="text-caption text-ink-2">Only you can view your profile</p>
                     </div>
                   </label>
                 </div>
@@ -222,8 +222,8 @@ export default function ProfileEditPage() {
                     className="w-4 h-4 text-action bg-card border-sep rounded focus:ring-action"
                   />
                   <div>
-                    <p className="text-ink font-medium">Show Workouts</p>
-                    <p className="text-xs text-ink-2">Allow others to see your completed workouts</p>
+                    <p className="text-ink font-medium">Show workouts</p>
+                    <p className="text-caption text-ink-2">Allow others to see your completed workouts</p>
                   </div>
                 </label>
               </div>
@@ -238,8 +238,8 @@ export default function ProfileEditPage() {
                     className="w-4 h-4 text-action bg-card border-sep rounded focus:ring-action"
                   />
                   <div>
-                    <p className="text-ink font-medium">Show Stats</p>
-                    <p className="text-xs text-ink-2">Allow others to see your training statistics</p>
+                    <p className="text-ink font-medium">Show stats</p>
+                    <p className="text-caption text-ink-2">Allow others to see your training statistics</p>
                   </div>
                 </label>
               </div>
@@ -247,12 +247,12 @@ export default function ProfileEditPage() {
 
             {/* Training Info */}
             <div className="border-t border-sep pt-6">
-              <h3 className="text-lg font-semibold text-ink mb-4">Training Info</h3>
+              <h3 className="text-headline font-semibold text-ink mb-4">Training info</h3>
 
               {/* Training Experience */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-ink mb-2">
-                  Training Experience
+                <label className="block text-subhead font-medium text-ink mb-2">
+                  Training experience
                 </label>
                 <select
                   value={trainingExperience}
@@ -269,8 +269,8 @@ export default function ProfileEditPage() {
 
               {/* Gym Name */}
               <div>
-                <label className="block text-sm font-medium text-ink mb-2">
-                  Gym Name
+                <label className="block text-subhead font-medium text-ink mb-2">
+                  Gym name
                 </label>
                 <input
                   type="text"
@@ -285,15 +285,15 @@ export default function ProfileEditPage() {
 
             {/* Error Message */}
             {error && (
-              <div className="bg-error-900/20 border border-error-500 rounded-lg p-3">
-                <p className="text-sm text-error-400">{error}</p>
+              <div className="bg-status-bad-tint rounded-lg p-3">
+                <p className="text-subhead text-status-bad">{error}</p>
               </div>
             )}
 
             {/* Success Message */}
             {success && (
               <div className="bg-status-ok/15 border border-status-ok rounded-lg p-3">
-                <p className="text-sm text-status-ok">Profile updated successfully!</p>
+                <p className="text-subhead text-status-ok">Profile updated successfully!</p>
               </div>
             )}
 
@@ -312,7 +312,7 @@ export default function ProfileEditPage() {
                 variant="primary"
                 disabled={saving}
               >
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? 'Saving...' : 'Save changes'}
               </Button>
             </div>
           </form>

@@ -51,8 +51,8 @@ export function SaveWorkoutButton({
   };
 
   const sizeClasses = {
-    sm: 'px-3 py-1.5 text-xs',
-    md: 'px-4 py-2 text-sm',
+    sm: 'px-3 py-1.5 text-caption',
+    md: 'px-4 py-2 text-subhead',
   };
 
   return (

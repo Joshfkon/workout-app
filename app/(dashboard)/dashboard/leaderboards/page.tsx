@@ -22,25 +22,25 @@ const LEADERBOARD_TABS: Array<{
 }> = [
   {
     id: 'total_volume_week',
-    label: 'Weekly Volume',
+    label: 'Weekly volume',
     timeFrame: 'week',
     description: 'Total weight lifted this week',
   },
   {
     id: 'workouts_completed_week',
-    label: 'Weekly Workouts',
+    label: 'Weekly workouts',
     timeFrame: 'week',
     description: 'Workouts completed this week',
   },
   {
     id: 'total_volume_month',
-    label: 'Monthly Volume',
+    label: 'Monthly volume',
     timeFrame: 'month',
     description: 'Total weight lifted this month',
   },
   {
     id: 'workouts_completed_month',
-    label: 'Monthly Workouts',
+    label: 'Monthly workouts',
     timeFrame: 'month',
     description: 'Workouts completed this month',
   },
@@ -84,7 +84,7 @@ export default function LeaderboardsPage() {
       <header className="sticky top-0 z-10 bg-canvas/95 backdrop-blur-sm border-b border-sep">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-ink">Leaderboards</h1>
+            <h1 className="text-large-title text-ink">Leaderboards</h1>
             <Button
               variant="ghost"
               size="sm"
@@ -114,7 +114,7 @@ export default function LeaderboardsPage() {
                 key={tab.id}
                 onClick={() => setSelectedType(tab.id)}
                 className={cn(
-                  'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
+                  'px-4 py-2 rounded-full text-subhead font-medium whitespace-nowrap transition-colors',
                   selectedType === tab.id
                     ? 'bg-action text-on-action'
                     : 'bg-fill text-ink-2 hover:text-ink'
@@ -131,7 +131,7 @@ export default function LeaderboardsPage() {
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         {/* Description */}
         {selectedTab && (
-          <p className="text-ink-2 text-sm">{selectedTab.description}</p>
+          <p className="text-ink-2 text-subhead">{selectedTab.description}</p>
         )}
 
         {/* User's rank card */}
@@ -141,8 +141,8 @@ export default function LeaderboardsPage() {
         {error && (
           <Card>
             <CardContent className="text-center py-8">
-              <p className="text-error-400 mb-4">{error}</p>
-              <Button onClick={refresh}>Try Again</Button>
+              <p className="text-status-bad mb-4">{error}</p>
+              <Button onClick={refresh}>Try again</Button>
             </CardContent>
           </Card>
         )}
@@ -151,10 +151,7 @@ export default function LeaderboardsPage() {
         {!error && (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <span className="text-2xl">🏆</span>
-                Top Lifters
-              </CardTitle>
+              <CardTitle>Top lifters</CardTitle>
             </CardHeader>
             <CardContent>
               <LeaderboardTable
@@ -187,7 +184,7 @@ export default function LeaderboardsPage() {
                   d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-sm text-ink-2">
+              <div className="text-subhead text-ink-2">
                 <p className="font-medium text-ink-2 mb-1">How rankings work</p>
                 <p>
                   Leaderboards update throughout the week as you complete workouts.

@@ -40,7 +40,7 @@ function getScoreLabel(type: LeaderboardType): string {
   switch (type) {
     case 'total_volume_week':
     case 'total_volume_month':
-      return 'Total Volume';
+      return 'Total volume';
     case 'exercise_1rm':
       return 'Estimated 1RM';
     case 'workouts_completed_week':
@@ -74,13 +74,13 @@ export function UserRankCard({ userRank, type, units }: UserRankCardProps) {
       <div className="flex items-center justify-between">
         {/* Rank */}
         <div className="text-center">
-          <p className="text-3xl font-bold text-ink">#{rank}</p>
-          <p className="text-xs text-ink-2">Your Rank</p>
+          <p className="text-large-title font-bold text-ink">#{rank}</p>
+          <p className="text-caption text-ink-2">Your rank</p>
           {rank_change !== 0 && (
             <p
               className={cn(
-                'text-xs flex items-center justify-center gap-0.5 mt-1',
-                rank_change > 0 ? 'text-status-ok' : 'text-error-400'
+                'text-caption flex items-center justify-center gap-0.5 mt-1',
+                rank_change > 0 ? 'text-status-ok' : 'text-status-bad'
               )}
             >
               {rank_change > 0 ? (
@@ -107,10 +107,10 @@ export function UserRankCard({ userRank, type, units }: UserRankCardProps) {
 
         {/* Score */}
         <div className="text-center">
-          <p className="text-2xl font-bold text-ink">
+          <p className="text-title font-bold text-ink">
             {formatScore(score, type, units)}
           </p>
-          <p className="text-xs text-ink-2">{getScoreLabel(type)}</p>
+          <p className="text-caption text-ink-2">{getScoreLabel(type)}</p>
         </div>
 
         {/* Divider */}
@@ -120,19 +120,19 @@ export function UserRankCard({ userRank, type, units }: UserRankCardProps) {
         <div className="text-center">
           {total_participants >= 10 ? (
             <>
-              <p className="text-2xl font-bold text-action">
+              <p className="text-title font-bold text-action">
                 Top {percentile > 0 ? percentile : 1}%
               </p>
-              <p className="text-xs text-ink-2">
+              <p className="text-caption text-ink-2">
                 of {total_participants} lifters
               </p>
             </>
           ) : (
             <>
-              <p className="text-2xl font-bold text-action">
+              <p className="text-title font-bold text-action">
                 {rank} of {total_participants}
               </p>
-              <p className="text-xs text-ink-2">this board</p>
+              <p className="text-caption text-ink-2">this board</p>
             </>
           )}
         </div>

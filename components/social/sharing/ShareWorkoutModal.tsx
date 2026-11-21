@@ -4,9 +4,8 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { serializeWorkoutForSharing, extractMuscleGroups } from '@/lib/workout-sharing';
 import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Sheet } from '@/components/ui/Sheet';
 import type { ShareType, Difficulty, SharedWorkoutContent } from '@/types/social';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 interface ShareWorkoutModalProps {
   workoutSessionId: string;
@@ -16,8 +15,6 @@ interface ShareWorkoutModalProps {
 }
 
 export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess }: ShareWorkoutModalProps) {
-  const { inset: keyboardInset, scrollContainerRef } =
-    useKeyboardInset<HTMLDivElement>(isOpen);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [shareType, setShareType] = useState<ShareType>('single_workout');
@@ -113,171 +110,148 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
     }
   };
 
-  if (!isOpen) return null;
+  const choice = (selected: boolean) =>
+    `flex-1 rounded-button px-4 py-2 text-subhead font-medium transition-colors ${
+      selected ? 'bg-action text-on-action' : 'bg-fill text-ink'
+    }`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      style={{
-        // Re-center above the on-screen keyboard; safe-area stays additive.
-        paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`,
-      }}
+    <Sheet
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Share workout"
+      size="lg"
+      data-testid="share-workout-sheet"
+      footer={
+        isSerializing ? undefined : (
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="share-workout-form"
+              variant="primary"
+              disabled={isLoading || !title.trim()}
+              className="flex-1"
+            >
+              {isLoading ? 'Sharing…' : 'Share workout'}
+            </Button>
+          </div>
+        )
+      }
     >
-      <Card
-        ref={scrollContainerRef}
-        className="w-full max-w-2xl overflow-y-auto"
-        style={{ maxHeight: `min(90vh, calc(100vh - 2rem - ${keyboardInset}px))` }}
-      >
-        <CardHeader>
-          <CardTitle>Share Workout</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {isSerializing ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-action" />
-              </div>
-            ) : (
-              <>
-                {/* Title */}
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-2">
-                    Title *
-                  </label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action shadow-card"
-                    placeholder="My Awesome Workout"
-                    required
-                    maxLength={100}
-                  />
+      {isSerializing ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-action" />
+        </div>
+      ) : (
+        <form id="share-workout-form" onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="share-title" className="block text-subhead font-medium text-ink mb-2">
+              Title
+            </label>
+            <input
+              id="share-title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action"
+              placeholder="My awesome workout"
+              required
+              maxLength={100}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="share-description" className="block text-subhead font-medium text-ink mb-2">
+              Description
+            </label>
+            <textarea
+              id="share-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-3 py-2 bg-fill rounded-input text-body text-ink focus:outline-none focus:ring-2 focus:ring-action resize-none"
+              rows={3}
+              placeholder="Describe your workout…"
+              maxLength={500}
+            />
+          </div>
+
+          <div>
+            <p className="text-subhead font-medium text-ink mb-2">Share as</p>
+            <div className="flex gap-2 flex-wrap">
+              {(['single_workout', 'template'] as ShareType[]).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setShareType(type)}
+                  aria-pressed={shareType === type}
+                  className={choice(shareType === type)}
+                >
+                  {type === 'single_workout' ? 'Single workout' : 'Template'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-subhead font-medium text-ink mb-2">Difficulty (optional)</p>
+            <div className="flex gap-2">
+              {(['beginner', 'intermediate', 'advanced'] as Difficulty[]).map((diff) => (
+                <button
+                  key={diff}
+                  type="button"
+                  onClick={() => setDifficulty(difficulty === diff ? '' : diff)}
+                  aria-pressed={difficulty === diff}
+                  className={`${choice(difficulty === diff)} capitalize`}
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="isPublic"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+              className="w-4 h-4 accent-[rgb(var(--ht-action))] rounded"
+            />
+            <label htmlFor="isPublic" className="text-subhead text-ink">
+              Make this workout public (visible in Discover)
+            </label>
+          </div>
+
+          {workoutData && (
+            <div className="bg-fill rounded-card p-4">
+              <p className="text-subhead font-medium text-ink mb-2">Preview</p>
+              <dl className="space-y-1 text-subhead">
+                <div className="flex justify-between">
+                  <dt className="text-ink-2">Exercises</dt>
+                  <dd className="text-ink tabular-nums">{workoutData.exercises.length}</dd>
                 </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full px-3 py-2 bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action resize-none shadow-card"
-                    rows={3}
-                    placeholder="Describe your workout..."
-                    maxLength={500}
-                  />
+                <div className="flex justify-between">
+                  <dt className="text-ink-2">Total sets</dt>
+                  <dd className="text-ink tabular-nums">{workoutData.total_sets}</dd>
                 </div>
-
-                {/* Share Type */}
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-2">
-                    Share Type
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    {(['single_workout', 'template'] as ShareType[]).map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setShareType(type)}
-                        className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
-                          shareType === type
-                            ? 'bg-action border-action text-on-action'
-                            : 'bg-card border-sep text-ink hover:border-sep'
-                        }`}
-                      >
-                        {type === 'single_workout' ? 'Single Workout' : 'Template'}
-                      </button>
-                    ))}
-                  </div>
+                <div className="flex justify-between">
+                  <dt className="text-ink-2">Est. duration</dt>
+                  <dd className="text-ink tabular-nums">{workoutData.estimated_duration_minutes} min</dd>
                 </div>
+              </dl>
+            </div>
+          )}
+        </form>
+      )}
 
-                {/* Difficulty */}
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-2">
-                    Difficulty (optional)
-                  </label>
-                  <div className="flex gap-2">
-                    {(['beginner', 'intermediate', 'advanced'] as Difficulty[]).map((diff) => (
-                      <button
-                        key={diff}
-                        type="button"
-                        onClick={() => setDifficulty(difficulty === diff ? '' : diff)}
-                        className={`flex-1 px-4 py-2 rounded-lg border transition-colors capitalize ${
-                          difficulty === diff
-                            ? 'bg-action border-action text-on-action'
-                            : 'bg-card border-sep text-ink hover:border-sep'
-                        }`}
-                      >
-                        {diff}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Privacy */}
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="isPublic"
-                    checked={isPublic}
-                    onChange={(e) => setIsPublic(e.target.checked)}
-                    className="w-4 h-4 text-action bg-card border-sep rounded focus:ring-action"
-                  />
-                  <label htmlFor="isPublic" className="text-sm text-ink">
-                    Make this workout public (visible in Discover feed)
-                  </label>
-                </div>
-
-                {/* Workout Preview */}
-                {workoutData && (
-                  <div className="bg-fill rounded-lg p-4">
-                    <p className="text-sm font-medium text-ink mb-2">Workout Preview</p>
-                    <div className="space-y-2 text-sm text-ink-2">
-                      <p>
-                        <span className="text-ink-2">Exercises:</span> {workoutData.exercises.length}
-                      </p>
-                      <p>
-                        <span className="text-ink-2">Total Sets:</span> {workoutData.total_sets}
-                      </p>
-                      <p>
-                        <span className="text-ink-2">Est. Duration:</span> {workoutData.estimated_duration_minutes} min
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {error && (
-                  <div className="bg-error-900/20 border border-error-500 rounded-lg p-3">
-                    <p className="text-sm text-error-400">{error}</p>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-3 justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onClose}
-                    disabled={isLoading}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={isLoading || !title.trim()}
-                  >
-                    {isLoading ? 'Sharing...' : 'Share Workout'}
-                  </Button>
-                </div>
-              </>
-            )}
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+      {error && (
+        <div className="mt-4 bg-status-bad-tint rounded-card p-3">
+          <p className="text-subhead text-status-bad">{error}</p>
+        </div>
+      )}
+    </Sheet>
   );
 }
-

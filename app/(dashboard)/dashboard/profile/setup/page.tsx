@@ -187,8 +187,8 @@ export default function ProfileSetupPage() {
     <div className="max-w-lg mx-auto px-4 py-8">
       <Card>
         <CardHeader>
-          <CardTitle>Create Your Profile</CardTitle>
-          <p className="text-ink-2 text-sm mt-1">
+          <CardTitle>Create your profile</CardTitle>
+          <p className="text-ink-2 text-subhead mt-1">
             Set up your profile to connect with other lifters
           </p>
         </CardHeader>
@@ -219,14 +219,14 @@ export default function ProfileSetupPage() {
               {/* Suggestions */}
               {suggestions.length > 0 && !username && (
                 <div className="mt-3">
-                  <p className="text-xs text-ink-2 mb-2">Suggestions:</p>
+                  <p className="text-caption text-ink-2 mb-2">Suggestions:</p>
                   <div className="flex flex-wrap gap-2">
                     {suggestions.map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"
                         onClick={() => handleSuggestionClick(suggestion)}
-                        className="px-3 py-1 text-sm bg-fill hover:bg-sep text-ink-2 rounded-full transition-colors"
+                        className="px-3 py-1 text-subhead bg-fill hover:bg-sep text-ink-2 rounded-full transition-colors"
                       >
                         @{suggestion}
                       </button>
@@ -238,16 +238,16 @@ export default function ProfileSetupPage() {
 
             {/* Display Name */}
             <Input
-              label="Display Name"
+              label="Display name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Your Name"
+              placeholder="Your name"
               hint="Optional - shown on your profile"
             />
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-medium text-ink mb-1.5">
+              <label className="block text-subhead font-medium text-ink mb-1.5">
                 Bio
               </label>
               <textarea
@@ -260,14 +260,14 @@ export default function ProfileSetupPage() {
                   focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent
                   transition-all duration-200 resize-none"
               />
-              <p className="mt-1 text-xs text-ink-3 text-right">
+              <p className="mt-1 text-caption text-ink-3 text-right">
                 {bio.length}/500
               </p>
             </div>
 
             {/* Training Experience */}
             <Select
-              label="Training Experience"
+              label="Training experience"
               value={trainingExperience}
               onChange={(e) => setTrainingExperience(e.target.value as TrainingExperience | '')}
               placeholder="Select your experience level"
@@ -297,11 +297,11 @@ export default function ProfileSetupPage() {
                 disabled={!username || !usernameAvailable || saving}
                 isLoading={saving}
               >
-                Create Profile
+                Create profile
               </Button>
             </div>
 
-            <p className="text-xs text-ink-3 text-center">
+            <p className="text-caption text-ink-3 text-center">
               You can change these settings later in your profile settings
             </p>
           </form>

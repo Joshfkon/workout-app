@@ -19,6 +19,16 @@ const FILES = [
   'components/body/BodyHubTrends.tsx',
   'components/dashboard/DailyCheckIn.tsx',
   'components/nutrition/MacroCalculatorModal.tsx',
+  // Social (reaction emoji in ReactionBar are content, not icons, so it is not listed).
+  'app/(dashboard)/dashboard/feed/page.tsx',
+  'app/(dashboard)/dashboard/discover/page.tsx',
+  'app/(dashboard)/dashboard/discover/[id]/page.tsx',
+  'app/(dashboard)/dashboard/leaderboards/page.tsx',
+  'app/(dashboard)/dashboard/profile/[username]/page.tsx',
+  'components/social/UserSearch.tsx',
+  'components/social/feed/ActivityCard.tsx',
+  'components/social/leaderboards/LeaderboardEntry.tsx',
+  'components/social/leaderboards/LeaderboardTable.tsx',
 ];
 
 // Pictographic emoji (not ✓ ✕ ⚠ arrows or other text symbols).
