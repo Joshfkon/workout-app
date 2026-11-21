@@ -502,6 +502,8 @@ export function useRestTimer({
     // State
     seconds,
     initialSeconds,
+    /** Epoch ms the running rest ends (mirrored to the Apple Watch); null when not running. */
+    endsAt: isRunning ? endTimeRef.current : null,
     isRunning,
     isFinished,
     isUrgent,

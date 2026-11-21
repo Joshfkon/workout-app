@@ -17,7 +17,39 @@
 	504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 	50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 	A1B2C3D41FED79650016851F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D31FED79650016851F /* PrivacyInfo.xcprivacy */; };
+	57A7C0DE2FE9000000000001 /* WatchBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000010 /* WatchBridgePlugin.swift */; };
+	57A7C0DE2FE9000000000002 /* HyperTrackBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000011 /* HyperTrackBridgeViewController.swift */; };
+	57A7C0DE2FE9000000000003 /* HyperTrackWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000012 /* HyperTrackWatchApp.swift */; };
+	57A7C0DE2FE9000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000013 /* ContentView.swift */; };
+	57A7C0DE2FE9000000000005 /* WorkoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000014 /* WorkoutStore.swift */; };
+	57A7C0DE2FE9000000000006 /* WatchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000015 /* WatchModels.swift */; };
+	57A7C0DE2FE9000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000016 /* Assets.xcassets */; };
+	57A7C0DE2FE9000000000008 /* HyperTrackWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000020 /* HyperTrackWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		57A7C0DE2FE9000000000030 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 57A7C0DE2FE9000000000040;
+			remoteInfo = HyperTrackWatch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		57A7C0DE2FE9000000000032 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				57A7C0DE2FE9000000000008 /* HyperTrackWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 	2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -32,6 +64,14 @@
 	50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 	958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 	A1B2C3D31FED79650016851F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000010 /* WatchBridgePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridgePlugin.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000011 /* HyperTrackBridgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperTrackBridgeViewController.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000012 /* HyperTrackWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperTrackWatchApp.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000013 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000014 /* WorkoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutStore.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000015 /* WatchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchModels.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000020 /* HyperTrackWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HyperTrackWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -43,6 +83,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		57A7C0DE2FE9000000000043 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -51,6 +98,7 @@
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
+				57A7C0DE2FE9000000000050 /* HyperTrackWatch */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				57A7C0DE2FE9000000000020 /* HyperTrackWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -69,6 +118,8 @@
 			50379B222058CBB4000EE86E /* capacitor.config.json */,
 			504EC3071FED79650016851F /* AppDelegate.swift */,
 			A1B2C3D42FE9000100AAAA01 /* SceneDelegate.swift */,
+			57A7C0DE2FE9000000000011 /* HyperTrackBridgeViewController.swift */,
+			57A7C0DE2FE9000000000010 /* WatchBridgePlugin.swift */,
 			504EC30B1FED79650016851F /* Main.storyboard */,
 			504EC30E1FED79650016851F /* Assets.xcassets */,
 			504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -78,6 +129,18 @@
 			50B271D01FEDC1A000F3C39B /* public */,
 		);
 		path = App;
+		sourceTree = "<group>";
+	};
+	57A7C0DE2FE9000000000050 /* HyperTrackWatch */ = {
+		isa = PBXGroup;
+		children = (
+			57A7C0DE2FE9000000000012 /* HyperTrackWatchApp.swift */,
+			57A7C0DE2FE9000000000013 /* ContentView.swift */,
+			57A7C0DE2FE9000000000014 /* WorkoutStore.swift */,
+			57A7C0DE2FE9000000000015 /* WatchModels.swift */,
+			57A7C0DE2FE9000000000016 /* Assets.xcassets */,
+		);
+		path = HyperTrackWatch;
 		sourceTree = "<group>";
 	};
 /* End PBXGroup section */
@@ -90,10 +153,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				57A7C0DE2FE9000000000032 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				57A7C0DE2FE9000000000031 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -101,6 +166,23 @@
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		57A7C0DE2FE9000000000040 /* HyperTrackWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 57A7C0DE2FE9000000000041 /* Build configuration list for PBXNativeTarget "HyperTrackWatch" */;
+			buildPhases = (
+				57A7C0DE2FE9000000000042 /* Sources */,
+				57A7C0DE2FE9000000000043 /* Frameworks */,
+				57A7C0DE2FE9000000000044 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HyperTrackWatch;
+			productName = HyperTrackWatch;
+			productReference = 57A7C0DE2FE9000000000020 /* HyperTrackWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -115,6 +197,10 @@
 					504EC3031FED79650016851F = {
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
+						ProvisioningStyle = Automatic;
+					};
+					57A7C0DE2FE9000000000040 = {
+						CreatedOnToolsVersion = 27.2;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -136,6 +222,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				57A7C0DE2FE9000000000040 /* HyperTrackWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -155,6 +242,14 @@
 		);
 		runOnlyForDeploymentPostprocessing = 0;
 	};
+	57A7C0DE2FE9000000000044 /* Resources */ = {
+		isa = PBXResourcesBuildPhase;
+		buildActionMask = 2147483647;
+		files = (
+			57A7C0DE2FE9000000000007 /* Assets.xcassets in Resources */,
+		);
+		runOnlyForDeploymentPostprocessing = 0;
+	};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -164,10 +259,31 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				A1B2C3D42FE9000100AAAA02 /* SceneDelegate.swift in Sources */,
+				57A7C0DE2FE9000000000002 /* HyperTrackBridgeViewController.swift in Sources */,
+				57A7C0DE2FE9000000000001 /* WatchBridgePlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		57A7C0DE2FE9000000000042 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				57A7C0DE2FE9000000000003 /* HyperTrackWatchApp.swift in Sources */,
+				57A7C0DE2FE9000000000004 /* ContentView.swift in Sources */,
+				57A7C0DE2FE9000000000005 /* WorkoutStore.swift in Sources */,
+				57A7C0DE2FE9000000000006 /* WatchModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		57A7C0DE2FE9000000000031 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 57A7C0DE2FE9000000000040 /* HyperTrackWatch */;
+			targetProxy = 57A7C0DE2FE9000000000030 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -346,6 +462,71 @@
 			};
 			name = Release;
 		};
+		57A7C0DE2FE9000000000045 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = 5LBB8BWZB3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = HyperTrack;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = (
+					UIInterfaceOrientationPortrait,
+					UIInterfaceOrientationPortraitUpsideDown,
+				);
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = app.hypertrack.workout;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.hypertrack.workout.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		57A7C0DE2FE9000000000046 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = 5LBB8BWZB3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = HyperTrack;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = (
+					UIInterfaceOrientationPortrait,
+					UIInterfaceOrientationPortraitUpsideDown,
+				);
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = app.hypertrack.workout;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.hypertrack.workout.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -363,6 +544,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		57A7C0DE2FE9000000000041 /* Build configuration list for PBXNativeTarget "HyperTrackWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				57A7C0DE2FE9000000000045 /* Debug */,
+				57A7C0DE2FE9000000000046 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

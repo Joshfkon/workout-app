@@ -5,6 +5,7 @@ import { Card, Button, ConfirmModal, InfoTooltip } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality, SetType } from '@/types/schema';
 import { rpeToRir, rirToRpe } from '@/types/schema';
+import { setActiveLogger, clearActiveLogger } from '@/lib/watch/activeLogger';
 import {
   displaySetQuality,
   SET_QUALITY_DISPLAY_META,
@@ -2229,6 +2230,61 @@ export const ExerciseCard = memo(function ExerciseCard({
     return true;
   };
 
+
+  // Apple Watch: publish this card's active logger row (the exact values in
+  // the steppers) and let the watch log through completeLoggedSet — the same
+  // lock and onSetComplete path as the "Log set" button. Mirrors the logger
+  // row's render condition below. See lib/watch/activeLogger.
+  const completeLoggedSetRef = useRef(completeLoggedSet);
+  completeLoggedSetRef.current = completeLoggedSet;
+  const watchLoggerVisible =
+    isActive && !pendingDropset && !dropsetMode && pendingSetsCount > 0 && pendingInputs.length > 0;
+  const watchUsesBwLoad = isBodyweightExercise && weightMode !== 'bodyweight';
+  const watchWeight = watchLoggerVisible
+    ? watchUsesBwLoad
+      ? bwLoadInput
+      : pendingInputs[0].weight
+    : '';
+  const watchReps = watchLoggerVisible ? pendingInputs[0].reps : '';
+  const watchTargetRir = isAmrapSuggested && pendingSetsCount === 1 ? 0 : effectiveTargetRir;
+  useEffect(() => {
+    if (!watchLoggerVisible) return;
+    setActiveLogger({
+      snapshot: {
+        blockId: block.id,
+        setNumber: completedSets.length + 1,
+        targetSets: block.targetSets,
+        weight: watchWeight,
+        reps: watchReps,
+        targetRir: watchTargetRir,
+        unit,
+        minIncrementKg: exercise.minWeightIncrementKg,
+        isDurationBased,
+        isBodyweight: isBodyweightExercise,
+        weightMode,
+        userBodyweightKg,
+      },
+      log: (data) => completeLoggedSetRef.current({ ...data, rirExplicitlySelected: true }),
+    });
+  }, [
+    watchLoggerVisible,
+    block.id,
+    completedSets.length,
+    block.targetSets,
+    watchWeight,
+    watchReps,
+    watchTargetRir,
+    unit,
+    exercise.minWeightIncrementKg,
+    isDurationBased,
+    isBodyweightExercise,
+    weightMode,
+    userBodyweightKg,
+  ]);
+  useEffect(() => {
+    if (!watchLoggerVisible) clearActiveLogger(block.id);
+  }, [watchLoggerVisible, block.id]);
+  useEffect(() => () => clearActiveLogger(block.id), [block.id]);
 
   // Start dropset mode with reduced weight
   const startDropset = (parentSet: SetLog) => {
