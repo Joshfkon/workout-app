@@ -13,15 +13,36 @@ import {
   type ParsedLoseItEntry,
   type ImportResult,
 } from '@/services/importExport';
+import {
+  parseHevyCSV,
+  resolveHevyExercises,
+  hevyExerciseNames,
+  HevyFormatError,
+  type ParsedHevyWorkout,
+  type ExerciseResolution,
+  type LibraryExercise,
+} from '@/services/hevyImport';
+import { runHevyImport } from '@/lib/import/runHevyImport';
+import {
+  inferMuscleFromName,
+  inferMechanicFromName,
+  inferMovementPattern,
+} from '@/services/exerciseInference';
 
-type ImportSource = 'strong' | 'loseit' | null;
+type ImportSource = 'strong' | 'hevy' | 'loseit' | null;
 
 export function ImportExportSettings() {
   const [activeTab, setActiveTab] = useState<'import' | 'export'>('import');
   const [importSource, setImportSource] = useState<ImportSource>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [previewData, setPreviewData] = useState<ParsedStrongWorkout[] | ParsedLoseItEntry[] | null>(null);
+  const [previewData, setPreviewData] = useState<ParsedStrongWorkout[] | ParsedHevyWorkout[] | ParsedLoseItEntry[] | null>(null);
+  // Hevy: parse warnings, the exercise library, and the per-name mapping the
+  // user can adjust before importing (null = create as custom exercise).
+  const [hevyWarnings, setHevyWarnings] = useState<{ errors: string[]; badRowCount: number } | null>(null);
+  const [hevyLibrary, setHevyLibrary] = useState<LibraryExercise[]>([]);
+  const [hevyResolutions, setHevyResolutions] = useState<ExerciseResolution[]>([]);
+  const [hevyMap, setHevyMap] = useState<Record<string, string | null>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Progress tracking
@@ -54,6 +75,21 @@ export function ImportExportSettings() {
       if (importSource === 'strong') {
         const parsed = parseStrongCSV(text);
         setPreviewData(parsed);
+      } else if (importSource === 'hevy') {
+        const parsed = parseHevyCSV(text);
+        setHevyWarnings(parsed.badRowCount > 0 ? { errors: parsed.errors, badRowCount: parsed.badRowCount } : null);
+
+        const supabase = createUntypedClient();
+        const { data: library } = await supabase.from('exercises').select('id, name').order('name');
+        const lib = (library ?? []) as LibraryExercise[];
+        const resolutions = resolveHevyExercises(hevyExerciseNames(parsed.workouts), lib);
+        setHevyLibrary(lib);
+        setHevyResolutions(resolutions);
+        setHevyMap(Object.fromEntries(resolutions.map((r) => [r.sourceName, r.exerciseId])));
+        if (parsed.workouts.length === 0) {
+          setResult({ success: false, imported: 0, skipped: parsed.badRowCount, errors: ['No workouts found in this file.', ...parsed.errors] });
+        }
+        setPreviewData(parsed.workouts);
       } else if (importSource === 'loseit') {
         const parsed = parseLoseItCSV(text);
         setPreviewData(parsed);
@@ -63,7 +99,11 @@ export function ImportExportSettings() {
         success: false,
         imported: 0,
         skipped: 0,
-        errors: ['Failed to parse file. Make sure it\'s a valid CSV export.'],
+        errors: [
+          error instanceof HevyFormatError
+            ? error.message
+            : 'Failed to parse file. Make sure it\'s a valid CSV export.',
+        ],
       });
     } finally {
       setIsProcessing(false);
@@ -442,6 +482,17 @@ export function ImportExportSettings() {
         const imported = sessionMap.size;
         const skipped = workouts.length - imported;
         setResult({ success: true, imported, skipped, errors, newExercises: createdExerciseCount });
+      } else if (importSource === 'hevy') {
+        const res = await runHevyImport(
+          supabase,
+          user.id,
+          previewData as ParsedHevyWorkout[],
+          hevyMap,
+          setImportProgress
+        );
+        setResult(res);
+        setHevyWarnings(null);
+        setHevyResolutions([]);
       } else if (importSource === 'loseit') {
         const entries = previewData as ParsedLoseItEntry[];
         let imported = 0;
@@ -647,7 +698,7 @@ export function ImportExportSettings() {
           {activeTab === 'import' && (
             <div className="space-y-4">
               {/* Import Source Selection */}
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid sm:grid-cols-3 gap-3">
                 <button
                   onClick={() => { setImportSource('strong'); setPreviewData(null); setResult(null); }}
                   className={`p-4 rounded-xl border-2 transition-all text-left ${
@@ -658,6 +709,19 @@ export function ImportExportSettings() {
                 >
                   <div className="text-title mb-1">💪</div>
                   <h3 className="font-bold text-ink">Strong App</h3>
+                  <p className="text-caption text-ink-2">Import workout history</p>
+                </button>
+
+                <button
+                  onClick={() => { setImportSource('hevy'); setPreviewData(null); setResult(null); }}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${
+                    importSource === 'hevy'
+                      ? 'border-action bg-action/10'
+                      : 'border-sep hover:border-sep bg-fill/50'
+                  }`}
+                >
+                  <div className="text-title mb-1">🏋️</div>
+                  <h3 className="font-bold text-ink">Hevy</h3>
                   <p className="text-caption text-ink-2">Import workout history</p>
                 </button>
 
@@ -679,12 +743,18 @@ export function ImportExportSettings() {
               {importSource && (
                 <div className="space-y-3">
                   <div className="p-3 bg-fill/50 rounded-lg">
-                    <h4 className="font-medium text-ink text-body mb-2">How to export from {importSource === 'strong' ? 'Strong' : 'LoseIt'}:</h4>
+                    <h4 className="font-medium text-ink text-body mb-2">How to export from {importSource === 'strong' ? 'Strong' : importSource === 'hevy' ? 'Hevy' : 'LoseIt'}:</h4>
                     {importSource === 'strong' ? (
                       <ol className="text-caption text-ink-2 space-y-1 list-decimal list-inside">
                         <li>Open Strong app → Settings → Export Data</li>
                         <li>Choose &quot;CSV&quot; format</li>
                         <li>Save and upload the file below</li>
+                      </ol>
+                    ) : importSource === 'hevy' ? (
+                      <ol className="text-caption text-ink-2 space-y-1 list-decimal list-inside">
+                        <li>Open Hevy → Profile → Settings → Export &amp; Import Data</li>
+                        <li>Tap &quot;Export Workouts&quot; and save the CSV file</li>
+                        <li>Upload it below. Workouts you already imported are skipped, so re-importing a newer export is safe</li>
                       </ol>
                     ) : (
                       <ol className="text-caption text-ink-2 space-y-1 list-decimal list-inside">
@@ -699,7 +769,7 @@ export function ImportExportSettings() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".csv"
+                      accept={importSource === 'hevy' ? '.csv,.tsv,text/csv' : '.csv'}
                       onChange={handleFileSelect}
                       className="hidden"
                     />
@@ -727,6 +797,15 @@ export function ImportExportSettings() {
                           <p className="text-caption text-ink-3">{workout.date} • {workout.exercises.length} exercises</p>
                         </div>
                       ))
+                    ) : importSource === 'hevy' ? (
+                      (previewData as ParsedHevyWorkout[]).slice(-5).reverse().map((workout, idx) => (
+                        <div key={idx} className="p-2 bg-fill/50 rounded-lg text-body">
+                          <p className="font-medium text-ink">{workout.title}</p>
+                          <p className="text-caption text-ink-3">
+                            {new Date(workout.startedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} • {workout.exercises.length} exercises
+                          </p>
+                        </div>
+                      ))
                     ) : (
                       (previewData as ParsedLoseItEntry[]).slice(0, 5).map((entry, idx) => (
                         <div key={idx} className="p-2 bg-fill/50 rounded-lg text-body">
@@ -741,6 +820,56 @@ export function ImportExportSettings() {
                       </p>
                     )}
                   </div>
+
+                  {importSource === 'hevy' && hevyWarnings && (
+                    <div className="p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg">
+                      <p className="text-caption text-status-warn font-medium">
+                        {hevyWarnings.badRowCount} row{hevyWarnings.badRowCount === 1 ? '' : 's'} couldn&apos;t be read and will be skipped
+                      </p>
+                      <ul className="text-caption text-ink-3 mt-1 max-h-24 overflow-y-auto">
+                        {hevyWarnings.errors.map((e) => <li key={e}>{e}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {importSource === 'hevy' && hevyResolutions.some((r) => !r.exerciseId) && !importProgress && (
+                    <div className="space-y-2">
+                      <p className="text-body font-medium text-ink">
+                        Exercises to match ({hevyResolutions.filter((r) => !r.exerciseId).length})
+                      </p>
+                      <p className="text-caption text-ink-2">
+                        These names aren&apos;t in your exercise library. Pick a match, or leave &quot;Create as custom&quot;.
+                        {' '}{hevyResolutions.filter((r) => r.exerciseId).length} other exercises matched automatically.
+                      </p>
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {hevyResolutions.filter((r) => !r.exerciseId).map((r) => {
+                          const suggestedIds = new Set(r.suggestions.map((s) => s.id));
+                          return (
+                            <label key={r.sourceName} className="block p-2 bg-fill/50 rounded-lg">
+                              <span className="block text-body text-ink mb-1">{r.sourceName}</span>
+                              <select
+                                className="w-full bg-card border border-sep rounded-lg px-2 py-1 text-body text-ink"
+                                value={hevyMap[r.sourceName] ?? ''}
+                                onChange={(e) => setHevyMap((m) => ({ ...m, [r.sourceName]: e.target.value || null }))}
+                              >
+                                <option value="">Create as custom exercise</option>
+                                {r.suggestions.length > 0 && (
+                                  <optgroup label="Suggested">
+                                    {r.suggestions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                  </optgroup>
+                                )}
+                                <optgroup label="All exercises">
+                                  {hevyLibrary.filter((ex) => !suggestedIds.has(ex.id)).map((ex) => (
+                                    <option key={ex.id} value={ex.id}>{ex.name}</option>
+                                  ))}
+                                </optgroup>
+                              </select>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Progress Bar */}
                   {importProgress && (
@@ -783,7 +912,13 @@ export function ImportExportSettings() {
                       </p>
                       <p className="text-caption text-ink-2">
                         {result.imported} imported, {result.skipped} skipped
+                        {(result.duplicates ?? 0) > 0 && ` (${result.duplicates} already in your history)`}
                       </p>
+                      {result.errors.length > 0 && (
+                        <ul className="text-caption text-ink-3 mt-1 space-y-0.5">
+                          {result.errors.slice(0, 5).map((e) => <li key={e}>{e}</li>)}
+                        </ul>
+                      )}
                       {(result.newExercises ?? 0) > 0 && (
                         <p className="text-caption text-status-warn mt-1">
                           {result.newExercises} new custom exercise{result.newExercises === 1 ? '' : 's'} created
@@ -980,155 +1115,4 @@ function parseDate(dateStr: string): string | null {
   }
 
   return null;
-}
-
-function inferMuscleFromName(exerciseName: string): string {
-  const name = exerciseName.toLowerCase();
-
-  if (name.includes('crunch') || name.includes('ab ') || name.includes('abdominal') ||
-      name.includes('sit-up') || name.includes('situp') || name.includes('plank') ||
-      name.includes('pallof') || name.includes('palloff') ||
-      name.includes('side bend') || name.includes('oblique') ||
-      name.includes('woodchop') || name.includes('wood chop') ||
-      name.includes('dead bug') || name.includes('hollow') ||
-      name.includes('90/90') || name.includes('90 90') ||
-      (name.includes('leg raise') && !name.includes('calf')) ||
-      (name.includes('leg lift') && !name.includes('calf'))) {
-    return 'abs';
-  }
-
-  if (name.includes('push-up') || name.includes('pushup') || name.includes('push up') ||
-      name.includes('chest dip') || name.includes('dip') && name.includes('chest') ||
-      name.includes('bench press') || name.includes('chest press') || name.includes('chest fly') ||
-      name.includes('pec deck') || name.includes('pec fly') || name.includes('cable fly') ||
-      name.includes('dumbbell fly') || name.includes('incline press') || name.includes('decline press') ||
-      name.includes('floor press') ||
-      (name.includes('fly') && (name.includes('chest') || name.includes('pec') || name.includes('cable')))) {
-    return 'chest';
-  }
-
-  if (name.includes('arnold') ||
-      name.includes('shoulder') || name.includes('lateral raise') || name.includes('front raise') ||
-      name.includes('side raise') || name.includes('delt') || name.includes('military') ||
-      name.includes('overhead press') || name.includes('ohp') ||
-      name.includes('upright row') || name.includes('face pull') ||
-      name.includes('reverse fly') || name.includes('rear delt')) {
-    return 'shoulders';
-  }
-
-  if (name.includes('bicep') || name.includes('hammer curl') || name.includes('preacher') ||
-      name.includes('concentration') || name.includes('ez curl') || name.includes('ez bar curl') ||
-      (name.includes('curl') && !name.includes('leg') && !name.includes('ham') &&
-       !name.includes('wrist') && !name.includes('reverse'))) {
-    return 'biceps';
-  }
-
-  if (name.includes('tricep') || name.includes('skullcrusher') || name.includes('skull crusher') ||
-      name.includes('pushdown') || name.includes('push down') ||
-      (name.includes('dip') && !name.includes('chest')) ||
-      name.includes('kickback') && !name.includes('glute') ||
-      (name.includes('extension') && !name.includes('leg') && !name.includes('back') &&
-       !name.includes('calf') && !name.includes('hip'))) {
-    return 'triceps';
-  }
-
-  if (name.includes('shrug') || (name.includes('trap') && !name.includes('deadlift'))) {
-    return 'traps';
-  }
-
-  if (name.includes('calf') || name.includes('calves') ||
-      (name.includes('raise') && (name.includes('calf') || name.includes('heel')))) {
-    return 'calves';
-  }
-
-  if (name.includes('row') && !name.includes('upright') ||
-      name.includes('lat pull') || name.includes('pulldown') || name.includes('pull down') ||
-      name.includes('pull-up') || name.includes('pullup') || name.includes('pull up') ||
-      name.includes('chin-up') || name.includes('chinup') || name.includes('chin up') ||
-      name.includes('back extension') || name.includes('hyper') ||
-      name.includes('iso-lateral') || name.includes('iso lateral')) {
-    return 'back';
-  }
-
-  if (name.includes('adductor') || name.includes('adduction')) {
-    return 'adductors';
-  }
-  if (name.includes('abductor') || name.includes('abduction')) {
-    return 'glutes';
-  }
-
-  if (name.includes('glute') || name.includes('hip thrust') ||
-      (name.includes('kickback') && name.includes('glute'))) {
-    return 'glutes';
-  }
-
-  if (name.includes('hamstring') || name.includes('leg curl') || name.includes('lying curl') ||
-      (name.includes('seated curl') && name.includes('leg')) || name.includes('rdl') ||
-      name.includes('romanian') || name.includes('stiff leg') ||
-      name.includes('good morning')) {
-    return 'hamstrings';
-  }
-
-  if (name.includes('squat') || name.includes('leg press') || name.includes('leg extension') ||
-      name.includes('quad') || name.includes('lunge') || name.includes('hack') ||
-      name.includes('step up') || name.includes('step-up') ||
-      name.includes('split squat') || name.includes('sissy')) {
-    return 'quads';
-  }
-
-  if (name.includes('forearm') || name.includes('wrist curl') || name.includes('grip') ||
-      name.includes('reverse curl')) {
-    return 'forearms';
-  }
-
-  if (name.includes('deadlift') || name.includes('trap bar')) {
-    return 'hamstrings';
-  }
-
-  return 'back';
-}
-
-function inferMechanicFromName(exerciseName: string): string {
-  const name = exerciseName.toLowerCase();
-
-  const compounds = ['squat', 'deadlift', 'bench', 'press', 'row', 'pull-up', 'pullup', 'chin-up', 'dip'];
-  if (compounds.some(c => name.includes(c))) {
-    return 'compound';
-  }
-
-  return 'isolation';
-}
-
-function inferMovementPattern(exerciseName: string): string {
-  const name = exerciseName.toLowerCase();
-
-  if (name.includes('bench') || name.includes('push') || name.includes('fly') || name.includes('press') && name.includes('chest')) {
-    return 'horizontal_push';
-  }
-  if (name.includes('row') || name.includes('pull') && !name.includes('down')) {
-    return 'horizontal_pull';
-  }
-  if (name.includes('overhead') || name.includes('shoulder press') || name.includes('military')) {
-    return 'vertical_push';
-  }
-  if (name.includes('pulldown') || name.includes('pull-up') || name.includes('pullup') || name.includes('chin')) {
-    return 'vertical_pull';
-  }
-  if (name.includes('squat') || name.includes('leg press') || name.includes('lunge')) {
-    return 'squat';
-  }
-  if (name.includes('deadlift') || name.includes('rdl') || name.includes('hip thrust')) {
-    return 'hinge';
-  }
-  if (name.includes('curl') && !name.includes('leg')) {
-    return 'curl';
-  }
-  if (name.includes('extension') || name.includes('pushdown') || name.includes('tricep')) {
-    return 'extension';
-  }
-  if (name.includes('lateral') || name.includes('raise') || name.includes('fly')) {
-    return 'isolation';
-  }
-
-  return 'compound';
 }
