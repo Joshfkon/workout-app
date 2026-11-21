@@ -17,6 +17,9 @@ struct ContentView: View {
                                 detail: "Start a workout in HyperTrack on your iPhone.")
                 } else if let end = store.restEnd {
                     RestView(end: end, total: store.restTotal)
+                } else if store.awaitingPhone {
+                    MessageView(icon: "iphone", title: "Sent to iPhone",
+                                detail: "Next set appears when your iPhone catches up.")
                 } else if store.canLog {
                     LoggerView()
                 } else if store.allSetsDone {

@@ -22,6 +22,7 @@ struct WatchWorkoutState: Codable, Equatable {
     var exerciseNumber: Int?
     var exerciseCount: Int?
     var canLog: Bool?
+    var canQueueNext: Bool?
     var allSetsDone: Bool?
     var setNumber: Int?
     var targetSets: Int?
