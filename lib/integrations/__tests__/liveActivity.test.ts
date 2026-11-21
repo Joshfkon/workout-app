@@ -122,6 +122,22 @@ describe('widget data', () => {
     expect(mockPlugin.setWidgetData).toHaveBeenCalledTimes(2);
   });
 
+  it('rewrites an unchanged payload on a new local day', async () => {
+    const data = { sessionName: null, path: '/dashboard' };
+    await updateTodayWorkoutWidget(data);
+    await updateTodayWorkoutWidget(data);
+    expect(mockPlugin.setWidgetData).toHaveBeenCalledTimes(1);
+
+    (Date.now as jest.Mock).mockReturnValue(NOW + 86_400_000);
+    jest.useFakeTimers({ now: NOW + 86_400_000 });
+    try {
+      await updateTodayWorkoutWidget(data);
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(mockPlugin.setWidgetData).toHaveBeenCalledTimes(2);
+  });
+
   it('retries a write that failed', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     mockPlugin.setWidgetData.mockRejectedValueOnce(new Error('no group'));

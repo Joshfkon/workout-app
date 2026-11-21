@@ -13,6 +13,7 @@
  */
 
 import { getPlatform, isNativePlatform } from './capacitor-stub';
+import { getLocalDateString } from '@/lib/utils';
 
 export interface RestActivityContext {
   /** Exercise the lifter is resting from (or about to start). */
@@ -140,8 +141,11 @@ async function writeWidgetData(key: WidgetDataKey, data: object): Promise<void> 
   if (!p) return;
   const json = JSON.stringify({ ...data, updatedAt: Date.now() });
   // Skip identical writes (ignoring the timestamp) so re-renders don't reload
-  // widget timelines, which iOS budgets.
-  const fingerprint = JSON.stringify(data);
+  // widget timelines, which iOS budgets. The local day is part of the key:
+  // the widgets treat an earlier day's updatedAt as stale, so the first write
+  // of a new day must go through even when the payload is unchanged (two rest
+  // days in a row with the web view alive overnight).
+  const fingerprint = `${getLocalDateString()}|${JSON.stringify(data)}`;
   if (lastWritten[key] === fingerprint) return;
   lastWritten[key] = fingerprint;
   try {

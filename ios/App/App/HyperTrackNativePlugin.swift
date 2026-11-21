@@ -22,12 +22,30 @@ public class HyperTrackNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: Live Activity
 
+    /// JS fires start / update / end without awaiting them, and each one
+    /// suspends (ending the previous activity, pushing an update). Run them
+    /// strictly in call order, so a ±15s or a pause that arrives while a new
+    /// rest is still replacing the old activity applies to the replacement
+    /// instead of racing it.
+    private let opLock = NSLock()
+    private var lastOp: Task<Void, Never>?
+
+    private func enqueue(_ op: @escaping @Sendable () async -> Void) {
+        opLock.lock()
+        let previous = lastOp
+        lastOp = Task {
+            await previous?.value
+            await op()
+        }
+        opLock.unlock()
+    }
+
     @objc func startRestTimer(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else { return call.resolve() }
         guard let state = Self.contentState(from: call) else {
             return call.reject("endTimeMs is required")
         }
-        Task {
+        enqueue {
             // One rest at a time: a new set's rest replaces the previous one.
             await Self.endAll()
             guard ActivityAuthorizationInfo().areActivitiesEnabled else { return call.resolve() }
@@ -49,7 +67,7 @@ public class HyperTrackNativePlugin: CAPPlugin, CAPBridgedPlugin {
         guard let state = Self.contentState(from: call) else {
             return call.reject("endTimeMs is required")
         }
-        Task {
+        enqueue {
             for activity in Activity<RestTimerAttributes>.activities {
                 await activity.update(ActivityContent(state: state, staleDate: state.endTime))
             }
@@ -59,7 +77,7 @@ public class HyperTrackNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func endRestTimer(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else { return call.resolve() }
-        Task {
+        enqueue {
             await Self.endAll()
             call.resolve()
         }
