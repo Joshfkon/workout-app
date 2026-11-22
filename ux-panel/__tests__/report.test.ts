@@ -85,3 +85,16 @@ describe('renderReport', () => {
     expect(cmp).toContain('not compared');
   });
 });
+
+describe('issues from sessions with test-environment errors', () => {
+  it('are flagged for verification on the issue card', () => {
+    const run = makeRun();
+    (run.frictions[0].items as Array<Record<string, unknown>>).push({ personaId: 'dre', journeyId: 'log-meal', text: 'Broken', taskId: 'dre__log-meal' });
+    const html = renderReport(run);
+    expect(html).toContain('Check before acting');
+    expect(html).toContain('1 of the sessions');
+  });
+  it('are not flagged when no session behind them had an error', () => {
+    expect(renderReport(makeRun())).not.toContain('Check before acting');
+  });
+});

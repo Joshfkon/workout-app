@@ -6,7 +6,7 @@
  * Pure: run objects in, HTML string out.
  */
 import { QUESTIONS } from '../anchors.mjs';
-import { compareRuns } from './aggregate.mjs';
+import { envTaintedTasks, compareRuns } from './aggregate.mjs';
 
 const esc = (s) =>
   String(s ?? '')
@@ -37,10 +37,14 @@ function issueCard(c, i, run, readoutIssue, shotPrefix) {
   });
   const shotItem = c.items.find((it) => it.screenshot);
   const shot = shotItem ? `<img loading="lazy" src="${esc(`${shotPrefix}tasks/${shotItem.taskId}/${shotItem.screenshot}`)}" alt="Screen where ${esc(names[0])} hit this">` : '';
+  const tainted = envTaintedTasks(c, run.results ?? []);
+  const envNote = tainted.length
+    ? `<p class="env-note"><strong>Check before acting:</strong> ${tainted.length === c.items.length ? 'every session' : `${tainted.length} of the sessions`} behind this issue also hit a local test-environment error (see <em>Test environment problems</em>). It may be the test setup, not the app.</p>`
+    : '';
   return `<article class="issue sev-${esc(c.severity)}">
   <div class="issue-head"><span class="num">${i + 1}</span><h3>${esc(readoutIssue?.title || c.label)}</h3><span class="pill">${esc(SEVERITY_LABEL[c.severity] ?? c.severity)}</span></div>
   <p class="meta"><strong>${c.personaCount} of ${run.panel.personas}</strong> participants · <code>${esc(c.screen)}</code> · ${esc(c.journeys.map((j) => run.journeyLabels[j] ?? j).join(', '))}</p>
-  <div class="issue-body"><div>${quotes.join('')}${readoutIssue?.recommendation ? `<p class="rec"><strong>Recommendation:</strong> ${esc(readoutIssue.recommendation)}</p>` : ''}<p class="who">Hit by: ${esc(names.join(', '))}</p></div>${shot}</div>
+  ${envNote}<div class="issue-body"><div>${quotes.join('')}${readoutIssue?.recommendation ? `<p class="rec"><strong>Recommendation:</strong> ${esc(readoutIssue.recommendation)}</p>` : ''}<p class="who">Hit by: ${esc(names.join(', '))}</p></div>${shot}</div>
 </article>`;
 }
 
@@ -145,7 +149,7 @@ th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;verti
 .num{font-weight:700;color:var(--muted)}.pill{margin-left:auto;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 8px}
 .meta{margin:6px 0 10px;color:var(--muted);font-size:13.5px}.issue-body{display:grid;grid-template-columns:1fr 180px;gap:16px}
 .issue-body img{width:180px;border-radius:12px;border:1px solid var(--line)}blockquote{margin:0 0 8px;padding-left:10px;border-left:3px solid var(--line)}
-cite{display:block;font-style:normal;font-size:12.5px;color:var(--muted)}.rec{background:var(--bg);padding:8px 10px;border-radius:8px}.who{font-size:12.5px;color:var(--muted)}
+cite{display:block;font-style:normal;font-size:12.5px;color:var(--muted)}.rec{background:var(--bg);padding:8px 10px;border-radius:8px}.who{font-size:12.5px;color:var(--muted)}.env-note{border:1px dashed var(--warn);color:var(--fg);padding:6px 10px;border-radius:8px;font-size:13.5px}
 .dist{display:flex;height:12px;border-radius:6px;overflow:hidden;min-width:120px}.dist span{display:block;height:100%}.score{font-size:13px;margin-top:4px}
 .legend{font-size:12.5px;color:var(--muted)}.legend span{margin-right:10px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .delta.up{color:var(--ok)}.delta.down{color:var(--bad)}.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}

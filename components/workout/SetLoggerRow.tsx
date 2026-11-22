@@ -655,7 +655,11 @@ export function SetLoggerRow({
                 // how the set actually felt) — say so, or the two read as a clash.
                 `At this weight: about ${effortCheck.predictedRir} more in the tank (${
                   RIR_LABELS[clampToChip(effortCheck.predictedRir)]
-                })`}
+                })${
+                  effortCheck.repsForTarget != null
+                    ? ` · ~${effortCheck.repsForTarget} reps would leave ${effortCheck.targetRir}`
+                    : ''
+                }`}
             {effortCheck.softened ? ' · rough estimate' : ''}
           </span>
           <button

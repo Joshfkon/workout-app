@@ -4,6 +4,24 @@
  * that must not spend credits.
  */
 import Anthropic from '@anthropic-ai/sdk';
+import { execFileSync } from 'node:child_process';
+
+/**
+ * Credentials: ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN if set, otherwise the
+ * `ant` CLI's login (`ant auth login`). The token is fetched fresh per client
+ * (print-credentials refreshes it when near expiry) and never written to disk.
+ */
+export function clientOptions() {
+  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return {};
+  let token = '';
+  try {
+    token = execFileSync('ant', ['auth', 'print-credentials', '--access-token'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    /* fall through */
+  }
+  if (!token) throw new Error('No Anthropic credentials: set ANTHROPIC_API_KEY, or install the ant CLI and run `ant auth login`.');
+  return { apiKey: null, authToken: token };
+}
 
 /** $ per million tokens (first-party API). Cache writes bill at 1.25× input. */
 export const PRICES = {
@@ -46,7 +64,7 @@ export class Ledger {
  * Thinking stays on (it cannot be disabled on Opus 5.5); effort keeps it short.
  */
 export function anthropicLLM({ model = DEFAULT_MODEL, effort = 'low', ledger = new Ledger() } = {}) {
-  const client = new Anthropic();
+  const client = new Anthropic(clientOptions());
   return {
     model,
     ledger,

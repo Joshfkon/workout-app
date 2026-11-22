@@ -182,3 +182,13 @@ export function compareRuns(a, b, { threshold = 0.6 } = {}) {
   const resolved = a.frictions.filter((_, i) => !matchedA.has(i));
   return { scores, frictions: { persisting, added, resolved } };
 }
+
+/**
+ * Task ids behind a friction cluster whose session also hit a local
+ * test-environment error (missing column/table). Such an issue may be the
+ * environment, not the app, and must be verified before anyone acts on it.
+ */
+export function envTaintedTasks(cluster, results) {
+  const tainted = new Set(results.filter((r) => (r.envErrors ?? []).length).map((r) => r.taskId));
+  return [...new Set(cluster.items.map((it) => it.taskId).filter((t) => tainted.has(t)))];
+}

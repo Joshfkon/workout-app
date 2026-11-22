@@ -42,4 +42,12 @@ ALTER TABLE hydration_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "own hydration" ON hydration_log;
 CREATE POLICY "own hydration" ON hydration_log FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 GRANT ALL ON hydration_log TO authenticated;
+-- users.training_age: the Settings page saves it (years, parseFloat) but no
+-- migration creates it (see the comment in app/(dashboard)/dashboard/settings/page.tsx).
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS training_age NUMERIC(4,1) DEFAULT 0;
+
+-- users.body_fat_percent: read on the workout and onboarding paths, never
+-- added to users by a migration (only dexa_scans has it).
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS body_fat_percent NUMERIC(4,1);
+
 NOTIFY pgrst, 'reload schema';

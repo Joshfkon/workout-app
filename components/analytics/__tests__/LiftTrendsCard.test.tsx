@@ -98,4 +98,31 @@ describe('LiftTrendsCard', () => {
     expect(row).not.toHaveTextContent('%/wk');
     expect(within(row).getByText('Calibrating')).toBeInTheDocument();
   });
+
+  it('shows best recent sets with numbers when no lift has a trend yet', () => {
+    render(
+      <LiftTrendsCard
+        summary={{
+          ...summary,
+          lifts: [],
+          rising: 0,
+          flat: 0,
+          down: 0,
+          stalled: null,
+          insufficientData: 2,
+          earlyLifts: [
+            { name: 'Bench Press', sessions: 2, bestWeightKg: 60, bestReps: 8 },
+            { name: 'Pull-up', sessions: 1, bestWeightKg: 0, bestReps: 6 },
+          ],
+        }}
+        units="kg"
+      />,
+    );
+    const early = screen.getByTestId('lift-early-bests');
+    expect(early).toHaveTextContent('Bench Press');
+    expect(early).toHaveTextContent('60.0 kg × 8');
+    expect(early).toHaveTextContent('2 of 3 workouts');
+    expect(early).toHaveTextContent('6 reps');
+    expect(screen.queryByText(/No lift has enough history/)).not.toBeInTheDocument();
+  });
 });

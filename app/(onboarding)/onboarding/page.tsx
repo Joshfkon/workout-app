@@ -71,6 +71,9 @@ export default function OnboardingBodyCompPage() {
   const [heightInches, setHeightInches] = useState<string>('');
   const [weightDisplay, setWeightDisplay] = useState<string>('');
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
+  // True when the user chose "Not sure" and we filled in a typical value.
+  // A guessed body fat must not drive a muscle-mass verdict or a goal pick.
+  const [bfEstimated, setBfEstimated] = useState(false);
   const [useDexa, setUseDexa] = useState(false);
   const [showBodyFatGuide, setShowBodyFatGuide] = useState(false);
   // Training goal (users.goal). Seeded from the signup selection; confirmed or
@@ -182,7 +185,7 @@ export default function OnboardingBodyCompPage() {
         leanMassKg: comp.leanMassKg,
         ffmi: comp.ffmi,
         ffmiAssessment: getFFMIAssessment(comp.ffmi, sex),
-        ffmiBracket: getFFMIBracket(comp.ffmi)
+        ffmiBracket: getFFMIBracket(comp.ffmi, sex)
       });
     } else {
       setBodyComp(null);
@@ -225,6 +228,7 @@ export default function OnboardingBodyCompPage() {
             heightCm: height,
             totalWeightKg: weight,
             bodyFatPercentage: bf,
+            bodyFatEstimated: bfEstimated,
             leanMassKg: bodyComp?.leanMassKg,
             ffmi: bodyComp?.ffmi
           },
@@ -254,6 +258,8 @@ export default function OnboardingBodyCompPage() {
   };
   
   const canContinue = bodyComp !== null && bodyComp.ffmi > 0;
+  // Women's FFMI runs ~3 points lower; the scale bar shifts with it.
+  const ffmiScaleMin = sex === 'female' ? 12 : 15;
 
   // Why Continue is disabled, in words (a dimmed button alone reads as broken).
   const missingBodyComp: string[] = [];
@@ -375,7 +381,8 @@ export default function OnboardingBodyCompPage() {
   if (step === 'goal') {
     const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
     // Body-fat-aware guidance, mirroring the mesocycle builder's DEXA thresholds
-    const recommended: 'bulk' | 'cut' | null = !bf || isNaN(bf)
+    // A typical-value guess ("Not sure") never drives a recommendation.
+    const recommended: 'bulk' | 'cut' | null = bfEstimated || !bf || isNaN(bf)
       ? null
       : bf >= (sex === 'male' ? 20 : 30)
         ? 'cut'
@@ -419,9 +426,10 @@ export default function OnboardingBodyCompPage() {
         {recommended && (
           <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
             <p className="text-body text-action">
-              At ~{bf.toFixed(0)}% body fat, {recommended === 'cut'
-                ? 'a cut is a strong starting point — you’ll keep your muscle while improving your muscle-to-fat ratio.'
-                : 'you’re lean enough to bulk effectively — extra calories will go toward muscle, not fat.'}
+              Going by body fat alone (~{bf.toFixed(0)}%), {recommended === 'cut'
+                ? 'a cut would be a good starting point.'
+                : 'you’re lean enough that a bulk would put most extra calories toward muscle.'}{' '}
+              Already have a plan, like cutting for a show? Pick that. Your choice wins.
             </p>
           </div>
         )}
@@ -445,7 +453,7 @@ export default function OnboardingBodyCompPage() {
                   <span className="font-semibold text-ink">{option.label}</span>
                   {recommended === option.value && (
                     <span className="text-caption font-medium px-2 py-0.5 rounded-full bg-status-ok/10 text-status-ok">
-                      Recommended
+                      Fits your body fat
                     </span>
                   )}
                 </div>
@@ -469,7 +477,7 @@ export default function OnboardingBodyCompPage() {
             disabled={isLoading}
             isLoading={isLoading}
           >
-            Continue to strength testing
+            Continue
             <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
@@ -616,6 +624,7 @@ export default function OnboardingBodyCompPage() {
                     value={useDexa && existingDexa ? String(existingDexa.body_fat_percent) : bodyFatPercent}
                     onChange={(e) => {
                       setUseDexa(false);
+                      setBfEstimated(false);
                       setBodyFatPercent(e.target.value);
                     }}
                     placeholder="15"
@@ -623,7 +632,13 @@ export default function OnboardingBodyCompPage() {
                     max={60}
                     step={0.5}
                     disabled={useDexa}
-                    hint={useDexa ? 'Using DEXA scan data' : ''}
+                    hint={
+                      useDexa
+                        ? 'Using DEXA scan data'
+                        : bfEstimated
+                          ? 'A typical value for now. Update it any time.'
+                          : "Don't know it? Use the visual guide, or tap Not sure."
+                    }
                   />
                 </div>
                 {!useDexa && (
@@ -638,6 +653,22 @@ export default function OnboardingBodyCompPage() {
                   </Button>
                 )}
               </div>
+              {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && (
+                <button
+                  type="button"
+                  className="mt-2 text-subhead font-medium text-action"
+                  data-testid="body-fat-not-sure"
+                  onClick={() => {
+                    // Typical adult values; flagged so nothing downstream
+                    // presents a verdict built on a guess.
+                    setBodyFatPercent(sex === 'female' ? '32' : '22');
+                    setBfEstimated(true);
+                    setShowBodyFatGuide(false);
+                  }}
+                >
+                  Not sure — use a typical estimate
+                </button>
+              )}
               
               {/* Body fat visual guide */}
               {!useDexa && showBodyFatGuide && (
@@ -735,7 +766,12 @@ export default function OnboardingBodyCompPage() {
             <CardTitle>Your metrics</CardTitle>
           </CardHeader>
           <CardContent>
-            {bodyComp ? (
+            {bodyComp && bfEstimated ? (
+              <p className="text-body text-ink-2" data-testid="body-comp-estimated">
+                We&apos;re using a typical body-fat value, so we&apos;ll skip the muscle-mass rating for now.
+                Add your real number later in Settings and we&apos;ll fill this in.
+              </p>
+            ) : bodyComp ? (
               <div className="space-y-6">
                 {/* FFMI display */}
                 <div className="text-center p-6 bg-fill/50 rounded-xl">
@@ -800,17 +836,15 @@ export default function OnboardingBodyCompPage() {
                     <div 
                       className="absolute top-0 w-1 h-full bg-white shadow-lg"
                       style={{ 
-                        left: `${Math.min(100, Math.max(0, ((bodyComp.ffmi - 15) / 12) * 100))}%`,
+                        left: `${Math.min(100, Math.max(0, ((bodyComp.ffmi - ffmiScaleMin) / 12) * 100))}%`,
                         transform: 'translateX(-50%)'
                       }}
                     />
                   </div>
                   <div className="flex justify-between text-caption text-ink-3">
-                    <span>15</span>
-                    <span>18</span>
-                    <span>21</span>
-                    <span>24</span>
-                    <span>27</span>
+                    {[0, 3, 6, 9, 12].map((d) => (
+                      <span key={d}>{ffmiScaleMin + d}</span>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -832,7 +866,7 @@ export default function OnboardingBodyCompPage() {
           <p className="text-caption text-ink-2 text-right" data-testid="body-comp-missing">
             Add your {missingBodyComp.join(', ').replace(/, ([^,]*)$/, ' and $1')} to continue.
             {missingBodyComp.includes('body-fat estimate') &&
-              ' Not sure of your body fat? Tap Visual Guide and pick the closest look.'}
+              ' Not sure of your body fat? Pick the closest look in the visual guide, or tap Not sure.'}
           </p>
         )}
         <Button

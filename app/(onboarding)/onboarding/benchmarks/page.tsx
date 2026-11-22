@@ -89,6 +89,19 @@ function BenchmarksContent() {
   };
   
   const estimatedTime = selectedBenchmarks.length * 17;
+
+  // Skipping is a finished setup, not an abandoned one — otherwise the
+  // "Complete your setup" card nags on every screen.
+  const skipTesting = async () => {
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await completeOnboarding(supabase, user.id);
+    } catch {
+      // Best-effort: the worst case is the setup card showing once.
+    }
+    router.push('/dashboard');
+  };
   
   const handleContinue = async () => {
     if (!sessionId || selectedBenchmarks.length === 0) return;
@@ -153,11 +166,25 @@ function BenchmarksContent() {
       </div>
       
       <div className="text-center mb-6">
-        <h1 className="text-large-title font-bold text-ink mb-2">Select benchmark lifts</h1>
+        <h1 className="text-large-title font-bold text-ink mb-2">Test your strength? (optional)</h1>
         <p className="text-ink-2">
-          Choose which lifts you&apos;d like to test. This helps us personalize your entire training experience.
+          Testing at the gym (about 17 minutes per lift) makes your first weights more precise.
+          Skip it and we&apos;ll estimate them, then fine-tune from your first workouts.
         </p>
       </div>
+
+      {/* Skipping comes first: testing takes about an hour at a gym, and many
+          people sign up elsewhere or don't lift barbells at all. */}
+      <div className="rounded-card bg-card p-4 space-y-3 shadow-card">
+        <Button className="w-full" size="lg" onClick={skipTesting} data-testid="skip-benchmarks">
+          Skip and start using the app
+        </Button>
+        <p className="text-caption text-ink-3 text-center">
+          You can test your strength any time later from Analytics.
+        </p>
+      </div>
+
+      <h2 className="text-headline font-semibold text-ink pt-2">Or pick lifts to test now</h2>
 
       {/* Context card explaining why we test strength */}
       <ContextCard
@@ -268,33 +295,6 @@ function BenchmarksContent() {
         </Button>
       </div>
 
-      {/* Testing takes about an hour at a gym; most people sign up elsewhere.
-          Starting weights are estimated from the profile without it. */}
-      <div className="rounded-card bg-card p-4 text-center space-y-2 shadow-card">
-        <p className="text-body text-ink-2">
-          Not at the gym right now? Skip testing — we&apos;ll estimate your starting weights
-          and fine-tune them from your first workouts.
-        </p>
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={async () => {
-            // Skipping is a finished setup, not an abandoned one — otherwise
-            // the "Complete your setup" card nags on every screen.
-            try {
-              const supabase = createUntypedClient();
-              const { data: { user } } = await supabase.auth.getUser();
-              if (user) await completeOnboarding(supabase, user.id);
-            } catch {
-              // Best-effort: the worst case is the setup card showing once.
-            }
-            router.push('/dashboard');
-          }}
-          data-testid="skip-benchmarks"
-        >
-          Skip testing and start training
-        </Button>
-      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
  * Panel aggregation: score distributions per journey, friction clustering
  * (persona counts), completion rates and run-vs-run comparison.
  */
-import { aggregateScores, clusterFrictions, compareRuns, completionRates, screenKey } from '../lib/aggregate.mjs';
+import { aggregateScores, clusterFrictions, compareRuns, completionRates, envTaintedTasks, screenKey } from '../lib/aggregate.mjs';
 
 const P_LOW = [0.6, 0.4, 0, 0, 0];
 const P_HIGH = [0, 0, 0, 0.4, 0.6];
@@ -129,5 +129,14 @@ describe('compareRuns', () => {
     expect(cmp.frictions.persisting[0].personaDelta).toBe(-2);
     expect(cmp.frictions.added.map((c) => c.label)).toEqual(['new one']);
     expect(cmp.frictions.resolved.map((c) => c.label)).toEqual(['fixed one']);
+  });
+});
+
+describe('envTaintedTasks', () => {
+  it('returns the cluster tasks whose session logged an environment error', () => {
+    const cluster = { items: [{ taskId: 'a' }, { taskId: 'b' }, { taskId: 'a' }] };
+    const results = [{ taskId: 'a', envErrors: ['column x does not exist'] }, { taskId: 'b', envErrors: [] }];
+    expect(envTaintedTasks(cluster, results)).toEqual(['a']);
+    expect(envTaintedTasks(cluster, [])).toEqual([]);
   });
 });

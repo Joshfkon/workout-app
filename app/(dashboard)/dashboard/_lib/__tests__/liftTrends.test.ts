@@ -181,6 +181,22 @@ describe('computeLiftTrends', () => {
     expect(summary.insufficientData).toBe(1);
   });
 
+  it('reports the best recent set of each not-yet-trended lift (real numbers before a trend)', () => {
+    const sessions = [
+      session('b1', '2026-06-15T10:00:00Z', bench, 80, 8),
+      session('b2', '2026-06-22T10:00:00Z', bench, 85, 6),
+      session('q1', '2026-06-20T10:00:00Z', squat, 100, 5),
+    ];
+
+    const summary = computeLiftTrends(sessions, undefined, new Date('2026-06-23'));
+
+    expect(summary.lifts).toEqual([]);
+    expect(summary.earlyLifts).toEqual([
+      { name: 'Bench Press', sessions: 2, bestWeightKg: 85, bestReps: 6 },
+      { name: 'Squat', sessions: 1, bestWeightKg: 100, bestReps: 5 },
+    ]);
+  });
+
   it('ignores bodyweight/zero-load sets instead of zeroing the trend', () => {
     const sessions = [
       session('s1', '2026-06-01T10:00:00Z', bench, 80, 8),

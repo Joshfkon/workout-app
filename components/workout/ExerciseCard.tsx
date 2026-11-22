@@ -4493,31 +4493,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           // at that weight; predicted RIR = rep-max − entered reps). The
           // banner debounces and renders the amber warning state itself so
           // the 250ms flip re-renders only the banner.
-          const effortCheck = (() => {
-            if (isDurationBased) return null;
-            // rep_total: no e1RM curve exists for this exercise — no
-            // near-max predictions either.
-            if (repTotalMode) return null;
-            const enteredReps = parseInt(input.reps);
-            if (isNaN(enteredReps) || enteredReps < 1) return null;
-
-            const entered = parseEnteredLoad({
-              weightStr: input.weight,
-              bwLoadStr: bwLoadInput,
-              isBodyweight: isBodyweightExercise,
-              weightMode,
-              userBodyweightKg,
-              unit,
-              unitLabel: weightLabel,
-            });
-            if (!entered || !(entered.kg > 0)) return null;
-            const enteredKg = entered.kg;
-
+          // Rep-max (0 RIR) at a load, on the SAME e1RM ladder the
+          // prescription used. Shared by the effort check (entered load) and
+          // the banner's rep range (suggested load), so the two can't disagree.
+          const predictMaxReps = (loadKg: number) => {
             const lastCompleted = completedSets[completedSets.length - 1];
             let maxReps: number | null;
             let anchorE1RMKgUsed: number;
             let anchorSourcePhrase: string;
             let setsDone = 0;
+            const enteredKg = loadKg;
             if (lastCompleted) {
               // Within-session: same capacity anchor as recommendSet —
               // max(session-best e1RM, Epley of the last set at its logged
@@ -4561,6 +4546,38 @@ export const ExerciseCard = memo(function ExerciseCard({
                   ? 'from your last session of this exercise'
                   : coldStartSuggestion?.reason ?? 'an estimate from your training profile';
             }
+            return { maxReps, anchorE1RMKgUsed, anchorSourcePhrase, setsDone };
+          };
+
+          // Reps that land on the target reserve at a load, capped at the top
+          // of the range. null when there's no curve to read.
+          const repsForTargetAt = (loadKg: number): number | null => {
+            const m = predictMaxReps(loadKg).maxReps;
+            if (m == null) return null;
+            return Math.min(block.targetRepRange[1], m - loggerTargetRir);
+          };
+
+          const effortCheck = (() => {
+            if (isDurationBased) return null;
+            // rep_total: no e1RM curve exists for this exercise — no
+            // near-max predictions either.
+            if (repTotalMode) return null;
+            const enteredReps = parseInt(input.reps);
+            if (isNaN(enteredReps) || enteredReps < 1) return null;
+
+            const entered = parseEnteredLoad({
+              weightStr: input.weight,
+              bwLoadStr: bwLoadInput,
+              isBodyweight: isBodyweightExercise,
+              weightMode,
+              userBodyweightKg,
+              unit,
+              unitLabel: weightLabel,
+            });
+            if (!entered || !(entered.kg > 0)) return null;
+
+            const lastCompleted = completedSets[completedSets.length - 1];
+            const { maxReps, anchorE1RMKgUsed, anchorSourcePhrase, setsDone } = predictMaxReps(entered.kg);
             if (maxReps == null) return null;
 
             // Confidence: an e1RM transferred from another lift (cold-start
@@ -4595,8 +4612,15 @@ export const ExerciseCard = memo(function ExerciseCard({
               );
             }
 
+            // Well short of the target effort: say how far the target goes, so
+            // "about 5 more in the tank" reads as advice, not a contradiction
+            // of the banner's "@ 2 RIR".
+            const repsForTarget = Math.min(block.targetRepRange[1], maxReps - loggerTargetRir);
             return {
               predictedRir,
+              ...(predictedRir >= loggerTargetRir + 2 && repsForTarget > enteredReps
+                ? { repsForTarget, targetRir: loggerTargetRir }
+                : {}),
               weightLabel: entered.label,
               reps: enteredReps,
               softened: !hasOwnHistory,
@@ -4605,6 +4629,28 @@ export const ExerciseCard = memo(function ExerciseCard({
                 : undefined,
               reasoning,
             };
+          })();
+
+          // "160 lbs × 6 @ 2 RIR" when 6 reps leaves ~5 is a contradiction:
+          // the engine's ask is the minimum (e.g. double progression resets to
+          // the range floor after a load bump). Show it as a range up to the
+          // reps that land on the target reserve — "× 6–8 @ 2 RIR".
+          const bannerRepsLabel = (() => {
+            const asked = parseInt(suggestion.repsLabel);
+            if (!/^\d+$/.test(suggestion.repsLabel) || isDurationBased || repTotalMode || isBodyweightExercise || activeIsAmrap) {
+              return suggestion.repsLabel;
+            }
+            const sugg = parseEnteredLoad({
+              weightStr: suggestion.weight,
+              bwLoadStr: bwLoadInput,
+              isBodyweight: false,
+              weightMode,
+              userBodyweightKg,
+              unit,
+              unitLabel: weightLabel,
+            });
+            const upTo = sugg && sugg.kg > 0 ? repsForTargetAt(sugg.kg) : null;
+            return upTo != null && upTo >= asked + 2 ? `${asked}–${upTo}` : suggestion.repsLabel;
           })();
 
           return (
@@ -4618,7 +4664,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 repsLabel={
                   latestCall?.heldByVelocity
                     ? latestCall.repsLabel
-                    : `${suggestion.repsLabel || '—'}${isDurationBased ? 's' : ''}`
+                    : `${bannerRepsLabel || '—'}${isDurationBased ? 's' : ''}`
                 }
                 verdict={bannerVerdict}
                 rir={Math.max(0, Math.min(3, loggerTargetRir))}
