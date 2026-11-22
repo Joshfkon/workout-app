@@ -254,13 +254,20 @@ export function BodyHubTrends({
       {/* Weight trend. With < 2 weigh-ins there's no line yet, so say
           exactly what gets one instead of rendering nothing. */}
       {weightHistory.length >= 2 ? (
-        <WeightGraph weightHistory={weightHistory} preferredUnit={units} phases={phaseSpans} />
+        <Card data-testid="weight-trend-card">
+          <CardHeader>
+            <CardTitle>Body weight</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WeightGraph weightHistory={weightHistory} preferredUnit={units} phases={phaseSpans} />
+          </CardContent>
+        </Card>
       ) : isLoading ? (
         <div className="h-56 animate-pulse bg-fill/50 rounded-xl" />
       ) : (
         <Card data-testid="weight-trend-empty">
           <CardHeader>
-            <CardTitle>Weight trend</CardTitle>
+            <CardTitle>Body weight</CardTitle>
           </CardHeader>
           <CardContent>
             {weightHistory.length === 1 && (
@@ -473,7 +480,8 @@ export function BodyHubTrends({
               </div>
               <p className="text-caption text-ink-2 mt-2">
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 align-middle mr-1" />
-                Body scans (DEXA) are measured · line between scans is an estimate
+                Body scans (DEXA, a clinic X-ray that measures fat, muscle and bone) are
+                measured · line between scans is an estimate
                 re-anchored to pass through every scan
                 {gapCount > 0 && (
                   <>
