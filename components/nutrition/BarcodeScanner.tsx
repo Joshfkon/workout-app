@@ -265,6 +265,77 @@ type BarcodeScannerProps = {
   | { onScan: (barcode: string) => Promise<void>; onProductFound?: never }
 );
 
+/** Why the camera couldn't start (drives the manual-first fallback copy). */
+export type CameraIssue = 'denied' | 'missing' | 'failed';
+
+export function classifyCameraError(err: unknown): CameraIssue {
+  const text = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+  if (/Permission|NotAllowed/i.test(text)) return 'denied';
+  if (/NotFound|no camera|Requested device not found|getUserMedia|mediaDevices|not supported/i.test(text)) {
+    return 'missing';
+  }
+  return 'failed';
+}
+
+const CAMERA_ISSUE_COPY: Record<CameraIssue, string> = {
+  denied: 'Camera access is off — type the barcode number instead',
+  missing: 'No camera here — type the barcode number instead',
+  failed: "The camera didn't start — type the barcode number instead",
+};
+
+/**
+ * Shown when the camera can't start: manual entry is the primary action,
+ * with retry / photo as quiet secondary options. Real-camera behaviour is
+ * untouched — this only replaces the idle "Start camera scanner" card.
+ */
+function CameraUnavailablePanel({
+  issue,
+  manualBarcode,
+  onManualBarcodeChange,
+  onLookup,
+  onRetryCamera,
+  onTakePhoto,
+}: {
+  issue: CameraIssue;
+  manualBarcode: string;
+  onManualBarcodeChange: (value: string) => void;
+  onLookup: () => void;
+  onRetryCamera: () => void;
+  onTakePhoto?: () => void;
+}) {
+  return (
+    <div className="p-4 space-y-3" data-testid="barcode-manual-first">
+      <p className="text-body font-semibold text-ink">{CAMERA_ISSUE_COPY[issue]}</p>
+      <p className="text-caption text-ink-2">It&apos;s the number printed under the bars.</p>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        autoFocus
+        aria-label="Barcode number"
+        value={manualBarcode}
+        onChange={(e) => onManualBarcodeChange(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && onLookup()}
+        placeholder="e.g. 0123456789012"
+        className="w-full px-3 py-3 bg-fill rounded-lg text-ink text-body placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action"
+      />
+      <Button onClick={onLookup} disabled={!manualBarcode.trim()} size="lg" className="w-full">
+        Look up barcode
+      </Button>
+      <div className="flex items-center justify-center gap-4 pt-1 text-subhead">
+        <button type="button" onClick={onRetryCamera} className="text-action hover:underline">
+          Try the camera again
+        </button>
+        {onTakePhoto && (
+          <button type="button" onClick={onTakePhoto} className="text-action hover:underline">
+            Take a photo
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BarcodeScanner(props: BarcodeScannerProps) {
   const { onClose, onCreateCustom } = props;
   const onProductFound = 'onProductFound' in props ? props.onProductFound : undefined;
@@ -278,6 +349,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<'info' | 'error'>('info');
   const [manualBarcode, setManualBarcode] = useState('');
+  // Why the camera couldn't start, if it couldn't. Swaps the scanner card for
+  // a manual-entry-first layout instead of a small error line under it.
+  const [cameraIssue, setCameraIssue] = useState<CameraIssue | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('Waiting to scan...');
   const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
   const [torchSupported, setTorchSupported] = useState(false); // web torch
@@ -586,8 +660,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         permission = await MLKitScanner.requestPermissions();
       }
       if (permission.camera !== 'granted' && permission.camera !== 'limited') {
-        setErrorType('info');
-        setError('Camera permission denied. Enter barcode manually below.');
+        setCameraIssue('denied');
         setDebugInfo(`Camera permission: ${permission.camera}`);
         return;
       }
@@ -774,19 +847,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       setIsScanning(false);
       const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       setDebugInfo(`Camera error: ${errMsg}`);
-      setErrorType('info');
-
-      if (err instanceof Error) {
-        if (err.message.includes('Permission')) {
-          setError('Camera permission denied. Enter barcode manually below.');
-        } else if (err.message.includes('NotFoundError')) {
-          setError('No camera found. Enter barcode manually below.');
-        } else {
-          setError(`Camera unavailable: ${err.message}`);
-        }
-      } else {
-        setError('Camera unavailable. Enter barcode manually below.');
-      }
+      setCameraIssue(classifyCameraError(err));
     }
   };
 
@@ -889,6 +950,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     if (!isMountedRef.current) return;
 
     setError(null);
+    setCameraIssue(null);
     setShowCustomForm(false);
 
     if (Capacitor.isNativePlatform()) {
@@ -1069,7 +1131,20 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             >
               <div id="barcode-reader" className={isScanning ? 'block' : 'hidden'} />
 
-              {!isScanning && (
+              {!isScanning && cameraIssue && (
+                <CameraUnavailablePanel
+                  issue={cameraIssue}
+                  manualBarcode={manualBarcode}
+                  onManualBarcodeChange={setManualBarcode}
+                  onLookup={handleManualLookup}
+                  onRetryCamera={() => { void startScanner(); }}
+                  onTakePhoto={
+                    Capacitor.isNativePlatform() ? undefined : () => photoInputRef.current?.click()
+                  }
+                />
+              )}
+
+              {!isScanning && !cameraIssue && (
                 <div className="flex flex-col items-center justify-center py-8 px-4">
                   <div className="w-16 h-16 rounded-full bg-action/20 flex items-center justify-center mb-4">
                     <svg className="w-8 h-8 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1148,7 +1223,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               )}
             </div>
 
-            {/* Manual entry */}
+            {/* Manual entry (the camera-unavailable panel has its own, as
+                the primary option) */}
+            {!cameraIssue && (
             <div className="border-t border-sep pt-4">
               <p className="text-subhead text-ink-2 mb-2">Or enter barcode manually:</p>
               <div className="flex gap-2">
@@ -1167,6 +1244,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                 </Button>
               </div>
             </div>
+            )}
 
             {/* Error/Info message with Create Custom button */}
             {error && (
@@ -1181,14 +1259,16 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         )}
       </div>
 
-      {/* Tips */}
-      <div className="px-4 pb-2">
-        <div className="p-2 bg-card/50 rounded-lg">
-          <p className="text-caption text-ink-3">
-            Hold the barcode 6–10 inches (15–25 cm) from the camera — too close and it can&apos;t focus. If it stays blurry, use Take Photo instead.
-          </p>
+      {/* Tips (camera aiming — irrelevant while there's no camera) */}
+      {!cameraIssue && (
+        <div className="px-4 pb-2">
+          <div className="p-2 bg-card/50 rounded-lg">
+            <p className="text-caption text-ink-3">
+              Hold the barcode 6–10 inches (15–25 cm) from the camera — too close and it can&apos;t focus. If it stays blurry, use Take Photo instead.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Debug info: opt-in only (NEXT_PUBLIC_SCANNER_DEBUG=1). Plain dev builds
           are what testers and the synthetic panel see, and a raw DEBUG box

@@ -730,8 +730,10 @@ describe('ExerciseCard', () => {
       render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
 
       const line = screen.getByTestId('session-volume-line');
-      expect(line).toHaveTextContent(/Volume 1,900 kg/);
-      expect(line).toHaveTextContent(/projected/);
+      expect(line).toHaveTextContent(/Lifted so far 1,900 kg/);
+      expect(line).toHaveTextContent(/if you finish/);
+      // Plain words first, the technical term still named.
+      expect(line).toHaveTextContent(/\(volume: weight × reps, all sets\)/);
     });
 
     it('renders no session volume line on an untouched inactive exercise', () => {
@@ -817,7 +819,7 @@ describe('ExerciseCard', () => {
       // Debounced ~250ms; assertive copy for a directly-trained exercise.
       await waitFor(() => {
         expect(screen.getByTestId('effort-warning')).toHaveTextContent(
-          '100 kg × 12 ≈ 0 RIR — predicted max for you'
+          "100 kg × 12 — likely all you've got (0 left in the tank)"
         );
       });
       // The suggestion copy stays mounted (it reserves the banner's height so
@@ -1168,7 +1170,7 @@ describe('ExerciseCard', () => {
     it('cold start (no history): the banner says the number is a profile estimate', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'Estimated from your profile — start light and adjust'
+        'Starting guess — pick a weight you could lift ~12 times, then adjust'
       );
     });
 
@@ -1186,7 +1188,7 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'First time on this lift — estimated from your Barbell Back Squat; adjust to feel'
+        'Starting guess from your Barbell Back Squat — pick a weight you could lift ~12 times, then adjust'
       );
       // The prescribed number is unchanged by the explanation.
       expect(screen.getByTestId('suggestion-source').closest('p')).toHaveTextContent(
@@ -1194,7 +1196,7 @@ describe('ExerciseCard', () => {
       );
     });
 
-    it('with history, the source line points at the user’s own sets', () => {
+    it('with history, the banner points at the user’s own sets — once', () => {
       render(
         <ExerciseCard
           {...defaultProps}
@@ -1202,9 +1204,11 @@ describe('ExerciseCard', () => {
           previousSets={[{ weightKg: 100, reps: 10, rpe: 8 }]}
         />
       );
-      expect(screen.getByTestId('suggestion-source').textContent).toMatch(
-        /^From your (last session|recent sets on this lift)/
-      );
+      // The banner paragraph names the user's own sets, and never twice
+      // (reason + a repeated "From your last session" line).
+      const banner = screen.getByTestId('suggestion-rir-plain').closest('p')?.textContent ?? '';
+      expect(banner).toMatch(/last (session|set)|recent sets on this lift/);
+      expect((banner.match(/last session/g) ?? []).length).toBeLessThanOrEqual(1);
     });
 
     it('explains "RIR" accessibly where the banner shows the target', () => {
@@ -1422,7 +1426,7 @@ describe('ExerciseCard', () => {
       // The rationale line shows the curve working, with the e1RM it used.
       const note = screen.getByTestId('weight-edit-recompute-note');
       expect(note).toHaveTextContent('35 lbs ⇒ ~6 reps @ 2 RIR');
-      expect(note).toHaveTextContent(/from your 44(\.\d+)? lbs e1RM/);
+      expect(note).toHaveTextContent(/from your est\. 1-rep max, e1RM 44(\.\d+)? lbs/);
     });
 
     it('note slot stays mounted at all times — toggling it must not move the steppers (layout stability)', async () => {

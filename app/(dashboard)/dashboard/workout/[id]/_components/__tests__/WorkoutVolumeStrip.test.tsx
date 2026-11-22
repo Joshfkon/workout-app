@@ -106,7 +106,7 @@ describe('WorkoutVolumeStrip', () => {
     const chestMevMarker = screen.getByTestId('workout-volume-mev-marker-chest');
     expect(chestMevMarker).toBeInTheDocument();
     expect(chestMevMarker).toHaveStyle({ left: '40%' }); // 10/25 = 40%
-    expect(chestMevMarker).toHaveAttribute('title', 'MEV: 10 sets');
+    expect(chestMevMarker).toHaveAttribute('title', 'Minimum that grows muscle (MEV): 10 sets');
 
     const backMevMarker = screen.getByTestId('workout-volume-mev-marker-back');
     expect(backMevMarker).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe('WorkoutVolumeStrip', () => {
     const chestMrvMarker = screen.getByTestId('workout-volume-mrv-marker-chest');
     expect(chestMrvMarker).toBeInTheDocument();
     expect(chestMrvMarker).toHaveStyle({ left: '100%' });
-    expect(chestMrvMarker).toHaveAttribute('title', 'MRV: 25 sets');
+    expect(chestMrvMarker).toHaveAttribute('title', 'Most you can recover from (MRV): 25 sets');
 
     const backMrvMarker = screen.getByTestId('workout-volume-mrv-marker-back');
     expect(backMrvMarker).toBeInTheDocument();

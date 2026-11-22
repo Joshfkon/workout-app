@@ -154,6 +154,7 @@ import {
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
 import { detectLiveSetPr, prBaselineFromRecord } from '@/services/livePrDetector';
+import { prCelebrationCopy } from './_lib/prCelebrationCopy';
 import type { PRCelebrationData } from '@/components/workout/PRCelebration';
 import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
@@ -293,6 +294,7 @@ import {
   type RecalcChange,
 } from '../_lib/staleTargets';
 import { RecalcTargetsBanner } from '@/components/workout';
+import { STICKY_LOG_SLOT_ID } from '@/components/workout/SetLoggerRow';
 import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
@@ -3653,23 +3655,10 @@ export default function WorkoutPage() {
             const v = convertWeightForDisplay(kg, preferences.units, 1);
             return `${Number.isInteger(v) ? v.toFixed(0) : v} ${unitLabel}`;
           };
-          const pct = pr.improvement > 0 ? ` · +${pr.improvement}%` : '';
-          const celebrationByType: Record<typeof pr.type, { title: string; detail: string }> = {
-            e1rm: { title: 'New e1RM PR', detail: `${fmtKg(pr.value)} est. 1RM${pct}` },
-            weight: { title: 'New weight PR', detail: `${fmtKg(pr.value)}${pct}` },
-            reps: {
-              title: 'New reps PR',
-              detail: `${pr.value} reps${pr.improvement > 0 ? ` · +${pr.improvement}` : ''}`,
-            },
-            duration: {
-              title: 'New hold PR',
-              detail: `${pr.value}s${pr.improvement > 0 ? ` · +${pr.improvement}s` : ''}`,
-            },
-          };
           setPrCelebration({
             id: setId,
             exerciseName: currentBlock.exercise.name,
-            ...celebrationByType[pr.type],
+            ...prCelebrationCopy(pr, fmtKg),
           });
         }
       });
@@ -7293,7 +7282,6 @@ export default function WorkoutPage() {
   // Any bottom-anchored chrome present → reserve room below the in-flow action
   // bar so the fixed stack never covers it. The toast can stack on top of the
   // timer, so when it's showing reserve the taller amount.
-  const bottomChromeVisible = restBarVisible || !!sanityCheckResult;
   const bottomPad = sanityCheckResult ? 'pb-56' : restBarVisible ? 'pb-32' : 'pb-8';
 
   return (
@@ -8332,14 +8320,20 @@ export default function WorkoutPage() {
           transient Performance-Drop toast sits ABOVE the persistent rest timer
           (P0-5) — previously each was its own independent fixed layer at the
           same bottom offset and they overlapped. The in-flow action bar above
-          gets matching bottom padding (see restBarVisible / bottomChromeVisible)
+          gets matching bottom padding (see restBarVisible / bottomPad)
           so nothing here covers it. pointer-events pass through the empty gaps
           so taps land on the exercise list, not an invisible full-width layer.
           Hidden while the on-screen keyboard is up: iOS detaches fixed-bottom
           layers from the screen edge then, leaving the timer floating mid-page
           (see useKeyboardOpen). */}
-      {bottomChromeVisible && !keyboardOpen && (
-        <div className="fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto flex flex-col items-stretch gap-2 pointer-events-none [&>*]:pointer-events-auto pb-[env(safe-area-inset-bottom)]">
+      {/* Always mounted (hidden, not unmounted, under the keyboard): the
+          active set's pinned "Log set" bar portals into the slot at its
+          bottom, and a portal target must outlive what renders into it. */}
+      <div
+          className={`fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto flex flex-col items-stretch gap-2 pointer-events-none [&>*]:pointer-events-auto pb-[env(safe-area-inset-bottom)] ${
+            keyboardOpen ? 'hidden' : ''
+          }`}
+        >
           {sanityCheckResult && (
             <SanityCheckToast
               layout="inline"
@@ -8380,8 +8374,10 @@ export default function WorkoutPage() {
               }}
             />
           )}
+          {/* Pinned "Log set" (SetLoggerRow) — empty, and so collapsed, while
+              the card's own button is on screen. */}
+          <div id={STICKY_LOG_SLOT_ID} className="empty:hidden" />
         </div>
-      )}
 
       {/* Add Exercise Modal */}
       {showAddExercise && (

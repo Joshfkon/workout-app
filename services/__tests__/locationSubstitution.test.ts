@@ -271,3 +271,26 @@ describe('buildSubstitutedPick', () => {
     });
   });
 });
+
+describe('applyLocationSubstitutions with standing-injury safety', () => {
+  const base = {
+    plan: plan([pick('chest-machine')]),
+    exercises: [CHEST_MACHINE, DB_PRESS, PUSH_UP],
+    unavailableEquipmentIds: HOTEL_UNAVAILABLE,
+    sessionMinutes: 45,
+  };
+
+  it('never substitutes an avoid exercise, in the pick or the alternatives', () => {
+    const result = applyLocationSubstitutions({ ...base, avoidExerciseIds: ['db-press'] });
+    const [chest] = result.exercises;
+    expect(chest.exerciseId).not.toBe('db-press');
+    expect(chest.substitution?.alternatives ?? []).not.toContain('db-press');
+  });
+
+  it('ranks a caution exercise behind safe alternatives', () => {
+    const plain = applyLocationSubstitutions(base);
+    expect(plain.exercises[0].exerciseId).toBe('db-press');
+    const result = applyLocationSubstitutions({ ...base, cautionExerciseIds: new Set(['db-press']) });
+    expect(result.exercises[0].exerciseId).not.toBe('db-press');
+  });
+});

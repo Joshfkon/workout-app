@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup } from '@/types/schema';
 import {
+  MIN_SESSIONS_FOR_INSIGHT,
   getPaceDisplay,
   type MuscleGroupProgression,
   type ProgressionPace,
@@ -51,6 +52,49 @@ function formatWeeklyPct(pct: number): string {
 }
 
 /**
+ * Plain copy for muscles that can't be judged yet: the real threshold, each
+ * muscle's progress toward it, and the next step. A muscle's count is its
+ * best-trained lift's workouts (a pace appears once ANY of its lifts reaches
+ * MIN_SESSIONS_FOR_INSIGHT) — worded like LiftTrendsCard's "N of 3 workouts".
+ * A lift already at the threshold whose trend is still too noisy shows as
+ * "settling" rather than a count that looks complete.
+ */
+export function buildingSummaryText(groups: MuscleGroupProgression[]): {
+  lead: string;
+  detail: string;
+} {
+  const min = MIN_SESSIONS_FOR_INSIGHT;
+  const counted = groups.map((g) => ({
+    name: muscleDisplayName(g.muscleGroup),
+    sessions: g.insights.reduce((best, i) => Math.max(best, i.sessionsAnalyzed), 0),
+  }));
+  const parts = counted.map((c) =>
+    c.sessions >= min ? `${c.name} settling` : `${c.name} ${c.sessions} of ${min}`
+  );
+  const short = counted.filter((c) => c.sessions < min);
+  let next = '';
+  if (short.length > 0) {
+    const closest = short.reduce((a, b) => (b.sessions > a.sessions ? b : a));
+    const more = min - closest.sessions;
+    next =
+      short.length === 1
+        ? ` Train ${closest.name} ${more} more time${more === 1 ? '' : 's'} to see its pace.`
+        : ` Closest: ${closest.name}, ${more} more workout${more === 1 ? '' : 's'}.`;
+  }
+  return {
+    lead: `A pace shows once one of a muscle's lifts has ${min} workouts:`,
+    detail: `${parts.join(', ')}.${next}`,
+  };
+}
+
+/** Plain explanation for a group rate clamped at the sanity ceiling. */
+export function cappedRateText(names: string[]): string {
+  const list = names.join(', ');
+  const subject = names.length === 1 ? `${list}'s rate was` : `${list} rates were`;
+  return `${subject} capped: it climbed faster than muscle realistically gains, which usually means a weight was mistyped or the equipment changed. Check recent sets for a typo; after a switch of machine or gym it settles in a few workouts.`;
+}
+
+/**
  * "Progression by muscle group" — how each muscle's lifts are trending vs
  * the expected E1RM gain rate for the user's experience level. Rows expand
  * to show per-exercise pace.
@@ -80,6 +124,8 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
   const activeGroups = groups.filter((g) => paceHasRate(g.pace));
   const calibratingGroups = groups.filter((g) => g.pace === 'calibrating');
   const buildingGroups = groups.filter((g) => g.pace === 'insufficient_data');
+  const buildingSummary = buildingSummaryText(buildingGroups);
+  const cappedGroups = activeGroups.filter((g) => g.rateImplausible);
 
   const expectedPct = groups[0].expectedWeeklyPct;
   const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
@@ -189,10 +235,16 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
             className="px-4 py-3 text-caption text-ink-2"
             data-testid="muscle-progression-building-summary"
           >
-            <span className="font-medium text-ink-2">
-              Not enough workouts yet to judge:
-            </span>{' '}
-            {buildingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}. A few more sessions each and these fill in.
+            <span className="font-medium text-ink-2">{buildingSummary.lead}</span>{' '}
+            {buildingSummary.detail}
+          </li>
+        )}
+        {cappedGroups.length > 0 && (
+          <li
+            className="px-4 py-3 text-caption text-status-warn"
+            data-testid="muscle-progression-capped-note"
+          >
+            ⚠ {cappedRateText(cappedGroups.map((g) => muscleDisplayName(g.muscleGroup)))}
           </li>
         )}
       </ul>

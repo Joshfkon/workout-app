@@ -87,6 +87,14 @@ export interface ApplyLocationSubstitutionsInput {
   unavailableEquipmentIds: string[];
   /** Session length, for re-sizing sets when the substitute's mechanic differs. */
   sessionMinutes: number;
+  /**
+   * Standing-injury safety from the plan step (exerciseSafetyForAreas): a
+   * substitute may never be an 'avoid' exercise, and 'caution' ones rank
+   * behind every safe alternative — swapping for the gym must not undo the
+   * injury decision the plan already made.
+   */
+  avoidExerciseIds?: ReadonlySet<string> | string[];
+  cautionExerciseIds?: ReadonlySet<string> | string[];
 }
 
 // ============================================================
@@ -163,22 +171,34 @@ export function substitutionScore(
   return score;
 }
 
+const NO_IDS: ReadonlySet<string> = new Set();
+const asIdSet = (ids: ReadonlySet<string> | string[] | undefined): ReadonlySet<string> =>
+  ids ? (Array.isArray(ids) ? new Set(ids) : ids) : NO_IDS;
+
 function rankCandidates(
   original: LocationSubstitutionExercise,
   pool: LocationSubstitutionExercise[],
   unavailableEquipmentIds: string[],
-  excludedIds: Set<string>
+  excludedIds: Set<string>,
+  avoidIds: ReadonlySet<string> = NO_IDS,
+  cautionIds: ReadonlySet<string> = NO_IDS
 ): LocationSubstitutionExercise[] {
   return pool
     .filter(
       (ex) =>
         ex.id !== original.id &&
         !excludedIds.has(ex.id) &&
+        !avoidIds.has(ex.id) &&
         sharesStandardMuscle(ex.primaryMuscle, original.primaryMuscle) &&
         isAvailable(ex, unavailableEquipmentIds)
     )
     .map((ex) => ({ ex, score: substitutionScore(original, ex) }))
-    .sort((a, b) => b.score - a.score || a.ex.name.localeCompare(b.ex.name))
+    .sort(
+      (a, b) =>
+        Number(cautionIds.has(a.ex.id)) - Number(cautionIds.has(b.ex.id)) ||
+        b.score - a.score ||
+        a.ex.name.localeCompare(b.ex.name)
+    )
     .map((entry) => entry.ex);
 }
 
@@ -227,6 +247,8 @@ export function applyLocationSubstitutions(
   input: ApplyLocationSubstitutionsInput
 ): SubstitutedWorkoutPlan {
   const { plan, exercises, unavailableEquipmentIds, sessionMinutes } = input;
+  const avoidIds = asIdSet(input.avoidExerciseIds);
+  const cautionIds = asIdSet(input.cautionExerciseIds);
   const exerciseById = new Map(exercises.map((ex) => [ex.id, ex]));
 
   // Ids already in the plan — a substitute must not duplicate another pick.
@@ -237,7 +259,7 @@ export function applyLocationSubstitutions(
     if (!original || unavailableEquipmentIds.length === 0) return { ...pick };
     if (isAvailable(original, unavailableEquipmentIds)) return { ...pick };
 
-    const candidates = rankCandidates(original, exercises, unavailableEquipmentIds, usedIds);
+    const candidates = rankCandidates(original, exercises, unavailableEquipmentIds, usedIds, avoidIds, cautionIds);
     if (candidates.length === 0) {
       // No same-muscle work possible here — keep the muscle visible and
       // let the UI surface "no substitute available".

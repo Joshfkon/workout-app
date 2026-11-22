@@ -102,6 +102,13 @@ export interface BuildSuggestedWorkoutInput {
   injuredMuscles?: string[];
   /** Equipment the user's gym lacks (user_equipment ids). */
   unavailableEquipmentIds?: string[];
+  /**
+   * Standing-injury safety (lib/training/standingInjuries
+   * exerciseSafetyForAreas): 'avoid' ids are never picked; 'caution' ids rank
+   * behind every safe alternative for the same muscle.
+   */
+  avoidExerciseIds?: ReadonlySet<string> | string[];
+  cautionExerciseIds?: ReadonlySet<string> | string[];
 }
 
 export interface SuggestedWorkoutPick {
@@ -288,11 +295,16 @@ function isDurationBased(ex: SuggestedExerciseInput): boolean {
  * (compareExerciseCandidates). Timed carries/holds sit behind every
  * rep-based option: a coarse 'shoulders' carry is not side-delt volume.
  */
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+const toIdSet = (ids: ReadonlySet<string> | string[] | undefined): ReadonlySet<string> =>
+  ids ? (Array.isArray(ids) ? new Set(ids) : ids) : EMPTY_IDS;
+
 function candidatesForMuscle(
   muscle: StandardMuscleGroup,
   exercises: SuggestedExerciseInput[],
   recentIds: Set<string>,
-  stapleIds: Set<string>
+  stapleIds: Set<string>,
+  cautionIds: ReadonlySet<string> = EMPTY_IDS
 ): SuggestedExerciseInput[] {
   const tags = trainableTags(muscle);
   return exercises
@@ -301,6 +313,8 @@ function candidatesForMuscle(
     )
     .sort(
       (a, b) =>
+        // Injury caution first: a safe alternative always outranks it.
+        Number(cautionIds.has(a.id)) - Number(cautionIds.has(b.id)) ||
         Number(isDurationBased(a)) - Number(isDurationBased(b)) ||
         compareExerciseCandidates(a, b, recentIds, stapleIds)
     );
@@ -346,14 +360,15 @@ function buildLightSession(
   exercises: SuggestedExerciseInput[],
   recentIds: Set<string>,
   stapleIds: Set<string>,
-  exerciseById: Map<string, SuggestedExerciseInput>
+  exerciseById: Map<string, SuggestedExerciseInput>,
+  cautionIds: ReadonlySet<string> = EMPTY_IDS
 ): SuggestedWorkoutPlan {
   const picks: SuggestedWorkoutPick[] = [];
   const pickedIds = new Set<string>();
 
   for (const muscle of ranked.slice(0, MAX_MUSCLES)) {
     if (muscle.headroom < 1) continue;
-    const next = candidatesForMuscle(muscle.muscle, exercises, recentIds, stapleIds).find(
+    const next = candidatesForMuscle(muscle.muscle, exercises, recentIds, stapleIds, cautionIds).find(
       (ex) => !pickedIds.has(ex.id)
     );
     if (!next) continue;
@@ -385,7 +400,8 @@ function buildFullBodyFallback(
   maxExercises: number,
   sessionMinutes: number,
   injuredMuscles: string[],
-  headroomByMuscle: Map<StandardMuscleGroup, number>
+  headroomByMuscle: Map<StandardMuscleGroup, number>,
+  cautionIds: ReadonlySet<string> = EMPTY_IDS
 ): SuggestedWorkoutPlan {
   const byGroup = new Map<string, SuggestedExerciseInput[]>();
   for (const group of FULL_BODY_GROUPS) {
@@ -398,6 +414,8 @@ function buildFullBodyFallback(
           muscleMatchesGroup(ex.primaryMuscle, group)
       )
       .sort((a, b) => {
+        const cautionDiff = Number(cautionIds.has(a.id)) - Number(cautionIds.has(b.id));
+        if (cautionDiff !== 0) return cautionDiff;
         const mechanicDiff =
           (a.mechanic === 'compound' ? 0 : 1) - (b.mechanic === 'compound' ? 0 : 1);
         if (mechanicDiff !== 0) return mechanicDiff;
@@ -468,6 +486,8 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
   const maxExercises = Math.max(1, input.maxExercises ?? DEFAULT_MAX_EXERCISES);
   const sessionMinutes = input.sessionMinutes ?? DEFAULT_SESSION_MINUTES;
   const injuredMuscles = input.injuredMuscles ?? [];
+  const avoidIds = toIdSet(input.avoidExerciseIds);
+  const cautionIds = toIdSet(input.cautionExerciseIds);
 
   // Guardrail filters first: equipment (shared fail-closed filter), then
   // the mesocycle generator's muscle-level injury exclusion applied to each
@@ -476,7 +496,9 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
     input.exercises,
     input.unavailableEquipmentIds ?? []
   ).filter(
-    (ex) => !ex.primaryMuscle || !isMuscleExcludedByInjury(ex.primaryMuscle, injuredMuscles)
+    (ex) =>
+      !avoidIds.has(ex.id) &&
+      (!ex.primaryMuscle || !isMuscleExcludedByInjury(ex.primaryMuscle, injuredMuscles))
   );
 
   const stapleIds = computeStapleExerciseIds(
@@ -500,13 +522,14 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
       maxExercises,
       sessionMinutes,
       injuredMuscles,
-      headroomByMuscle
+      headroomByMuscle,
+      cautionIds
     );
   }
 
   // Every under-target muscle out of MRV headroom → technique day, not volume.
   if (ranked.every((m) => m.headroom < MIN_PICK_SETS)) {
-    return buildLightSession(ranked, usableExercises, recentIds, stapleIds, exerciseById);
+    return buildLightSession(ranked, usableExercises, recentIds, stapleIds, exerciseById, cautionIds);
   }
 
   // Top muscles are the best-ranked ones the library can actually train; a
@@ -516,7 +539,7 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
   const topMuscles: RankedMuscle[] = [];
   for (const m of ranked) {
     if (topMuscles.length >= MAX_MUSCLES) break;
-    const candidates = candidatesForMuscle(m.muscle, usableExercises, recentIds, stapleIds);
+    const candidates = candidatesForMuscle(m.muscle, usableExercises, recentIds, stapleIds, cautionIds);
     if (candidates.length === 0) continue;
     remaining.set(m.muscle, candidates);
     topMuscles.push(m);
@@ -565,7 +588,8 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
       maxExercises,
       sessionMinutes,
       injuredMuscles,
-      headroomByMuscle
+      headroomByMuscle,
+      cautionIds
     );
   }
 

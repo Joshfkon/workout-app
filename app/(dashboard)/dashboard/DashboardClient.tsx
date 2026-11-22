@@ -44,6 +44,8 @@ import {
   type TrainingSchedule,
 } from '@/lib/training/trainingSchedule';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
+import { useBodyOrFoodLogged } from '@/hooks/useBodyOrFoodLogged';
+import { homeFocus } from '@/components/dashboard/home/homeFocus';
 import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import { startMesocycleWorkoutSession } from '@/lib/training/startMesocycleSession';
@@ -501,6 +503,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // loading, the hook reports every muscle as ready (empty training map), so
   // the note is suppressed until real data arrives.
   const { recoveringMuscles, isLoading: recoveryLoading } = useMuscleRecovery();
+  // Ever logged food or a weigh-in (persisted, two one-row probes): one of
+  // the signals that Home should lead with food. Never blocks rendering.
+  const { data: hasLoggedBodyOrFood } = useBodyOrFoodLogged();
 
   // Sleep glance data for the grid's Sleep tile (last night + 7-day average +
   // trailing-week sparkline). Same shared cache the quick-log sheet writes to.
@@ -1394,6 +1399,28 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // wants it (it decides for itself whether it has anything to say).
   const needsCheckIn = !!userId && checkInStatus === 'missing';
 
+  // Food-only users (no workouts ever / in 12 weeks, but logging food or
+  // weight) get food and weight first and one compact workout entry lower
+  // down; lifters keep the workout hero. Every input is already in hand.
+  const foodFocus =
+    homeFocus({
+      completedWorkoutsCount: initialData?.completedWorkoutsCount,
+      recentCompletedWorkouts: liftTrends?.sessionsInWindow,
+      hasPlan: !!planMesocycle,
+      hasTodaysWorkout: !!heroWorkout || !!heroScheduled,
+      hasRecentWeighIn: weightHistory.length > 0 || !!todaysWeight,
+      hasFoodToday: nutritionTotals.calories > 0,
+      hasLoggedBodyOrFood,
+    }) === 'food';
+  const heroVariant = todayHeroVariant({
+    workout: heroWorkout,
+    scheduled: heroScheduled,
+    hasPlan: !!planMesocycle,
+    freestyle: isFreestyle,
+    meal: mealHero,
+    foodFocus,
+  });
+
   // One-shot guidance shown after the user accepts a standalone light week —
   // without a program there is no week to transform, so the advice IS the
   // application. Keyed to the deload type derived from the trigger reasons.
@@ -1485,7 +1512,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const nudge = pickHomeNudge({
     deload: !!deloadCard,
     checkin: needsCheckIn,
-    volume: !!(rampBanner || atrophyCard),
+    // Under-minimum muscle volume isn't news to someone who doesn't lift here.
+    volume: !foodFocus && !!(rampBanner || atrophyCard),
     waist: !!userId,
   });
   const openToday = () => setActiveModal('today');
@@ -1570,21 +1598,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         onStartWorkout={handleStartWorkout}
         isStarting={isStartingWorkout}
         freestyleActions={isFreestyle ? <FreestyleStartActions userId={userId} /> : undefined}
+        foodFocus={foodFocus}
       />
 
       {/* A workout start is always one tap from Home: when the hero shows a
           meal, "done" or nothing, this resumes an unfinished workout or
-          opens the start options. */}
-      {!isLoading &&
-        !heroOffersWorkoutStart(
-          todayHeroVariant({
-            workout: heroWorkout,
-            scheduled: heroScheduled,
-            hasPlan: !!planMesocycle,
-            freestyle: isFreestyle,
-            meal: mealHero,
-          })
-        ) && <HomeStartWorkout userId={userId} />}
+          opens the start options. Food-focused users get it as a compact
+          row below the logging chips instead. */}
+      {!foodFocus && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
 
       {/* 2. Today: Eat · Recovery · This week (depth one tap away) */}
       <TodayCard
@@ -1615,6 +1636,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
         onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
       />
+
+      {foodFocus && <HomeStartWorkout userId={userId} compact />}
 
       {/* Today sheet: the tiles, Apple Health and weekly-set detail that used
           to stack on Home, one tap from the Today card. */}

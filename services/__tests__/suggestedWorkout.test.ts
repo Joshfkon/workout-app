@@ -718,3 +718,23 @@ describe('focus matches the picked exercises', () => {
     expect(plan.focus).toBe('Focus: calves and quads — most recovered, furthest behind target this week.');
   });
 });
+
+describe('standing-injury safety', () => {
+  const muscles = [makeMuscle('lateral_delts', { weeklySets: 0, targetSets: 12 })];
+  const exercises = [
+    makeExercise({ id: 'upright', name: 'Upright Row', primaryMuscle: 'lateral_delts', mechanic: 'compound', tier: 'A' }),
+    makeExercise({ id: 'raise', name: 'Lateral Raise', primaryMuscle: 'lateral_delts', mechanic: 'isolation', tier: 'B' }),
+  ];
+
+  it('ranks a caution lift behind a safe alternative for the same muscle', () => {
+    const plain = build({ muscles, exercises, maxExercises: 1 });
+    expect(plain.exercises[0].exerciseId).toBe('upright'); // compound, higher tier wins normally
+    const plan = build({ muscles, exercises, maxExercises: 1, cautionExerciseIds: ['upright'] });
+    expect(plan.exercises[0].exerciseId).toBe('raise');
+  });
+
+  it('never picks an avoid lift', () => {
+    const plan = build({ muscles, exercises, avoidExerciseIds: new Set(['upright']) });
+    expect(plan.exercises.map((p) => p.exerciseId)).not.toContain('upright');
+  });
+});

@@ -429,10 +429,14 @@ function mapDbExercise(row: Record<string, unknown>): Exercise {
   const equipment = (row.equipment as Equipment) || getFirstEquipment(row);
 
   // Derive injury metadata from DB or use defaults
-  const spinalLoading = (row.spinal_loading as SpinalLoading) ||
-    deriveSpinalLoading(pattern, equipment, mechanic);
-  const positionStress = (row.position_stress as PositionStress) ||
-    derivePositionStress(pattern, equipment, row.name as string);
+  const { spinalLoading, positionStress } = deriveSafetyMetadata({
+    pattern,
+    equipment,
+    mechanic,
+    name: row.name as string,
+    storedSpinalLoading: row.spinal_loading as SpinalLoading | null | undefined,
+    storedPositionStress: row.position_stress as PositionStress | null | undefined,
+  });
 
   return {
     id: row.id as string,
@@ -494,6 +498,33 @@ function mapDbExercise(row: Record<string, unknown>): Exercise {
 /**
  * Derive spinal loading level from exercise properties
  */
+/**
+ * Injury-safety metadata for an exercise row: the stored values when the row
+ * actually carries them, else derived from pattern / equipment / name. An
+ * empty stored position_stress ({}, the default for most stock rows) counts as
+ * MISSING — treating it as data meant the derivation never ran, so the safety
+ * check saw no joint stress on e.g. upright rows. Exported so every workout
+ * generator judges exercises the same way.
+ */
+export function deriveSafetyMetadata(args: {
+  pattern: string;
+  equipment: Equipment;
+  mechanic: string;
+  name: string;
+  storedSpinalLoading?: SpinalLoading | null;
+  storedPositionStress?: PositionStress | null;
+}): { spinalLoading: SpinalLoading; positionStress: PositionStress } {
+  const stored = args.storedPositionStress;
+  // Any stored key counts as data — including explicit false values a user
+  // saved for a custom exercise. Only a truly empty {} (the stock default)
+  // falls back to derivation.
+  const hasStoredStress = !!stored && Object.keys(stored).length > 0;
+  return {
+    spinalLoading: args.storedSpinalLoading || deriveSpinalLoading(args.pattern, args.equipment, args.mechanic),
+    positionStress: hasStoredStress ? (stored as PositionStress) : derivePositionStress(args.pattern, args.equipment, args.name),
+  };
+}
+
 function deriveSpinalLoading(pattern: string, equipment: Equipment, mechanic: string): SpinalLoading {
   // Machine and cable exercises typically have low spinal loading
   if (equipment === 'machine') return 'none';
@@ -546,6 +577,13 @@ function derivePositionStress(pattern: string, equipment: Equipment, name: strin
   // Curl exercises stress elbows
   if (nameLower.includes('curl') || nameLower.includes('extension')) {
     stress.elbows = true;
+  }
+
+  // Upright rows and behind-the-neck work load the shoulder in internal
+  // rotation under elevation — the classic impingement position — whatever
+  // their (pull) pattern says.
+  if (nameLower.includes('upright row') || nameLower.includes('behind the neck') || nameLower.includes('behind-the-neck')) {
+    stress.shoulders = true;
   }
 
   return stress;
