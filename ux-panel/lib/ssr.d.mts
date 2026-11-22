@@ -1,6 +1,7 @@
 export type Pmf = number[];
 export interface SsrOptions { epsilon?: number; temperature?: number }
 export const LIKERT_POINTS: number[];
+export const SHARP_TEMPERATURE: number;
 export function cosine(a: number[], b: number[]): number;
 export function normalise(weights: number[]): number[];
 export function pmfFromSimilarities(sims: number[], opts?: SsrOptions): Pmf;

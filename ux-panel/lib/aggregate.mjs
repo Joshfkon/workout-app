@@ -37,9 +37,11 @@ function sd(xs) {
 /**
  * Per journey × question: the mean pmf over personas (the panel's
  * distribution), its expected value, and the spread of per-persona means.
- * An `all` pseudo-journey pools every result.
+ * An `all` pseudo-journey pools every result. When results also carry
+ * sharper pmfs (`scoresSharp`, scored at a lower temperature), each cell gets
+ * a `sharp` {pmf, mean} beside the standard one.
  *
- * @param {Array<{journeyId: string, scores?: Record<string, number[]>}>} results
+ * @param {Array<{journeyId: string, scores?: Record<string, number[]>, scoresSharp?: Record<string, number[]>}>} results
  * @param {string[]} questionIds
  */
 export function aggregateScores(results, questionIds) {
@@ -52,7 +54,53 @@ export function aggregateScores(results, questionIds) {
       const pmfs = rs.map((r) => r.scores?.[q]).filter(Boolean);
       const means = pmfs.map(expectedValue);
       const pmf = meanPmf(pmfs);
-      out[journeyId][q] = { n: pmfs.length, pmf, mean: pmfs.length ? expectedValue(pmf) : NaN, sd: sd(means) };
+      const cell = { n: pmfs.length, pmf, mean: pmfs.length ? expectedValue(pmf) : NaN, sd: sd(means) };
+      const sharp = rs.map((r) => r.scoresSharp?.[q]).filter(Boolean);
+      if (sharp.length) {
+        const sp = meanPmf(sharp);
+        cell.sharp = { pmf: sp, mean: expectedValue(sp) };
+      }
+      out[journeyId][q] = cell;
+    }
+  }
+  return out;
+}
+
+/**
+ * Per-question anchor hashes of a run. Runs from before per-question hashes
+ * map their whole-file hash through `legacy` (anchors.mjs LEGACY_ANCHOR_HASHES).
+ */
+export function runAnchorHashes(run, legacy = {}) {
+  return run.anchorHashes ?? legacy[run.anchorsHash] ?? {};
+}
+
+/**
+ * Questions two runs can be compared on: same embedding model, and the same
+ * anchors for that question. Questions only one run asked are left out.
+ */
+export function comparableQuestions(a, b, legacy = {}) {
+  if (!a || !b || a.embed !== b.embed) return [];
+  const ha = runAnchorHashes(a, legacy);
+  const hb = runAnchorHashes(b, legacy);
+  return Object.keys(hb).filter((q) => ha[q] && ha[q] === hb[q]);
+}
+
+/** Compare two score tables ({group: {question: cell}}) on the given questions. */
+export function compareScoreTables(ta = {}, tb = {}, questions) {
+  const out = {};
+  for (const g of new Set([...Object.keys(ta), ...Object.keys(tb)])) {
+    out[g] = {};
+    for (const q of questions) {
+      const x = ta[g]?.[q];
+      const y = tb[g]?.[q];
+      if (!x && !y) continue;
+      out[g][q] = {
+        meanA: x?.mean ?? NaN,
+        meanB: y?.mean ?? NaN,
+        delta: (y?.mean ?? NaN) - (x?.mean ?? NaN),
+        ks: x?.n && y?.n ? ksSimilarity(x.pmf, y.pmf) : NaN,
+        sharpDelta: (y?.sharp?.mean ?? NaN) - (x?.sharp?.mean ?? NaN),
+      };
     }
   }
   return out;
@@ -141,23 +189,11 @@ export function completionRates(results) {
  * similarity per journey × question. Frictions: clusters matched across runs
  * by same screen + centroid cosine ≥ threshold → persisting / new / resolved.
  */
-export function compareRuns(a, b, { threshold = 0.6 } = {}) {
-  const scores = {};
-  for (const journeyId of new Set([...Object.keys(a.scores), ...Object.keys(b.scores)])) {
-    scores[journeyId] = {};
-    const qa = a.scores[journeyId] ?? {};
-    const qb = b.scores[journeyId] ?? {};
-    for (const q of new Set([...Object.keys(qa), ...Object.keys(qb)])) {
-      const x = qa[q];
-      const y = qb[q];
-      scores[journeyId][q] = {
-        meanA: x?.mean ?? NaN,
-        meanB: y?.mean ?? NaN,
-        delta: (y?.mean ?? NaN) - (x?.mean ?? NaN),
-        ks: x?.n && y?.n ? ksSimilarity(x.pmf, y.pmf) : NaN,
-      };
-    }
-  }
+export function compareRuns(a, b, { threshold = 0.6, questions = null } = {}) {
+  // Default (no anchor info given): every question either run has, as before.
+  const qs = questions ?? [...new Set([...Object.values(a.scores ?? {}), ...Object.values(b.scores ?? {}), ...Object.values(a.weekScores ?? {}), ...Object.values(b.weekScores ?? {})].flatMap((t) => Object.keys(t)))];
+  const scores = compareScoreTables(a.scores, b.scores, qs);
+  const weekScores = compareScoreTables(a.weekScores, b.weekScores, qs);
   const matchedA = new Set();
   const persisting = [];
   const added = [];
@@ -180,7 +216,7 @@ export function compareRuns(a, b, { threshold = 0.6 } = {}) {
     }
   }
   const resolved = a.frictions.filter((_, i) => !matchedA.has(i));
-  return { scores, frictions: { persisting, added, resolved } };
+  return { scores, weekScores, frictions: { persisting, added, resolved } };
 }
 
 /**

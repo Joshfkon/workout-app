@@ -5,8 +5,11 @@
  * participant snapshots, then the SSR score distributions with caveats.
  * Pure: run objects in, HTML string out.
  */
-import { QUESTIONS } from '../anchors.mjs';
-import { envTaintedTasks, compareRuns } from './aggregate.mjs';
+import { QUESTIONS, WEEK_QUESTIONS, RETIRED_QUESTION_LABELS, LEGACY_ANCHOR_HASHES } from '../anchors.mjs';
+import { envTaintedTasks, compareRuns, comparableQuestions } from './aggregate.mjs';
+
+const LABELS = { ...RETIRED_QUESTION_LABELS, ...Object.fromEntries(QUESTIONS.map((q) => [q.id, q.label])) };
+const labelOf = (id) => LABELS[id] ?? id;
 
 const esc = (s) =>
   String(s ?? '')
@@ -60,23 +63,47 @@ function completionTable(run, base) {
   return `<div class="tw"><table><thead><tr><th>Task</th><th>Completed</th><th>Gave up</th><th>Harness error</th><th>Median actions (completed)</th>${base ? '<th>Baseline completed</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+/** One score cell: distribution bar, mean, sharper mean, and the change vs baseline. */
+function scoreCell(s, d) {
+  if (!s?.n) return '<td class="muted">–</td>';
+  const sharp = s.sharp ? ` <span class="muted" title="Sharper scoring (lower temperature): same answers, less pulled toward 3">sharp ${fmt(s.sharp.mean)}</span>` : '';
+  const delta = d && Number.isFinite(d.delta)
+    ? `<div class="small"><span class="delta ${d.delta > 0 ? 'up' : d.delta < 0 ? 'down' : ''}">${signed(d.delta)}</span>${Number.isFinite(d.sharpDelta) ? ` <span class="muted">sharp ${signed(d.sharpDelta)}</span>` : ''} <span class="muted">KS ${fmt(d.ks)}</span></div>`
+    : '';
+  return `<td>${distBar(s.pmf)}<div class="score">${fmt(s.mean)}${sharp} <span class="muted">n=${s.n}</span></div>${delta}</td>`;
+}
+
 function scoresSection(run, cmp) {
   const journeys = Object.keys(run.scores);
-  const head = `<tr><th>Task</th>${QUESTIONS.map((q) => `<th>${esc(q.label)}</th>`).join('')}</tr>`;
+  const qs = Object.keys(run.scores.all ?? run.scores[journeys[0]] ?? {});
+  const head = `<tr><th>Task</th>${qs.map((q) => `<th>${esc(labelOf(q))}</th>`).join('')}</tr>`;
   const rows = journeys
-    .map((j) => {
-      const cells = QUESTIONS.map((q) => {
-        const s = run.scores[j][q.id];
-        if (!s?.n) return '<td class="muted">–</td>';
-        const d = cmp?.scores?.[j]?.[q.id];
-        const delta = d && Number.isFinite(d.delta) ? `<span class="delta ${d.delta > 0 ? 'up' : d.delta < 0 ? 'down' : ''}">${signed(d.delta)}</span> <span class="muted">KS ${fmt(d.ks)}</span>` : '';
-        return `<td>${distBar(s.pmf)}<div class="score">${fmt(s.mean)} <span class="muted">n=${s.n}</span> ${delta}</div></td>`;
-      }).join('');
-      return `<tr><th scope="row">${esc(j === 'all' ? 'All tasks' : run.journeyLabels[j] ?? j)}</th>${cells}</tr>`;
-    })
+    .map((j) => `<tr><th scope="row">${esc(j === 'all' ? 'All tasks' : run.journeyLabels[j] ?? j)}</th>${qs.map((q) => scoreCell(run.scores[j][q], cmp?.scores?.[j]?.[q])).join('')}</tr>`)
     .join('');
   return `<div class="tw"><table class="scores"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
-<p class="legend">${[1, 2, 3, 4, 5].map((n) => `<span><i style="background:${LIKERT_COLORS[n - 1]}"></i>${n}</span>`).join('')} Each bar is the panel's SSR distribution over 1–5; the number is its mean.${cmp ? ' Δ is this build minus the baseline; KS similarity 1.00 means identical distributions.' : ''}</p>`;
+<p class="legend">${[1, 2, 3, 4, 5].map((n) => `<span><i style="background:${LIKERT_COLORS[n - 1]}"></i>${n}</span>`).join('')} Each bar is the panel's SSR distribution over 1–5; the number is its mean${run.sharpTemperature ? `, and "sharp" is the same answers scored at T = ${run.sharpTemperature}, which pulls less toward 3` : ''}.${cmp ? ' Δ is this build minus the baseline; KS similarity 1.00 means identical distributions.' : ''}</p>`;
+}
+
+/** End-of-week verdicts: one per participant, relative to what they use now. */
+function weekSection(run, cmp, baseline) {
+  if (!run.weekScores?.all) return '';
+  const all = run.weekScores.all;
+  const qs = WEEK_QUESTIONS.filter((q) => all[q.id]);
+  const table = `<div class="tw"><table class="scores"><thead><tr><th></th>${qs.map((q) => `<th>${esc(q.label)}</th>`).join('')}</tr></thead><tbody><tr><th scope="row">All participants</th>${qs
+    .map((q) => scoreCell(all[q.id], cmp?.weekScores?.all?.[q.id]))
+    .join('')}</tr></tbody></table></div>`;
+  const rows = (run.weekReviews ?? [])
+    .map((w) => {
+      const p = run.personas[w.personaId] ?? { name: w.personaId };
+      const m = (q) => (w.scores?.[q] ? fmt(w.scores[q].reduce((s, x, i) => s + x * (i + 1), 0), 1) : '–');
+      return `<tr><th scope="row">${esc(p.name)}</th><td class="small">“${esc(w.review.switch)}” <span class="muted">(${m('switch')})</span></td><td class="small">“${esc(w.review.pay_price)}” <span class="muted">(${m('pay_price')})</span></td><td class="small">${esc(w.review.dealbreaker)}</td></tr>`;
+    })
+    .join('');
+  const note = baseline && !baseline.weekScores ? '<p class="muted small">The baseline run predates the end-of-week review, so there is nothing to compare these with yet.</p>' : '';
+  return `<h2>End of week: would they switch?</h2>
+<p class="muted">After all of their sessions, each participant gave one verdict, judged against what they use now (another app, a notebook, or nothing) and against the real ${esc(qs.find((q) => q.id === 'pay_price')?.label.replace('Would pay ', '') ?? 'price')}.</p>
+${table}${note}
+<div class="tw" style="margin-top:12px"><table class="people"><thead><tr><th>Participant</th><th>Would they switch?</th><th>Would they pay?</th><th>Dealbreaker</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function participants(run) {
@@ -88,7 +115,8 @@ function participants(run) {
       const p = run.personas[id];
       const rs = run.results.filter((r) => r.personaId === id);
       if (!rs.length) return '';
-      const quote = rs.find((r) => r.review?.keep_using)?.review.keep_using ?? '';
+      const week = run.weekReviews?.find((w) => w.personaId === id)?.review.switch;
+      const quote = week ?? rs.find((r) => r.review?.keep_using)?.review.keep_using ?? '';
       return `<tr><th scope="row">${esc(p.name)}, ${esc(p.age)}<div class="muted small">${esc(p.tagline)}</div></th>${journeys
         .map((j) => {
           const r = rs.find((x) => x.journeyId === j);
@@ -97,7 +125,7 @@ function participants(run) {
         .join('')}<td class="small">“${esc(quote)}”</td></tr>`;
     })
     .join('');
-  return `<div class="tw"><table class="people"><thead><tr><th>Participant</th>${journeys.map((j) => `<th class="c">${esc(run.journeyLabels[j] ?? j)}</th>`).join('')}<th>Would they keep using it?</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="tw"><table class="people"><thead><tr><th>Participant</th>${journeys.map((j) => `<th class="c">${esc(run.journeyLabels[j] ?? j)}</th>`).join('')}<th>${run.weekReviews?.length ? 'Would they switch?' : 'Would they keep using it?'}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function changesSection(cmp, run, baseline, basePrefix) {
@@ -121,8 +149,17 @@ function envSection(run) {
 }
 
 export function renderReport(run, { baseline = null, basePrefix = '' } = {}) {
-  const comparable = baseline && baseline.embed === run.embed && baseline.anchorsHash === run.anchorsHash;
-  const cmp = comparable ? compareRuns(baseline, run) : null;
+  // Frictions compare whenever the embedding model matches; scores only on
+  // questions whose anchors match (ease and polish carry across the move to
+  // end-of-week reviews; the week questions start fresh).
+  const comparable = !!baseline && baseline.embed === run.embed;
+  const sharedQs = comparable ? comparableQuestions(baseline, run, LEGACY_ANCHOR_HASHES) : [];
+  const cmp = comparable ? compareRuns(baseline, run, { questions: sharedQs }) : null;
+  const runQs = [...Object.keys(run.scores?.all ?? {}), ...Object.keys(run.weekScores?.all ?? {})];
+  const notShared = runQs.filter((q) => !sharedQs.includes(q));
+  const headline = run.weekScores?.all?.switch ? 'switch' : 'keep_using';
+  const headCell = (run.weekScores?.all ?? run.scores.all ?? {})[headline];
+  const headDelta = (headline === 'switch' ? cmp?.weekScores?.all : cmp?.scores?.all)?.[headline]?.delta;
   const ro = run.readout ?? { executive_summary: [], issues: [], liked_themes: [], simpler_themes: [] };
   const roByIndex = Object.fromEntries((ro.issues ?? []).map((x) => [x.index, x]));
   const issues = run.frictions.slice(0, 15);
@@ -159,7 +196,7 @@ ul{padding-left:20px}
 </style></head><body><main>
 <h1>HyperTrack synthetic panel readout</h1>
 <p class="muted">${esc(run.label || run.runId)}${run.lens ? ` · <strong>${esc(run.lens)} lens</strong>` : ''} · ${esc(run.createdAt.slice(0, 16).replace('T', ' '))} · build <code>${esc(run.gitSha || 'unknown')}</code>${baseline ? ` · compared with <code>${esc(baseline.label || baseline.runId)}</code>` : ''}</p>
-<div class="banner"><strong>Read this as relative, not absolute.</strong> Participants are AI personas, not people, and the scores are semantic-similarity ratings (Maier et al., arXiv 2510.08338) without a human baseline. They are useful for comparing builds and for finding friction; they are <em>not</em> predicted App Store ratings.${baseline && !comparable ? ' <strong>The baseline used a different embedding model or anchor set, so scores are not compared.</strong>' : ''}${
+<div class="banner"><strong>Read this as relative, not absolute.</strong> Participants are AI personas, not people, and the scores are semantic-similarity ratings (Maier et al., arXiv 2510.08338) without a human baseline. They are useful for comparing builds and for finding friction; they are <em>not</em> predicted App Store ratings.${baseline && !comparable ? ' <strong>The baseline used a different embedding model, so scores and issues are not compared.</strong>' : ''}${comparable && notShared.length ? ` <strong>Scores are compared only where both runs asked the same question with the same reference statements${sharedQs.length ? ` (${esc(sharedQs.map(labelOf).join(', '))})` : ''}; ${esc(notShared.map(labelOf).join(', '))} ${notShared.length === 1 ? 'is' : 'are'} new or changed since the baseline.</strong>` : ''}${
   baseline && comparable && (baseline.lens ?? null) !== (run.lens ?? null)
     ? ` <strong>The two runs used different lenses (${esc(baseline.lens ?? 'none')} vs ${esc(run.lens ?? 'none')}): personas were asked to look for different things, so treat score shifts with extra care.</strong>`
     : ''
@@ -169,20 +206,21 @@ ul{padding-left:20px}
  <div class="kpi"><span class="muted">Sessions</span><b>${totalSessions}</b></div>
  <div class="kpi"><span class="muted">Tasks completed</span><b>${pct(completed, totalSessions)}</b></div>
  <div class="kpi"><span class="muted">Distinct issues</span><b>${run.frictions.length}</b></div>
- <div class="kpi"><span class="muted">Keep-using (mean, 1–5)</span><b>${fmt(run.scores.all?.keep_using?.mean)}</b>${cmp ? `<span class="delta ${cmp.scores.all.keep_using.delta >= 0 ? 'up' : 'down'}">${signed(cmp.scores.all.keep_using.delta)}</span>` : ''}</div>
+ <div class="kpi"><span class="muted">${esc(headline === 'switch' ? 'Would switch (mean, 1–5)' : 'Keep-using (mean, 1–5)')}</span><b>${fmt(headCell?.mean)}</b>${headCell?.sharp ? `<span class="muted small">sharp ${fmt(headCell.sharp.mean)}</span> ` : ''}${Number.isFinite(headDelta) ? `<span class="delta ${headDelta >= 0 ? 'up' : 'down'}">${signed(headDelta)}</span>` : ''}</div>
 </div>
 ${ro.executive_summary?.length ? `<h2>Summary</h2><ul>${ro.executive_summary.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
 ${cmp ? `<h2>What changed since the baseline</h2>${changesSection(cmp, run, baseline, basePrefix)}` : ''}
-<h2>Task success</h2>${completionTable(run, comparable ? baseline : null)}
+<h2>Task success</h2>${completionTable(run, cmp ? baseline : null)}
 <h2>Top issues</h2><p class="muted">Ranked by how many participants hit the same problem on the same screen (similar complaints are grouped by meaning), then by severity.</p>
 ${issues.map((c, i) => issueCard(c, i, run, roByIndex[i + 1], '')).join('') || '<p class="muted">No issues reported.</p>'}
 ${ro.liked_themes?.length ? `<h2>What participants liked</h2><ul>${ro.liked_themes.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
 ${ro.simpler_themes?.length ? `<h2>How tasks could be simpler</h2><ul>${ro.simpler_themes.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+${weekSection(run, cmp, baseline)}
 <h2>Participants</h2>${participants(run)}
-<h2>Scores</h2>${scoresSection(run, cmp)}
+<h2>Scores per task</h2>${scoresSection(run, cmp)}
 ${envSection(run)}
 <h2>Method</h2>
-<p class="small">Each participant is an LLM persona (<code>${esc(run.model)}</code>) driving the real app in a 390×844 browser against a local database, using only the on-screen accessibility tree and screenshots. After each task it writes a free-text review; each answer is embedded (<code>${esc(run.embed)}</code>) and compared with ${QUESTIONS[0].anchorSets.length} sets of five reference statements per question, giving a 1–5 distribution (SSR, minimum-similarity subtraction, ε = 0, T = 1, averaged over sets). Issues are participant-reported friction, clustered per screen by embedding similarity. Anchor set hash <code>${esc(run.anchorsHash)}</code>${run.storiesHash ? `, stories hash <code>${esc(run.storiesHash)}</code>` : ''}. Run cost ≈ $${fmt(run.cost?.dollars)}.</p>
+<p class="small">Each participant is an LLM persona (<code>${esc(run.model)}</code>) driving the real app in a 390×844 browser against a local database, using only the on-screen accessibility tree and screenshots. After each task it writes a free-text review of that task${run.weekReviews?.length ? ', and after all of its tasks one end-of-week verdict on switching and paying, judged against what it uses now' : ''}; each answer is embedded (<code>${esc(run.embed)}</code>) and compared with ${QUESTIONS[0].anchorSets.length} sets of five reference statements per question, giving a 1–5 distribution (SSR, minimum-similarity subtraction, ε = 0, T = 1, averaged over sets${run.sharpTemperature ? `; the "sharp" figures use T = ${run.sharpTemperature}` : ''}). Issues are participant-reported friction, clustered per screen by embedding similarity. Anchor set hash <code>${esc(run.anchorsHash)}</code>${run.storiesHash ? `, stories hash <code>${esc(run.storiesHash)}</code>` : ''}. Run cost ≈ $${fmt(run.cost?.dollars)}.</p>
 <p class="small muted">Known limits: personas are written by us, not sampled from real users; the paper validated SSR only for purchase intent against human surveys, not for usability questions; some friction can come from the local test setup (no camera, no third-party food APIs) — check the screenshot before acting on an issue.</p>
 </main></body></html>`;
 }

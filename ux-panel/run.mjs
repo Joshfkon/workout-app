@@ -19,12 +19,12 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 import { JOURNEYS, journeyById } from './journeys.mjs';
-import { QUESTIONS } from './anchors.mjs';
+import { QUESTIONS, TASK_QUESTIONS, WEEK_QUESTIONS } from './anchors.mjs';
 import { adminClient, createAccount, newCredentials, seedReturningUser, tagAccount, assertLocalSupabase } from './lib/accounts.mjs';
-import { runJourney, writeReview, LENSES } from './lib/agent.mjs';
+import { runJourney, writeReview, writeWeekReview, LENSES } from './lib/agent.mjs';
 import { anthropicLLM, fakeLLM, Ledger, DEFAULT_MODEL } from './lib/llm.mjs';
 import { createEmbedder } from './lib/embed.mjs';
-import { ssrPmf } from './lib/ssr.mjs';
+import { ssrPmf, SHARP_TEMPERATURE } from './lib/ssr.mjs';
 import { aggregateScores, clusterFrictions, completionRates } from './lib/aggregate.mjs';
 import { ensureStories, storyToJourney } from './lib/stories.mjs';
 import { writeReadout, plainReadout } from './lib/readout.mjs';
@@ -61,6 +61,7 @@ const opts = {
   readout: !flag('no-readout'),
   reuse: flag('reuse', ''),
   rerun: String(flag('rerun', '')).split(',').filter(Boolean),
+  week: !flag('no-week'),
 };
 
 // ---------- env (.env.local, never printed) ----------
@@ -131,7 +132,10 @@ async function main() {
   const fresh = tasks.filter((t) => !reusableResult(reuseDir, taskIdOf(t.persona, t.journey)));
   if (reuseDir) console.log(`Reusing ${tasks.length - fresh.length} clean session(s) from ${path.relative(process.cwd(), reuseDir)}; running ${fresh.length}.`);
 
-  const estimate = estimateCost({ tasks: [...fresh.map((t) => t.journey), ...Array(storyCount).fill({ maxSteps: 25 })], personas, model: opts.model, storiesToGenerate: wantStories ? personas.length : 0 });
+  // One end-of-week review per persona with two or more sessions.
+  const sessionsOf = (p) => tasks.filter((t) => t.persona.id === p.id).length + (wantStories ? opts.storiesPerPersona : 0);
+  const weekCount = opts.week ? personas.filter((p) => sessionsOf(p) >= 2).length : 0;
+  const estimate = estimateCost({ tasks: [...fresh.map((t) => t.journey), ...Array(storyCount).fill({ maxSteps: 25 })], personas, model: opts.model, storiesToGenerate: wantStories ? personas.length : 0, weekReviews: weekCount });
   console.log(formatEstimate(estimate, { model: opts.model, sessions: fresh.length + storyCount }));
   if (opts.estimateOnly) return;
   if (!FAKE && !opts.yes) {
@@ -225,25 +229,58 @@ async function main() {
     process.exit(1);
   }
 
+  // ---------- end-of-week reviews ----------
+  // One verdict per persona, written after all of their sessions and asked
+  // relative to what they use now (see anchors.mjs, scope 'week').
+  const labelOf = Object.fromEntries(tasks.map((t) => [t.journey.id, t.journey.label]));
+  const weekReviews = [];
+  if (opts.week) {
+    const queue = personas
+      .map((p) => [p, results.filter((r) => r.personaId === p.id && r.review && ['completed', 'gave_up'].includes(r.outcome)).sort((x, y) => x.taskId.localeCompare(y.taskId))])
+      .filter(([, rs]) => rs.length >= 2);
+    let wi = 0;
+    await Promise.all(
+      Array.from({ length: Math.max(1, opts.concurrency) }, async () => {
+        while (wi < queue.length) {
+          const [persona, rs] = queue[wi++];
+          try {
+            const sessions = rs.map((r) => ({ label: labelOf[r.journeyId] ?? r.journeyId, outcome: r.outcome, summary: r.summary, review: r.review }));
+            const review = await writeWeekReview({ llm, persona, sessions, lens: opts.lens });
+            weekReviews.push({ personaId: persona.id, journeyId: 'week', tasks: rs.map((r) => r.taskId), review });
+            console.log(`  week      ${persona.id} (${rs.length} sessions)  [$${ledger.dollars().toFixed(2)} so far]`);
+          } catch (e) {
+            console.log(`  week      ${persona.id} failed: ${apiErrorMessage(e)}`);
+          }
+        }
+      }),
+    );
+    weekReviews.sort((x, y) => x.personaId.localeCompare(y.personaId));
+  }
+
   // ---------- scoring ----------
+  // Each answer gets the standard SSR pmf (T = 1, the headline) and a sharper
+  // one (SHARP_TEMPERATURE) shown beside it.
   const embedder = await createEmbedder({ provider: opts.embed, cacheDir: path.join(HERE, '.cache') });
   const anchorVecs = {};
-  for (const q of QUESTIONS) anchorVecs[q.id] = await Promise.all(q.anchorSets.map((s) => embedder.embed(s)));
-  for (const r of results) {
-    if (!r.review) continue;
-    r.scores = {};
-    for (const q of QUESTIONS) {
-      const [v] = await embedder.embed([r.review[q.id]]);
-      r.scores[q.id] = ssrPmf(v, anchorVecs[q.id]);
+  for (const q of QUESTIONS) anchorVecs[q.id] = await Promise.all(q.anchorSets.map((set) => embedder.embed(set)));
+  async function score(rec, questions) {
+    rec.scores = {};
+    rec.scoresSharp = {};
+    for (const q of questions) {
+      const [v] = await embedder.embed([rec.review[q.id]]);
+      rec.scores[q.id] = ssrPmf(v, anchorVecs[q.id]);
+      rec.scoresSharp[q.id] = ssrPmf(v, anchorVecs[q.id], { temperature: SHARP_TEMPERATURE });
     }
   }
+  for (const r of results) if (r.review) await score(r, TASK_QUESTIONS);
+  for (const w of weekReviews) await score(w, WEEK_QUESTIONS);
   const allFrictions = results.flatMap((r) => r.frictions ?? []);
   const vecs = await embedder.embed(allFrictions.map((f) => f.text));
   allFrictions.forEach((f, i) => (f.embedding = vecs[i]));
 
   results.sort((a, b) => a.taskId.localeCompare(b.taskId));
   const run = {
-    schema: 1,
+    schema: 2,
     runId,
     label: opts.label,
     lens: opts.lens,
@@ -253,6 +290,8 @@ async function main() {
     model: FAKE ? 'fake' : opts.model,
     embed: embedder.id,
     anchorsHash: sha(await readFile(path.join(HERE, 'anchors.mjs'), 'utf8')),
+    anchorHashes: Object.fromEntries(QUESTIONS.map((q) => [q.id, sha(JSON.stringify(q.anchorSets))])),
+    sharpTemperature: SHARP_TEMPERATURE,
     storiesHash,
     reusedFrom: reuseDir ? path.basename(reuseDir) : null,
     reusedSessions: results.filter((r) => r.reused).length,
@@ -261,7 +300,9 @@ async function main() {
     personas: Object.fromEntries(personas.map((p) => [p.id, { name: p.name, age: p.age, tagline: p.summary.split('. ')[0] }])),
     results: results.map(({ log, ...r }) => ({ ...r, frictions: (r.frictions ?? []).map(({ embedding, ...f }) => f), actions: log })),
     completion: completionRates(results),
-    scores: aggregateScores(results.filter((r) => r.scores), QUESTIONS.map((q) => q.id)),
+    scores: aggregateScores(results.filter((r) => r.scores), TASK_QUESTIONS.map((q) => q.id)),
+    weekReviews,
+    weekScores: weekReviews.length ? aggregateScores(weekReviews, WEEK_QUESTIONS.map((q) => q.id)) : null,
     frictions: clusterFrictions(allFrictions),
   };
   run.readout = opts.readout && !FAKE ? await writeReadout({ llm, run }).catch((e) => ({ ...plainReadout(run), error: e.message })) : plainReadout(run);

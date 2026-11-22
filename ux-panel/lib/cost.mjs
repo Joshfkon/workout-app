@@ -23,6 +23,8 @@ export const TOKENS = {
   stepOut: 200,
   reviewIn: 2500,
   reviewOut: 450,
+  weekIn: 2500,
+  weekOut: 400,
   readoutIn: 12000,
   readoutOut: 2500,
   storiesIn: 900,
@@ -34,11 +36,12 @@ const usd = (model, inTok, outTok) => {
   return (inTok * p.input + outTok * p.output) / 1e6;
 };
 
-export function estimateCost({ tasks, personas, model, storiesToGenerate = 0, tokens = TOKENS }) {
+export function estimateCost({ tasks, personas, model, storiesToGenerate = 0, weekReviews = 0, tokens = TOKENS }) {
   const avgPatience = personas.reduce((s, p) => s + p.patience, 0) / Math.max(1, personas.length);
   const budgetSteps = tasks.reduce((s, j) => s + stepBudget(j, { patience: avgPatience }), 0);
   const fixed =
     tasks.length * usd(model, tokens.reviewIn, tokens.reviewOut) +
+    weekReviews * usd(model, tokens.weekIn, tokens.weekOut) +
     usd(model, tokens.readoutIn, tokens.readoutOut) +
     storiesToGenerate * usd(model, tokens.storiesIn, tokens.storiesOut);
   const perStep = usd(model, tokens.stepIn, tokens.stepOut);
