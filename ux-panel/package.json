@@ -1,0 +1,14 @@
+{
+  "name": "hypertrack-ux-panel",
+  "private": true,
+  "type": "module",
+  "description": "Synthetic user panel (SSR-scored persona journeys). Separate package so its embedding runtime stays out of the app's install; playwright, @supabase/supabase-js and @anthropic-ai/sdk resolve from the repo root.",
+  "scripts": {
+    "panel": "node run.mjs",
+    "report": "node report.mjs",
+    "cleanup": "node cleanup.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.1"
+  }
+}
