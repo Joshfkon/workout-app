@@ -161,6 +161,13 @@ export function SuggestionBanner({
 
   const showWarning = warningActive && effortCheck != null;
 
+  // One "why" line on the strip, not two: the plain source line ("From your
+  // last session: 100 × 10 → +5 lbs", "Starting guess — …") already says
+  // where the number came from, and the engine's terser reason usually says
+  // the same thing again in jargon. When either a verdict or a source line is
+  // showing, the reason moves to the top of the ⓘ sheet.
+  const reasonInSheet = !!verdict || !!source;
+
   const warningMessage = effortCheck
     ? effortCheck.softened
       ? `${effortCheck.weightLabel} × ${effortCheck.reps} may be near max — ${
@@ -223,7 +230,7 @@ export function SuggestionBanner({
               {roleTag}
             </span>
           ) : null}
-          {reason && !verdict ? <span> — {reason}</span> : null}
+          {reason && !reasonInSheet ? <span> — {reason}</span> : null}
           {source ? (
             <span
               data-testid="suggestion-source"
@@ -265,7 +272,7 @@ export function SuggestionBanner({
       >
         <ul className="space-y-2.5">
           {[
-            ...(verdict && reason
+            ...(reasonInSheet && reason
               ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
               : explanation),
             ...(showRir ? [RIR_DEFINITION_LINE] : []),

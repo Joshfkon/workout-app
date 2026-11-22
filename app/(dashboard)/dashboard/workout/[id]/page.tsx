@@ -2773,13 +2773,15 @@ export default function WorkoutPage() {
         const recovery = computeMuscleRecovery(
           recoveryHistorySessions,
           muscle,
-          new Date(),
+          clockNow(),
           config
         );
-        
-        // Only show muscles that aren't fresh
+
+        // Only show muscles that aren't fresh. 'recovering' was labelled
+        // "recovered" here, which contradicted the volume strip's "~Nh" for
+        // the same muscle (and the line exists only for un-fresh muscles).
         if (recovery.status !== 'fresh') {
-          const statusLabel = recovery.status === 'recovering' ? 'recovered' : 'fatigued';
+          const statusLabel = recovery.status === 'recovering' ? 'recovering' : 'fatigued';
           results.push({
             muscle,
             displayName: STANDARD_MUSCLE_DISPLAY_NAMES[muscle],

@@ -1161,10 +1161,38 @@ describe('ExerciseCard', () => {
       expect(screen.getByText(/999 kg ×/).closest('p')).toHaveAttribute('aria-hidden', 'true');
     });
 
-    it('shows the suggestion banner with a reason', () => {
+    it('shows ONE "why" line on the strip; the engine reason moves to the ⓘ sheet', async () => {
+      const user = userEvent.setup();
       render(<ExerciseCard {...defaultProps} isActive={true} />);
-      // No history and a target weight -> profile-based starting point reason
+      // No history and a target weight -> the plain source line is on the
+      // strip, and the profile-estimate reason (which says the same thing in
+      // other words) is not repeated next to it.
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/Starting guess/);
+      expect(screen.queryByText(/starting point estimated/)).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'How this suggestion works' }));
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
+    });
+
+    it('the strip, the preset chip and the effort line share one target RIR (no "@ 3" over a 4+ chip)', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          block={{ ...defaultProps.block, targetRir: 3 }}
+          isActive={true}
+          readinessModulation={{
+            rirDelta: 1,
+            suggestSetReduction: false,
+            banner: 'Adjusted for readiness — leaving one extra rep in reserve today',
+          }}
+        />
+      );
+      // Program 3 + readiness 1 = 4: the strip used to clamp to "@ 3".
+      expect(screen.getByTestId('suggestion-source').closest('p')).toHaveTextContent(/@ 4 RIR/);
+      expect(screen.getByRole('button', { name: '4+ reps in reserve (cruise)' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      expect(screen.getByTestId('rir-preset-note')).toHaveTextContent('Preset to your target (4+)');
     });
 
     it('cold start (no history): the banner says the number is a profile estimate', () => {
@@ -1235,7 +1263,9 @@ describe('ExerciseCard', () => {
         />
       );
 
-      expect(screen.getByText(/eased for readiness/)).toBeInTheDocument();
+      // The easing rides the visible source line (the full reason is in the
+      // ⓘ sheet), so a raised target is never unexplained on the strip.
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/eased for readiness/);
       // Target RIR 2 + readiness delta 1 -> chip 3 pre-selected
       expect(screen.getByRole('button', { name: '3 reps in reserve (easy)' })).toHaveAttribute(
         'aria-pressed',
@@ -1426,7 +1456,8 @@ describe('ExerciseCard', () => {
       // The rationale line shows the curve working, with the e1RM it used.
       const note = screen.getByTestId('weight-edit-recompute-note');
       expect(note).toHaveTextContent('35 lbs ⇒ ~6 reps @ 2 RIR');
-      expect(note).toHaveTextContent(/from your est\. 1-rep max, e1RM 44(\.\d+)? lbs/);
+      expect(note).toHaveTextContent(/from your est\. max 44(\.\d+)? lbs/);
+      expect(note).not.toHaveTextContent(/e1RM/);
     });
 
     it('note slot stays mounted at all times — toggling it must not move the steppers (layout stability)', async () => {
@@ -2106,6 +2137,22 @@ describe('ExerciseCard', () => {
       // Phase 4 relabel: the pill is a TREND statement, not a prescription one.
       expect(screen.getByText(/Trend: ahead/)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Plateau' })).not.toBeInTheDocument();
+    });
+
+    it('never shows "Trend: ahead" next to a stall pill — the stall wins', () => {
+      const stalled = (date: string) => ({
+        date,
+        sets: [10, 10, 10].map((r) => ({ weightKg: 100, reps: r, rir: 2 })),
+      });
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          performanceSnapshots={progressingSnapshots}
+          progressionHealthSessions={[stalled(weeksAgo(3)), stalled(weeksAgo(2)), stalled(weeksAgo(1)), stalled(weeksAgo(0))]}
+        />
+      );
+      expect(screen.getByTestId('progression-stall-pill')).toBeInTheDocument();
+      expect(screen.queryByText(/Trend: ahead/)).not.toBeInTheDocument();
     });
 
     it('suppresses the pace pill when the plateau badge is showing', () => {

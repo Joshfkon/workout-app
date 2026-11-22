@@ -123,8 +123,13 @@ export const STICKY_LOG_SLOT_ID = 'workout-sticky-action-slot';
 /** Share of the in-card button that must be on screen to count as reachable. */
 const LOG_BUTTON_VISIBLE_RATIO = 0.6;
 
-/** Clamp a prescribed RIR to the 0-4 chip range. */
-function clampToChip(rir: number): RepsInTank {
+/**
+ * Clamp a prescribed RIR to the 0-4 chip range. Also the ONE display value
+ * for the target everywhere on the active set (suggestion strip, preset chip,
+ * effort readout), so the strip can never say "@ 3 RIR" over a chip preset
+ * to 4+.
+ */
+export function clampToChip(rir: number): RepsInTank {
   const rounded = Math.round(rir);
   return Math.max(0, Math.min(4, Number.isFinite(rounded) ? rounded : 2)) as RepsInTank;
 }
@@ -750,8 +755,10 @@ export function SetLoggerRow({
                   RIR_LABELS[clampToChip(effortCheck.predictedRir)]
                 })${
                   effortCheck.repsForTarget != null
-                    ? ` · ~${effortCheck.repsForTarget} reps would leave ${effortCheck.targetRir}`
-                    : ''
+                    ? ` · ~${effortCheck.repsForTarget} reps would leave ${effortCheck.targetRir}, your target`
+                    : clampToChip(effortCheck.predictedRir) === clampToChip(targetRir)
+                      ? ' · on target'
+                      : ''
                 }`}
             {effortCheck.softened ? ' · rough estimate' : ''}
           </span>
@@ -775,7 +782,7 @@ export function SetLoggerRow({
           // so, or an untouched chip reads as an answer the lifter never gave.
           <span className="text-ink-3" data-testid="rir-preset-note">
             {' '}
-            Preset to your target — tap the one that matches.
+            Preset to your target ({RIR_CHIP_TEXT[clampToChip(targetRir)]}) — tap to change.
           </span>
         )}
       </p>
