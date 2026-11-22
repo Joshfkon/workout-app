@@ -499,6 +499,8 @@ export interface ColdStartSuggestion {
   explanation: string;
   /** Name of the logged lift the estimate transferred from, when it did. */
   transferFrom?: string;
+  /** Which estimation rung produced the number, so the source line can name it plainly. */
+  estimateSource?: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio' | 'calibration' | 'exercise_transfer';
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -510,6 +512,27 @@ export interface ColdStartSuggestion {
 export type SetSyncStatus = 'saving' | 'saved' | 'queued' | 'failed';
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
+
+/**
+ * Past this many reps a weight edit stops refilling the reps field. The
+ * rep-max curve is only trustworthy to ~15 effective reps; well beyond it
+ * (a 45 lb edit against a 123 lb est. max read "~50 reps") the number is
+ * noise, so the field keeps its value and the note says why. A block whose
+ * own target range goes higher keeps refilling up to that range.
+ */
+const WEIGHT_EDIT_MAX_REPS = 20;
+
+/** A shown load more than this fraction above the engine's counts as rounded up. */
+const GRID_ROUND_UP_TOLERANCE = 0.005;
+
+/** Plain words for what a cold-start estimate rests on (weightEstimationEngine sources). */
+const COLD_START_BASIS: Record<string, string> = {
+  related_exercise: 'similar lifts you’ve logged',
+  strength_standards: 'typical strength for your experience and bodyweight',
+  bodyweight_ratio: 'your bodyweight',
+  calibration: 'your strength test',
+};
+
 export const ExerciseCard = memo(function ExerciseCard({
   exercise,
   block,
@@ -1564,7 +1587,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   // carry a rep RANGE; ramp slots take a fixed % of the top working set with no
   // RIR claim.
   const buildSlotSeed = useCallback(
-    (setIndex: number): { seed: SeedRecommendation; prevSet?: { weightKg: number; reps: number; rpe?: number } } => {
+    (setIndex: number): {
+      seed: SeedRecommendation;
+      prevSet?: { weightKg: number; reps: number; rpe?: number };
+      /** The plate grid rounded the shown load UP, so last session's reps are kept (see below). */
+      gridRoundedUp?: boolean;
+    } => {
       const prevSet = previousSets[setIndex];
       const role: SetRole =
         prevSet && prevSet.weightKg > 0
@@ -1591,9 +1619,23 @@ export const ExerciseCard = memo(function ExerciseCard({
         slotIndex: setIndex,
         plannedSetCount: block.targetSets,
       });
+      // Don't stack two steps. A position-matched "+1 rep at the same load"
+      // is shown on the user's plate grid; when that grid rounds the load UP
+      // (40 kg → 90 lb, not 88.2), the set is already heavier than last time,
+      // so keep last session's reps instead of also adding one. Stacked,
+      // 90 × 11 ran past the lifter's estimated max while the plan claimed
+      // 2 RIR, and the readout under it said "0 left in the tank".
+      const pm = seed.positionMatch;
+      if (seed.anchorSource === 'position_match' && pm?.progression === 'add_rep' && seed.seedReps !== undefined) {
+        const shown = suggestionWeight(seed.weightKg, prevSet?.weightKg);
+        const shownKg = unit === 'lb' ? convertWeight(shown, 'lb', 'kg') : shown;
+        if (shownKg > seed.weightKg * (1 + GRID_ROUND_UP_TOLERANCE)) {
+          return { seed: { ...seed, seedReps: pm.prevReps }, prevSet, gridRoundedUp: true };
+        }
+      }
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, isBodyweightExercise, prevSessionSetsForGating, priorSessionSetsForGating]
+    [suggestionWeight, unit, previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, isBodyweightExercise, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: ONE ANCHOR PER
@@ -1656,6 +1698,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     reps: number;
     rir: number;
     e1rmKg: number;
+    /** The weight is so light the rep-max curve can't answer (see WEIGHT_EDIT_MAX_REPS). */
+    beyondCurve?: boolean;
   } | null>(null);
 
   // Track the last known completed sets count to detect changes
@@ -2156,6 +2200,16 @@ export const ExerciseCard = memo(function ExerciseCard({
                       targetRepRange: block.targetRepRange,
                       targetRir: rowTargetRir,
                     });
+                    // Far below the working weight the rep-max curve runs off
+                    // its valid range (45 lb against a 123 lb est. max read
+                    // "~50 reps"). Leave the reps alone and say why instead
+                    // of writing a number nobody would do.
+                    if (!isDurationBased && newReps != null && newReps > Math.max(WEIGHT_EDIT_MAX_REPS, block.targetRepRange?.[1] ?? 0)) {
+                      if (index === 0) {
+                        setWeightEditNote({ weightDisplay: value, reps: newReps, rir: rowTargetRir, e1rmKg: anchorE1RM ?? 0, beyondCurve: true });
+                      }
+                      return newInputs;
+                    }
                     // null = no e1RM after all — leave the reps field untouched.
                     if (newReps != null) {
                       newInputs[index] = { ...newInputs[index], reps: String(newReps) };
@@ -2844,7 +2898,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Session start: role-aware seed for this slot (services/setRecommender).
       // Working slots anchor on the e1RM (clamped ±10% of recent working weight);
       // ramp/feeder slots take a % of the top working set with no RIR claim.
-      const { seed, prevSet } = buildSlotSeed(completedSets.length);
+      const { seed, prevSet, gridRoundedUp } = buildSlotSeed(completedSets.length);
       role = seed.role;
       showRir = seed.showRirTarget;
       reps =
@@ -2937,20 +2991,25 @@ export const ExerciseCard = memo(function ExerciseCard({
         const setNo = completedSets.length + 1;
         const prevDesc = `${displayWeight(pm.prevWeightKg, true)} ${weightLabel} × ${pm.prevReps}`;
         if (seed.seedReps !== undefined) repsLabel = String(seed.seedReps);
-        sourceLine = `From your last session: ${prevDesc} → ${progressionPhrase(pm.progression)}`;
-        reason =
-          pm.progression === 'add_rep'
+        sourceLine = gridRoundedUp
+          ? `From your last session: ${prevDesc} → rounded up to the nearest plate, same reps`
+          : `From your last session: ${prevDesc} → ${progressionPhrase(pm.progression)}`;
+        reason = gridRoundedUp
+          ? `matching set ${setNo} from last session (${prevDesc}) — rounded up to the nearest plate, so same reps`
+          : pm.progression === 'add_rep'
             ? `matching set ${setNo} from last session (${prevDesc}) — go one more rep`
             : pm.progression === 'add_load'
               ? `set ${setNo} last session hit the rep ceiling (${prevDesc}) — one increment up`
               : `matching set ${setNo} from last session (${prevDesc})`;
         explanation.push(
           `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''} — the same position in a comparable session carries the same accumulated fatigue, so it anchors this target${
-            pm.progression === 'add_rep'
-              ? ', plus one rep (it was left at or above the target reserve).'
-              : pm.progression === 'add_load'
-                ? '; at the top of the rep range with reserve, the load steps up one increment and trades a rep.'
-                : '; held as-is because it was taken harder than the target effort.'
+            gridRoundedUp
+              ? '. It was left at or above the target reserve, but your plates round this load up to a little more than last time — that is the progression, so the reps stay the same rather than also adding one.'
+              : pm.progression === 'add_rep'
+                ? ', plus one rep (it was left at or above the target reserve).'
+                : pm.progression === 'add_load'
+                  ? '; at the top of the rep range with reserve, the load steps up one increment and trades a rep.'
+                  : '; held as-is because it was taken harder than the target effort.'
           }`
         );
       } else if (seed.anchorSource === 'last_session' && prevSet) {
@@ -2990,11 +3049,16 @@ export const ExerciseCard = memo(function ExerciseCard({
         const transferFrom =
           coldStartSuggestion.transferFrom ??
           coldStartSuggestion.reason.match(/from your (.+?) strength/i)?.[1];
-        sourceLine = transferFrom
-          ? `Starting guess from your ${transferFrom} — ${coldStartPickLine}`
-          : `Starting guess — ${coldStartPickLine}`;
+        // Name what the guess rests on, in plain words: "no explanation of
+        // why 65 lbs" was the panel's complaint about a bare "Starting guess".
+        const basis = transferFrom
+          ? `your ${transferFrom}`
+          : COLD_START_BASIS[coldStartSuggestion.estimateSource ?? ''] ?? null;
+        sourceLine = basis
+          ? `First time on this lift — starting guess from ${basis}; ${coldStartPickLine}`
+          : `First time on this lift — starting guess; ${coldStartPickLine}`;
       } else if (weight) {
-        sourceLine = `Starting guess — ${coldStartPickLine}`;
+        sourceLine = `First time on this lift — starting guess; ${coldStartPickLine}`;
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else if (isDurationBased) {
@@ -4794,7 +4858,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                   weightEditNote ? '' : 'invisible'
                 }`}
               >
-                {weightEditNote && (
+                {weightEditNote?.beyondCurve ? (
+                  <>
+                    {weightEditNote.weightDisplay} {weightLabel} is far below your working weight, so reps were left as they were
+                  </>
+                ) : weightEditNote && (
                   <>
                     {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
                     {isDurationBased ? 'seconds' : 'reps'} @ {clampToChip(weightEditNote.rir)} RIR (from your

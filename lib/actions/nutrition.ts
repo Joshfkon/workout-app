@@ -98,7 +98,7 @@ export async function recalculateMacrosForWeight(
 
     const activityConfig: ActivityConfig = {
       activityLevel: settings.activity_level as ActivityLevel,
-      workoutsPerWeek: settings.workouts_per_week || 4,
+      workoutsPerWeek: settings.workouts_per_week ?? 4,
       avgWorkoutMinutes: settings.avg_workout_minutes || 60,
       workoutIntensity: (settings.workout_intensity as 'light' | 'moderate' | 'intense') || 'moderate',
     };

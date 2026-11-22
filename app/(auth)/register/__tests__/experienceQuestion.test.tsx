@@ -1,6 +1,7 @@
 /**
- * Sign-up asks "How long have you been lifting?" in plain words, optional,
- * with nothing preselected. Skipping it keeps the previous default (intermediate).
+ * Sign-up asks "Do you lift weights?" in plain words, optional, with nothing
+ * preselected. Skipping it keeps the previous default (intermediate); "No,
+ * food tracking" is a real answer that leads Home with food.
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -21,7 +22,8 @@ async function fillIn() {
   return user;
 }
 
-const sentExperience = () => mockSignUp.mock.calls[0][0].options.data.experience;
+const sentData = () => mockSignUp.mock.calls[0][0].options.data;
+const sentExperience = () => sentData().experience;
 
 describe('RegisterPage — experience question', () => {
   beforeEach(() => {
@@ -31,7 +33,7 @@ describe('RegisterPage — experience question', () => {
 
   it('is optional, plain, and has nothing preselected', async () => {
     await fillIn();
-    expect(screen.getByRole('radiogroup', { name: /How long have you been lifting\? \(optional\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: /Do you lift weights\? .*\(optional\)/ })).toBeInTheDocument();
     for (const radio of screen.getAllByRole('radio')) {
       expect(radio).toHaveAttribute('aria-checked', 'false');
     }
@@ -44,6 +46,15 @@ describe('RegisterPage — experience question', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
     expect(sentExperience()).toBe('intermediate');
+    expect(sentData()).not.toHaveProperty('tracking_focus');
+  });
+
+  it('"No, food tracking" signs up as a food tracker (novice if they ever lift)', async () => {
+    const user = await fillIn();
+    await user.click(screen.getByRole('radio', { name: 'No, food tracking' }));
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
+    expect(sentData()).toMatchObject({ experience: 'novice', tracking_focus: 'food' });
   });
 
   it('sends the picked answer', async () => {
@@ -53,6 +64,7 @@ describe('RegisterPage — experience question', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
     expect(sentExperience()).toBe('advanced');
+    expect(sentData()).not.toHaveProperty('tracking_focus');
   });
 });
 

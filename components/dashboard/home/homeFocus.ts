@@ -8,6 +8,10 @@
  * weigh-in logs. They see food and weight first, and a single compact workout
  * entry lower down instead of the "Ready to train?" hero and program prompt.
  *
+ * A brand-new user (no completed workout ever) who answered "No, food
+ * tracking" at sign-up also gets 'food' before logging anything — a fresh
+ * account has no logs to go on. Their first completed workout ends that.
+ *
  * Anything uncertain falls back to 'training' (today's layout): an unknown
  * workout history is treated as a lifter, never as food-only.
  */
@@ -28,12 +32,15 @@ export interface HomeFocusInput {
   hasFoodToday: boolean;
   /** Ever logged food or a weigh-in (useBodyOrFoodLogged); undefined while unknown. */
   hasLoggedBodyOrFood?: boolean | null;
+  /** Sign-up answer (lib/onboarding/trackingFocus); null when not given. */
+  statedFocus?: 'food' | null;
 }
 
 export function homeFocus(input: HomeFocusInput): HomeFocus {
   if (input.hasPlan || input.hasTodaysWorkout) return 'training';
 
   const noWorkoutsEver = input.completedWorkoutsCount === 0;
+  if (noWorkoutsEver && input.statedFocus === 'food') return 'food';
   const noRecentWorkouts = input.recentCompletedWorkouts === 0;
   if (!noWorkoutsEver && !noRecentWorkouts) return 'training';
 

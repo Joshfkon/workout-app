@@ -19,45 +19,30 @@ export type PreferenceSaveStatus =
   | { state: 'error'; message: string; field?: string }
   | null;
 
-/** Spoken names for the screen-reader announcement ("Units saved"). */
-const FIELD_LABELS: Record<string, string> = {
-  units: 'Units',
-  restTimer: 'Default rest timer',
-  showFormCues: 'Show form cues',
-  showWarmupSuggestions: 'Show warmup suggestions',
-  prioritizeHypertrophy: 'Prioritize hypertrophy',
-  skipPreWorkoutCheckIn: 'Skip pre-workout check-in',
-  trackWaistInCheckin: 'Morning waist in check-in',
-  showAiCoachNotes: 'AI coach notes',
-};
-
 /** A status with no field (older callers) belongs to the Units control. */
 const statusField = (status: PreferenceSaveStatus) => status?.field ?? 'units';
 
-function announcement(status: PreferenceSaveStatus): string {
-  if (!status || status.state === 'error') return '';
-  if (status.state === 'saving') return 'Saving…';
-  const name = FIELD_LABELS[statusField(status)];
-  return name ? `${name} saved` : 'Saved';
-}
-
 /**
- * Inline "Saving… / Saved" pill next to one control. It is aria-hidden: the
- * panel's single live region announces the same thing ("Units saved").
+ * Inline "Saving… / Saved" pill next to one control. Its always-mounted
+ * wrapper is the live region, so screen readers hear the same single "Saved"
+ * that sighted users see — there is no second, hidden confirmation.
  */
 function FieldSavePill({ field, status }: { field: string; status: PreferenceSaveStatus }) {
-  if (!status || status.state === 'error' || statusField(status) !== field) return null;
-  const saved = status.state === 'saved';
+  const active = !!status && status.state !== 'error' && statusField(status) === field;
+  const saved = active && status?.state === 'saved';
   return (
-    <span
-      aria-hidden="true"
-      data-testid={`save-status-${field}`}
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold animate-fade-in ${
-        saved ? 'bg-status-ok/15 text-status-ok' : 'bg-fill text-ink-2'
-      }`}
-    >
-      {saved && <IconCheck size={12} stroke={3} />}
-      {saved ? 'Saved' : 'Saving…'}
+    <span role="status" aria-live="polite" data-testid={`save-region-${field}`}>
+      {active && (
+        <span
+          data-testid={`save-status-${field}`}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-semibold animate-fade-in ${
+            saved ? 'bg-status-ok/15 text-status-ok' : 'bg-fill text-ink-2'
+          }`}
+        >
+          {saved && <IconCheck size={12} stroke={3} aria-hidden="true" />}
+          {saved ? 'Saved' : 'Saving…'}
+        </span>
+      )}
     </span>
   );
 }
@@ -151,11 +136,6 @@ export function PreferencesTabPanel({
 }: PreferencesTabPanelProps) {
   return (
     <div className="space-y-6">
-      {/* One live region for every auto-save on this tab ("Units saved"). */}
-      <span role="status" aria-live="polite" className="sr-only" data-testid="preferences-save-status">
-        {announcement(saveStatus)}
-      </span>
-
       {/* Units first: the setting people come to Preferences for most. One
           choice covers weight and length (they are stored together). */}
       <Card>

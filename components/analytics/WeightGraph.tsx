@@ -13,8 +13,8 @@ import {
   ReferenceArea,
 } from 'recharts';
 import { formatDate, formatChartTickDate, dateTickStep, showDateTick, parseLocalDate } from '@/lib/utils';
-import { getDisplayWeight } from '@/lib/weightUtils';
 import { now as clockNow } from '@/lib/clock';
+import { DAY_MS, weighInsInWindow, weightTrendLine } from './weightTrend';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 import type { PhaseType } from '@/types/schema';
 import { PHASE_STYLE, PHASE_BAND_OPACITY } from '@/components/body/phaseStyle';
@@ -33,8 +33,6 @@ const TIMEFRAME_DAYS: Record<Timeframe, number> = {
   '30d': 30,
   '90d': 90,
 };
-
-const DAY_MS = 1000 * 60 * 60 * 24;
 
 interface WeightEntry {
   date: string;
@@ -81,20 +79,6 @@ export function weightAxisDomain(weights: number[], unit: 'lb' | 'kg'): [number,
   const mid = (min + max) / 2;
   const step = unit === 'kg' ? 0.5 : 1;
   return [Math.floor((mid - span / 2) / step) * step, Math.ceil((mid + span / 2) / step) * step];
-}
-
-/** Least-squares slope (per day) and intercept over day offsets from the first point. */
-function fitLine(data: WeightChartDataPoint[]): { slopePerDay: number; intercept: number; lastX: number } | null {
-  if (data.length < 2) return null;
-  const t0 = parseLocalDate(data[0].date).getTime();
-  const points = data.map((d) => ({ x: (parseLocalDate(d.date).getTime() - t0) / DAY_MS, y: d.weight }));
-  const n = points.length;
-  const meanX = points.reduce((sum, p) => sum + p.x, 0) / n;
-  const meanY = points.reduce((sum, p) => sum + p.y, 0) / n;
-  const denom = points.reduce((sum, p) => sum + (p.x - meanX) ** 2, 0);
-  if (denom === 0) return null;
-  const slopePerDay = points.reduce((sum, p) => sum + (p.x - meanX) * (p.y - meanY), 0) / denom;
-  return { slopePerDay, intercept: meanY - slopePerDay * meanX, lastX: points[n - 1].x };
 }
 
 /**
@@ -144,15 +128,9 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
 
   // Simple, straightforward conversion - no guessing
   const chartData = useMemo(() => {
-    const cutoffDate = clockNow();
-    cutoffDate.setDate(cutoffDate.getDate() - TIMEFRAME_DAYS[timeframe]);
-    // Compare whole local days: a weigh-in exactly N days ago is in an N-day
-    // window regardless of the time of day the page is opened.
-    cutoffDate.setHours(0, 0, 0, 0);
-
-    const filtered = weightHistory
-      .filter((entry) => parseLocalDate(entry.date) >= cutoffDate)
-      .sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
+    // Whole local days, display unit, one decimal — shared with the
+    // Progress summary line (weightTrend.weighInsInWindow).
+    const filtered = weighInsInWindow(weightHistory, preferredUnit, TIMEFRAME_DAYS[timeframe], clockNow());
 
     // Include the year in tick labels only when the range crosses a year boundary.
     const spansYear =
@@ -160,20 +138,11 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       parseLocalDate(filtered[0].date).getFullYear() !==
         parseLocalDate(filtered[filtered.length - 1].date).getFullYear();
 
-    return filtered.map((entry) => {
-      // Use unified weight utility for consistent validation and conversion
-      const displayWeight = getDisplayWeight(
-        entry.weight,
-        entry.unit as 'lb' | 'kg' | null,
-        preferredUnit
-      );
-
-      return {
-        date: entry.date,
-        displayDate: formatChartTickDate(entry.date, spansYear),
-        weight: Number(displayWeight.toFixed(1)),
-      };
-    });
+    return filtered.map((entry) => ({
+      date: entry.date,
+      displayDate: formatChartTickDate(entry.date, spansYear),
+      weight: entry.weight,
+    }));
   }, [weightHistory, timeframe, preferredUnit]);
 
   // Phase spans clipped to the visible window, expressed as category-axis
@@ -203,18 +172,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
   // Weekly rolling trend: least-squares slope of weight over the visible
   // window, expressed per week. Robust to noisy endpoints, unlike last - first.
   // The same fit is drawn as a dashed line so the number and the picture agree.
-  const trend = useMemo(() => {
-    const fit = fitLine(chartData);
-    if (!fit) return null;
-    const perWeek = fit.slopePerDay * 7;
-    return {
-      perWeek,
-      isPositive: perWeek > 0.05,
-      isNegative: perWeek < -0.05,
-      fitStart: fit.intercept,
-      fitEnd: fit.intercept + fit.slopePerDay * fit.lastX,
-    };
-  }, [chartData]);
+  const trend = useMemo(() => weightTrendLine(chartData), [chartData]);
 
   const summary = useMemo(() => weightWindowSummary(chartData), [chartData]);
 

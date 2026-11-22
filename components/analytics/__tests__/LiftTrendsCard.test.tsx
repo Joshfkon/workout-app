@@ -57,7 +57,7 @@ describe('LiftTrendsCard', () => {
 
     const squat = screen.getByTestId('lift-row-squat');
     expect(squat).toHaveTextContent('Squat');
-    expect(squat).toHaveTextContent('est. max');
+    expect(squat).toHaveTextContent('Est. max 140.0 kg');
     expect(squat).toHaveTextContent('+1.1%/wk');
     expect(within(squat).getByText('Rising')).toBeInTheDocument();
     expect(within(screen.getByTestId('lift-row-row')).getByText('Down')).toBeInTheDocument();
@@ -111,7 +111,10 @@ describe('LiftTrendsCard', () => {
           stalled: null,
           insufficientData: 2,
           earlyLifts: [
-            { name: 'Bench Press', sessions: 2, bestWeightKg: 60, bestReps: 8 },
+            {
+              name: 'Bench Press', sessions: 2, bestWeightKg: 62.5, bestReps: 8,
+              firstWeightKg: 60, firstReps: 8, latestWeightKg: 62.5, latestReps: 8,
+            },
             { name: 'Pull-up', sessions: 1, bestWeightKg: 0, bestReps: 6 },
           ],
         }}
@@ -119,15 +122,34 @@ describe('LiftTrendsCard', () => {
       />,
     );
     const early = screen.getByTestId('lift-early-bests');
-    expect(early).toHaveTextContent('Bench Press');
-    expect(early).toHaveTextContent('60.0 kg × 8');
-    expect(early).toHaveTextContent('2 of 3 workouts');
-    expect(early).toHaveTextContent('6 reps');
-    expect(screen.queryByText(/No lift has enough history/)).not.toBeInTheDocument();
-    // Says plainly what the user can see now and what unlocks a trend.
-    expect(screen.getByTestId('lift-trends-summary')).toHaveTextContent('No strength trends yet');
+    const [bench, pullUp] = screen.getAllByTestId('early-lift-row');
+    expect(bench).toHaveTextContent('Bench Press');
+    expect(bench).toHaveTextContent('Best set 62.5 kg × 8');
+    // Progress before a trend: first vs latest workout, weight actually lifted.
+    expect(within(bench).getByTestId('early-lift-change')).toHaveTextContent('First 60 kg × 8 → latest 62.5 kg × 8');
+    expect(bench).toHaveTextContent('Trend in 1 more workout');
+    expect(pullUp).toHaveTextContent('6 reps');
+    expect(pullUp).toHaveTextContent('Trend in 2 more workouts');
+    expect(within(pullUp).queryByTestId('early-lift-change')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No lift has enough/)).not.toBeInTheDocument();
+    // Says plainly, per lift, what unlocks a trend.
+    const head = screen.getByTestId('lift-trends-summary');
+    expect(head).toHaveTextContent('No strength trends yet');
+    expect(screen.getByTestId('lift-first-trend-hint')).toHaveTextContent(
+      'Log Bench Press in 1 more workout to see its trend. A trend needs the same lift in 3 workouts.'
+    );
     expect(early).toHaveTextContent(/best set on each lift/);
-    expect(early).toHaveTextContent(/Log a lift in 3 workouts and its strength trend line appears/);
+  });
+
+  it('labels a lift row as an estimated max from the set actually lifted', () => {
+    const withSet = lift({
+      history: [
+        { date: '2026-10-01', e1rmKg: 95, topSetWeightKg: 75, topSetReps: 8 },
+        { date: '2026-11-01', e1rmKg: 100, topSetWeightKg: 80, topSetReps: 7 },
+      ],
+    });
+    render(<LiftTrendsCard summary={{ ...summary, lifts: [withSet] }} units="kg" />);
+    expect(screen.getByTestId('lift-row-bench')).toHaveTextContent('Est. max 100.0 kg (from 80 kg × 7)');
   });
 
   it('never ellipsizes a long lift name or its weekly change at phone width', () => {

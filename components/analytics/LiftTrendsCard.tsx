@@ -2,13 +2,22 @@
 
 import Link from 'next/link';
 import { ListGroup, Sparkline } from '@/components/ui';
-import { formatWeight } from '@/lib/utils';
 import {
   MIN_SESSIONS_FOR_TREND,
   type LiftTrend,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
-import { liftHref, signedPct, statusOf } from './liftTrendFormat';
+import {
+  earlyLiftChange,
+  estMaxLabel,
+  liftHref,
+  moreWorkouts,
+  nextTrendHint,
+  setLabel,
+  signedPct,
+  statusOf,
+  workoutsUntilTrend,
+} from './liftTrendFormat';
 
 interface LiftTrendsCardProps {
   summary: LiftTrendsSummary;
@@ -24,7 +33,14 @@ interface LiftTrendsCardProps {
  * line at phone width instead of being ellipsized ("+3.0…").
  */
 function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { max: string; change: string } {
-  const max = `${formatWeight(lift.currentE1RMKg, units)} est. max`;
+  // Labelled as an estimate, with the set it came from ("Est. max 225 lbs
+  // (from 185 lbs × 8)") so it never reads as weight actually lifted.
+  const latest = lift.history[lift.history.length - 1];
+  const max = estMaxLabel(
+    lift.currentE1RMKg,
+    latest ? { weightKg: latest.topSetWeightKg, reps: latest.topSetReps } : null,
+    units
+  );
   // A calibrating lift shows NO rate — a fitted slope over a program boundary
   // or an equipment change is noise with a decimal point.
   if (lift.lowConfidence) {
@@ -50,6 +66,10 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
   const confident = summary.rising + summary.flat + summary.down;
   const weeks = Math.round(summary.windowDays / 7);
   const rebuilding = summary.rebuilding;
+  const earlyLifts = summary.earlyLifts ?? [];
+  // No trend anywhere yet: name the lift closest to one and how many more
+  // workouts it needs, in the user's terms.
+  const firstTrendHint = summary.lifts.length === 0 ? nextTrendHint(earlyLifts) : null;
 
   const attention =
     attentionNames.length > 0
@@ -70,6 +90,11 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
               ? 'Your lift trends are rebuilding'
               : 'No strength trends yet'}
         </p>
+        {firstTrendHint && (
+          <p className="mt-1 text-subhead text-ink" data-testid="lift-first-trend-hint">
+            {firstTrendHint} A trend needs the same lift in {MIN_SESSIONS_FOR_TREND} workouts.
+          </p>
+        )}
         {summary.lifts.length > 0 && (
           <p className="mt-0.5 text-caption text-ink-2" data-testid="est-max-explainer">
             {EST_MAX_EXPLAINER}
@@ -98,33 +123,49 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
         )}
       </div>
 
-      {summary.lifts.length === 0 && (summary.earlyLifts?.length ?? 0) > 0 ? (
+      {summary.lifts.length === 0 && earlyLifts.length > 0 ? (
         <div className="space-y-2" data-testid="lift-early-bests">
           <p className="px-1 text-subhead text-ink-2">
-            For now you can see your best set on each lift. Log a lift in {MIN_SESSIONS_FOR_TREND} workouts and
-            its strength trend line appears here.
+            Until then, here is what you have lifted so far: your best set on each lift, and your first vs latest
+            workout where you have two.
           </p>
           <ListGroup>
-            {(summary.earlyLifts ?? []).map((l) => (
-              <div key={l.name} className="flex min-h-[52px] items-center gap-3 px-4 py-2">
-                <span className="min-w-0 flex-1 break-words text-body font-semibold text-ink" data-testid="early-lift-name">
-                  {l.name}
-                </span>
-                <span className="flex-shrink-0 text-body text-ink tabular-nums">
-                  {l.bestWeightKg > 0 ? `${formatWeight(l.bestWeightKg, units)} × ${l.bestReps}` : `${l.bestReps} reps`}
-                </span>
-                <span className="w-[76px] flex-shrink-0 text-right text-caption text-ink-2">
-                  {l.sessions} of {MIN_SESSIONS_FOR_TREND} workouts
-                </span>
-              </div>
-            ))}
+            {earlyLifts.map((l) => {
+              const change = earlyLiftChange(l, units);
+              const left = workoutsUntilTrend(l.sessions);
+              return (
+                <div key={l.name} className="flex min-h-[56px] items-center gap-3 px-4 py-2" data-testid="early-lift-row">
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-body font-semibold text-ink" data-testid="early-lift-name">
+                      {l.name}
+                    </span>
+                    <span className="block text-subhead text-ink-2 tabular-nums">
+                      Best set {setLabel(l.bestWeightKg, l.bestReps, units)}
+                    </span>
+                    {change && (
+                      <span className="block text-subhead text-ink-2 tabular-nums" data-testid="early-lift-change">
+                        {change}
+                      </span>
+                    )}
+                  </span>
+                  <span className="w-[84px] flex-shrink-0 text-right text-caption text-ink-2">
+                    {left > 0 ? `Trend in ${moreWorkouts(left)}` : 'Trend soon'}
+                  </span>
+                </div>
+              );
+            })}
           </ListGroup>
         </div>
       ) : summary.lifts.length === 0 ? (
         <div className="rounded-card bg-card p-6 text-center shadow-card">
-          <p className="text-body text-ink">No lift has enough history for a trend yet.</p>
+          <p className="text-body text-ink">
+            {summary.insufficientData > 0
+              ? 'No lift has enough workouts for a trend yet.'
+              : `No lifts logged in the last ${weeks} weeks.`}
+          </p>
           <p className="mt-1 text-subhead text-ink-2">
-            Log a lift in {MIN_SESSIONS_FOR_TREND} workouts and its trend shows up here.
+            Finish a workout with weights and your best sets show up here. Log the same lift in{' '}
+            {MIN_SESSIONS_FOR_TREND} workouts to see whether it is going up.
           </p>
         </div>
       ) : (

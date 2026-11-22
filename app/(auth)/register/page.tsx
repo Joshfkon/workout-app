@@ -7,10 +7,18 @@ import { IconEye, IconEyeOff } from '@tabler/icons-react';
 import { Button, Input, Card } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
 import type { Goal, Experience } from '@/types/schema';
+import { TRACKING_FOCUS_METADATA_KEY } from '@/lib/onboarding/trackingFocus';
 
-/** Plain-language answers to "How long have you been lifting?". */
-const EXPERIENCE_OPTIONS: { value: Experience; label: string }[] = [
-  { value: 'novice', label: 'New / < 1 yr' },
+/**
+ * Plain-language answers to "Do you lift weights?". Asked so it doesn't
+ * assume lifting is why someone signed up: "No, food tracking" is a real
+ * answer, and it tells Home to lead with food (lib/onboarding/trackingFocus).
+ * Someone who doesn't lift yet starts as a novice if they ever do.
+ */
+type LiftingAnswer = 'no' | Experience;
+const LIFTING_OPTIONS: { value: LiftingAnswer; label: string }[] = [
+  { value: 'no', label: 'No, food tracking' },
+  { value: 'novice', label: 'Under 1 year' },
   { value: 'intermediate', label: '1–3 years' },
   { value: 'advanced', label: '3+ years' },
 ];
@@ -30,7 +38,7 @@ export default function RegisterPage() {
   // neutral default so the profile row is complete either way.
   const goal: Goal = 'maintenance';
   // Optional: null = skipped, which signs up as SKIPPED_EXPERIENCE.
-  const [experience, setExperience] = useState<Experience | null>(null);
+  const [liftingAnswer, setLiftingAnswer] = useState<LiftingAnswer | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   // Address a confirmation email was sent to. Renders the post-signup screen
@@ -87,7 +95,9 @@ export default function RegisterPage() {
           emailRedirectTo: redirectUrl,
           data: {
             goal,
-            experience: experience ?? SKIPPED_EXPERIENCE,
+            experience:
+              liftingAnswer === null ? SKIPPED_EXPERIENCE : liftingAnswer === 'no' ? 'novice' : liftingAnswer,
+            ...(liftingAnswer === 'no' ? { [TRACKING_FOCUS_METADATA_KEY]: 'food' } : {}),
           },
         },
       });
@@ -239,15 +249,16 @@ export default function RegisterPage() {
             }
           />
 
-          {/* Optional, plain-language, nothing preselected: food-only users
-              can skip it, and a skip starts training suggestions light. */}
+          {/* Optional, plain-language, nothing preselected. "No" is a real
+              answer, not a skip: it leads Home with food. */}
           <div role="radiogroup" aria-labelledby="lifting-question" aria-describedby="lifting-hint">
             <p id="lifting-question" className="block text-body font-medium text-ink mb-2">
-              How long have you been lifting? <span className="text-ink-3 font-normal">(optional)</span>
+              Do you lift weights? If so, for how long?{' '}
+              <span className="text-ink-3 font-normal">(optional)</span>
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {EXPERIENCE_OPTIONS.map((option) => {
-                const checked = experience === option.value;
+            <div className="grid grid-cols-2 gap-2">
+              {LIFTING_OPTIONS.map((option) => {
+                const checked = liftingAnswer === option.value;
                 return (
                   <button
                     key={option.value}
@@ -256,7 +267,7 @@ export default function RegisterPage() {
                     aria-checked={checked}
                     data-testid={`experience-option-${option.value}`}
                     // Tapping the picked option again clears it (back to "skip").
-                    onClick={() => setExperience(checked ? null : option.value)}
+                    onClick={() => setLiftingAnswer(checked ? null : option.value)}
                     className={`min-h-[44px] px-2 rounded-input border-2 text-subhead font-medium transition-colors ${
                       checked ? 'border-action bg-action/10 text-ink' : 'border-sep bg-fill/50 text-ink-2 hover:text-ink'
                     }`}
@@ -267,7 +278,7 @@ export default function RegisterPage() {
               })}
             </div>
             <p id="lifting-hint" className="text-caption text-ink-3 mt-1">
-              Not sure, or just here for food tracking? Skip it — you can change it any time in Settings.
+              Only used to pitch workout suggestions. Not sure? Skip it.
             </p>
           </div>
 

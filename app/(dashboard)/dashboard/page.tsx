@@ -13,6 +13,7 @@ import {
   fetchBodyCompGlance,
   fetchDashboardDateKey,
 } from '@/lib/actions/dashboard';
+import { statedTrackingFocus } from '@/lib/onboarding/trackingFocus';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -96,6 +97,7 @@ export default async function DashboardPage() {
         reachableMuscles: muscleVolume.reachable,
         liftTrends,
         bodyCompGlance,
+        statedFocus: statedTrackingFocus(user.user_metadata),
       }}
     />
   );

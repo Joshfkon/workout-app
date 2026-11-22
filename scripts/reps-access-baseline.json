@@ -10,6 +10,7 @@
   "app/(dashboard)/dashboard/workout/[id]/_lib/suggestions.ts": 7,
   "app/(dashboard)/dashboard/workout/[id]/page.tsx": 13,
   "app/(onboarding)/onboarding/calibrate/page.tsx": 1,
+  "components/analytics/liftTrendFormat.ts": 1,
   "components/motion/CaptureAnalysisView.tsx": 2,
   "components/motion/MotionCaptureFlow.tsx": 14,
   "components/motion/MotionCoachSheet.tsx": 1,

@@ -62,13 +62,19 @@ interface MacroCalculatorModalProps {
   currentPhase?: 'bulk' | 'cut' | 'maintenance';
 }
 
+/** Typed workouts per week: 0 is a real answer; blank or junk falls back to 4. */
+export function workoutsCount(value: string): number {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 4;
+}
+
 export function MacroCalculatorModal({
   isOpen,
   onClose,
   onApply,
   existingTargets,
   userStats,
-  workoutsPerWeek = 4,
+  workoutsPerWeek: plannedWorkoutsPerWeek,
   currentPhase,
 }: MacroCalculatorModalProps) {
   // User stats
@@ -83,7 +89,10 @@ export function MacroCalculatorModal({
 
   // Activity
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>('moderate');
-  const [workouts, setWorkouts] = useState(workoutsPerWeek.toString());
+  // Workouts per week: the active plan's days when there is one; otherwise
+  // the saved setting (restored on open below), else 4. A saved 0 — a
+  // food-only tracker from onboarding — is kept as 0, not read as "unset".
+  const [workouts, setWorkouts] = useState(String(plannedWorkoutsPerWeek ?? 4));
   const [workoutDuration, setWorkoutDuration] = useState('60');
   const [workoutIntensity, setWorkoutIntensity] = useState<'light' | 'moderate' | 'intense'>('moderate');
 
@@ -128,10 +137,10 @@ export function MacroCalculatorModal({
 
   // Update workouts when prop changes
   useEffect(() => {
-    if (workoutsPerWeek) {
-      setWorkouts(workoutsPerWeek.toString());
+    if (plannedWorkoutsPerWeek != null) {
+      setWorkouts(plannedWorkoutsPerWeek.toString());
     }
-  }, [workoutsPerWeek]);
+  }, [plannedWorkoutsPerWeek]);
 
   // Seed the form from saved macro settings when the modal opens, so reopening
   // the calculator doesn't silently reset goal/activity/peptide to defaults
@@ -150,6 +159,9 @@ export function MacroCalculatorModal({
           setPeptide(saved.peptide || 'none');
           if (saved.workout_intensity) setWorkoutIntensity(saved.workout_intensity);
           if (saved.avg_workout_minutes) setWorkoutDuration(saved.avg_workout_minutes.toString());
+          if (plannedWorkoutsPerWeek == null && saved.workouts_per_week != null) {
+            setWorkouts(String(saved.workouts_per_week));
+          }
         } else if (currentPhase) {
           setGoal(PHASE_TO_GOAL[currentPhase]);
         }
@@ -206,7 +218,7 @@ export function MacroCalculatorModal({
       },
       {
         activityLevel,
-        workoutsPerWeek: parseInt(workouts) || 4,
+        workoutsPerWeek: workoutsCount(workouts),
         avgWorkoutMinutes: parseInt(workoutDuration) || 60,
         workoutIntensity,
       },

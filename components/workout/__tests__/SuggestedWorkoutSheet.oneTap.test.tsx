@@ -127,7 +127,7 @@ describe('SuggestedWorkoutSheet: one tap to start', () => {
     // Last-used location is preselected.
     expect(screen.getByRole('button', { name: /Iron Gym/, pressed: true })).toBeInTheDocument();
     // Target effort in plain words, the term kept.
-    expect(screen.getAllByText(/2 reps left \(RIR\)/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/stop 2 reps short of failure/).length).toBeGreaterThan(0);
   });
 
   it('uses the last-used duration', async () => {

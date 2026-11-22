@@ -169,21 +169,20 @@ describe('Settings → Preferences auto-save', () => {
 
     await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
 
-    const live = screen.getByTestId('preferences-save-status');
+    // ONE confirmation: the visible pill in the Units card is itself the
+    // live region's content — no second hidden "Units saved" message.
+    const live = screen.getByTestId('save-region-units');
     expect(live).toHaveAttribute('role', 'status');
     expect(live).toHaveAttribute('aria-live', 'polite');
-    await waitFor(() => expect(live).toHaveTextContent('Units saved'));
-
-    // The visible pill sits in the Units card, not a distant header.
-    const pill = screen.getByTestId('save-status-units');
-    expect(pill).toHaveTextContent('Saved');
-    expect(pill).toHaveAttribute('aria-hidden', 'true');
+    await waitFor(() => expect(live).toHaveTextContent(/^Saved$/));
+    expect(screen.getAllByText(/saved/i)).toHaveLength(1);
+    expect(screen.queryByText(/Units saved/i)).not.toBeInTheDocument();
     expect(screen.queryByTestId('save-status-showFormCues')).not.toBeInTheDocument();
 
     // A switch moves the confirmation to its own row.
     await user.click(screen.getAllByRole('switch')[0]);
-    await waitFor(() => expect(live).toHaveTextContent('Show form cues saved'));
-    expect(screen.getByTestId('save-status-showFormCues')).toHaveTextContent('Saved');
+    await waitFor(() => expect(screen.getByTestId('save-status-showFormCues')).toHaveTextContent('Saved'));
+    expect(screen.getByTestId('save-region-showFormCues')).toHaveAttribute('role', 'status');
     expect(screen.queryByTestId('save-status-units')).not.toBeInTheDocument();
   });
 

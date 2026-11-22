@@ -37,7 +37,10 @@ export const JOURNEYS = [
     startPath: '/dashboard',
     maxSteps: 30,
     goal: () =>
-      "Log what you had for lunch today: search for at least one food and add it, then try to add a food you've eaten recently a faster way if the app offers one. Also find where you would scan a barcode (you can't actually use the camera; just find the entry point).",
+      // Not "lunch": sessions run at any hour, and a task that names a meal the
+      // clock disagrees with reported the app's (correct) time-of-day default
+      // as a bug in every session of the first week-review baseline.
+      "Log the meal you just ate (whichever meal it is right now): search for at least one food and add it, then try to add a food you've eaten recently a faster way if the app offers one. Also find where you would scan a barcode (you can't actually use the camera; just find the entry point).",
   },
   {
     id: 'check-progress',

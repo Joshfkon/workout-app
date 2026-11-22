@@ -1,9 +1,21 @@
 import {
   hasRecentLifting,
+  orderProgressTabs,
   parseProgressTabParam,
   resolveActiveProgressTab,
   resolveDefaultProgressTab,
 } from '../progressTabs';
+
+describe('orderProgressTabs', () => {
+  it('puts Body first and Strength last for someone who has not lifted', () => {
+    expect(orderProgressTabs(false)).toEqual(['body-composition', 'wellness', 'strength']);
+  });
+
+  it('keeps Strength first for a lifter, or while not known', () => {
+    expect(orderProgressTabs(true)).toEqual(['strength', 'body-composition', 'wellness']);
+    expect(orderProgressTabs(undefined)).toEqual(['strength', 'body-composition', 'wellness']);
+  });
+});
 
 const emptySummary = { lifts: [], insufficientData: 0 };
 // Shape only matters for the length check.

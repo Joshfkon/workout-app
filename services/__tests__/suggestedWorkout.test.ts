@@ -152,7 +152,7 @@ describe('deficit ranking', () => {
 
     expect(plan.exercises).toHaveLength(1);
     expect(plan.exercises[0].muscle).toBe('lateral_delts');
-    expect(plan.exercises[0].reason).toContain('11 sets below target this week');
+    expect(plan.exercises[0].reason).toMatch(/^Side Delts: \d+(\.\d)? of \d+(\.\d)? weekly sets done$/);
   });
 
   it('skips muscles already at or over target', () => {
@@ -185,7 +185,7 @@ describe('deficit ranking', () => {
       ],
     });
 
-    expect(plan.focus).toContain('Focus:');
+    expect(plan.focus).toContain('Today:');
     expect(plan.focus.toLowerCase()).toContain('side delts');
     expect(plan.focus.toLowerCase()).toContain('lats');
   });
@@ -683,7 +683,7 @@ describe('focus matches the picked exercises', () => {
       new Set(['calves', 'lateral_delts', 'triceps', 'quads'])
     );
     expect(plan.focus).toBe(
-      'Focus: calves, side delts, triceps and quads — most recovered, furthest behind target this week.'
+      "Today: calves, side delts, triceps and quads — rested, and furthest behind on this week's sets."
     );
   });
 
@@ -715,7 +715,7 @@ describe('focus matches the picked exercises', () => {
       muscles: [makeMuscle('calves', { targetSets: 14 }), makeMuscle('gastrocnemius'), makeMuscle('soleus'), makeMuscle('quads')],
       exercises: panelLibrary(),
     });
-    expect(plan.focus).toBe('Focus: calves and quads — most recovered, furthest behind target this week.');
+    expect(plan.focus).toBe("Today: calves and quads — rested, and furthest behind on this week's sets.");
   });
 });
 

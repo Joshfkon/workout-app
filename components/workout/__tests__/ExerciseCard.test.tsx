@@ -1106,6 +1106,50 @@ describe('ExerciseCard', () => {
       ).toBeInTheDocument();
     });
 
+    it('PANEL REPRO: when the lb grid rounds the load up, last session\'s reps are kept, not +1', () => {
+      // Last session 40 kg (88.2 lb) × 10, 9, 8 at 2 RIR. The engine's
+      // position match asks 40 kg × 11; the lb grid shows 90 lb, which is
+      // already heavier, so the prefill must be 90 × 10, not 90 × 11.
+      const prev = [
+        { weightKg: 40, reps: 10, rpe: 8 },
+        { weightKg: 40, reps: 9, rpe: 8 },
+        { weightKg: 40, reps: 8, rpe: 8 },
+      ];
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          isActive={true}
+          block={createMockBlock({ targetRepRange: [8, 12] as [number, number], targetSets: 3, targetWeightKg: 40 })}
+          previousSets={prev}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Weight: 90 lbs/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 10 reps/ })).toBeInTheDocument();
+      expect(screen.getAllByText(/rounded up to the nearest plate/).length).toBeGreaterThan(0);
+    });
+
+    it('still adds the rep when the load shows exactly as last time (kg user)', () => {
+      const prev = [
+        { weightKg: 40, reps: 10, rpe: 8 },
+        { weightKg: 40, reps: 9, rpe: 8 },
+        { weightKg: 40, reps: 8, rpe: 8 },
+      ];
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="kg"
+          isActive={true}
+          block={createMockBlock({ targetRepRange: [8, 12] as [number, number], targetSets: 3, targetWeightKg: 40 })}
+          previousSets={prev}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Weight: 40 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 11 reps/ })).toBeInTheDocument();
+    });
+
     it('snaps a kg-native previous-set weight onto the lb grid instead of showing the conversion', () => {
       render(
         <ExerciseCard
@@ -1167,7 +1211,7 @@ describe('ExerciseCard', () => {
       // No history and a target weight -> the plain source line is on the
       // strip, and the profile-estimate reason (which says the same thing in
       // other words) is not repeated next to it.
-      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/Starting guess/);
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting guess/);
       expect(screen.queryByText(/starting point estimated/)).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'How this suggestion works' }));
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
@@ -1198,7 +1242,25 @@ describe('ExerciseCard', () => {
     it('cold start (no history): the banner says the number is a profile estimate', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'Starting guess — pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust'
+      );
+    });
+
+    it('cold start from a profile estimate says what the guess rests on', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          coldStartSuggestion={{
+            weightKg: 30,
+            reason: 'starting point estimated from your training profile',
+            explanation: 'Based on typical strength for your experience level.',
+            estimateSource: 'strength_standards',
+          }}
+        />
+      );
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+        'First time on this lift — starting guess from typical strength for your experience and bodyweight; pick a weight'
       );
     });
 
@@ -1216,7 +1278,7 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'Starting guess from your Barbell Back Squat — pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting guess from your Barbell Back Squat; pick a weight you could lift ~12 times, then adjust'
       );
       // The prescribed number is unchanged by the explanation.
       expect(screen.getByTestId('suggestion-source').closest('p')).toHaveTextContent(
@@ -1458,6 +1520,34 @@ describe('ExerciseCard', () => {
       expect(note).toHaveTextContent('35 lbs ⇒ ~6 reps @ 2 RIR');
       expect(note).toHaveTextContent(/from your est\. max 44(\.\d+)? lbs/);
       expect(note).not.toHaveTextContent(/e1RM/);
+    });
+
+    it('PANEL REPRO: a weight far below the working weight leaves reps alone instead of "~50 reps"', async () => {
+      const user = setupUser();
+      // Last session 88.2 lbs (40 kg) × 10 @ 2 RIR ⇒ ~123.5 lb est. max. A
+      // beginner types 45 lbs: the curve answers ~50 reps @ 2 RIR, far past
+      // the range it is valid for.
+      const prevSet = { weightKg: 40, reps: 10, rpe: 8 };
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          block={createMockBlock({ targetRepRange: [8, 12] as [number, number], targetWeightKg: 40 })}
+          previousSets={[prevSet]}
+          exerciseHistory={{ lastWorkoutDate: weeksAgo(1), lastWorkoutSets: [prevSet], estimatedE1RM: 56, personalRecord: null, totalSessions: 6 }}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+      const before = screen.getByRole('button', { name: /Reps: \d+ reps/ }).getAttribute('aria-label');
+
+      await editWeight(user, /Weight: /, '45');
+      flushDebounce();
+
+      expect(screen.getByRole('button', { name: /Reps: \d+ reps/ }).getAttribute('aria-label')).toBe(before);
+      expect(screen.getByTestId('weight-edit-recompute-note')).toHaveTextContent(
+        '45 lbs is far below your working weight, so reps were left as they were'
+      );
     });
 
     it('note slot stays mounted at all times — toggling it must not move the steppers (layout stability)', async () => {
