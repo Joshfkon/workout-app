@@ -100,7 +100,22 @@ export async function observe(page) {
   } catch (e) {
     snapshot = `(snapshot failed: ${e.message})`;
   }
-  if (snapshot.length > SNAPSHOT_CHARS) snapshot = snapshot.slice(0, SNAPSHOT_CHARS) + '\n… (truncated)';
+  // Sheets and dialogs render at the end of the DOM, so a plain head-cut
+  // snapshot hides exactly the thing on top of the screen. Put an open
+  // dialog first; its refs resolve like the page's.
+  let dialog = '';
+  try {
+    const open = page.locator('[role="dialog"]:visible, [aria-modal="true"]:visible');
+    if (await open.count()) dialog = await open.last().ariaSnapshot({ mode: 'ai', timeout: 3000 });
+  } catch {
+    dialog = '';
+  }
+  if (dialog) {
+    const room = Math.max(0, SNAPSHOT_CHARS - dialog.length);
+    snapshot = `A sheet/dialog is open on top of the page; tap inside it (or close it) first:\n${dialog}\n\nPage behind it (covered while the sheet is open):\n${snapshot.length > room ? snapshot.slice(0, room) + '\n… (truncated)' : snapshot}`;
+  } else if (snapshot.length > SNAPSHOT_CHARS) {
+    snapshot = snapshot.slice(0, SNAPSHOT_CHARS) + '\n… (truncated)';
+  }
   const png = await page.screenshot({ type: 'jpeg', quality: 60 });
   return { url, snapshot, jpeg: png };
 }
