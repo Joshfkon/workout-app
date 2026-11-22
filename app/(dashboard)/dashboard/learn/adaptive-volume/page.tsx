@@ -3,48 +3,104 @@
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import Link from 'next/link';
-import { Card } from '@/components/ui/Card';
+import type { Icon as TablerIcon } from '@tabler/icons-react';
+import {
+  IconAlertOctagon,
+  IconAlertTriangle,
+  IconChartBar,
+  IconCheck,
+  IconChevronRight,
+  IconDna,
+  IconGauge,
+  IconHeart,
+  IconHourglass,
+  IconMeat,
+  IconMedal,
+  IconMoodNervous,
+  IconPill,
+  IconShieldCheck,
+  IconTarget,
+  IconTrendingUp,
+  IconX,
+} from '@tabler/icons-react';
+import {
+  ArticleCTA,
+  ArticleHeader,
+  ArticlePage,
+  ArticleSection,
+  BulletList,
+  Callout,
+  ContentCard,
+  IconBadge,
+  TermNote,
+} from '@/components/learn/ArticleKit';
 
-const metricsTracked = [
+function RelatedLink({ href, icon, title, subtitle }: { href: string; icon: TablerIcon; title: string; subtitle: string }) {
+  return (
+    <Link href={href} className="block">
+      <ContentCard className="transition-colors active:bg-fill">
+        <div className="flex items-center gap-3">
+          <IconBadge icon={icon} />
+          <div className="min-w-0 flex-1">
+            <p className="text-headline text-ink">{title}</p>
+            <p className="text-subhead text-ink-3">{subtitle}</p>
+          </div>
+          <IconChevronRight size={20} className="shrink-0 text-ink-3" aria-hidden="true" />
+        </div>
+      </ContentCard>
+    </Link>
+  );
+}
+
+const metricsTracked: Array<{ icon: TablerIcon; title: string; description: string; detail: string }> = [
   {
-    icon: '\uD83D\uDCC8',
-    title: 'Progression Rate',
-    description: 'Are you getting stronger week-over-week?',
+    icon: IconTrendingUp,
+    title: 'Progression rate',
+    description: 'Are you getting stronger week over week?',
     detail:
-      'If yes, you\'re recovering. If you\'re stalling or regressing, you may be exceeding your recovery capacity.',
+      "If yes, you're recovering. If you're stalling or regressing, you may be exceeding your recovery capacity.",
   },
   {
-    icon: '\uD83D\uDCAA',
-    title: 'RIR Drift',
+    icon: IconGauge,
+    title: 'RIR drift',
     description: 'Same weight feeling harder over time?',
     detail:
-      'If the same weight at the same reps feels significantly harder by week 3 than week 1, fatigue is accumulating faster than you\'re recovering.',
+      "If the same weight at the same reps feels much harder by week 3 than week 1, fatigue is building faster than you're recovering.",
   },
   {
-    icon: '\uD83C\uDFAF',
-    title: 'Form Quality',
+    icon: IconTarget,
+    title: 'Form quality',
     description: 'Is technique degrading?',
     detail:
-      'Your set feedback captures form quality. If you\'re progressively grinding out uglier reps, that\'s fatigue manifesting.',
+      "Your set feedback captures form quality. If you're grinding out uglier and uglier reps, that's fatigue showing.",
   },
   {
-    icon: '\u2764\uFE0F',
-    title: 'Recovery Scores',
+    icon: IconHeart,
+    title: 'Recovery scores',
     description: 'Does low recovery predict bad sessions?',
     detail:
-      'Your daily check-in recovery ratings correlate with performance. Strong correlation with consistently low recovery = volume may be too high.',
+      'Your daily check-in recovery ratings correlate with performance. A strong link with consistently low recovery means volume may be too high.',
   },
+];
+
+const recoveryFactors: Array<{ icon: TablerIcon; label: string }> = [
+  { icon: IconDna, label: 'Genetics - some people recover faster' },
+  { icon: IconMedal, label: 'Training age - beginners need less' },
+  { icon: IconMoodNervous, label: 'Life stress - work, sleep, relationships' },
+  { icon: IconMeat, label: 'Nutrition - protein, calories' },
+  { icon: IconHourglass, label: 'Age - recovery slows over time' },
+  { icon: IconPill, label: 'PED use - significantly higher capacity' },
 ];
 
 const phases = [
   {
     number: 1,
-    title: 'Establish Baseline',
+    title: 'Establish baseline',
     description: 'Train with evidence-based starting volumes for 3-4 weeks. We collect data.',
   },
   {
     number: 2,
-    title: 'Analyze Outcomes',
+    title: 'Analyze outcomes',
     description:
       'At the end of the mesocycle, we analyze progression, RIR drift, form quality, and recovery correlation.',
   },
@@ -52,376 +108,331 @@ const phases = [
     number: 3,
     title: 'Adjust',
     description:
-      'We determine if volume was too high, optimal, or too low for each muscle group. Then suggest specific adjustments.',
+      'We work out whether volume was too high, optimal, or too low for each muscle group, then suggest specific adjustments.',
   },
   {
     number: 4,
     title: 'Refine',
     description:
-      'Over multiple mesocycles, your personalized volume tolerance emerges. After 3-4 cycles, we have high confidence in YOUR optimal ranges.',
+      'Over multiple mesocycles, your personal volume tolerance emerges. After 3-4 cycles, we have high confidence in your optimal ranges.',
   },
 ];
 
-export default function AdaptiveVolumeArticle() {
-  useDocumentTitle('Adaptive Volume');
+const timeline = [
+  { when: 'Week 1', what: 'Start with evidence-based volumes' },
+  { when: 'Weeks 2-4', what: 'Train, log feedback, let data accumulate' },
+  { when: 'End of meso', what: 'Review analysis, see what worked' },
+  { when: 'Next meso', what: 'Apply adjustments, repeat' },
+];
+
+const signGroups: Array<{ icon: TablerIcon; iconClass: string; title: string; items: string[] }> = [
+  {
+    icon: IconAlertTriangle,
+    iconClass: 'text-status-warn',
+    title: 'Warning signs',
+    items: ['RIR drift starting to accumulate', 'Form slipping on later sets', 'Approaching your estimated MRV'],
+  },
+  {
+    icon: IconAlertOctagon,
+    iconClass: 'text-status-bad',
+    title: 'Alert signs',
+    items: ['Significant RIR drift (2+ points)', 'Form degradation multiple sessions', 'Exceeded estimated MRV'],
+  },
+];
+
+const tips: Array<{ icon: TablerIcon; iconClass: string; title: string; items: string[] }> = [
+  {
+    icon: IconCheck,
+    iconClass: 'text-status-ok',
+    title: 'Do',
+    items: [
+      'Log RIR and form honestly every set',
+      'Complete daily check-ins (especially recovery)',
+      'Run full 3-4 week mesocycles before adjusting',
+      'Trust the process - it takes a few cycles',
+    ],
+  },
+  {
+    icon: IconX,
+    iconClass: 'text-status-bad',
+    title: "Don't",
+    items: [
+      'Change volume mid-mesocycle based on feelings',
+      'Ignore fatigue warnings',
+      'Skip logging for some sessions',
+      'Expect perfect answers in week 1',
+    ],
+  },
+];
+
+function IconList({ icon: Icon, iconClass, items }: { icon: TablerIcon; iconClass: string; items: string[] }) {
   return (
-    <div className="max-w-3xl mx-auto pb-12">
-      {/* Back Navigation */}
-      <Link
-        href="/dashboard/learn"
-        className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-8 transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to Learn & Science
-      </Link>
+    <ul className="space-y-2 text-subhead text-ink-2">
+      {items.map((item) => (
+        <li key={item} className="flex items-start gap-2">
+          <Icon size={18} className={`mt-0.5 shrink-0 ${iconClass}`} aria-hidden="true" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-4xl">{'\uD83D\uDCCA'}</span>
-          <span className="px-3 py-1 bg-action/10 text-action rounded-full text-xs font-medium">
-            Training Science
-          </span>
-        </div>
-        <h1 className="text-3xl font-bold text-ink mb-3">
-          How We Learn Your Recovery Capacity
-        </h1>
-        <p className="text-lg text-ink-2">
-          Personalized volume recommendations based on YOUR data, not population averages.
+export default function AdaptiveVolumeArticle() {
+  useDocumentTitle('Adaptive volume');
+  return (
+    <ArticlePage>
+      <ArticleHeader
+        icon={IconChartBar}
+        tag="Training science"
+        title="How we learn your recovery capacity"
+        subtitle="Personalized volume recommendations based on your data, not population averages."
+      />
+
+      <ArticleSection title="The volume problem">
+        <p className="text-body text-ink-2">Every fitness influencer has an opinion on how many sets you should do:</p>
+        <ContentCard>
+          <BulletList
+            items={[
+              '“10-20 sets per muscle per week”',
+              '“Do more until you stop progressing”',
+              '“Less is more - just train harder”',
+            ]}
+          />
+        </ContentCard>
+        <Callout icon={IconAlertTriangle} title="The problem?">
+          <p className="text-ink-2">
+            Individual variation is massive. Research shows a <strong className="text-ink">3x difference</strong>{' '}
+            between low and high responders. One person&apos;s optimal is another person&apos;s overtraining.
+          </p>
+        </Callout>
+      </ArticleSection>
+
+      <ArticleSection title="Why generic recommendations fail">
+        <p className="text-body text-ink-2">
+          Standard volume recommendations come from research averages. But you&apos;re not average - you&apos;re
+          you.
         </p>
-      </div>
-
-      {/* Article Content */}
-      <article className="space-y-8 text-ink-2">
-        {/* The Volume Problem */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">The Volume Problem</h2>
-          <p className="mb-4">Every fitness influencer has an opinion on how many sets you should do:</p>
-          <ul className="list-disc list-inside space-y-2 text-ink-2 ml-4 mb-4">
-            <li>&quot;10-20 sets per muscle per week&quot;</li>
-            <li>&quot;Do more until you stop progressing&quot;</li>
-            <li>&quot;Less is more - just train harder&quot;</li>
-          </ul>
-          <Card className="p-4 bg-status-warn/10 border-status-warn/20">
-            <p className="text-status-warn font-medium mb-2">The problem?</p>
-            <p className="text-sm text-ink-2">
-              Individual variation is massive. Research shows a <strong className="text-ink">3x difference</strong> between
-              low and high responders. One person&apos;s optimal is another person&apos;s overtraining.
-            </p>
-          </Card>
-        </section>
-
-        {/* Why Generic Recommendations Fail */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">Why Generic Recommendations Fail</h2>
-          <p className="mb-4 text-ink-2">
-            Standard volume recommendations come from research averages. But you&apos;re not average - you&apos;re you.
-          </p>
-          <Card className="p-4">
-            <h4 className="font-semibold text-ink mb-3">Factors that affect YOUR recovery:</h4>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="flex items-center gap-2">
-                <span>{'\uD83E\uDDEC'}</span>
-                <span className="text-ink-2">Genetics - Some people recover faster</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>{'\uD83C\uDFC5'}</span>
-                <span className="text-ink-2">Training age - Beginners need less</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>{'\uD83D\uDE13'}</span>
-                <span className="text-ink-2">Life stress - Work, sleep, relationships</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>{'\uD83C\uDF57'}</span>
-                <span className="text-ink-2">Nutrition - Protein, calories</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>{'\u23F3'}</span>
-                <span className="text-ink-2">Age - Recovery slows over time</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>{'\uD83D\uDC8A'}</span>
-                <span className="text-ink-2">PED use - Significantly higher capacity</span>
-              </div>
-            </div>
-          </Card>
-          <p className="text-sm text-ink-3 mt-4">
-            A study might find &quot;16 sets/week is optimal for quad growth&quot; - but that&apos;s the average.
-            Some subjects grew best at 12 sets, others at 22.
-          </p>
-        </section>
-
-        {/* Our Approach */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">Our Approach: Let Your Body Tell Us</h2>
-          <p className="mb-6 text-ink-2">
-            Instead of guessing, we track what actually happens when you train at different volumes.
-          </p>
-
-          <h3 className="text-lg font-semibold text-ink mb-4">What We Monitor</h3>
-          <div className="space-y-4">
-            {metricsTracked.map((metric, idx) => (
-              <Card key={idx} className="p-4">
-                <div className="flex items-start gap-4">
-                  <div className="text-2xl shrink-0">{metric.icon}</div>
-                  <div>
-                    <h4 className="font-semibold text-ink">{metric.title}</h4>
-                    <p className="text-sm text-ink-3 mb-2">{metric.description}</p>
-                    <p className="text-sm text-ink-2">{metric.detail}</p>
-                  </div>
+        <ContentCard className="space-y-3">
+          <h3 className="text-headline text-ink">Factors that affect your recovery</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {recoveryFactors.map((f) => {
+              const Icon = f.icon;
+              return (
+                <div key={f.label} className="flex items-center gap-2">
+                  <Icon size={20} className="shrink-0 text-action" aria-hidden="true" />
+                  <span className="text-body text-ink-2">{f.label}</span>
                 </div>
-              </Card>
-            ))}
+              );
+            })}
           </div>
-        </section>
+        </ContentCard>
+        <p className="text-subhead text-ink-3">
+          A study might find &quot;16 sets/week is optimal for quad growth&quot; - but that&apos;s the average.
+          Some subjects grew best at 12 sets, others at 22.
+        </p>
+      </ArticleSection>
 
-        {/* RIR Drift Deep Dive */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">Understanding RIR Drift</h2>
-          <p className="mb-4 text-ink-2">
-            RIR Drift is subtle but important. It&apos;s a leading indicator of overreaching.
-          </p>
-          <Card className="p-4 bg-fill/50">
-            <p className="text-sm text-ink-3 mb-3">Example:</p>
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="px-2 py-1 bg-status-ok/20 text-status-ok text-xs rounded">Week 1</span>
-                <span className="text-ink-2">185 lbs × 8 at RIR 2 (felt like 2 left in tank)</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="px-2 py-1 bg-status-bad/20 text-status-bad text-xs rounded">Week 3</span>
-                <span className="text-ink-2">185 lbs × 8 at RIR 0 (barely got it)</span>
-              </div>
-            </div>
-            <p className="text-sm text-ink-2 mt-3">
-              Same performance on paper, but you&apos;re more fatigued. Volume is outpacing recovery.
-            </p>
-          </Card>
-        </section>
-
-        {/* How It Works */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">How It Works</h2>
-          <div className="space-y-4">
-            {phases.map((phase) => (
-              <div key={phase.number} className="flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-action/20 flex items-center justify-center shrink-0">
-                  <span className="text-action font-semibold">{phase.number}</span>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-ink">{phase.title}</h4>
-                  <p className="text-sm text-ink-2">{phase.description}</p>
+      <ArticleSection title="Our approach: let your body tell us">
+        <p className="text-body text-ink-2">
+          Instead of guessing, we track what actually happens when you train at different volumes.
+        </p>
+        <TermNote term="RIR" fullName="reps in reserve" />
+        <h3 className="text-headline text-ink">What we monitor</h3>
+        <div className="space-y-3">
+          {metricsTracked.map((metric) => (
+            <ContentCard key={metric.title}>
+              <div className="flex items-start gap-3">
+                <IconBadge icon={metric.icon} />
+                <div className="min-w-0 space-y-1">
+                  <h4 className="text-headline text-ink">{metric.title}</h4>
+                  <p className="text-subhead text-ink-3">{metric.description}</p>
+                  <p className="text-subhead text-ink-2">{metric.detail}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-
-        {/* The Math */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">The Math Behind It</h2>
-          <p className="mb-4 text-ink-2">We track two key metrics per muscle group:</p>
-
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <Card className="p-4 bg-status-ok/5 border-status-ok/20">
-              <h4 className="font-semibold text-status-ok mb-2">MEV</h4>
-              <p className="text-sm text-ink-2">
-                Minimum Effective Volume - the least amount of work needed to maintain or slowly progress.
-              </p>
-            </Card>
-            <Card className="p-4 bg-status-bad/5 border-status-bad/20">
-              <h4 className="font-semibold text-status-bad mb-2">MRV</h4>
-              <p className="text-sm text-ink-2">
-                Maximum Recoverable Volume - the most work you can do while still recovering.
-              </p>
-            </Card>
-          </div>
-
-          <Card className="p-4 bg-fill/50">
-            <pre className="text-xs text-ink-2 font-mono">
-{`|----MEV----[====OPTIMAL ZONE====]----MRV----|
-              You want to be here`}
-            </pre>
-          </Card>
-
-          <p className="text-sm text-ink-2 mt-4">
-            We start with research-based estimates, then adjust based on YOUR data:
-          </p>
-          <ul className="list-disc list-inside space-y-1 text-sm text-ink-2 mt-2 ml-4">
-            <li>Stalling/regressing? MRV estimate comes down.</li>
-            <li>Crushing it with gas in the tank? MRV estimate goes up.</li>
-          </ul>
-        </section>
-
-        {/* Real-Time Monitoring */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">Real-Time Fatigue Monitoring</h2>
-          <p className="mb-4 text-ink-2">
-            We don&apos;t wait until you&apos;re overtrained. Mid-mesocycle, we watch for warning signs:
-          </p>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card className="p-4 bg-status-warn/10 border-status-warn/20">
-              <h4 className="font-semibold text-status-warn mb-2">{'\uD83D\uDFE1'} Warning Signs</h4>
-              <ul className="space-y-1 text-sm text-ink-2">
-                <li>• RIR drift starting to accumulate</li>
-                <li>• Form slipping on later sets</li>
-                <li>• Approaching your estimated MRV</li>
-              </ul>
-            </Card>
-            <Card className="p-4 bg-status-bad/10 border-status-bad/20">
-              <h4 className="font-semibold text-status-bad mb-2">{'\uD83D\uDD34'} Alert Signs</h4>
-              <ul className="space-y-1 text-sm text-ink-2">
-                <li>• Significant RIR drift (2+ points)</li>
-                <li>• Form degradation multiple sessions</li>
-                <li>• Exceeded estimated MRV</li>
-              </ul>
-            </Card>
-          </div>
-
-          <p className="text-sm text-ink-3 mt-4">
-            When we detect these patterns, you&apos;ll get a heads-up before it becomes a problem.
-          </p>
-        </section>
-
-        {/* Enhanced Athletes */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">For Enhanced Athletes</h2>
-          <Card className="p-4 bg-action/10 border-action/20">
-            <p className="text-ink-2 mb-3">
-              If you&apos;re using PEDs, your recovery capacity is significantly higher. The system accounts for this:
-            </p>
-            <ul className="space-y-2 text-sm text-ink-2">
-              <li className="flex items-start gap-2">
-                <span className="text-action">{'\u2713'}</span>
-                <span>Volume ceiling (MRV) raised ~35&ndash;40%, starting volumes ~10%</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-action">{'\u2713'}</span>
-                <span>Faster weekly volume progression toward the raised ceiling</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-action">{'\u2713'}</span>
-                <span>Recognition that &quot;normal&quot; overreaching signals may not apply</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-action">{'\u2713'}</span>
-                <span>Joint-stress limits stay unchanged &mdash; tendons adapt slower than muscle, regardless of enhancement</span>
-              </li>
-            </ul>
-            <p className="text-sm text-ink-3 mt-3">
-              Set your status in profile settings. The algorithm adjusts accordingly.
-            </p>
-          </Card>
-        </section>
-
-        {/* What This Means */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">What This Means For You</h2>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 bg-fill rounded text-xs text-ink-2">Week 1</span>
-              <span className="text-ink-2">Start with evidence-based volumes</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 bg-fill rounded text-xs text-ink-2">Weeks 2-4</span>
-              <span className="text-ink-2">Train, log feedback, let data accumulate</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 bg-fill rounded text-xs text-ink-2">End of meso</span>
-              <span className="text-ink-2">Review analysis, see what worked</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 bg-fill rounded text-xs text-ink-2">Next meso</span>
-              <span className="text-ink-2">Apply adjustments, repeat</span>
-            </div>
-          </div>
-
-          <Card className="p-4 bg-status-ok/10 border-status-ok/20 mt-6">
-            <p className="font-semibold text-status-ok mb-2">After 2-3 mesocycles, you&apos;ll know:</p>
-            <ul className="space-y-1 text-sm text-ink-2">
-              <li>• Exactly how much chest volume you thrive on</li>
-              <li>• Whether your back recovers faster or slower than average</li>
-              <li>• Which muscles can handle more punishment</li>
-            </ul>
-            <p className="text-sm text-status-ok mt-3 font-medium">
-              No more guessing. No more cookie-cutter programs. Your volume, optimized for YOUR recovery.
-            </p>
-          </Card>
-        </section>
-
-        {/* Tips */}
-        <section>
-          <h2 className="text-xl font-bold text-ink mb-4">Tips for Best Results</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card className="p-4 bg-status-ok/5 border-status-ok/20">
-              <h4 className="font-semibold text-status-ok mb-2">{'\u2713'} Do</h4>
-              <ul className="space-y-2 text-sm text-ink-2">
-                <li>• Log RIR and form honestly every set</li>
-                <li>• Complete daily check-ins (especially recovery)</li>
-                <li>• Run full 3-4 week mesocycles before adjusting</li>
-                <li>• Trust the process - it takes a few cycles</li>
-              </ul>
-            </Card>
-            <Card className="p-4 bg-status-bad/5 border-status-bad/20">
-              <h4 className="font-semibold text-status-bad mb-2">{'\u2717'} Don&apos;t</h4>
-              <ul className="space-y-2 text-sm text-ink-2">
-                <li>• Change volume mid-mesocycle based on feelings</li>
-                <li>• Ignore fatigue warnings</li>
-                <li>• Skip logging for some sessions</li>
-                <li>• Expect perfect answers in week 1</li>
-              </ul>
-            </Card>
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="pt-4">
-          <Card className="bg-action/10 p-6 text-center border-action/20">
-            <h3 className="text-lg font-bold text-ink mb-2">See Your Volume Profile</h3>
-            <p className="text-sm text-ink-2 mb-4">
-              Check your current volume tolerance estimates and this week&apos;s training volume.
-            </p>
-            <Link href="/dashboard/volume">
-              <button className="px-6 py-2 bg-action hover:bg-action text-on-action font-semibold rounded-lg transition-colors">
-                View Volume Dashboard
-              </button>
-            </Link>
-          </Card>
-        </section>
-      </article>
-
-      {/* Related Articles */}
-      <div className="mt-12 pt-8 border-t border-sep">
-        <h3 className="text-lg font-semibold text-ink mb-4">Related Articles</h3>
-        <div className="grid md:grid-cols-2 gap-4">
-          <Link href="/dashboard/learn/injury-prevention">
-            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{'\uD83D\uDEE1\uFE0F'}</span>
-                <div>
-                  <p className="font-medium text-ink">Smart Injury Prevention</p>
-                  <p className="text-xs text-ink-3">Volume affects injury risk</p>
-                </div>
-              </div>
-            </Card>
-          </Link>
-          <Link href="/dashboard/learn/progressive-overload">
-            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{'\uD83D\uDCC8'}</span>
-                <div>
-                  <p className="font-medium text-ink">Progressive Overload</p>
-                  <p className="text-xs text-ink-3">How we track progression</p>
-                </div>
-              </div>
-            </Card>
-          </Link>
+            </ContentCard>
+          ))}
         </div>
-      </div>
-    </div>
+      </ArticleSection>
+
+      <ArticleSection title="Understanding RIR drift">
+        <p className="text-body text-ink-2">
+          RIR drift is subtle but important. It&apos;s an early sign of overreaching.
+        </p>
+        <ContentCard className="space-y-3">
+          <p className="text-subhead text-ink-3">Example:</p>
+          <div className="space-y-2">
+            {[
+              { week: 'Week 1', text: '185 lbs × 8 at RIR 2 (felt like 2 left in tank)' },
+              { week: 'Week 3', text: '185 lbs × 8 at RIR 0 (barely got it)' },
+            ].map((row) => (
+              <div key={row.week} className="flex items-center gap-3">
+                <span className="shrink-0 rounded-lg bg-fill px-2 py-1 text-caption text-ink-2">{row.week}</span>
+                <span className="text-body text-ink-2">{row.text}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-subhead text-ink-2">
+            Same performance on paper, but you&apos;re more fatigued. Volume is outpacing recovery.
+          </p>
+        </ContentCard>
+      </ArticleSection>
+
+      <ArticleSection title="How it works">
+        <ContentCard className="space-y-4">
+          {phases.map((phase) => (
+            <div key={phase.number} className="flex gap-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-action-tint text-subhead font-semibold text-action">
+                {phase.number}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-headline text-ink">{phase.title}</h3>
+                <p className="text-subhead text-ink-2">{phase.description}</p>
+              </div>
+            </div>
+          ))}
+        </ContentCard>
+      </ArticleSection>
+
+      <ArticleSection title="The math behind it">
+        <p className="text-body text-ink-2">We track two key numbers per muscle group:</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <ContentCard className="space-y-1">
+            <h3 className="text-headline text-ink">MEV</h3>
+            <p className="text-subhead text-ink-2">
+              Minimum effective volume: the least work needed to maintain or slowly progress.
+            </p>
+          </ContentCard>
+          <ContentCard className="space-y-1">
+            <h3 className="text-headline text-ink">MRV</h3>
+            <p className="text-subhead text-ink-2">
+              Maximum recoverable volume: the most work you can do while still recovering.
+            </p>
+          </ContentCard>
+        </div>
+
+        <ContentCard className="space-y-2">
+          <div className="flex h-8 overflow-hidden rounded-lg bg-fill" aria-hidden="true">
+            <div className="w-1/4" />
+            <div className="flex flex-1 items-center justify-center bg-action-tint text-caption font-medium text-action">
+              Optimal zone
+            </div>
+            <div className="w-1/4" />
+          </div>
+          <div className="flex justify-between text-caption text-ink-3">
+            <span>MEV</span>
+            <span className="text-action">You want to be here</span>
+            <span>MRV</span>
+          </div>
+        </ContentCard>
+
+        <p className="text-body text-ink-2">We start with research-based estimates, then adjust based on your data:</p>
+        <BulletList
+          items={['Stalling or regressing? MRV estimate comes down.', 'Crushing it with gas in the tank? MRV estimate goes up.']}
+        />
+      </ArticleSection>
+
+      <ArticleSection title="Real-time fatigue monitoring">
+        <p className="text-body text-ink-2">
+          We don&apos;t wait until you&apos;re overtrained. Mid-mesocycle, we watch for warning signs:
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {signGroups.map((group) => (
+            <ContentCard key={group.title} className="space-y-2">
+              <h3 className="text-headline text-ink">{group.title}</h3>
+              <IconList icon={group.icon} iconClass={group.iconClass} items={group.items} />
+            </ContentCard>
+          ))}
+        </div>
+        <p className="text-subhead text-ink-3">
+          When we spot these patterns, you&apos;ll get a heads-up before it becomes a problem.
+        </p>
+      </ArticleSection>
+
+      <ArticleSection title="For enhanced athletes">
+        <Callout>
+          <p className="text-ink-2">
+            If you&apos;re using PEDs, your recovery capacity is significantly higher. The system accounts for
+            this:
+          </p>
+          <ul className="space-y-2 pt-1 text-ink-2">
+            {[
+              'Volume ceiling (MRV) raised ~35–40%, starting volumes ~10%',
+              'Faster weekly volume progression toward the raised ceiling',
+              'Recognition that “normal” overreaching signals may not apply',
+              'Joint-stress limits stay unchanged — tendons adapt slower than muscle, regardless of enhancement',
+            ].map((t) => (
+              <li key={t} className="flex items-start gap-2">
+                <IconCheck size={18} className="mt-0.5 shrink-0 text-action" aria-hidden="true" />
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="pt-1 text-subhead text-ink-3">
+            Set your status in profile settings. The algorithm adjusts accordingly.
+          </p>
+        </Callout>
+      </ArticleSection>
+
+      <ArticleSection title="What this means for you">
+        <ContentCard className="p-0">
+          <div className="divide-y divide-sep">
+            {timeline.map((row) => (
+              <div key={row.when} className="flex items-center gap-3 px-4 py-3">
+                <span className="w-24 shrink-0 text-subhead font-medium text-ink">{row.when}</span>
+                <span className="min-w-0 text-body text-ink-2">{row.what}</span>
+              </div>
+            ))}
+          </div>
+        </ContentCard>
+        <Callout title="After 2-3 mesocycles, you'll know:">
+          <BulletList
+            items={[
+              'Exactly how much chest volume you thrive on',
+              'Whether your back recovers faster or slower than average',
+              'Which muscles can handle more punishment',
+            ]}
+          />
+          <p className="pt-1 font-medium text-ink">
+            No more guessing. No more cookie-cutter programs. Your volume, tuned to your recovery.
+          </p>
+        </Callout>
+      </ArticleSection>
+
+      <ArticleSection title="Tips for best results">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {tips.map((group) => (
+            <ContentCard key={group.title} className="space-y-2">
+              <h3 className="text-headline text-ink">{group.title}</h3>
+              <IconList icon={group.icon} iconClass={group.iconClass} items={group.items} />
+            </ContentCard>
+          ))}
+        </div>
+      </ArticleSection>
+
+      <ArticleCTA
+        title="See your volume profile"
+        body="Check your current volume tolerance estimates and this week's training volume."
+        href="/dashboard/volume"
+        label="View volume dashboard"
+      />
+
+      <ArticleSection title="Related articles">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <RelatedLink
+            href="/dashboard/learn/injury-prevention"
+            icon={IconShieldCheck}
+            title="Smart injury prevention"
+            subtitle="Volume affects injury risk"
+          />
+          <RelatedLink
+            href="/dashboard/learn/progressive-overload"
+            icon={IconTrendingUp}
+            title="Progressive overload"
+            subtitle="How we track progression"
+          />
+        </div>
+      </ArticleSection>
+    </ArticlePage>
   );
 }
