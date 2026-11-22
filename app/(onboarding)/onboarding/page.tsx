@@ -1,10 +1,10 @@
 'use client';
 
-import { IconApple, IconBarbell, IconChartLine, IconRuler2, IconSparkles, IconWorld } from '@tabler/icons-react';
+import { IconApple, IconBarbell, IconChartLine, IconCheck, IconRuler2, IconSparkles, IconWorld } from '@tabler/icons-react';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select, ExplainedTerm } from '@/components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, ExplainedTerm } from '@/components/ui';
 import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
@@ -54,9 +54,22 @@ export default function OnboardingBodyCompPage() {
   
   // Step state: 'units' -> 'body-comp' -> 'goal'
   const [step, setStep] = useState<'units' | 'body-comp' | 'goal'>('units');
+  // The highlighted unit IS the selection: Continue saves whatever is shown
+  // as picked, no extra tap needed. It starts from the stored preference
+  // (default Imperial) and follows it if that loads late, until the user
+  // picks one themselves.
   const [selectedUnits, setSelectedUnits] = useState<WeightUnit>(preferences.units || 'lb');
+  const unitsTouched = useRef(false);
+  useEffect(() => {
+    if (!unitsTouched.current && preferences.units) setSelectedUnits(preferences.units);
+  }, [preferences.units]);
+  const pickUnits = (u: WeightUnit) => {
+    unitsTouched.current = true;
+    setSelectedUnits(u);
+  };
+  const [isSavingUnits, setIsSavingUnits] = useState(false);
   const units = selectedUnits;
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [existingDexa, setExistingDexa] = useState<{
     weight_kg: number;
@@ -66,7 +79,9 @@ export default function OnboardingBodyCompPage() {
   } | null>(null);
   
   // Form state - stored in display units
-  const [sex, setSex] = useState<'male' | 'female'>('male');
+  // No preselection: a required, neutral choice (restored from the profile
+  // when re-entering onboarding).
+  const [sex, setSex] = useState<'male' | 'female' | null>(null);
   const [heightDisplay, setHeightDisplay] = useState<string>('');
   // For imperial: feet and inches
   const [heightFeet, setHeightFeet] = useState<string>('');
@@ -99,15 +114,24 @@ export default function OnboardingBodyCompPage() {
   
   // Save unit preference and proceed
   const handleUnitsConfirm = async () => {
-    await updatePreference('units', selectedUnits);
-    
-    // Track progress
-    const supabase = createUntypedClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await updateOnboardingStep(supabase, user.id, 'units');
+    if (isSavingUnits) return;
+    setIsSavingUnits(true);
+    try {
+      await updatePreference('units', selectedUnits);
+
+      // Track progress
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await updateOnboardingStep(supabase, user.id, 'units');
+      }
+    } catch (err) {
+      // Progress tracking is best-effort; the unit is already applied locally.
+      console.error('Error saving units step:', err);
+    } finally {
+      setIsSavingUnits(false);
     }
-    
+
     setStep('body-comp');
   };
   
@@ -198,7 +222,7 @@ export default function OnboardingBodyCompPage() {
     const weight = useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg();
     const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
     
-    if (height > 0 && weight > 0 && bf > 0 && bf < 100) {
+    if (sex && height > 0 && weight > 0 && bf > 0 && bf < 100) {
       const comp = calculateBodyComposition(weight, bf, height);
       setBodyComp({
         leanMassKg: comp.leanMassKg,
@@ -224,10 +248,19 @@ export default function OnboardingBodyCompPage() {
     }
   };
   
+  // Synchronous double-tap guard (as on /register): two taps land before the
+  // isLoading re-render disables the button, and each would insert a
+  // coaching session. The ref flips in the same tick.
+  const goalSubmittingRef = useRef(false);
+
   const handleContinue = async () => {
-    if (!goal) return;
+    if (!goal || !sex || goalSubmittingRef.current) return;
+    goalSubmittingRef.current = true;
     setIsLoading(true);
-    
+    // On success we navigate away: stay busy until the route changes rather
+    // than re-enabling Continue under the user's finger.
+    let navigating = false;
+
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -283,10 +316,14 @@ export default function OnboardingBodyCompPage() {
       
       // Navigate to benchmark selection with session ID
       router.push(`/onboarding/benchmarks?session=${session.id}`);
+      navigating = true;
     } catch (err) {
       console.error('Error creating coaching session:', err);
     } finally {
-      setIsLoading(false);
+      if (!navigating) {
+        goalSubmittingRef.current = false;
+        setIsLoading(false);
+      }
     }
   };
   
@@ -297,6 +334,7 @@ export default function OnboardingBodyCompPage() {
   // Why Continue is disabled, in words (a dimmed button alone reads as broken).
   const missingBodyComp: string[] = [];
   if (!canContinue) {
+    if (!sex) missingBodyComp.push('sex (Female or Male)');
     if (!(getHeightCm() > 0)) missingBodyComp.push('height');
     if (!(useDexa && existingDexa) && !(getWeightKg() > 0)) missingBodyComp.push('weight');
     const bfValue = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
@@ -362,36 +400,41 @@ export default function OnboardingBodyCompPage() {
         
         <Card>
           <CardContent className="p-6">
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setSelectedUnits('lb')}
-                className={`p-6 rounded-xl border-2 transition-all ${
-                  selectedUnits === 'lb'
-                    ? 'border-action bg-action/10'
-                    : 'border-sep hover:border-sep bg-fill/50'
-                }`}
-              >
-                <div className="text-center">
-                  <IconRuler2 size={36} className="mx-auto mb-2 text-action" aria-hidden="true" />
-                  <div className="text-title font-bold text-ink">Imperial</div>
-                  <div className="text-body text-ink-2 mt-1">lbs, inches</div>
-                </div>
-              </button>
-              
-              <button
-                onClick={() => setSelectedUnits('kg')}
-                className={`p-6 rounded-xl border-2 transition-all ${
-                  selectedUnits === 'kg'
-                    ? 'border-action bg-action/10'
-                    : 'border-sep hover:border-sep bg-fill/50'
-                }`}
-              >
-                <div className="text-center">
-                  <IconWorld size={36} className="mx-auto mb-2 text-action" aria-hidden="true" />
-                  <div className="text-title font-bold text-ink">Metric</div>
-                  <div className="text-body text-ink-2 mt-1">kg, cm</div>
-                </div>
-              </button>
+            <div className="grid grid-cols-2 gap-4" role="radiogroup" aria-label="Units">
+              {([
+                { value: 'lb' as const, title: 'Imperial', detail: 'lb & inches', Icon: IconRuler2 },
+                { value: 'kg' as const, title: 'Metric', detail: 'kg & cm', Icon: IconWorld },
+              ]).map(({ value, title, detail, Icon }) => {
+                const checked = selectedUnits === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    aria-label={`${title} (${detail})`}
+                    data-testid={`units-option-${value}`}
+                    onClick={() => pickUnits(value)}
+                    className={`relative p-6 rounded-xl border-2 transition-all ${
+                      checked ? 'border-action bg-action/10' : 'border-sep hover:border-sep bg-fill/50'
+                    }`}
+                  >
+                    {checked && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-action text-on-action flex items-center justify-center"
+                      >
+                        <IconCheck size={13} stroke={3} />
+                      </span>
+                    )}
+                    <div className="text-center">
+                      <Icon size={36} className="mx-auto mb-2 text-action" aria-hidden="true" />
+                      <div className="text-title font-bold text-ink">{title}</div>
+                      <div className="text-body text-ink-2 mt-1">{detail}</div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             
             <p className="text-caption text-ink-3 text-center mt-4">
@@ -400,9 +443,16 @@ export default function OnboardingBodyCompPage() {
           </CardContent>
         </Card>
         
-        <Button onClick={handleUnitsConfirm} className="w-full" size="lg">
-          Continue
-          <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <Button
+          onClick={handleUnitsConfirm}
+          className="w-full"
+          size="lg"
+          isLoading={isSavingUnits}
+          aria-busy={isSavingUnits}
+          data-testid="units-continue"
+        >
+          Continue with {selectedUnits === 'lb' ? 'Imperial' : 'Metric'}
+          <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
         </Button>
@@ -502,16 +552,35 @@ export default function OnboardingBodyCompPage() {
             <CardTitle>Body composition</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Select
-              label="Sex"
-              value={sex}
-              onChange={(e) => setSex(e.target.value as 'male' | 'female')}
-              options={[
-                { value: 'male', label: 'Male' },
-                { value: 'female', label: 'Female' },
-              ]}
-              hint="Used for strength percentile comparisons"
-            />
+            <div>
+              <p id="sex-label" className="block text-body font-medium text-ink mb-2">Sex</p>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="sex-label">
+                {([
+                  { value: 'female' as const, label: 'Female' },
+                  { value: 'male' as const, label: 'Male' },
+                ]).map((option) => {
+                  const checked = sex === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={checked}
+                      data-testid={`sex-option-${option.value}`}
+                      onClick={() => setSex(option.value)}
+                      className={`min-h-[44px] rounded-input border-2 text-body font-medium transition-colors ${
+                        checked ? 'border-action bg-action/10 text-ink' : 'border-sep bg-fill/50 text-ink-2 hover:text-ink'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-caption text-ink-3 mt-1">
+                Used for body-fat references and strength comparisons.
+              </p>
+            </div>
             
             {units === 'lb' ? (
               <div>
@@ -602,12 +671,19 @@ export default function OnboardingBodyCompPage() {
                     size="sm"
                     onClick={() => setShowBodyFatGuide(!showBodyFatGuide)}
                     className="mb-1"
+                    // The guide's pictures and typical values depend on sex.
+                    disabled={!sex}
                   >
                     {showBodyFatGuide ? 'Hide guide' : 'Visual guide'}
                   </Button>
                 )}
               </div>
-              {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && (
+              {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && !sex && (
+                <p className="mt-2 text-caption text-ink-2" data-testid="body-fat-needs-sex">
+                  Pick your sex above to use the visual guide or a typical estimate.
+                </p>
+              )}
+              {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && sex && (
                 <button
                   type="button"
                   className="mt-2 text-subhead font-medium text-action"
@@ -625,7 +701,7 @@ export default function OnboardingBodyCompPage() {
               )}
               
               {/* Body fat visual guide */}
-              {!useDexa && showBodyFatGuide && (
+              {!useDexa && showBodyFatGuide && sex && (
                 <div className="mt-3 p-4 bg-fill/50 rounded-lg border border-sep">
                   <p className="text-body font-medium text-ink mb-3">
                     Tap a body fat level that looks closest to you ({sex === 'male' ? 'Male' : 'Female'}):
