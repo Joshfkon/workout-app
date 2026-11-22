@@ -714,3 +714,20 @@ Rules:
 Open findings live in `docs/SIMULATION_FINDING_*.md`. Known defects are pinned
 with `it.failing` in `simulation/__tests__/scenarios.test.ts`, so they go red
 when the engine is fixed.
+
+## Synthetic User Panel (`ux-panel/`)
+
+LLM personas drive the real app at phone width against a LOCAL Supabase,
+write free-text reviews, and get scored with semantic similarity rating
+(arXiv 2510.08338). The output is a usability-study-style readout with
+ranked issues, plus score distributions for comparing builds. See
+`ux-panel/README.md`.
+
+- Never point it at production: it refuses non-local Supabase URLs, and every
+  account it creates is `@synthetic-panel.test` + `user_metadata.synthetic_panel`.
+- Real runs spend Anthropic credit and print an estimate first;
+  `--dry-run --fake-llm` is free.
+- Scores are relative (build vs. build), never predicted App Store ratings.
+- `ux-panel/local-db/setup.sh` exists because `supabase/migrations` does not
+  replay on an empty DB (two stub files, two shadowed CREATE TABLEs); see
+  `ux-panel/local-db/fixups.sql`.
