@@ -14,6 +14,13 @@ import { BottomSheet } from './BottomSheet';
 export interface EffortCheck {
   /** Predicted reps-in-reserve at the entered weight × reps. */
   predictedRir: number;
+  /**
+   * Set when the entered reps fall well short of the target effort: the rep
+   * count at this load that would leave `targetRir` in reserve (capped at the
+   * top of the range).
+   */
+  repsForTarget?: number;
+  targetRir?: number;
   /** Entered load, display-formatted (e.g. "140 lbs", "BW +25 lbs"). */
   weightLabel: string;
   /** Entered reps. */

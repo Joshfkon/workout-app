@@ -111,6 +111,12 @@ export interface LiftTrendsSummary {
    * (< MIN_SESSIONS_FOR_TREND) to classify at all.
    */
   insufficientData: number;
+  /**
+   * Those not-yet-trended lifts with their best recent set, so the Strength
+   * tab can show real numbers before a trend exists (heaviest top set in the
+   * window; most-trained first, capped at MAX_TRACKED_LIFTS).
+   */
+  earlyLifts?: { name: string; sessions: number; bestWeightKg: number; bestReps: number }[];
   /** Longest-running plateaued lift, e.g. Bench stalled 3 wks. */
   stalled: { name: string; weeks: number } | null;
   /** Days of history the summary was computed over. */
@@ -346,6 +352,23 @@ export function computeLiftTrends(
   const insufficientData = Array.from(snapshotsBySeries.values()).filter(
     (snapshots) => snapshots.length < MIN_SESSIONS_FOR_TREND
   ).length;
+  const earlyLifts = Array.from(snapshotsBySeries.entries())
+    .filter(([, snapshots]) => snapshots.length > 0 && snapshots.length < MIN_SESSIONS_FOR_TREND)
+    .map(([seriesKey, snapshots]) => {
+      const meta = seriesByKey.get(seriesKey) as TrendSeries;
+      const best = snapshots.reduce((a, b) =>
+        b.topSetWeightKg > a.topSetWeightKg || (b.topSetWeightKg === a.topSetWeightKg && b.topSetReps > a.topSetReps) ? b : a
+      );
+      const base = nameByExercise.get(meta.exerciseId) ?? 'Exercise';
+      return {
+        name: meta.locationLabel ? `${base} (${meta.locationLabel})` : base,
+        sessions: snapshots.length,
+        bestWeightKg: best.topSetWeightKg,
+        bestReps: best.topSetReps,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions || b.bestWeightKg - a.bestWeightKg)
+    .slice(0, MAX_TRACKED_LIFTS);
 
   // The user's main lifts: most sessions first (ties broken by heavier E1RM),
   // classified only with enough history to fit a trend.
@@ -468,6 +491,7 @@ export function computeLiftTrends(
     down: confident.filter((l) => l.direction === 'down').length,
     rebuilding: lifts.length - confident.length,
     insufficientData,
+    earlyLifts,
     stalled,
     windowDays: LIFT_TREND_WINDOW_DAYS,
   };
