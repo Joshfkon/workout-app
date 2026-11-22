@@ -13,6 +13,8 @@ let coachingInsertGate: Promise<void> | null = null;
 let coachingInserts = 0;
 let targetsRow: Row | null = null;
 const targetInserts: Row[] = [];
+// Auth user_metadata (tracking_focus: 'food' for a food-only sign-up).
+let mockUserMetadata: Row = {};
 
 function builder(table: string) {
   let op: 'select' | 'update' | 'insert' = 'select';
@@ -56,7 +58,7 @@ function builder(table: string) {
 
 jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
-    auth: { getUser: () => Promise.resolve({ data: { user: { id: 'u1' } } }) },
+    auth: { getUser: () => Promise.resolve({ data: { user: { id: 'u1', user_metadata: mockUserMetadata } } }) },
     from: (table: string) => builder(table),
   }),
 }));
@@ -295,11 +297,42 @@ describe('Onboarding goal step: daily targets', () => {
 
     expect(screen.queryByTestId('goal-daily-targets')).not.toBeInTheDocument();
     expect(screen.getByTestId('goal-targets-need-age')).toHaveTextContent(/Add your age/);
+    // Asked right here, not "go Back".
+    expect(screen.getByTestId('goal-targets-need-age')).not.toHaveTextContent(/Back|last step/);
+    expect(screen.getByLabelText('Age')).toHaveValue(null);
 
     await user.click(screen.getByTestId('goal-continue'));
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockSaveMacroSettings).not.toHaveBeenCalled();
     expect(targetInserts).toEqual([]);
+  });
+
+  it('takes the age on the goal step: targets appear at once and the age is saved like the body-comp one', async () => {
+    const user = await reachGoalStep();
+
+    // Out of range (13–100): still no targets, and the field stays put.
+    await user.type(screen.getByLabelText('Age'), '9');
+    expect(screen.queryByTestId('goal-daily-targets')).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Age'));
+
+    await user.type(screen.getByLabelText('Age'), '30');
+    const maintain = expected('maintenance').targets;
+    expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent(
+      `${maintain.calories.toLocaleString()} kcal · ${maintain.protein} g protein`
+    );
+    expect(screen.queryByTestId('goal-targets-need-age')).not.toBeInTheDocument();
+    // The field doesn't vanish mid-typing once the age becomes valid.
+    expect(screen.getByLabelText('Age')).toHaveValue(30);
+
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(userUpdates.find((u) => 'goal' in u)).toMatchObject({ goal: 'maintenance', age: 30 });
+    expect(targetInserts).toEqual([{ user_id: 'u1', ...maintain }]);
+  });
+
+  it('does not ask for an age when it was given on the body-comp step', async () => {
+    await reachGoalStep('15', '30');
+    expect(screen.queryByTestId('goal-age-field')).not.toBeInTheDocument();
   });
 
   it('shows targets the user already has and never overwrites them', async () => {
@@ -313,6 +346,55 @@ describe('Onboarding goal step: daily targets', () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockSaveMacroSettings).not.toHaveBeenCalled();
     expect(targetInserts).toEqual([]);
+  });
+});
+
+describe('Onboarding goal step: food-only users', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userUpdates.length = 0;
+    targetInserts.length = 0;
+    targetsRow = null;
+    mockStoredUnits = 'kg';
+    mockStoredInjuryAreas = [];
+    mockSaveMacroSettings.mockResolvedValue({ success: true });
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
+  });
+  afterEach(() => {
+    mockUserMetadata = {};
+  });
+
+  it('drops training talk and folds the injuries question away for a food tracker', async () => {
+    mockUserMetadata = { tracking_focus: 'food' };
+    const user = await reachGoalStep('15', '30');
+
+    expect(screen.getByText('This sets your daily food targets.')).toBeInTheDocument();
+    expect(screen.queryByText(/training is planned/)).not.toBeInTheDocument();
+    for (const g of ['cut', 'maintenance', 'bulk']) {
+      expect(screen.getByTestId(`goal-option-${g}`)).not.toHaveTextContent(/muscle|training|workout/i);
+    }
+    expect(screen.getByTestId('goal-option-maintenance')).toHaveAttribute('aria-pressed', 'true');
+    // Targets count no workouts.
+    const food = starterTargets({ phase: 'maintenance', weightKg: 80, heightCm: 180, age: 30, sex: 'male', liftsWeights: false })!;
+    expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent(`${food.targets.calories.toLocaleString()} kcal`);
+
+    // Injuries: collapsed, neutral, still answerable.
+    expect(screen.queryByTestId('injury-chip-knee')).not.toBeInTheDocument();
+    expect(screen.queryByText(/check-in/)).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('injury-question-toggle'));
+    expect(screen.getByText('Optional. Only used if you ever log a workout.')).toBeInTheDocument();
+    await user.click(screen.getByTestId('injury-chip-knee'));
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(mockUpdatePreference).toHaveBeenCalledWith('injuryAreas', ['knee']);
+  });
+
+  it('keeps the training copy and open injuries question for lifters', async () => {
+    await reachGoalStep('15', '30');
+    expect(screen.getByText(/how your training is planned/)).toBeInTheDocument();
+    expect(screen.getByTestId('injury-chip-knee')).toBeInTheDocument();
+    expect(screen.queryByTestId('injury-question-toggle')).not.toBeInTheDocument();
+    expect(screen.getByText(/pre-workout check-in/)).toBeInTheDocument();
   });
 });
 

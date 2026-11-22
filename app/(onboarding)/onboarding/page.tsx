@@ -554,6 +554,9 @@ export default function OnboardingBodyCompPage() {
               : null
         }
         targetsNeedAge={createStarterTargets && !getAge()}
+        ageDisplay={ageDisplay}
+        onAgeChange={setAgeDisplay}
+        foodFocus={foodFocus}
         isLoading={isLoading}
         onBack={() => setStep('body-comp')}
         onContinue={handleContinue}
