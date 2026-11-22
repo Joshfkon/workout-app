@@ -46,3 +46,19 @@ describe('phaseTargets', () => {
     expect(starterTargets({ ...base, phase: 'cut', age: 30, sex: null })).toBeNull();
   });
 });
+
+describe('starter targets for someone who does not lift', () => {
+  const base = { phase: 'maintenance' as const, weightKg: 72, heightCm: 165, age: 34, sex: 'female' as const };
+
+  it('counts no workouts, so the calories are lower than a lifter\'s', () => {
+    const lifter = starterTargets(base)!;
+    const foodOnly = starterTargets({ ...base, liftsWeights: false })!;
+    expect(foodOnly.settings.workouts_per_week).toBe(0);
+    expect(foodOnly.targets.calories).toBeLessThan(lifter.targets.calories);
+  });
+
+  it('keeps a stated 0 workouts as 0 when recomputing from saved settings', () => {
+    const foodOnly = starterTargets({ ...base, liftsWeights: false })!;
+    expect(targetsFromMacroSettings(72, foodOnly.settings).calories).toBe(foodOnly.targets.calories);
+  });
+});

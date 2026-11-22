@@ -13,6 +13,7 @@ import { updateOnboardingStep, confirmedOnboardingGoal, type TrainingGoal } from
 import type { StandingInjuryArea } from '@/lib/training/standingInjuries';
 import { GoalStep } from './_components/GoalStep';
 import { starterTargets } from '@/lib/nutrition/phaseTargets';
+import { statedTrackingFocus } from '@/lib/onboarding/trackingFocus';
 import { saveMacroSettings } from '@/lib/actions/nutrition';
 import type { WeightUnit } from '@/types/schema';
 
@@ -115,6 +116,8 @@ export default function OnboardingBodyCompPage() {
   // calculator settings, so nothing the user chose gets overwritten.
   const [existingTargets, setExistingTargets] = useState<{ calories: number; protein: number } | null>(null);
   const [hasMacroSettings, setHasMacroSettings] = useState(false);
+  // Said "No, food tracking" at sign-up: starter targets count no workouts.
+  const [foodFocus, setFoodFocus] = useState(false);
   useEffect(() => {
     if (injuryAreasSeeded.current || preferences.injuryAreas.length === 0) return;
     injuryAreasSeeded.current = true;
@@ -180,6 +183,7 @@ export default function OnboardingBodyCompPage() {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setFoodFocus(statedTrackingFocus(user.user_metadata) === 'food');
       
       // Get latest DEXA scan
       const { data: dexaScans } = await supabase
@@ -285,6 +289,7 @@ export default function OnboardingBodyCompPage() {
         heightCm: getHeightCm(),
         age: getAge(),
         sex,
+        liftsWeights: !foodFocus,
       })
     : null;
   const createStarterTargets = !existingTargets && !hasMacroSettings;

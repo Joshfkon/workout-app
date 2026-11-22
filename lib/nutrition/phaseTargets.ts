@@ -76,7 +76,8 @@ export function targetsFromMacroSettings(weightKg: number, settings: PhaseTarget
     },
     {
       activityLevel: (settings.activity_level ?? 'moderate') as ActivityLevel,
-      workoutsPerWeek: settings.workouts_per_week || 4,
+      // ?? not ||: a stated 0 workouts (a food-only tracker) is an answer, not a gap.
+      workoutsPerWeek: settings.workouts_per_week ?? 4,
       avgWorkoutMinutes: settings.avg_workout_minutes || 60,
       workoutIntensity: settings.workout_intensity || 'moderate',
     },
@@ -103,6 +104,12 @@ export interface StarterTargetsInput {
   heightCm: number;
   age: number | null;
   sex: 'male' | 'female' | null;
+  /**
+   * False for someone who said they don't lift (register's "No, food
+   * tracking"): no workouts are counted, so a non-lifter's targets aren't
+   * sized for four hour-long sessions a week.
+   */
+  liftsWeights?: boolean;
 }
 
 /**
@@ -121,6 +128,7 @@ export function starterTargets(
     sex,
     goal: phaseToNutritionGoal(phase, null),
     ...STARTER_ACTIVITY_SETTINGS,
+    ...(input.liftsWeights === false ? { workouts_per_week: 0 } : {}),
   };
   return { settings, targets: targetsFromMacroSettings(weightKg, settings) };
 }
