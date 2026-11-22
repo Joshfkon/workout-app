@@ -304,6 +304,13 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             id="effort-q-1"
           >
             How many more could you have done?
+            <span
+              class="text-ink-3"
+              data-testid="rir-preset-note"
+            >
+               
+              Preset to your target — tap the one that matches.
+            </span>
           </p>
           <div
             aria-labelledby="effort-q-1"
