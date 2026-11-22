@@ -59,6 +59,7 @@ import { analyzeAllExercises, type PlateauDetectionResult, type PlateauGoal } fr
 import { PlateauAlertList } from '@/components/analytics/PlateauAlert';
 import { getMuscleGroupProgression } from '@/services/progressionInsights';
 import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
+import { CalibrateStrengthPrompt, calibratePromptMode } from '@/components/analytics/CalibrateStrengthPrompt';
 import { ProportionsTargetsCard } from '@/components/analytics/ProportionsTargetsCard';
 import { WellnessTrendsCard } from '@/components/analytics/WellnessTrendsCard';
 import { BodyHubTrends } from '@/components/body/BodyHubTrends';
@@ -1916,20 +1917,16 @@ function AnalyticsPageContent() {
               )}
             </>
           ) : (
-            <Card className="text-center py-6">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-action/20 flex items-center justify-center">
-                <svg className="w-6 h-6 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <h2 className="text-body font-semibold text-ink">Calibrate your strength</h2>
-              <p className="text-subhead text-ink-2 mt-1.5 max-w-md mx-auto">
-                Log a few workouts to see strength trends, percentile rankings, and personalized recommendations.
-              </p>
-              <Button className="mt-4" size="sm" onClick={() => router.push('/onboarding')}>
-                Start strength test
-              </Button>
-            </Card>
+            // Full card only when there's little or no strength data; with
+            // lift history it's one optional row (percentile rankings).
+            <CalibrateStrengthPrompt
+              mode={calibratePromptMode({
+                liftTrends: liftTrendsSummary,
+                liftTrendsLoaded: liftTrendsQuery.isFetched || !!liftTrendsQuery.data,
+                muscleProgressionCount: muscleProgression.length,
+              })}
+              onStart={() => router.push('/onboarding')}
+            />
           )}
         </div>
       )}
