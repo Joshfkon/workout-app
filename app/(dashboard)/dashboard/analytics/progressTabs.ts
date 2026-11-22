@@ -80,3 +80,15 @@ export function resolveActiveProgressTab({
 }): ProgressTab {
   return pickedTab ?? explicitTab ?? dataDefaultTab ?? FALLBACK_PROGRESS_TAB;
 }
+
+/**
+ * Tab order. Someone who hasn't lifted in the window (food / weigh-in only)
+ * gets Body first and Strength last, so an empty Strength tab isn't the
+ * first thing offered; everyone else (or not known yet) keeps
+ * Strength · Body · Wellness.
+ */
+export function orderProgressTabs(lifted: boolean | undefined): ProgressTab[] {
+  return lifted === false
+    ? ['body-composition', 'wellness', 'strength']
+    : ['strength', 'body-composition', 'wellness'];
+}

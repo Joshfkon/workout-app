@@ -77,6 +77,10 @@ describe('LiftDetailScreen', () => {
 
     expect(screen.getByRole('heading', { name: 'Bench press' })).toBeInTheDocument();
     expect(screen.getByTestId('lift-detail')).toHaveTextContent('Estimated max');
+    // The estimate names the set actually lifted that it came from.
+    expect(screen.getByTestId('lift-est-max-source')).toHaveTextContent(
+      'Estimated from your last best set: 90 kg × 8'
+    );
 
     const rows = screen.getAllByTestId(/^best-set-/);
     expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual([

@@ -5,20 +5,13 @@ import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconBulb, IconChevronLeft, IconInfoCircle } from '@tabler/icons-react';
 import { InfoTooltip, ListGroup, PageSkeleton, Sparkline } from '@/components/ui';
 import { formatWeight } from '@/lib/utils';
-import { formatLoad } from '@/lib/mcp/summaries';
 import { useLiftTrends } from '@/hooks/useLiftTrends';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { LiftTrend, LiftTrendPoint } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import type { PlateauDetectionResult } from '@/services/plateauDetector';
-import { historyHref, shortDay, signedPct, statusOf } from './liftTrendFormat';
+import { historyHref, loggedLoad, setLabel, shortDay, signedPct, statusOf } from './liftTrendFormat';
 
 const PROGRESS_HREF = '/dashboard/analytics';
-
-/** A logged load, exact (formatLoad), with the app's "lbs" suffix (formatWeight's). */
-function loggedLoad(weightKg: number, units: 'lb' | 'kg'): string {
-  const exact = formatLoad(weightKg, units);
-  return units === 'lb' ? exact.replace(/ lb$/, ' lbs') : exact;
-}
 
 /**
  * The session whose top set has the highest estimated max, ignoring the
@@ -134,6 +127,7 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
   const best = bestPoint(lift);
+  const latest = points.length > 0 ? points[points.length - 1] : null;
   // `?? null`: a summary persisted before lifts carried `plateau`. A
   // calibrating lift never shows a stall verdict.
   const plateau = lift.lowConfidence ? null : (lift.plateau ?? null);
@@ -160,6 +154,13 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
             <p className="text-[34px] font-bold leading-10 tracking-tight text-ink tabular-nums">
               {formatWeight(lift.currentE1RMKg, units)}
             </p>
+            {/* Say plainly that this is an estimate, and from which set the
+                user actually lifted. */}
+            {latest && latest.topSetWeightKg > 0 && latest.topSetReps > 0 && (
+              <p className="text-subhead text-ink-2 tabular-nums" data-testid="lift-est-max-source">
+                Estimated from your last best set: {setLabel(latest.topSetWeightKg, latest.topSetReps, units)}
+              </p>
+            )}
             <p className="text-subhead text-ink-2">
               {lift.lowConfidence ? 'Trend rebuilding' : signedPct(lift.weeklyChangePct)} · {lift.sessionCount} sessions
             </p>
@@ -195,7 +196,7 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
                   {loggedLoad(p.topSetWeightKg, units)} × {p.topSetReps}
                 </span>
                 <span className="block text-subhead text-ink-2">
-                  {formatWeight(p.e1rmKg, units)} est. max{outlier ? ' · left out of trend' : ''}
+                  Est. max {formatWeight(p.e1rmKg, units)}{outlier ? ' · left out of trend' : ''}
                 </span>
               </span>
               {isBest && (
