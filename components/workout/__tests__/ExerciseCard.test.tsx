@@ -1106,6 +1106,50 @@ describe('ExerciseCard', () => {
       ).toBeInTheDocument();
     });
 
+    it('PANEL REPRO: when the lb grid rounds the load up, last session\'s reps are kept, not +1', () => {
+      // Last session 40 kg (88.2 lb) × 10, 9, 8 at 2 RIR. The engine's
+      // position match asks 40 kg × 11; the lb grid shows 90 lb, which is
+      // already heavier, so the prefill must be 90 × 10, not 90 × 11.
+      const prev = [
+        { weightKg: 40, reps: 10, rpe: 8 },
+        { weightKg: 40, reps: 9, rpe: 8 },
+        { weightKg: 40, reps: 8, rpe: 8 },
+      ];
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          isActive={true}
+          block={createMockBlock({ targetRepRange: [8, 12] as [number, number], targetSets: 3, targetWeightKg: 40 })}
+          previousSets={prev}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Weight: 90 lbs/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 10 reps/ })).toBeInTheDocument();
+      expect(screen.getAllByText(/rounded up to the nearest plate/).length).toBeGreaterThan(0);
+    });
+
+    it('still adds the rep when the load shows exactly as last time (kg user)', () => {
+      const prev = [
+        { weightKg: 40, reps: 10, rpe: 8 },
+        { weightKg: 40, reps: 9, rpe: 8 },
+        { weightKg: 40, reps: 8, rpe: 8 },
+      ];
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="kg"
+          isActive={true}
+          block={createMockBlock({ targetRepRange: [8, 12] as [number, number], targetSets: 3, targetWeightKg: 40 })}
+          previousSets={prev}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Weight: 40 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 11 reps/ })).toBeInTheDocument();
+    });
+
     it('snaps a kg-native previous-set weight onto the lb grid instead of showing the conversion', () => {
       render(
         <ExerciseCard
