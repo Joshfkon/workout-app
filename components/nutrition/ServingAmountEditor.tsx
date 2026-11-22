@@ -72,12 +72,18 @@ export function ServingAmountEditor({
     return merged;
   }, [unit.kind, recentAmounts]);
 
-  // For a serving unit backed by a known gram weight, surface the equivalence
-  // as helper text instead of inside the dropdown label.
-  const servingGramsHint =
-    unit.kind === 'serving' && unit.gramsPerUnit && unit.gramsPerUnit > 0
-      ? `1 ${unit.noun} = ${round2(unit.gramsPerUnit)} g`
-      : null;
+  // For a serving unit backed by a known gram weight, show what the portion
+  // weighs in plain words — "1 large egg · 50 g", "2 large egg · 100 g" — as
+  // helper text rather than inside the dropdown label.
+  const servingGramsHint = (() => {
+    if (unit.kind !== 'serving' || !unit.gramsPerUnit || unit.gramsPerUnit <= 0) return null;
+    const amt = parseFloat(value.amount);
+    const shownAmount = Number.isFinite(amt) && amt > 0 ? amt : 1;
+    // "1 × 2 tbsp" reads better than "1 2 tbsp" when the noun carries a count.
+    const sep = /^\d/.test(unit.noun) ? ' × ' : ' ';
+    const grams = round2(unit.gramsPerUnit * shownAmount);
+    return `${round2(shownAmount)}${sep}${unit.noun} · ${grams >= 10 ? Math.round(grams) : grams} g`;
+  })();
 
   const setAmount = (amount: string) => onChange({ ...value, amount });
   const setUnit = (unitId: string) => onChange({ ...value, unitId });
@@ -128,7 +134,10 @@ export function ServingAmountEditor({
       {/* Serving-weight helper text (keeps grams out of the ambiguous label) */}
       {servingGramsHint && (
         <p className="text-caption text-ink-3" data-testid={`${testIdPrefix}-serving-hint`}>
-          {servingGramsHint} · switch the unit to enter grams
+          <span className="text-ink-2 font-medium">{servingGramsHint}</span>
+          {model.units.some((u) => u.kind === 'weight') && (
+            <span> · switch the unit to enter grams</span>
+          )}
         </p>
       )}
 

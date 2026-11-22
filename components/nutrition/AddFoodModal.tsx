@@ -24,8 +24,11 @@ import {
   servingOptionsModel,
   parseServingWeight,
   modelFromLoggedEntry,
+  withHouseholdServing,
+  isHouseholdNoun,
   type FoodAmountModel,
 } from '@/lib/nutrition/servingScaling';
+import { householdServingForSystemFood } from '@/lib/nutrition/householdServings';
 import {
   foodKeyFor,
   getLastUsedServing,
@@ -289,6 +292,29 @@ function buildUsdaModel(food: FoodSearchResult | FoodSearchResultWithServings): 
   );
 }
 
+/** A scanned product per label serving, named by its household measure when it has one ("bar"). */
+function buildScannedModel(product: ScannedProduct): FoodAmountModel {
+  const noun = product.servingSize ? cleanServingNoun(product.servingSize) : '';
+  return packagedModel(
+    { calories: product.calories, protein: product.protein, carbs: product.carbs, fat: product.fat },
+    product.servingQuantity,
+    noun && isHouseholdNoun(noun) ? noun : 'serving'
+  );
+}
+
+/** System foods are per-100g; add the household unit people count in, if any. */
+function buildSystemModel(food: SystemFood): FoodAmountModel {
+  return withHouseholdServing(
+    weightBasedModel({
+      calories: food.calories_per_100g,
+      protein: food.protein_per_100g,
+      carbs: food.carbs_per_100g,
+      fat: food.fat_per_100g,
+    }),
+    householdServingForSystemFood(food.name)
+  );
+}
+
 function buildCustomModel(food: CustomFood): FoodAmountModel {
   if (food.is_per_weight && food.reference_amount && food.calories_per_ref != null) {
     return customPerRefModel(
@@ -502,16 +528,7 @@ export function AddFoodModal({
     }
     if (scannedProduct) {
       return {
-        model: packagedModel(
-          {
-            calories: scannedProduct.calories,
-            protein: scannedProduct.protein,
-            carbs: scannedProduct.carbs,
-            fat: scannedProduct.fat,
-          },
-          scannedProduct.servingQuantity,
-          'serving'
-        ),
+        model: buildScannedModel(scannedProduct),
         foodKey: foodKeyFor({ barcode: scannedProduct.barcode, name: scannedProduct.name }),
         name: scannedProduct.name,
         subtitle: `Base: ${scannedProduct.servingSize}`,
@@ -542,12 +559,7 @@ export function AddFoodModal({
     }
     if (selectedSystemFood) {
       return {
-        model: weightBasedModel({
-          calories: selectedSystemFood.calories_per_100g,
-          protein: selectedSystemFood.protein_per_100g,
-          carbs: selectedSystemFood.carbs_per_100g,
-          fat: selectedSystemFood.fat_per_100g,
-        }),
+        model: buildSystemModel(selectedSystemFood),
         foodKey: foodKeyFor({ id: selectedSystemFood.id, name: selectedSystemFood.name }),
         name: selectedSystemFood.name,
         subtitle: `${selectedSystemFood.calories_per_100g} cal per 100g`,
@@ -593,12 +605,7 @@ export function AddFoodModal({
           barcode: result.product.barcode,
         };
         setScannedProduct(product);
-        const model = packagedModel(
-          { calories: product.calories, protein: product.protein, carbs: product.carbs, fat: product.fat },
-          product.servingQuantity,
-          'serving'
-        );
-        primeAmountForFood(model, foodKeyFor({ barcode: product.barcode, name: product.name }));
+        primeAmountForFood(buildScannedModel(product), foodKeyFor({ barcode: product.barcode, name: product.name }));
         // Stay on barcode tab to show serving selector
       }
     } catch {
@@ -646,13 +653,7 @@ export function AddFoodModal({
     setSelectedFood(null);
     setSelectedCustomFood(null);
     setSelectedRecent(null);
-    const model = weightBasedModel({
-      calories: food.calories_per_100g,
-      protein: food.protein_per_100g,
-      carbs: food.carbs_per_100g,
-      fat: food.fat_per_100g,
-    });
-    primeAmountForFood(model, foodKeyFor({ id: food.id, name: food.name }));
+    primeAmountForFood(buildSystemModel(food), foodKeyFor({ id: food.id, name: food.name }));
   };
 
   // Tap a recent's row body → open the shared detail panel primed with the

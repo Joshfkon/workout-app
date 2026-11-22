@@ -307,6 +307,61 @@ export function perServingModel(
   };
 }
 
+/**
+ * True when a serving noun names a household measure ("large", "cup", "slice",
+ * "large egg") rather than a bare weight/volume ("100g", "1 oz", "ml") or
+ * USDA's catch-all "Quantity not specified".
+ */
+export function isHouseholdNoun(noun: string): boolean {
+  const n = noun.trim();
+  if (!n) return false;
+  if (/quantity not specified/i.test(n)) return false;
+  if (/^(?:[\d.]+\s*)?(?:g|gm|grams?|oz|ounces?|ml|milliliters?|lbs?|kg)$/i.test(n)) return false;
+  return true;
+}
+
+/** A natural household serving for a food, e.g. { noun: 'large egg', grams: 50 }. */
+export interface HouseholdServing {
+  noun: string;
+  grams: number;
+}
+
+/**
+ * Add a household serving unit to a weight-based model (system foods are
+ * defined per 100g) and make "1 ×" it the default. The unit's macros are the
+ * model's per-gram macros × its grams, so 1 large egg (50g) logs exactly what
+ * 50g would; the log semantics (weightAnchored, servings 1) are unchanged.
+ */
+export function withHouseholdServing(
+  model: FoodAmountModel,
+  household: HouseholdServing | null | undefined
+): FoodAmountModel {
+  if (!household || !(household.grams > 0)) return model;
+  const gramUnit = model.units.find((u) => u.id === 'g');
+  if (!gramUnit) return model;
+  const g = household.grams;
+  const unit: ServingUnitDef = {
+    id: 'household',
+    kind: 'serving',
+    label: household.noun,
+    noun: household.noun,
+    gramsPerUnit: g,
+    perUnit: {
+      calories: gramUnit.perUnit.calories * g,
+      protein: gramUnit.perUnit.protein * g,
+      carbs: gramUnit.perUnit.carbs * g,
+      fat: gramUnit.perUnit.fat * g,
+    },
+  };
+  return {
+    ...model,
+    units: [unit, ...model.units],
+    defaultUnitId: unit.id,
+    defaultAmount: 1,
+    quickChips: DEFAULT_SERVING_CHIPS,
+  };
+}
+
 export interface ServingOption {
   noun: string;
   grams: number | null;
@@ -343,9 +398,17 @@ export function servingOptionsModel(options: ServingOption[]): FoodAmountModel {
     if (perServingGrams == null) perServingGrams = gramOption.grams;
   }
 
+  // Default to the first HOUSEHOLD measure that has a gram weight ("1 large
+  // (50g)", "1 cup (160g)") rather than a bare "100g": people think in whole
+  // eggs, not grams. Falls back to the first option when none exists.
+  const householdIdx = options.findIndex(
+    (o) => o.grams != null && o.grams > 0 && isHouseholdNoun(o.noun)
+  );
+  const defaultIdx = householdIdx >= 0 ? householdIdx : 0;
+
   return {
     units,
-    defaultUnitId: servingUnits[0]?.id ?? 'srv-0',
+    defaultUnitId: servingUnits[defaultIdx]?.id ?? 'srv-0',
     defaultAmount: 1,
     weightAnchored: false,
     perServingGrams,

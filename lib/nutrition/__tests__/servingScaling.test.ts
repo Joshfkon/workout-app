@@ -10,6 +10,8 @@ import {
   servingOptionsModel,
   modelFromLoggedEntry,
   initialAmountForEntry,
+  isHouseholdNoun,
+  withHouseholdServing,
 } from '../servingScaling';
 
 describe('scaleMacros', () => {
@@ -236,5 +238,46 @@ describe('edit corruption regression: serving reference survives a save→reopen
     expect(entry.serving_size).toBe('180g');
     expect(Math.round(perServing.calories)).toBe(140);
     expect(perServingGrams).toBeCloseTo(85, 5);
+  });
+});
+
+describe('household serving defaults', () => {
+  it('USDA options default to the first household measure, not "100g"', () => {
+    const model = servingOptionsModel([
+      { noun: '100g', grams: 100, macros: { calories: 143, protein: 12.6, carbs: 0.7, fat: 9.5 } },
+      { noun: 'Quantity not specified', grams: 50, macros: { calories: 72, protein: 6.3, carbs: 0.4, fat: 4.8 } },
+      { noun: 'large', grams: 50, macros: { calories: 72, protein: 6.3, carbs: 0.4, fat: 4.8 } },
+    ]);
+    expect(model.defaultUnitId).toBe('srv-2');
+    expect(computeServing(model, 2, model.defaultUnitId).macros.calories).toBe(144);
+  });
+
+  it('falls back to the first option when every option is a plain weight', () => {
+    const model = servingOptionsModel([
+      { noun: '100g', grams: 100, macros: { calories: 100, protein: 1, carbs: 1, fat: 1 } },
+      { noun: '1 oz', grams: 28, macros: { calories: 28, protein: 0.3, carbs: 0.3, fat: 0.3 } },
+    ]);
+    expect(model.defaultUnitId).toBe('srv-0');
+  });
+
+  it('isHouseholdNoun separates measures from bare weights', () => {
+    expect(isHouseholdNoun('large egg')).toBe(true);
+    expect(isHouseholdNoun('cup')).toBe(true);
+    expect(isHouseholdNoun('100g')).toBe(false);
+    expect(isHouseholdNoun('30 g')).toBe(false);
+    expect(isHouseholdNoun('oz')).toBe(false);
+    expect(isHouseholdNoun('Quantity not specified')).toBe(false);
+  });
+
+  it('withHouseholdServing adds a unit whose macros equal its gram weight', () => {
+    const base = weightBasedModel({ calories: 155, protein: 13, carbs: 1.1, fat: 11 });
+    const model = withHouseholdServing(base, { noun: 'large egg', grams: 50 });
+    expect(model.defaultUnitId).toBe('household');
+    expect(model.defaultAmount).toBe(1);
+    expect(model.weightAnchored).toBe(true);
+    expect(computeServing(model, 3, 'household').macros).toEqual(
+      computeServing(base, 150, 'g').macros
+    );
+    expect(withHouseholdServing(base, null)).toBe(base);
   });
 });

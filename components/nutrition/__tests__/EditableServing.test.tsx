@@ -17,6 +17,7 @@ import userEvent from '@testing-library/user-event';
 import { AddFoodModal } from '../AddFoodModal';
 import { EditFoodModal } from '../EditFoodModal';
 import type { SystemFood, FoodLogEntry } from '@/types/nutrition';
+import { computeServing, weightBasedModel } from '@/lib/nutrition/servingScaling';
 
 // The add sheet imports server actions / camera scanner — stub them so the
 // jsdom render never reaches server-only or html5-qrcode code.
@@ -333,5 +334,85 @@ describe('edit corruption regression (Giant Eagle fries)', () => {
     expect(screen.queryByTestId('edit-food-serving-hint')).not.toBeInTheDocument();
     // Per-serving reference recovered cleanly.
     expect(screen.getByTestId('edit-food-per-serving')).toHaveTextContent('Per serving: 140 cal');
+  });
+});
+
+describe('household serving default (people think in whole eggs, not grams)', () => {
+  const EGGS: SystemFood = {
+    id: 'eggs-id',
+    name: 'Whole Eggs (large, cooked)',
+    category: 'protein',
+    subcategory: 'eggs',
+    calories_per_100g: 155,
+    protein_per_100g: 13,
+    carbs_per_100g: 1.1,
+    fat_per_100g: 11,
+  };
+
+  function renderEggs(onAdd = jest.fn().mockResolvedValue(undefined)) {
+    render(
+      <AddFoodModal
+        isOpen
+        onClose={jest.fn()}
+        onAdd={onAdd}
+        defaultMealType="breakfast"
+        systemFoods={[EGGS]}
+      />
+    );
+    return onAdd;
+  }
+
+  it('defaults to 1 large egg with the grams shown next to it', async () => {
+    const user = userEvent.setup();
+    renderEggs();
+    await user.click(screen.getByText('Whole Eggs (large, cooked)'));
+
+    expect(screen.getByTestId('add-food-amount')).toHaveValue(1);
+    expect(screen.getByTestId('add-food-unit')).toHaveValue('household');
+    expect(screen.getByTestId('add-food-serving-hint')).toHaveTextContent('1 large egg · 50 g');
+
+    // The hint follows the amount: 2 eggs = 100 g.
+    const amount = screen.getByTestId('add-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '2');
+    expect(screen.getByTestId('add-food-serving-hint')).toHaveTextContent('2 large egg · 100 g');
+  });
+
+  it('logs exactly the macros of the equivalent gram weight', async () => {
+    const user = userEvent.setup();
+    const onAdd = renderEggs();
+    await user.click(screen.getByText('Whole Eggs (large, cooked)'));
+
+    const amount = screen.getByTestId('add-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '2');
+    await user.click(screen.getByRole('button', { name: /add to log/i }));
+
+    // Same numbers the grams path gives for 100 g of the per-100g row.
+    const byWeight = computeServing(
+      weightBasedModel({ calories: 155, protein: 13, carbs: 1.1, fat: 11 }),
+      100,
+      'g'
+    );
+    expect(byWeight.macros).toEqual({ calories: 155, protein: 13, carbs: 1.1, fat: 11 });
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        food_name: 'Whole Eggs (large, cooked)',
+        serving_size: '2 large egg (100g)',
+        servings: 1,
+        calories: byWeight.macros.calories,
+        protein: byWeight.macros.protein,
+        carbs: byWeight.macros.carbs,
+        fat: byWeight.macros.fat,
+      })
+    );
+  });
+
+  it('keeps grams for foods people weigh (no household serving)', async () => {
+    const user = userEvent.setup();
+    renderAdd();
+    await user.click(screen.getByText('Peas'));
+    expect(screen.getByTestId('add-food-amount')).toHaveValue(100);
+    expect(screen.getByTestId('add-food-unit')).toHaveValue('g');
   });
 });
