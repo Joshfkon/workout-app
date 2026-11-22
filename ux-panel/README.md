@@ -110,7 +110,7 @@ Then:
 ```bash
 npx next dev -p 3100                   # the build under test
 node ux-panel/local-db/check-env.mjs   # should print "No schema errors"
-export ANTHROPIC_API_KEY=...           # for real runs only
+ant auth login                         # or export ANTHROPIC_API_KEY=… (real runs only)
 ```
 
 **Why not `supabase start` + `db reset`?** The migration history doesn't
@@ -147,7 +147,13 @@ node ux-panel/run.mjs --estimate --personas=all   # cost only, no run
 | `--yes` | | skip the spend confirmation |
 | `--base-url` | `http://localhost:3100` | |
 
-Every real run prints a cost estimate and asks before spending.
+Every real run prints a cost estimate and asks before spending. It then makes
+one tiny API call before creating any accounts, and stops the whole run at the
+first billing or auth error.
+
+**Credentials:** `ANTHROPIC_API_KEY` (or `ANTHROPIC_AUTH_TOKEN`) if set,
+otherwise the [`ant` CLI](https://github.com/anthropics/anthropic-cli) login
+(`ant auth login`). The token is fetched per run and never written to disk.
 
 Output goes to `ux-panel/runs/<id>/`:
 - `report.html`: the readout
@@ -169,6 +175,11 @@ With 1 sample per persona, treat mean shifts under about 0.3 as noise. Look at
 the issue diff (new, gone, still present) first.
 
 ### Cost (estimates; calibrate from a real run's `run.json → cost`)
+
+Measured so far: the Sonnet 2 × 1 dry run cost **$0.22** (19 calls, ~6 k
+input and ~200 output tokens per call). Both personas finished in 8 actions,
+well under the 55 % of step budget the estimate assumes, so treat the
+estimates below as upper-leaning.
 
 | | 2 × 1 dry run | 5 personas × core | 20 × core | 20 × 3 stories |
 |---|---|---|---|---|
