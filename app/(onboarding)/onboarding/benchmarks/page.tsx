@@ -173,8 +173,9 @@ function BenchmarksContent() {
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">Test your strength? (optional)</h1>
         <p className="text-ink-2">
-          Testing at the gym (about 17 minutes per lift) makes your first weights more precise.
-          Skip it and we&apos;ll estimate them, then fine-tune from your first workouts.
+          You don&apos;t need this to start. Skip it and we&apos;ll estimate your starting weights,
+          then sharpen them from your first couple of workouts. Testing at the gym just gets
+          them right from day one.
         </p>
       </div>
 

@@ -78,11 +78,12 @@ export default function OnboardingBodyCompPage() {
   const [bfEstimated, setBfEstimated] = useState(false);
   const [useDexa, setUseDexa] = useState(false);
   const [showBodyFatGuide, setShowBodyFatGuide] = useState(false);
-  // Training goal (users.goal). Nothing is preselected for a fresh user:
-  // registration stores 'maintenance' as a placeholder, which must not read as
-  // a choice. A goal saved by this step earlier (re-entering onboarding) is
-  // restored; see confirmedOnboardingGoal.
-  const [goal, setGoal] = useState<TrainingGoal | null>(null);
+  // Training goal (users.goal). Preselected to Maintain so Continue works in
+  // one tap. A goal saved by this step earlier (re-entering onboarding) is
+  // restored instead; see confirmedOnboardingGoal. Registration's
+  // 'maintenance' placeholder isn't treated as a saved choice.
+  const [goal, setGoal] = useState<TrainingGoal | null>('maintenance');
+  const goalTouched = useRef(false);
   // Optional "areas to go easy on", saved as body areas in
   // users.preferences.injuryAreas (lib/training/standingInjuries), never
   // injury_history. null = unanswered, which leaves the stored value alone.
@@ -183,7 +184,7 @@ export default function OnboardingBodyCompPage() {
       const savedGoal = confirmedOnboardingGoal(userData);
       if (savedGoal) {
         // Don't overwrite a pick the user made while this was loading.
-        setGoal((current) => current ?? savedGoal);
+        if (!goalTouched.current) setGoal(savedGoal);
       }
     }
     
@@ -425,7 +426,10 @@ export default function OnboardingBodyCompPage() {
     return (
       <GoalStep
         goal={goal}
-        onGoalChange={setGoal}
+        onGoalChange={(g) => {
+          goalTouched.current = true;
+          setGoal(g);
+        }}
         recommended={recommended}
         bodyFatPercent={bf}
         injuryAreas={injuryAreas}

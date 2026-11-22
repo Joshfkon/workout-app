@@ -75,20 +75,17 @@ describe('Onboarding goal step', () => {
 
   const injuryWrites = () => mockUpdatePreference.mock.calls.filter(([key]) => key === 'injuryAreas');
 
-  it('preselects nothing for a fresh user (registration placeholder) and blocks Continue until a pick', async () => {
+  it('preselects Maintain for a fresh user so Continue works in one tap', async () => {
     // Registration writes goal='maintenance'; no onboarding step saved yet.
     usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep();
 
-    for (const g of ['cut', 'maintenance', 'bulk']) {
-      expect(screen.getByTestId(`goal-option-${g}`)).toHaveAttribute('aria-pressed', 'false');
-    }
-    expect(screen.getByTestId('goal-continue')).toBeDisabled();
-    expect(screen.getByTestId('goal-pick-hint')).toHaveTextContent('Pick one to continue');
-
-    await user.click(screen.getByTestId('goal-option-cut'));
+    expect(screen.getByTestId('goal-option-maintenance')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('goal-continue')).toBeEnabled();
     expect(screen.queryByTestId('goal-pick-hint')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('goal-option-cut'));
+    expect(screen.getByTestId('goal-option-cut')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('preselects a goal the user already saved in onboarding', async () => {
