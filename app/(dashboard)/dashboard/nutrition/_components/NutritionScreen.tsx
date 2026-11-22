@@ -1957,8 +1957,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
 
       <NutritionQuickActions
         onDescribe={() => setShowDescribeMeal(true)}
-        onScan={() => openAddFood(timeMealType, 'barcode')}
-        onSearch={() => openAddFood(timeMealType, 'search')}
+        onScan={() => openAddFood(chipMealType, 'barcode')}
+        onSearch={() => openAddFood(chipMealType, 'search')}
         onMeals={() => setShowSavedMeals(true)}
       />
 
@@ -2501,7 +2501,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           setShowDescribeMeal(false);
           setDescribeMealType(null);
         }}
-        defaultMealType={describeMealType ?? timeMealType}
+        defaultMealType={describeMealType ?? chipMealType}
         onLogItems={handleLogParsedItems}
       />
 
