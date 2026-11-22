@@ -267,8 +267,7 @@ export default function RegisterPage() {
               })}
             </div>
             <p id="lifting-hint" className="text-caption text-ink-3 mt-1">
-              Not sure, or just here for food tracking? Skip it. We&apos;ll start light, and you can
-              change it in Settings.
+              Not sure, or just here for food tracking? Skip it — you can change it any time in Settings.
             </p>
           </div>
 
