@@ -351,12 +351,22 @@ export async function getFoodDetails(foodId: string): Promise<{
         const gramWeight = portion.gramWeight || 100;
         const ratio = gramWeight / 100;
         
-        let description = portion.portionDescription || portion.modifier || '';
-        if (portion.measureUnit?.name) {
-          description = `${portion.amount || 1} ${portion.measureUnit.name}`;
+        // Survey (FNDDS) portions carry text like "1 large" in
+        // portionDescription with measureUnit "undetermined"; SR Legacy ones
+        // carry the size in `modifier` ("large") with the same placeholder
+        // unit. Never surface "undetermined" — it isn't a unit people know.
+        const unitName = portion.measureUnit?.name?.trim();
+        const realUnit = unitName && !/^undetermined$/i.test(unitName) ? unitName : '';
+        let description = '';
+        if (realUnit) {
+          description = `${portion.amount || 1} ${realUnit}`;
           if (portion.modifier) {
             description += ` (${portion.modifier})`;
           }
+        } else if (portion.portionDescription) {
+          description = portion.portionDescription;
+        } else if (portion.modifier) {
+          description = `${portion.amount || 1} ${portion.modifier}`;
         }
         
         if (description && description !== '100g') {

@@ -44,9 +44,6 @@ import {
   IconHistory,
   IconListDetails,
   IconLoader2,
-  IconPlus,
-  IconRepeat,
-  IconSparkles,
   IconTemplate,
   IconTrendingUp,
 } from '@tabler/icons-react';
@@ -75,7 +72,6 @@ import {
   type RecentSessionRow,
   type RepeatableExercise,
 } from '@/lib/training/repeatWorkout';
-import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
@@ -83,7 +79,6 @@ import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useMuscleProgression } from '@/hooks/useMuscleProgression';
 import { fetchActiveMesocycle, type ActiveMesocycleRow } from '@/lib/training/fetchActiveMesocycle';
 import {
-  QuickLogRow,
   SectionLabel,
   UnfinishedWorkoutBanner,
   formatRelativeDay,
@@ -93,6 +88,7 @@ import { SessionExerciseList } from '@/components/mesocycle';
 import { CardioTracker } from '@/components/dashboard/CardioTracker';
 import { NonGymActivityLogger } from '@/components/dashboard/NonGymActivityLogger';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
+import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
 import { Modal } from '@/components/ui/Modal';
 import { clearPersistedRestTimer } from '@/hooks/useRestTimer';
 import { fetchTrainingStyle } from '@/lib/training/trainingStyle';
@@ -220,7 +216,6 @@ export default function TrainPage() {
   const [completedTodayCount, setCompletedTodayCount] = useState(0);
   const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const [isStartingEmpty, setIsStartingEmpty] = useState(false);
   const [showAiSheet, setShowAiSheet] = useState(false);
   const [showRepeatSheet, setShowRepeatSheet] = useState(false);
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
@@ -520,34 +515,22 @@ export default function TrainPage() {
     }
   };
 
-  // Empty workout: create/reuse today's ad-hoc session (no exercise blocks)
-  // and open the workout page — exercises get added there via the picker.
-  // Same path as the Log page's blank workout, so repeat taps reuse the
-  // session and never litter empties.
-  const handleStartEmpty = async () => {
-    if (isStartingEmpty) return;
-    setIsStartingEmpty(true);
-    setError(null);
-    try {
-      const auth = await resolveAuthState(supabase);
-      if (auth.status === 'unauthenticated') {
-        router.push('/login');
-        return;
-      }
-      if (auth.status === 'error') {
-        // Verify failed transiently — keep the session, let them retry.
-        setError("Couldn't verify your session. Check your connection and try again.");
-        setIsStartingEmpty(false);
-        return;
-      }
-      const { sessionId } = await getOrCreateTodaySession(supabase, auth.userId);
-      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
-    } catch (err) {
-      console.error('Failed to start empty workout:', err);
-      setError('Failed to start workout. Please try again.');
-      setIsStartingEmpty(false);
+  // Home's "Start workout" sheet sends "Repeat previous workout" here
+  // (?repeat=1): open the picker once the recent workouts have loaded.
+  // window.location, not useSearchParams, which would need a Suspense
+  // boundary around this whole page.
+  const [repeatRequested, setRepeatRequested] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('repeat') === '1') {
+      setRepeatRequested(true);
+      router.replace('/dashboard/train', { scroll: false });
     }
-  };
+  }, [router]);
+  useEffect(() => {
+    if (!repeatRequested || isLoading) return;
+    setRepeatRequested(false);
+    if (recentWorkouts.length > 0) setShowRepeatSheet(true);
+  }, [repeatRequested, isLoading, recentWorkouts.length]);
 
   // Repeat a previous workout: clone its exercise list (not its logged
   // weights) into a fresh session via the shared helper the History page's
@@ -806,48 +789,10 @@ export default function TrainPage() {
           app state can ever block starting a workout */}
       <div className="space-y-2">
         <SectionLabel>Start a workout</SectionLabel>
-
-        <QuickLogRow
-          icon={
-            <span className="w-10 h-10 rounded-xl bg-action/15 flex items-center justify-center flex-shrink-0">
-              {isStartingEmpty ? (
-                <IconLoader2 size={22} className="text-action animate-spin" aria-hidden="true" />
-              ) : (
-                <IconPlus size={22} className="text-action" aria-hidden="true" />
-              )}
-            </span>
-          }
-          title="Start empty workout"
-          subtitle={isStartingEmpty ? 'Starting...' : 'Add exercises as you go'}
-          onTap={handleStartEmpty}
-          disabled={isStartingEmpty}
-        />
-
-        <QuickLogRow
-          icon={
-            <span className="w-10 h-10 rounded-xl bg-action/15 flex items-center justify-center flex-shrink-0">
-              <IconSparkles size={22} className="text-action" aria-hidden="true" />
-            </span>
-          }
-          title="AI-suggested workout"
-          subtitle="Built from recovery and weekly volume"
-          onTap={() => setShowAiSheet(true)}
-        />
-
-        <QuickLogRow
-          icon={
-            <span className="w-10 h-10 rounded-xl bg-fill flex items-center justify-center flex-shrink-0">
-              <IconRepeat size={22} className="text-ink" aria-hidden="true" />
-            </span>
-          }
-          title="Repeat previous workout"
-          subtitle={
-            recentWorkouts.length > 0
-              ? 'Same exercises, fresh targets'
-              : 'Available once you complete a workout'
-          }
-          onTap={() => setShowRepeatSheet(true)}
-          disabled={recentWorkouts.length === 0}
+        <StartWorkoutOptions
+          onSuggest={() => setShowAiSheet(true)}
+          onRepeat={() => setShowRepeatSheet(true)}
+          canRepeat={recentWorkouts.length > 0}
         />
       </div>
 

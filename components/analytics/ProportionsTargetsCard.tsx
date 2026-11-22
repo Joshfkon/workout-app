@@ -215,7 +215,7 @@ function FfmiCeilingSection({
   if (currentFfmi == null) {
     return (
       <p className="text-caption text-ink-3">
-        Add body composition data to see your FFMI ceiling.
+        Add a body scan (DEXA) to see your muscle-to-height ceiling (FFMI).
       </p>
     );
   }
@@ -301,12 +301,12 @@ function FfmiCeilingSection({
 
       <div className="space-y-2">
         <div className="flex justify-between text-caption">
-          <span className="text-ink-2">Current FFMI</span>
+          <span className="text-ink-2">Current muscle score (FFMI)</span>
           <span className="text-ink font-medium">{currentFfmi.toFixed(1)}</span>
         </div>
         {targetFfmi && (
           <div className="flex justify-between text-caption">
-            <span className="text-ink-2">Target FFMI</span>
+            <span className="text-ink-2">Target muscle score (FFMI)</span>
             <span className="text-action font-medium">{targetFfmi.toFixed(1)}</span>
           </div>
         )}
@@ -599,7 +599,7 @@ export function ProportionsTargetsCard({
             </AccordionItem>
           )}
           <AccordionItem id="ffmi-ceiling">
-            <AccordionTrigger id="ffmi-ceiling">FFMI ceiling</AccordionTrigger>
+            <AccordionTrigger id="ffmi-ceiling">Muscle-to-height ceiling (FFMI)</AccordionTrigger>
             <AccordionContent id="ffmi-ceiling">
               <div className="pb-3">
                 <FfmiCeilingSection

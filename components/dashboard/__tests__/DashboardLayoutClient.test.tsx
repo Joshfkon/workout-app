@@ -54,6 +54,12 @@ jest.mock('@/lib/offline/setOutbox', () => ({
   unparkOutboxEntries: jest.fn(() => Promise.resolve(0)),
 }));
 
+const mockGetAiConsent = jest.fn(async () => null);
+jest.mock('@/lib/actions/ai-consent', () => ({
+  getAiDataSharingConsent: () => mockGetAiConsent(),
+  setAiDataSharingConsent: jest.fn(),
+}));
+
 describe('DashboardLayoutClient', () => {
   const { usePathname } = require('next/navigation');
 
@@ -107,5 +113,21 @@ describe('DashboardLayoutClient', () => {
     expect(screen.getByTestId('bottom-nav')).toBeInTheDocument();
     expect(screen.getByTestId('resume-banner')).toBeInTheDocument();
     expect(screen.getByTestId('page-content')).toBeInTheDocument();
+  });
+
+  it('never asks for AI consent on plain dashboard load', async () => {
+    usePathname.mockReturnValue('/dashboard');
+
+    render(
+      <DashboardLayoutClient>
+        <div>Test content</div>
+      </DashboardLayoutClient>
+    );
+
+    // Give any mount effects a chance to run.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByTestId('ai-consent-prompt')).not.toBeInTheDocument();
+    expect(screen.queryByText('Allow AI features?')).not.toBeInTheDocument();
+    expect(mockGetAiConsent).not.toHaveBeenCalled();
   });
 });

@@ -29,6 +29,7 @@ import { createClient, createUntypedServerClient } from '@/lib/supabase/server';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 import { parseMealDescription } from '@/lib/actions/nutrition-ai';
 import { reviewWorkoutPlan } from '@/lib/actions/workoutPlanReview';
+import { completeSingleExercise } from '@/lib/actions/exercise-completion';
 import type { ReviewPayload } from '@/services/workoutSetup/aiReview';
 
 /** Supabase stub: a signed-in user whose users row has the given consent. */
@@ -100,5 +101,23 @@ describe('AI actions without consent', () => {
       error: AI_CONSENT_REQUIRED_MESSAGE,
     });
     expect(mockOpenAI).not.toHaveBeenCalled();
+  });
+
+  it('meal parsing refuses before calling Anthropic when never asked (NULL)', async () => {
+    useConsent(null);
+    await expect(parseMealDescription('two eggs and toast')).resolves.toEqual({
+      ok: false,
+      error: AI_CONSENT_REQUIRED_MESSAGE,
+    });
+    expect(mockAnthropic).not.toHaveBeenCalled();
+  });
+
+  it('exercise AI review refuses (and writes no defaults) before calling Anthropic', async () => {
+    await expect(completeSingleExercise('exercise-1')).resolves.toEqual({
+      success: false,
+      updated: false,
+      error: AI_CONSENT_REQUIRED_MESSAGE,
+    });
+    expect(mockAnthropic).not.toHaveBeenCalled();
   });
 });

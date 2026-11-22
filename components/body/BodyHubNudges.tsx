@@ -182,7 +182,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
         <div className="flex items-center gap-3 p-3 rounded-xl bg-action/10 border border-action/20">
           <IconScan size={18} className="text-action flex-shrink-0" aria-hidden="true" />
           <p className="flex-1 text-subhead text-ink">
-            DEXA due — last scan {scanWeeks} {scanWeeks === 1 ? 'week' : 'weeks'} ago.
+            Body scan (DEXA) due — last scan {scanWeeks} {scanWeeks === 1 ? 'week' : 'weeks'} ago.
           </p>
           <button
             onClick={() => onLog('dexa')}
@@ -196,7 +196,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
               setDexaDismissed(true);
             }}
             className="p-1 rounded text-ink-2 hover:text-ink transition-colors flex-shrink-0"
-            aria-label="Dismiss DEXA reminder"
+            aria-label="Dismiss body scan (DEXA) reminder"
           >
             <IconX size={16} aria-hidden="true" />
           </button>
@@ -207,7 +207,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
         <div className="flex items-center gap-3 p-3 rounded-card bg-card shadow-card">
           <IconScan size={18} className="text-ink-2 flex-shrink-0" aria-hidden="true" />
           <p className="flex-1 text-subhead text-ink-2">
-            Want a &quot;DEXA due&quot; reminder? Suggested: every {SUGGESTED_DEXA_WEEKS} weeks.
+            Want a reminder when a body scan (DEXA) is due? Suggested: every {SUGGESTED_DEXA_WEEKS} weeks.
           </p>
           <button
             onClick={() => savePrefs({ dexaReminderWeeks: SUGGESTED_DEXA_WEEKS })}
@@ -218,7 +218,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
           <button
             onClick={() => savePrefs({ dexaReminderDeclined: true })}
             className="p-1 rounded text-ink-2 hover:text-ink transition-colors flex-shrink-0"
-            aria-label="Decline DEXA reminder"
+            aria-label="Decline body scan (DEXA) reminder"
           >
             <IconX size={16} aria-hidden="true" />
           </button>
@@ -266,7 +266,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
 
           <div>
             <label className="block text-subhead text-ink mb-1.5" htmlFor="dexa-reminder-weeks">
-              DEXA due reminder
+              Body scan (DEXA) reminder
             </label>
             <select
               id="dexa-reminder-weeks"

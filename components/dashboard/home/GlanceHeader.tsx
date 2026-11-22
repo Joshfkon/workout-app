@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { IconGauge } from '@tabler/icons-react';
+import Link from 'next/link';
+import { IconGauge, IconSettings } from '@tabler/icons-react';
 
 interface GlanceHeaderProps {
   /** Time-based greeting ("Good morning" etc.), computed client-side by the caller. */
@@ -59,17 +60,27 @@ export function GlanceHeader({
         </div>
         <h1 className="text-large-title text-ink mt-0.5">{greeting}</h1>
       </div>
-      {typeof readinessScore === 'number' && (
-        <button
-          type="button"
-          onClick={onReadinessClick}
-          aria-label={`Readiness ${readinessScore}. Tap to review your check-in.`}
-          className={`flex-shrink-0 h-9 rounded-full px-3 text-body font-bold tabular-nums whitespace-nowrap inline-flex items-center gap-1.5 ${readinessPillClasses(readinessScore)}`}
+      <div className="flex flex-shrink-0 items-center gap-2">
+        {typeof readinessScore === 'number' && (
+          <button
+            type="button"
+            onClick={onReadinessClick}
+            aria-label={`Readiness ${readinessScore}. Tap to review your check-in.`}
+            className={`flex-shrink-0 h-9 rounded-full px-3 text-body font-bold tabular-nums whitespace-nowrap inline-flex items-center gap-1.5 ${readinessPillClasses(readinessScore)}`}
+          >
+            <IconGauge size={18} aria-hidden="true" />
+            {readinessScore}
+          </button>
+        )}
+        <Link
+          href="/dashboard/settings"
+          aria-label="Settings"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-fill active:bg-fill"
+          data-testid="home-settings"
         >
-          <IconGauge size={18} aria-hidden="true" />
-          {readinessScore}
-        </button>
-      )}
+          <IconSettings size={22} aria-hidden="true" />
+        </Link>
+      </div>
     </div>
   );
 }

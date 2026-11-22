@@ -91,11 +91,30 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 60 kg
                  × 
                 8–12
-                 @ 2 RIR
+                 @ 2 
+                <abbr
+                  class="no-underline"
+                  title="reps in reserve: how many more you could have done"
+                >
+                  RIR
+                </abbr>
+                <span
+                  class="sr-only"
+                >
+                   (
+                  reps in reserve: how many more you could have done
+                  )
+                </span>
               </span>
               <span>
                  — 
                 starting point estimated from your training profile
+              </span>
+              <span
+                class="block mt-0.5 text-caption leading-snug text-ink-2"
+                data-testid="suggestion-source"
+              >
+                Estimated from your profile — start light and adjust
               </span>
             </p>
           </div>

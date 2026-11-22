@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import type { Goal, Experience, WeightUnit } from '@/types/schema';
+import { parseStandingInjuryAreas, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
 interface UserPreferences {
   goal: Goal;
@@ -17,6 +18,11 @@ interface UserPreferences {
   skipPreWorkoutCheckIn: boolean;
   /** Show the optional morning-waist field in the daily check-in. */
   trackWaistInCheckin: boolean;
+  /**
+   * Standing body areas to go easy on (onboarding). Defaulted into the
+   * pre-workout check-in at mild severity; never written to injury_history.
+   */
+  injuryAreas: StandingInjuryArea[];
 }
 
 const defaultPreferences: UserPreferences = {
@@ -30,6 +36,7 @@ const defaultPreferences: UserPreferences = {
   showWarmupSuggestions: true,
   skipPreWorkoutCheckIn: false,
   trackWaistInCheckin: true,
+  injuryAreas: [],
 };
 
 // Global state to share preferences across components
@@ -87,6 +94,7 @@ export function useUserPreferences() {
             showWarmupSuggestions: (prefs.showWarmupSuggestions as boolean) ?? true,
             skipPreWorkoutCheckIn: (prefs.skipPreWorkoutCheckIn as boolean) ?? false,
             trackWaistInCheckin: (prefs.trackWaistInCheckin as boolean) ?? true,
+            injuryAreas: parseStandingInjuryAreas(prefs.injuryAreas),
           };
           notifyListeners(newPrefs);
         }
@@ -115,7 +123,7 @@ export function useUserPreferences() {
 
     // Persist to database
     try {
-      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn' || key === 'trackWaistInCheckin') {
+      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn' || key === 'trackWaistInCheckin' || key === 'injuryAreas') {
         // These go in the preferences JSONB column
         const { data: currentUser } = await supabase
           .from('users')
@@ -167,4 +175,15 @@ export function useUserPreferences() {
     updatePreference,
     toggleUnits
   };
+}
+
+/**
+ * Reflect a preference that was ALREADY persisted (e.g. by Settings'
+ * auto-save) in every useUserPreferences consumer, without another DB write.
+ */
+export function applyPreferenceLocally<K extends keyof UserPreferences>(
+  key: K,
+  value: UserPreferences[K]
+): void {
+  notifyListeners({ ...globalPreferences, [key]: value });
 }

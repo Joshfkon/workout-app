@@ -497,6 +497,8 @@ export interface ColdStartSuggestion {
   reason: string;
   /** Full rationale sentence for the info sheet. */
   explanation: string;
+  /** Name of the logged lift the estimate transferred from, when it did. */
+  transferFrom?: string;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -2434,14 +2436,30 @@ export const ExerciseCard = memo(function ExerciseCard({
     explanation: string[];
     showRir: boolean;
     role: SetRole;
+    /**
+     * One short plain-language line naming where the number comes from
+     * ("From your last session: 70 kg × 10 → one step up"). Phrases the
+     * branch below that produced the prescription — never a second opinion.
+     */
+    source: string;
   } => {
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
+    let sourceLine = '';
+    const progressionPhrase = (p: string | undefined) =>
+      p === 'add_load' ? 'one step up' : p === 'add_rep' ? 'one more rep' : 'same again';
 
     // Observed RIR for the reason string. Half-step values are real data (the
     // RIR-2 "good" chip stores RPE 7.5) — show one decimal, not a rounded lie.
     const fmtRir = (r: number) => (Number.isInteger(r) ? String(r) : r.toFixed(1));
+
+    // Reps, or seconds for a timed exercise (the reps column holds seconds
+    // there), for the source line under the suggestion.
+    const amountLabel = (set: { reps: number }): string => {
+      const reps = getSetReps(set, exercise);
+      return reps != null ? String(reps) : `${getSetDuration(set, exercise) ?? 0}s`;
+    };
 
     // Weight delta label for trigger-based reason strings.
     const deltaLabel = (fromKg: number, toWeightStr: string) => {
@@ -2491,6 +2509,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         weight = seedWeightString(next?.weightKg ?? lastCompleted.weightKg, lastCompleted.weightKg);
         reps = next?.reps ?? Math.min(Math.max(lastCompleted.reps, block.targetRepRange[0]), block.targetRepRange[1]);
         repsLabel = String(reps);
+        sourceLine = next && repTotalPlan
+          ? `From your sets so far today (${soFar} reps)`
+          : 'Repeating your last set — no history to plan from yet';
         if (next && repTotalPlan) {
           if (next.rationale === 'reduce_load') {
             reason = `rep-total — reducing the load: last set fell below the ${block.targetRepRange[0]}-rep floor at failure`;
@@ -2613,6 +2634,17 @@ export const ExerciseCard = memo(function ExerciseCard({
         const setNo = completedSets.length + 1;
         const prevDesc = `${displayWeight(pm.prevWeightKg, true)} ${weightLabel} × ${pm.prevReps}`;
         const source = rec.provenance?.source ?? 'position_match';
+        const pmAction =
+          source === 'load_lever'
+            ? 'one step up'
+            : source === 'rep_resolve'
+              ? 'reps set to beat it'
+              : source === 'session_capacity_cap' || source === 'monotonicity_floor'
+                ? 'capped at today’s best'
+                : source === 'range_floor'
+                  ? 'lighter to stay in range'
+                  : progressionPhrase(pm.progression);
+        sourceLine = `From your last session: ${prevDesc} → ${pmAction}`;
         if (source === 'load_lever') {
           reason = `beating set ${setNo} from last session (${prevDesc}) — more reps can't top it at that load, so up one increment`;
           explanation.push(
@@ -2704,6 +2736,17 @@ export const ExerciseCard = memo(function ExerciseCard({
         }
       }
       if (!rec.positionMatch) {
+        const lastDesc = `${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${amountLabel(lastCompleted)}`;
+        const action = rec.noMeaningfulChange
+          ? 'same weight'
+          : rec.rangeFloorLoadDrop
+            ? 'lighter to stay in range'
+            : rec.rationale === 'increase_load'
+              ? 'load up'
+              : rec.rationale === 'reduce_load'
+                ? 'load down'
+                : 'same weight';
+        sourceLine = `From your last set: ${lastDesc} → ${action}`;
         explanation.push(
           `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
         );
@@ -2742,6 +2785,9 @@ export const ExerciseCard = memo(function ExerciseCard({
       reps = repTotalPlan.perSetRepTargets[0] ?? block.targetRepRange[0];
       repsLabel = String(reps);
       const firstRef = repTotalPlan.perSetRefReps?.[0];
+      sourceLine = `From your last session at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel} → ${
+        repTotalPlan.bumped ? 'one step up' : `beat ${repTotalPlan.prevSessionRepTotal} total reps`
+      }`;
       reason = repTotalPlan.bumped
         ? `rep-total — load up; set 1 targets ${reps} (you did ${firstRef ?? '—'} at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`
         : repTotalPlan.bumpDeferred === 'load_cost'
@@ -2805,6 +2851,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (seed.role === 'ramp') {
         const pct = Math.round(RAMP_LOAD_FRACTION * 100);
         reason = `ramp set — ~${pct}% of today's top working set`;
+        sourceLine = `Warm-up: ~${pct}% of today's top set`;
         explanation.push(
           `This is a ramp/feeder set (~${pct}% of today's top working set), so there's no RIR target and it isn't counted as junk volume.`
         );
@@ -2833,6 +2880,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                 : binder === 'noise_floor'
                   ? '(held — no meaningful change available at this increment)'
                   : null;
+        sourceLine =
+          binder === 'bump_gate'
+            ? 'From your recent sets on this lift — held until you top the rep range'
+            : 'From your recent sets on this lift';
         reason = holdNote
           ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM ${holdNote}`
           : `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM`;
@@ -2875,6 +2926,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         const setNo = completedSets.length + 1;
         const prevDesc = `${displayWeight(pm.prevWeightKg, true)} ${weightLabel} × ${pm.prevReps}`;
         if (seed.seedReps !== undefined) repsLabel = String(seed.seedReps);
+        sourceLine = `From your last session: ${prevDesc} → ${progressionPhrase(pm.progression)}`;
         reason =
           pm.progression === 'add_rep'
             ? `matching set ${setNo} from last session (${prevDesc}) — go one more rep`
@@ -2897,6 +2949,13 @@ export const ExerciseCard = memo(function ExerciseCard({
         const prevDelta = deltaLabel(prevSet.weightKg, weight);
         const seedUp = prevDelta ? `load +${prevDelta}` : 'load up';
         const seedDown = prevDelta ? `load -${prevDelta}` : 'load down';
+        const seedAction =
+          seed.trigger === 'rep_overshoot' || seed.trigger === 'top_range_reserve'
+            ? 'load up'
+            : seed.trigger === 'below_rep_min' || seed.trigger === 'rir_deficit'
+              ? 'load down'
+              : 'same again';
+        sourceLine = `From your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${amountLabel(prevSet)} → ${seedAction}`;
         if (seed.trigger === 'rep_overshoot') {
           reason = `${prevSet.reps} reps over ${rangeLabel} target last session — ${seedUp}`;
         } else if (seed.trigger === 'top_range_reserve') {
@@ -2917,7 +2976,14 @@ export const ExerciseCard = memo(function ExerciseCard({
         // which source fired.
         reason = coldStartSuggestion.reason;
         explanation.push(coldStartSuggestion.explanation);
+        const transferFrom =
+          coldStartSuggestion.transferFrom ??
+          coldStartSuggestion.reason.match(/from your (.+?) strength/i)?.[1];
+        sourceLine = transferFrom
+          ? `First time on this lift — estimated from your ${transferFrom}; adjust to feel`
+          : 'Estimated from your profile — start light and adjust';
       } else if (weight) {
+        sourceLine = 'Estimated from your profile — start light and adjust';
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else if (isDurationBased) {
@@ -2925,11 +2991,13 @@ export const ExerciseCard = memo(function ExerciseCard({
         // fabricate a load for a timed exercise with no history — say so here
         // instead of leaving only a console warning.
         reason = 'no load prescription for this timed exercise yet';
+        sourceLine = 'No history yet — pick a weight you can hold';
         explanation.push(
           `Timed exercise: no history to anchor a load on, so none is suggested. Pick a weight you can hold for ~${block.targetRepRange[0]}s at the target effort — the engine progresses from what you log.`
         );
       } else {
         reason = 'enter your working weight to calibrate';
+        sourceLine = 'No history yet — log a set and suggestions learn from it';
         explanation.push('Log a first set and future suggestions will anchor to it.');
       }
     }
@@ -2958,6 +3026,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // next-week anchoring.
     if (isDeloadSession) {
       reason = 'deload — reduced load this session';
+      sourceLine = 'Deload: lighter on purpose so you recover';
       explanation.unshift(
         'Deload session: keeping the load easy to shed fatigue. This session is held out of PRs, e1RM trends and next session’s weight suggestion.'
       );
@@ -2979,12 +3048,13 @@ export const ExerciseCard = memo(function ExerciseCard({
         weight = seedWeightString(anchorKg * 0.9);
       }
       reason = `easing off — you flagged ${partLabel} pain here`;
+      sourceLine = `Eased off ~10% because you flagged ${partLabel} pain`;
       explanation.unshift(
         `You stopped a set for ${partLabel} pain, so the load is backed off ~10% instead of progressing. If it still hurts, swap to a variation (⋯ menu → Swap).`
       );
     }
 
-    return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role };
+    return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role, source: sourceLine };
   };
 
   // The MOST RECENT completed set's next-set call (services/
@@ -4671,6 +4741,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                 showRir={suggestion.showRir}
                 roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
                 reason={suggestion.reason}
+                source={
+                  latestCall?.heldByVelocity
+                    ? 'Holding: bar speed says your last set was harder than logged'
+                    : suggestion.source
+                }
                 explanation={suggestion.explanation}
                 effortCheck={effortCheck}
                 setKey={activeSetNumber}

@@ -1,6 +1,52 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { createUntypedClient } from '@/lib/supabase/client';
+import { completeOnboarding } from '@/lib/onboarding/onboardingProgress';
+
+/**
+ * Header "Skip for now". Before the goal is saved (the /onboarding steps) it
+ * is a plain link: setup isn't done, so the dashboard's resume banner should
+ * offer to finish it. On every later page (benchmarks onward) the essentials
+ * are saved, so skipping finishes onboarding in the same tap; otherwise it
+ * lands on the dashboard with a "Complete your setup" banner to dismiss.
+ */
+function SkipLink() {
+  const pathname = usePathname() ?? '';
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const className = 'text-body text-ink-2 hover:text-ink transition-colors';
+  const pastGoalStep = pathname.startsWith('/onboarding/');
+
+  if (!pastGoalStep) {
+    return (
+      <Link href="/dashboard" className={className}>
+        Skip for now →
+      </Link>
+    );
+  }
+
+  const skip = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await completeOnboarding(supabase, user.id);
+    } catch {
+      // Best-effort: the worst case is the setup banner showing once.
+    }
+    router.push('/dashboard');
+  };
+
+  return (
+    <button type="button" onClick={skip} disabled={busy} className={className} data-testid="header-skip-onboarding">
+      Skip for now →
+    </button>
+  );
+}
 
 export default function OnboardingLayout({
   children,
@@ -21,12 +67,7 @@ export default function OnboardingLayout({
             <span className="text-headline font-bold text-ink">HyperTrack</span>
           </Link>
           
-          <Link 
-            href="/dashboard"
-            className="text-body text-ink-2 hover:text-ink transition-colors"
-          >
-            Skip for now →
-          </Link>
+          <SkipLink />
         </div>
       </header>
 

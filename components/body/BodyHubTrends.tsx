@@ -48,7 +48,7 @@ import {
 } from '@/services/compositionSpace';
 import { CompositionMap } from '@/components/body/CompositionMap';
 import type { WeightHistoryEntry } from '@/hooks/useBodyCompTrend';
-import { kgToLbs } from '@/lib/utils';
+import { kgToLbs, lbsToKg } from '@/lib/utils';
 import type { Goal, Experience } from '@/types/schema';
 
 interface BodyHubTrendsProps {
@@ -76,6 +76,8 @@ interface BodyHubTrendsProps {
   initialMetric?: CompMetric;
   /** Training-phase spans drawn as background bands on the weight chart. */
   phaseSpans?: PhaseBandSpan[];
+  /** Opens weight logging — the "how to get a trend" action when < 2 weigh-ins. */
+  onLogWeight?: () => void;
 }
 
 export type CompMetric = 'bodyFat' | 'leanMass' | 'ffmi' | 'map';
@@ -128,6 +130,17 @@ function metricValueOf(
   }
 }
 
+/** A lone weigh-in in the viewer's unit, one decimal. */
+function singleWeighInDisplay(entry: WeightHistoryEntry, units: 'lb' | 'kg'): string {
+  const value =
+    entry.unit === units
+      ? entry.weight
+      : units === 'lb'
+        ? kgToLbs(entry.weight)
+        : lbsToKg(entry.weight);
+  return (Math.round(value * 10) / 10).toFixed(1);
+}
+
 export function BodyHubTrends({
   units,
   heightCm,
@@ -142,6 +155,7 @@ export function BodyHubTrends({
   onSetTarget,
   initialMetric,
   phaseSpans,
+  onLogWeight,
 }: BodyHubTrendsProps) {
   const [metric, setMetric] = useState<CompMetric>(initialMetric ?? 'bodyFat');
 
@@ -154,10 +168,11 @@ export function BodyHubTrends({
   // height; the map additionally needs ≥2 scans to have a path to draw.
   const metricOptions = useMemo(() => {
     const options: { value: CompMetric; label: string }[] = [
-      { value: 'bodyFat', label: 'BF %' },
+      { value: 'bodyFat', label: 'Body fat %' },
       { value: 'leanMass', label: 'Lean mass' },
     ];
-    if (heightCm) options.push({ value: 'ffmi', label: 'FFMI' });
+    // Plain label first, the technical term kept in brackets.
+    if (heightCm) options.push({ value: 'ffmi', label: 'Muscle (FFMI)' });
     if (heightCm && dexaCount >= MIN_SCANS_FOR_COMPOSITION_MAP) {
       options.push({ value: 'map', label: 'Map' });
     }
@@ -236,13 +251,50 @@ export function BodyHubTrends({
 
   return (
     <div className="space-y-4">
-      {/* Weight trend */}
-      {weightHistory.length >= 2 && (
+      {/* Weight trend. With < 2 weigh-ins there's no line yet, so say
+          exactly what gets one instead of rendering nothing. */}
+      {weightHistory.length >= 2 ? (
         <WeightGraph weightHistory={weightHistory} preferredUnit={units} phases={phaseSpans} />
+      ) : isLoading ? (
+        <div className="h-56 animate-pulse bg-fill/50 rounded-xl" />
+      ) : (
+        <Card data-testid="weight-trend-empty">
+          <CardHeader>
+            <CardTitle>Weight trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {weightHistory.length === 1 && (
+              <p className="text-title font-semibold text-ink mb-1">
+                {singleWeighInDisplay(weightHistory[0], units)}
+                <span className="text-subhead text-ink-2 font-normal"> {units}</span>
+              </p>
+            )}
+            <p className="text-subhead text-ink-2">
+              {weightHistory.length === 1
+                ? 'Weigh in on one more day and your trend line starts here.'
+                : 'Weigh in on 2 different days and your trend line shows up here.'}
+            </p>
+            {onLogWeight && (
+              <button
+                type="button"
+                onClick={onLogWeight}
+                className="mt-3 text-subhead text-action font-medium"
+              >
+                Log weight
+              </button>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* BF% / lean mass / FFMI anchored trend + Composition Map.
-          The id anchors ?section= deep links (e.g. from the Home card). */}
+      {/* Without a body scan there's nothing to plot here — the "log a body
+          scan" prompt lives in the page's Add-more-data list, below the
+          chart. The anchor stays for ?section= deep links. */}
+      {!isLoading && trend.length === 0 ? (
+        <div id={BODY_COMP_TREND_SECTION_ID} className="scroll-mt-4" />
+      ) : (
+      // BF% / lean mass / FFMI anchored trend + Composition Map. The id
+      // anchors ?section= deep links (e.g. from the Home card).
       <div id={BODY_COMP_TREND_SECTION_ID} className="scroll-mt-4">
       <Card>
         <CardHeader>
@@ -272,11 +324,6 @@ export function BodyHubTrends({
         <CardContent>
           {isLoading ? (
             <div className="h-56 animate-pulse bg-fill/50 rounded-lg" />
-          ) : trend.length === 0 ? (
-            <p className="text-subhead text-ink-2 py-8 text-center">
-              Log a DEXA scan to unlock the composition trend — bodyweight
-              alone can&apos;t estimate body fat.
-            </p>
           ) : activeMetric === 'map' && heightCm ? (
             <CompositionMap
               trend={trend}
@@ -300,7 +347,7 @@ export function BodyHubTrends({
                     </span>
                   </span>
                   <span className="text-caption text-ink-2">
-                    {latest.kind === 'dexa' ? 'measured (DEXA)' : 'current estimate'}
+                    {latest.kind === 'dexa' ? 'measured by body scan (DEXA)' : 'current estimate'}
                     {' · '}
                     {new Date(`${latest.date}T00:00:00`).toLocaleDateString('en-US', {
                       month: 'short',
@@ -404,7 +451,7 @@ export function BodyHubTrends({
                     {/* DEXA anchors: distinct, larger markers */}
                     <Scatter
                       dataKey="anchorValue"
-                      name="DEXA scan"
+                      name="Body scan (DEXA)"
                       fill="#22d3ee"
                       shape={(props: { cx?: number; cy?: number }) =>
                         props.cx != null && props.cy != null ? (
@@ -426,7 +473,7 @@ export function BodyHubTrends({
               </div>
               <p className="text-caption text-ink-2 mt-2">
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 align-middle mr-1" />
-                DEXA scans (measured) · line between scans is an estimate
+                Body scans (DEXA) are measured · line between scans is an estimate
                 re-anchored to pass through every scan
                 {gapCount > 0 && (
                   <>
@@ -438,7 +485,8 @@ export function BodyHubTrends({
               </p>
               {activeMetric === 'ffmi' && latestFfmi && (
                 <p className="text-caption text-ink-2 mt-1">
-                  Chart shows raw FFMI (fat-free mass / height m²) · latest{' '}
+                  Muscle-to-height score (FFMI): how much lean mass you carry for
+                  your height. Chart shows raw FFMI (fat-free mass / height m²) · latest{' '}
                   {latestFfmi.ffmi} · height-normalized:{' '}
                   {latestFfmi.normalizedFfmi}
                   {trend[trend.length - 1].boneMassKg == null &&
@@ -450,6 +498,7 @@ export function BodyHubTrends({
         </CardContent>
       </Card>
       </div>
+      )}
     </div>
   );
 }

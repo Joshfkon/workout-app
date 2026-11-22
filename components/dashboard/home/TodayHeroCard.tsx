@@ -139,6 +139,41 @@ function HeroShell({
   );
 }
 
+/** Which state the hero renders (see TodayHeroCard). */
+export type TodayHeroVariant =
+  | 'workout' // today's session, ready or in progress: Start / Continue
+  | 'scheduled' // plan day without a session yet: Start
+  | 'meal' // no pending workout: Log food
+  | 'done' // finished today: View workout
+  | 'freestyle' // freestyle, nothing yet: Start workout
+  | 'no-plan' // no plan: Start workout / Build a program
+  | 'none'; // rest day with nothing to log: no hero
+
+/**
+ * Pure: the hero branch for these inputs. TodayHeroCard renders from it, and
+ * Home uses it to know whether the hero already offers a workout start.
+ */
+export function todayHeroVariant({
+  workout,
+  scheduled,
+  hasPlan,
+  freestyle = false,
+  meal,
+}: Pick<TodayHeroCardProps, 'workout' | 'scheduled' | 'hasPlan' | 'freestyle' | 'meal'>): TodayHeroVariant {
+  if (workout && workout.state !== 'completed') return 'workout';
+  if (!workout && scheduled) return 'scheduled';
+  if (meal && (hasPlan || freestyle)) return 'meal';
+  if (workout && workout.state === 'completed') return 'done';
+  if (freestyle) return 'freestyle';
+  if (!hasPlan) return 'no-plan';
+  return 'none';
+}
+
+/** Hero states whose primary button starts or continues a workout. */
+export function heroOffersWorkoutStart(variant: TodayHeroVariant): boolean {
+  return variant === 'workout' || variant === 'scheduled' || variant === 'freestyle' || variant === 'no-plan';
+}
+
 /**
  * "Next up" hero — the primary daily action at the top of the home page.
  * A pending workout wins; otherwise the next meal is suggested (workout done
@@ -163,8 +198,10 @@ export function TodayHeroCard({
   isStarting = false,
   freestyleActions,
 }: TodayHeroCardProps) {
+  const variant = todayHeroVariant({ workout, scheduled, hasPlan, freestyle, meal });
+
   // Pending workout — the primary recommendation when the user hasn't trained yet.
-  if (workout && workout.state !== 'completed') {
+  if (variant === 'workout' && workout) {
     const inProgress = workout.state === 'in_progress';
     const title = scheduled?.dayName ?? mesocycleName ?? "Today's workout";
     const meta =
@@ -201,7 +238,7 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
   }
 
   // Plan exists but today's session hasn't been generated yet.
-  if (!workout && scheduled) {
+  if (variant === 'scheduled' && scheduled) {
     return (
       <div>
         <div className="rounded-card bg-card shadow-card p-5">
@@ -232,7 +269,7 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
   // No pending workout (done for the day or rest day) — recommend the next
   // meal. Only within an active plan: without one the "plan a mesocycle" CTA
   // below must stay reachable as the primary hero for new users.
-  if (meal && (hasPlan || freestyle)) {
+  if (variant === 'meal' && meal) {
     return (
       <div className="rounded-card bg-card shadow-card p-5">
         <HeroShell
@@ -255,7 +292,7 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
   }
 
   // Workout done and nothing left to log — a quiet "done" state.
-  if (workout && workout.state === 'completed') {
+  if (variant === 'done' && workout) {
     return (
       <Link href={`/dashboard/workout/${workout.id}`} className="block">
         <div className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill">
@@ -279,7 +316,7 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
     );
   }
 
-  if (freestyle) {
+  if (variant === 'freestyle') {
     return (
       <div>
         <div className="relative rounded-card bg-card shadow-card p-5">
@@ -305,7 +342,7 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
     );
   }
 
-  if (!hasPlan) {
+  if (variant === 'no-plan') {
     return (
       <div>
         <div className="relative rounded-card bg-card shadow-card p-5">

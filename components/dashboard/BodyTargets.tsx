@@ -441,7 +441,7 @@ export function BodyTargets({
 
               {progress.ffmi && (
                 <div className="p-3 bg-fill/50 rounded-lg">
-                  <p className="text-caption text-ink-3 mb-1">FFMI</p>
+                  <p className="text-caption text-ink-3 mb-1">Muscle score (FFMI)</p>
                   <p className={`text-headline font-medium ${getProgressColor(progress.ffmi.progress)}`}>
                     {progress.ffmi.current.toFixed(1)}
                   </p>
@@ -506,7 +506,7 @@ export function BodyTargets({
           <div className="text-center py-6">
             <p className="text-ink-2 text-subhead mb-2">No goals set yet</p>
             <p className="text-caption text-ink-3 mb-3">
-              Set target weight, body fat, FFMI, or measurements to track progress
+              Set target weight, body fat, muscle-to-height score (FFMI), or measurements to track progress
             </p>
             <Button variant="outline" size="sm" onClick={startEditing}>
               Set goals
@@ -560,7 +560,7 @@ export function BodyTargets({
               />
             </div>
             <div>
-              <label className="block text-subhead text-ink-2 mb-1">Target FFMI</label>
+              <label className="block text-subhead text-ink-2 mb-1">Target muscle-to-height score (FFMI)</label>
               <Input
                 type="number"
                 step="0.1"

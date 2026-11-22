@@ -108,6 +108,12 @@ interface ReadinessCheckInProps {
    * are passed back via onSubmit's second argument (no defaults; skippable).
    */
   sorenessMuscles?: StandardMuscleGroup[];
+  /**
+   * Standing areas to go easy on (from onboarding, users.preferences
+   * .injuryAreas), already expanded to check-in areas at mild severity.
+   * Prefilled into temporaryInjuries; the lifter can remove them for today.
+   */
+  defaultInjuries?: TemporaryInjury[];
   // Initial values from daily check-in and weight log
   initialValues?: {
     sleepHours?: number | null;
@@ -119,7 +125,7 @@ interface ReadinessCheckInProps {
   };
 }
 
-export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose, unit = 'kg', todayNutrition, userGoal, sorenessMuscles, initialValues }: ReadinessCheckInProps) {
+export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose, unit = 'kg', todayNutrition, userGoal, sorenessMuscles, defaultInjuries, initialValues }: ReadinessCheckInProps) {
   // Initialize with daily check-in data if available
   const [sleepHours, setSleepHours] = useState(initialValues?.sleepHours ?? 7);
   const [sleepQuality, setSleepQuality] = useState<Rating>(initialValues?.sleepQuality ?? 3);
@@ -135,7 +141,18 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
   const [sorenessRatings, setSorenessRatings] = useState<MuscleSorenessRatings>({});
 
   const [showInjurySection, setShowInjurySection] = useState(false);
-  const [temporaryInjuries, setTemporaryInjuries] = useState<TemporaryInjury[]>([]);
+  const [temporaryInjuries, setTemporaryInjuries] = useState<TemporaryInjury[]>(defaultInjuries ?? []);
+  // Defaults can arrive after mount (preferences load async); apply them once,
+  // and only if the lifter hasn't touched the injury list yet.
+  const [injuriesTouched, setInjuriesTouched] = useState(false);
+  const [appliedDefaults, setAppliedDefaults] = useState((defaultInjuries?.length ?? 0) > 0);
+  useEffect(() => {
+    if (appliedDefaults || injuriesTouched || !defaultInjuries || defaultInjuries.length === 0) return;
+    setTemporaryInjuries(defaultInjuries);
+    setAppliedDefaults(true);
+  }, [defaultInjuries, appliedDefaults, injuriesTouched]);
+  const showingDefaults =
+    appliedDefaults && temporaryInjuries.some((i) => defaultInjuries?.some((d) => d.area === i.area));
   const [selectedArea, setSelectedArea] = useState<TemporaryInjury['area'] | ''>('');
   const [selectedSeverity, setSelectedSeverity] = useState<1 | 2 | 3>(1);
 
@@ -227,6 +244,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
 
   const addInjury = () => {
     if (selectedArea) {
+      setInjuriesTouched(true);
       // Check if already added
       if (!temporaryInjuries.some(i => i.area === selectedArea)) {
         setTemporaryInjuries([...temporaryInjuries, { area: selectedArea, severity: selectedSeverity }]);
@@ -237,6 +255,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
   };
 
   const removeInjury = (area: TemporaryInjury['area']) => {
+    setInjuriesTouched(true);
     setTemporaryInjuries(temporaryInjuries.filter(i => i.area !== area));
   };
 
@@ -567,6 +586,12 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
             </svg>
           </button>
 
+          {showingDefaults && (
+            <p className="text-caption text-ink-3 mt-1" data-testid="checkin-default-injuries-note">
+              Marked mild from your setup. Remove any that feel fine today.
+            </p>
+          )}
+
           {/* Current injuries display */}
           {temporaryInjuries.length > 0 && !showInjurySection && (
             <div className="flex flex-wrap gap-2 mt-2">
@@ -612,7 +637,9 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                           <span>{areaInfo?.label}</span>
                           <span className="text-caption opacity-70">({severityLabels[injury.severity - 1]})</span>
                           <button
+                            type="button"
                             onClick={() => removeInjury(injury.area)}
+                            aria-label={`Remove ${areaInfo?.label ?? injury.area}`}
                             className="ml-1 p-0.5 hover:bg-sep rounded-full"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

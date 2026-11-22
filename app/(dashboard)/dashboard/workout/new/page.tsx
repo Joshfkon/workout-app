@@ -32,6 +32,8 @@ import {
   unavailableIdsFromLegacyAllowlist,
 } from '@/services/equipmentFilter';
 import type { UserInjury } from '@/lib/training/injury-types';
+import { parseStandingInjuryAreas, standingAreasToUserInjuries } from '@/lib/training/standingInjuries';
+import { now as clockNow } from '@/lib/clock';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
@@ -392,7 +394,7 @@ function NewWorkoutContent() {
       
       const { data: userData } = await supabase
         .from('users')
-        .select('available_equipment, injury_history')
+        .select('available_equipment, injury_history, preferences')
         .eq('id', user.id)
         .single();
       
@@ -469,6 +471,18 @@ function NewWorkoutContent() {
         // Continue without injury data from sessions
       }
       
+      // Standing areas to go easy on (onboarding, users.preferences
+      // .injuryAreas): mild, so the safety check flags or swaps exercises that
+      // load them rather than dropping whole muscle groups.
+      const standingAreas = parseStandingInjuryAreas(
+        (userData?.preferences as Record<string, unknown> | null | undefined)?.injuryAreas
+      );
+      for (const injury of standingAreasToUserInjuries(standingAreas, clockNow())) {
+        if (!activeInjuries.some(inj => inj.injuryTypeId === injury.injuryTypeId)) {
+          activeInjuries.push(injury);
+        }
+      }
+
       // Also check user's injury_history if available
       if (userData?.injury_history && Array.isArray(userData.injury_history) && userData.injury_history.length > 0) {
         // Convert injury_history (array of muscle groups) to UserInjury format

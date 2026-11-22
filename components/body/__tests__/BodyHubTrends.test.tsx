@@ -73,14 +73,33 @@ function renderTrends(props: Partial<React.ComponentProps<typeof BodyHubTrends>>
 }
 
 describe('BodyHubTrends', () => {
-  it('shows the empty state until a DEXA scan exists', () => {
+  it('renders no composition card until a body scan exists (the prompt lives below the chart)', () => {
     renderTrends({ trend: [] });
-    expect(screen.getByText(/Log a DEXA scan/)).toBeInTheDocument();
+    expect(screen.queryByText('Body composition trend')).not.toBeInTheDocument();
+    expect(screen.queryByText(/DEXA/)).not.toBeInTheDocument();
+  });
+
+  it('tells a user with no weigh-ins how to get a weight trend', async () => {
+    const user = userEvent.setup();
+    const onLogWeight = jest.fn();
+    renderTrends({ trend: [], weightHistory: [], onLogWeight });
+    expect(screen.getByText(/Weigh in on 2 different days/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Log weight' }));
+    expect(onLogWeight).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a lone weigh-in with what it takes to start the line', () => {
+    renderTrends({
+      trend: [],
+      weightHistory: [{ date: '2026-06-01', weight: 80, unit: 'kg' }],
+    });
+    expect(screen.getByText('80.0')).toBeInTheDocument();
+    expect(screen.getByText(/Weigh in on one more day/)).toBeInTheDocument();
   });
 
   it('offers the FFMI toggle only when the profile has a height', () => {
     const { rerender } = renderTrends();
-    expect(screen.getByRole('button', { name: 'FFMI' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Muscle (FFMI)' })).toBeInTheDocument();
 
     rerender(
       <BodyHubTrends
@@ -91,9 +110,9 @@ describe('BodyHubTrends', () => {
         isLoading={false}
       />
     );
-    expect(screen.queryByRole('button', { name: 'FFMI' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Muscle (FFMI)' })).not.toBeInTheDocument();
     // The other two metrics remain available.
-    expect(screen.getByRole('button', { name: 'BF %' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Body fat %' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Lean mass' })).toBeInTheDocument();
   });
 
@@ -111,7 +130,7 @@ describe('BodyHubTrends', () => {
     expect(screen.getByText(/current estimate · Jun 15/)).toBeInTheDocument();
   });
 
-  it('labels the headline "measured (DEXA)" when the newest point is a scan', () => {
+  it('labels the headline "measured by body scan (DEXA)" when the newest point is a scan', () => {
     renderTrends({
       trend: [
         trendPoint({ date: '2026-06-01' }),
@@ -119,14 +138,14 @@ describe('BodyHubTrends', () => {
       ],
     });
     expect(screen.getByText('17.8')).toBeInTheDocument();
-    expect(screen.getByText(/measured \(DEXA\) · Jun 15/)).toBeInTheDocument();
+    expect(screen.getByText(/measured by body scan \(DEXA\) · Jun 15/)).toBeInTheDocument();
   });
 
   it('labels the normalized FFMI readout from the trend last point (shared computeFFMI)', async () => {
     const user = userEvent.setup();
     renderTrends();
 
-    await user.click(screen.getByRole('button', { name: 'FFMI' }));
+    await user.click(screen.getByRole('button', { name: 'Muscle (FFMI)' }));
 
     const last = twoPointTrend[twoPointTrend.length - 1];
     const expected = computeFFMI(last.leanMassKg, last.boneMassKg, 180);
@@ -141,7 +160,7 @@ describe('BodyHubTrends', () => {
       trend: twoPointTrend.map((p) => ({ ...p, boneMassKg: null })),
     });
 
-    await user.click(screen.getByRole('button', { name: 'FFMI' }));
+    await user.click(screen.getByRole('button', { name: 'Muscle (FFMI)' }));
     expect(
       screen.getByText(/bone mass not logged — FFMI uses lean mass only/)
     ).toBeInTheDocument();

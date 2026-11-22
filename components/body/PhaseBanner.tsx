@@ -29,7 +29,7 @@ export function PhaseBanner({ phase, href }: PhaseBannerProps) {
         className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-fill/60 border border-sep/60 text-subhead hover:bg-fill transition-colors"
         data-testid="phase-banner-empty"
       >
-        <span className="text-ink">No active phase — set one</span>
+        <span className="text-ink">No goal phase (cut / maintain / bulk) set</span>
         <span className="text-action text-caption font-medium shrink-0">Set phase</span>
       </Link>
     );

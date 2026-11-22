@@ -140,6 +140,7 @@ import { evaluateWarmupReadiness } from '@/services/warmupEngine';
 import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import { getSetReps, formatSetCount } from '@/services/shared/setModality';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { standingAreasToCheckInInjuries } from '@/lib/training/standingInjuries';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import {
@@ -444,6 +445,11 @@ export default function WorkoutPage() {
   const sessionId = params.id as string;
   const fromCreate = searchParams.get('fromCreate') === 'true';
   const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
+  // Onboarding's "areas to go easy on", prefilled into the check-in at mild.
+  const standingCheckInInjuries = useMemo(
+    () => standingAreasToCheckInInjuries(preferences.injuryAreas ?? []),
+    [preferences.injuryAreas]
+  );
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
   const pauseSession = useWorkoutStore((state) => state.pauseSession);
   const resumeSession = useWorkoutStore((state) => state.resumeSession);
@@ -7828,6 +7834,7 @@ export default function WorkoutPage() {
                           ? `starting point estimated from your ${weightRec.transferFrom} strength`
                           : 'starting point estimated from your training profile',
                         explanation: weightRec.rationale,
+                        transferFrom: weightRec.transferFrom || undefined,
                       }
                     : undefined;
 
@@ -8490,6 +8497,7 @@ export default function WorkoutPage() {
               todayNutrition={todayNutrition || undefined}
               userGoal={userGoal}
               sorenessMuscles={Object.keys(recentMuscleSessions) as StandardMuscleGroup[]}
+              defaultInjuries={temporaryInjuries.length === 0 ? standingCheckInInjuries : undefined}
               initialValues={todayCheckInData || undefined}
             />
           </div>

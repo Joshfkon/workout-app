@@ -21,7 +21,7 @@ import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useHealthKitForegroundSync } from '@/hooks/useHealthKitSync';
 import { useMealReminderSync } from '@/hooks/useMealReminderSync';
 import { isActiveWorkoutRoute } from './isActiveWorkoutRoute';
-import { AiConsentPrompt } from '@/components/ai/AiConsentPrompt';
+import { AiConsentProvider } from '@/components/ai/AiConsentGate';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -98,6 +98,9 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
     // overflow-x-clip, NOT -hidden: hidden makes this div a scroll container,
     // which kills the sticky header below and makes iOS unpin the fixed
     // bottom nav mid-scroll. clip clips without creating a scroll container.
+    // AiConsentProvider: the "Allow AI features?" sheet, asked at the first
+    // AI tap (never on load) — see components/ai/AiConsentGate.
+    <AiConsentProvider>
     <div className="min-h-screen bg-canvas overflow-x-clip">
       <Sidebar onSignOut={handleSignOut} volumeGoalsMet={volumeGoalsMet} />
 
@@ -150,9 +153,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
       {/* Resume workout banner - shows when there's an active workout */}
       <ResumeWorkoutBanner />
-
-      {/* One-time third-party AI data sharing consent (never mid-workout) */}
-      <AiConsentPrompt suppressed={hideAppHeader} />
     </div>
+    </AiConsentProvider>
   );
 }

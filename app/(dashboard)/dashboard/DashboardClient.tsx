@@ -64,6 +64,8 @@ import {
 import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard, useHealthGlance, TodayCard, TodaySheet, NudgeCard, pickHomeNudge } from '@/components/dashboard/home';
 import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
+import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
+import { heroOffersWorkoutStart, todayHeroVariant } from '@/components/dashboard/home/TodayHeroCard';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
@@ -1569,6 +1571,20 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         isStarting={isStartingWorkout}
         freestyleActions={isFreestyle ? <FreestyleStartActions userId={userId} /> : undefined}
       />
+
+      {/* A workout start is always one tap from Home: when the hero shows a
+          meal, "done" or nothing, this resumes an unfinished workout or
+          opens the start options. */}
+      {!isLoading &&
+        !heroOffersWorkoutStart(
+          todayHeroVariant({
+            workout: heroWorkout,
+            scheduled: heroScheduled,
+            hasPlan: !!planMesocycle,
+            freestyle: isFreestyle,
+            meal: mealHero,
+          })
+        ) && <HomeStartWorkout userId={userId} />}
 
       {/* 2. Today: Eat · Recovery · This week (depth one tap away) */}
       <TodayCard

@@ -14,6 +14,7 @@ import { CustomExerciseBasicForm } from './CustomExerciseBasicForm';
 import { CustomExerciseReviewForm } from './CustomExerciseReviewForm';
 import type { BasicExerciseInput, CompletedExerciseData } from '@/lib/exercises/types';
 import { completeExerciseWithAI } from '@/lib/actions/exercise-completion';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { createCustomExercise, clearExerciseCache } from '@/services/exerciseService';
 import { isGroupSplitPrimary } from '@/services/muscleAttributionAudit';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -38,6 +39,7 @@ export function CreateCustomExercise({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const ensureAiConsent = useAiConsentGate();
   const [basicInput, setBasicInput] = useState<BasicExerciseInput | null>(null);
   const [completedData, setCompletedData] = useState<CompletedExerciseData | null>(
     null
@@ -51,6 +53,10 @@ export function CreateCustomExercise({
     setBasicInput(input);
 
     try {
+      // First AI use asks for consent. Declining still creates the exercise:
+      // without consent the server action sends nothing to Anthropic and
+      // returns equipment defaults (lib/actions/exercise-completion.ts).
+      await ensureAiConsent();
       const result = await completeExerciseWithAI(input);
 
       if (!result.success) {

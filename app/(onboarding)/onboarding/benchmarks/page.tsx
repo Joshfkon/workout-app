@@ -72,9 +72,10 @@ function BenchmarksContent() {
   const sessionId = searchParams.get('session');
   
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedBenchmarks, setSelectedBenchmarks] = useState<string[]>([
-    'bench_press', 'squat', 'deadlift', 'barbell_row'
-  ]);
+  const [isSkipping, setIsSkipping] = useState(false);
+  // Nothing preselected: testing is optional, and a preselected set made the
+  // page open on "about 68 minutes". Recommended lifts carry a badge instead.
+  const [selectedBenchmarks, setSelectedBenchmarks] = useState<string[]>([]);
   
   const recommendedIds = ['bench_press', 'squat', 'deadlift', 'barbell_row'];
   const optionalIds = ['overhead_press', 'pullup'];
@@ -92,7 +93,11 @@ function BenchmarksContent() {
 
   // Skipping is a finished setup, not an abandoned one — otherwise the
   // "Complete your setup" card nags on every screen.
+  // One tap: no confirm, and the button goes busy at once so a slow network
+  // doesn't read as "nothing happened, tap again".
   const skipTesting = async () => {
+    if (isSkipping) return;
+    setIsSkipping(true);
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -168,15 +173,23 @@ function BenchmarksContent() {
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">Test your strength? (optional)</h1>
         <p className="text-ink-2">
-          Testing at the gym (about 17 minutes per lift) makes your first weights more precise.
-          Skip it and we&apos;ll estimate them, then fine-tune from your first workouts.
+          You don&apos;t need this to start. Skip it and we&apos;ll estimate your starting weights,
+          then sharpen them from your first couple of workouts. Testing at the gym just gets
+          them right from day one.
         </p>
       </div>
 
       {/* Skipping comes first: testing takes about an hour at a gym, and many
           people sign up elsewhere or don't lift barbells at all. */}
       <div className="rounded-card bg-card p-4 space-y-3 shadow-card">
-        <Button className="w-full" size="lg" onClick={skipTesting} data-testid="skip-benchmarks">
+        <Button
+          className="w-full"
+          size="lg"
+          onClick={skipTesting}
+          isLoading={isSkipping}
+          disabled={isLoading}
+          data-testid="skip-benchmarks"
+        >
           Skip and start using the app
         </Button>
         <p className="text-caption text-ink-3 text-center">
@@ -194,26 +207,6 @@ function BenchmarksContent() {
         collapsible={true}
       />
 
-      {/* Time estimate */}
-      <Card className="bg-fill/50">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-action/20 flex items-center justify-center">
-                <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <p className="font-medium text-ink">Estimated time</p>
-                <p className="text-body text-ink-2">{selectedBenchmarks.length} lifts selected</p>
-              </div>
-            </div>
-            <p className="text-title font-bold text-ink">{estimatedTime} min</p>
-          </div>
-        </CardContent>
-      </Card>
-      
       {/* Recommended lifts */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -270,6 +263,32 @@ function BenchmarksContent() {
         </div>
       </div>
       
+      {/* Time estimate: only once lifts are picked, so the page doesn't open
+          on an hour-long number for something optional. It sits by the Start
+          button so it appearing doesn't shift the list being tapped. */}
+      {selectedBenchmarks.length > 0 && (
+        <Card className="bg-fill/50" data-testid="benchmark-time-estimate">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-action/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-ink">Estimated time</p>
+                  <p className="text-body text-ink-2">
+                    {selectedBenchmarks.length} {selectedBenchmarks.length === 1 ? 'lift' : 'lifts'} selected
+                  </p>
+                </div>
+              </div>
+              <p className="text-title font-bold text-ink">{estimatedTime} min</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Navigation */}
       <div className="flex justify-between pt-4">
         <Button 
@@ -285,10 +304,12 @@ function BenchmarksContent() {
         <Button 
           size="lg" 
           onClick={handleContinue} 
-          disabled={selectedBenchmarks.length === 0 || isLoading}
+          disabled={selectedBenchmarks.length === 0 || isLoading || isSkipping}
           isLoading={isLoading}
         >
-          Start Testing ({selectedBenchmarks.length} lifts)
+          {selectedBenchmarks.length === 0
+            ? 'Pick lifts to test'
+            : `Start Testing (${selectedBenchmarks.length} ${selectedBenchmarks.length === 1 ? 'lift' : 'lifts'})`}
           <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
