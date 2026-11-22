@@ -62,6 +62,9 @@ import {
 import { getOrCreateTodaySession } from '@/app/(dashboard)/dashboard/workout/_lib/adhocSession';
 import { markGymChosen } from '@/lib/geo/gymChoice';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
+import { exerciseSafetyForAreas, parseStandingInjuryAreas } from '@/lib/training/standingInjuries';
+import type { PositionStress } from '@/services/exerciseService';
+import { now as clockNow } from '@/lib/clock';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
@@ -81,6 +84,9 @@ interface SheetExercise {
   equipment_required: string[] | null;
   is_bodyweight: boolean | null;
   exercise_type: ExerciseType | null;
+  position_stress?: PositionStress | null;
+  spinal_loading?: string | null;
+  contraindications?: string[] | null;
 }
 
 /** Shape the location substitution pass consumes. */
@@ -120,6 +126,8 @@ interface SheetProfile {
   body_fat_percent: number | null;
   experience: string | null;
   injury_history: string[] | null;
+  /** users.preferences; injuryAreas = standing injuries from onboarding. */
+  preferences?: { injuryAreas?: unknown } | null;
 }
 
 interface SuggestedWorkoutSheetProps {
@@ -224,7 +232,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           supabase
             .from('exercises')
             .select(
-              'id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, default_rep_range, default_rir, hypertrophy_tier, equipment_required, is_bodyweight, exercise_type'
+              'id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, default_rep_range, default_rir, hypertrophy_tier, equipment_required, is_bodyweight, exercise_type, position_stress, spinal_loading, contraindications'
             )
             .is('deleted_at', null) // hide merge-soft-deleted duplicates
             .order('name'),
@@ -235,7 +243,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString()),
           supabase
             .from('users')
-            .select('weight_kg, height_cm, body_fat_percent, experience, injury_history')
+            .select('weight_kg, height_cm, body_fat_percent, experience, injury_history, preferences')
             .eq('id', userId)
             .single(),
           fetchUnavailableEquipment(userId).catch(() => [] as string[]),
@@ -361,6 +369,24 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       return;
 
     const volumeByMuscle = new Map(volumeData.map((v) => [v.muscleGroup, v]));
+    // Standing injuries (onboarding's "areas to go easy on"): drop lifts the
+    // safety check rates 'avoid', rank 'caution' ones behind safe options.
+    const injurySafety = exerciseSafetyForAreas(
+      exercises.map((ex) => ({
+        id: ex.id,
+        name: ex.name,
+        primaryMuscle: ex.primary_muscle,
+        movementPattern: ex.movement_pattern,
+        equipment: ex.equipment_required,
+        mechanic: ex.mechanic,
+        isBodyweight: ex.is_bodyweight,
+        positionStress: ex.position_stress ?? null,
+        spinalLoading: ex.spinal_loading ?? null,
+        contraindications: ex.contraindications ?? null,
+      })),
+      parseStandingInjuryAreas(profile?.preferences?.injuryAreas),
+      clockNow()
+    );
     const plan = buildSuggestedWorkout({
       muscles: recoveryStatus.map((r) => ({
         muscle: r.muscle,
@@ -386,6 +412,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       sessionMinutes: aiDuration,
       injuredMuscles: profile?.injury_history ?? [],
       unavailableEquipmentIds: baselineUnavailable ?? [],
+      avoidExerciseIds: injurySafety.avoid,
+      cautionExerciseIds: injurySafety.caution,
     });
 
     // Location pass: swap picks the selected location can't support for

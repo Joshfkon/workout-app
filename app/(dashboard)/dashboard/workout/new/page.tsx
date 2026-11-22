@@ -34,7 +34,7 @@ import {
 import type { UserInjury } from '@/lib/training/injury-types';
 import { parseStandingInjuryAreas, standingAreasToUserInjuries, checkInInjuryToUserInjury } from '@/lib/training/standingInjuries';
 import { now as clockNow } from '@/lib/clock';
-import type { Exercise as ExerciseType } from '@/services/exerciseService';
+import { deriveSafetyMetadata, type Exercise as ExerciseType } from '@/services/exerciseService';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 interface Exercise {
@@ -629,7 +629,7 @@ function NewWorkoutContent() {
       
       const { data: exercisesData } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic, hypertrophy_tier, movement_pattern, equipment_required, is_bodyweight')
+        .select('id, name, primary_muscle, mechanic, hypertrophy_tier, movement_pattern, equipment_required, is_bodyweight, position_stress, spinal_loading, contraindications')
         .in('primary_muscle', suggestedMuscles.flatMap(expandMuscleGroupForFilter))
         .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
@@ -659,7 +659,17 @@ function NewWorkoutContent() {
       const cautionExercises: any[] = [];
       
       for (const exercise of candidateExercises) {
-        // Convert to ExerciseType format for safety check
+        // Convert to ExerciseType format for safety check. Joint stress and
+        // spinal loading are derived like the exercise service does: the
+        // stored values are mostly empty, which made every lift read safe.
+        const safetyMeta = deriveSafetyMetadata({
+          pattern: exercise.movement_pattern || 'isolation',
+          equipment: (exercise.equipment_required?.[0] || 'barbell') as ExerciseType['equipment'],
+          mechanic: exercise.mechanic || 'compound',
+          name: exercise.name,
+          storedPositionStress: exercise.position_stress ?? null,
+          storedSpinalLoading: exercise.spinal_loading ?? null,
+        });
         const exerciseForSafety: ExerciseType = {
           id: exercise.id,
           name: exercise.name,
@@ -676,12 +686,13 @@ function NewWorkoutContent() {
           isCustom: false,
           isBodyweight: exercise.is_bodyweight || false,
           hypertrophyScore: { tier: exercise.hypertrophy_tier || 'C', stretchUnderLoad: 3, resistanceProfile: 3, progressionEase: 3 },
-          spinalLoading: 'none',
+          spinalLoading: safetyMeta.spinalLoading,
           requiresBackArch: false,
           requiresSpinalFlexion: false,
           requiresSpinalExtension: false,
           requiresSpinalRotation: false,
-          positionStress: {},
+          positionStress: safetyMeta.positionStress,
+          contraindications: exercise.contraindications ?? [],
         } as ExerciseType;
         
         const safety = checkExerciseSafety(exerciseForSafety, activeInjuries);

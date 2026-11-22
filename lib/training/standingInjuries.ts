@@ -16,6 +16,8 @@
 import type { InjuryArea } from '@/types/training';
 import type { TemporaryInjury } from '@/types/schema';
 import type { UserInjury } from '@/lib/training/injury-types';
+import { deriveSafetyMetadata, type Exercise, type PositionStress } from '@/services/exerciseService';
+import { checkExerciseSafety } from '@/lib/training/exercise-safety';
 
 export type StandingInjuryArea = Extract<InjuryArea, 'shoulder' | 'lower_back' | 'knee' | 'elbow' | 'wrist' | 'hip'>;
 
@@ -131,4 +133,77 @@ export function checkInInjuryToUserInjury(
     startDate: inj.startDate ? new Date(inj.startDate) : now,
     ...(inj.affectedSide ?? side ? { affectedSide: inj.affectedSide ?? side } : {}),
   };
+}
+
+/** The fields of an exercise row the injury-safety check reads. */
+export interface SafetyCheckableExercise {
+  id: string;
+  name: string;
+  primaryMuscle: string | null;
+  movementPattern?: string | null;
+  equipment?: string[] | null;
+  mechanic?: string | null;
+  isBodyweight?: boolean | null;
+  /** Stored safety metadata when the row was fetched with it. */
+  positionStress?: PositionStress | null;
+  spinalLoading?: string | null;
+  contraindications?: string[] | null;
+}
+
+/**
+ * How the injury-safety check rates each exercise for the user's standing
+ * injury areas (mild): 'avoid' ids should be dropped, 'caution' ids ranked
+ * behind safe alternatives. Joint stress is derived the same way the exercise
+ * service does (deriveSafetyMetadata), so generators agree.
+ */
+export function exerciseSafetyForAreas(
+  exercises: readonly SafetyCheckableExercise[],
+  areas: readonly StandingInjuryArea[],
+  now: Date
+): { avoid: Set<string>; caution: Set<string> } {
+  const avoid = new Set<string>();
+  const caution = new Set<string>();
+  if (areas.length === 0) return { avoid, caution };
+  const injuries = standingAreasToUserInjuries(areas, now);
+  for (const ex of exercises) {
+    const pattern = ex.movementPattern || 'isolation';
+    const equipment = (ex.equipment?.[0] || 'barbell') as Exercise['equipment'];
+    const mechanic = ex.mechanic ?? 'compound';
+    const derived = deriveSafetyMetadata({
+      pattern,
+      equipment,
+      mechanic,
+      name: ex.name,
+      storedPositionStress: ex.positionStress ?? null,
+      storedSpinalLoading: (ex.spinalLoading as Exercise['spinalLoading']) ?? null,
+    });
+    const asExercise = {
+      id: ex.id,
+      name: ex.name,
+      primaryMuscle: ex.primaryMuscle ?? '',
+      secondaryMuscles: [],
+      pattern,
+      equipment,
+      difficulty: 'intermediate',
+      fatigueRating: 2,
+      defaultRepRange: [8, 12],
+      defaultRir: 2,
+      minWeightIncrementKg: 2.5,
+      mechanic,
+      isCustom: false,
+      isBodyweight: !!ex.isBodyweight,
+      hypertrophyScore: { tier: 'C', stretchUnderLoad: 3, resistanceProfile: 3, progressionEase: 3 },
+      spinalLoading: derived.spinalLoading,
+      requiresBackArch: false,
+      requiresSpinalFlexion: false,
+      requiresSpinalExtension: false,
+      requiresSpinalRotation: false,
+      positionStress: derived.positionStress,
+      contraindications: ex.contraindications ?? [],
+    } as unknown as Exercise;
+    const level = checkExerciseSafety(asExercise, injuries).level;
+    if (level === 'avoid') avoid.add(ex.id);
+    else if (level === 'caution') caution.add(ex.id);
+  }
+  return { avoid, caution };
 }

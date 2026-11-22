@@ -11,6 +11,7 @@ import {
   standingAreasToCheckInInjuries,
   standingAreasToUserInjuries,
   checkInInjuryToUserInjury,
+  exerciseSafetyForAreas,
 } from '../standingInjuries';
 
 describe('standing injury areas', () => {
@@ -69,5 +70,29 @@ describe('checkInInjuryToUserInjury', () => {
     expect(checkInInjuryToUserInjury({ area: 'knee_left', severity: 1, isActive: false }, now)).toBeNull();
     expect(checkInInjuryToUserInjury({ area: 'chest', severity: 1 }, now)).toBeNull();
     expect(checkInInjuryToUserInjury({ area: 'other', severity: 1 }, now)).toBeNull();
+  });
+});
+
+describe('exerciseSafetyForAreas', () => {
+  const now = new Date('2026-11-22T12:00:00Z');
+  const ex = (id: string, name: string, primaryMuscle: string, movementPattern: string) => ({ id, name, primaryMuscle, movementPattern });
+  const library = [
+    ex('ur', 'Upright Row', 'lateral_delts', 'vertical_pull'),
+    ex('ohp', 'Overhead Press', 'front_delts', 'vertical_push'),
+    ex('lat', 'Lateral Raise', 'lateral_delts', 'isolation'),
+    ex('sq', 'Barbell Back Squat', 'quads', 'squat'),
+  ];
+
+  it('marks shoulder-loading lifts (incl. upright rows, despite their pull pattern) for a shoulder', () => {
+    const { avoid, caution } = exerciseSafetyForAreas(library, ['shoulder'], now);
+    expect(caution.has('ur') || avoid.has('ur')).toBe(true);
+    expect(caution.has('ohp') || avoid.has('ohp')).toBe(true);
+    expect(caution.has('lat') || avoid.has('lat')).toBe(false);
+    expect(caution.has('sq') || avoid.has('sq')).toBe(false);
+  });
+
+  it('marks nothing with no standing injuries', () => {
+    const { avoid, caution } = exerciseSafetyForAreas(library, [], now);
+    expect(avoid.size + caution.size).toBe(0);
   });
 });
