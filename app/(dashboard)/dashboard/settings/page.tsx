@@ -622,24 +622,41 @@ export default function SettingsPage() {
     autoSaveToggle('showAiCoachNotes', setShowAiCoachNotes)(value);
   };
 
-  // The slider fires on every step: save once the user lets go.
+  // The slider fires on every step: save once the user lets go. The pending
+  // value is kept so leaving Settings inside the debounce window FLUSHES it
+  // instead of dropping it (there is no Save button to fall back on).
+  const pendingRestTimerRef = useRef<number | null>(null);
+  const saveRestTimer = (value: number) => {
+    pendingRestTimerRef.current = null;
+    autoSavePreferences({ restTimer: value }, () =>
+      setRestTimer(initialValuesRef.current.restTimer ?? 180)
+    );
+  };
+  // Latest closure for the unmount/pagehide flush: the first render's copy
+  // still has settingsLoaded = false and would revert instead of saving.
+  const saveRestTimerRef = useRef(saveRestTimer);
+  saveRestTimerRef.current = saveRestTimer;
+
   const handleRestTimerChange = (value: number) => {
     setRestTimer(value);
+    pendingRestTimerRef.current = value;
     if (restTimerSaveRef.current) clearTimeout(restTimerSaveRef.current);
-    restTimerSaveRef.current = setTimeout(() => {
-      autoSavePreferences({ restTimer: value }, () =>
-        setRestTimer(initialValuesRef.current.restTimer ?? 180)
-      );
-    }, REST_TIMER_SAVE_DEBOUNCE_MS);
+    restTimerSaveRef.current = setTimeout(() => saveRestTimer(value), REST_TIMER_SAVE_DEBOUNCE_MS);
   };
 
-  useEffect(
-    () => () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  useEffect(() => {
+    const flush = () => {
       if (restTimerSaveRef.current) clearTimeout(restTimerSaveRef.current);
-    },
-    []
-  );
+      restTimerSaveRef.current = null;
+      if (pendingRestTimerRef.current != null) saveRestTimerRef.current(pendingRestTimerRef.current);
+    };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      flush();
+    };
+  }, []);
 
   const handleExperienceChange = (exp: Experience) => {
     setVolumeLandmarks(DEFAULT_VOLUME_LANDMARKS[exp]);
