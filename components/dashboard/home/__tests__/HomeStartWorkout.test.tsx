@@ -93,14 +93,15 @@ describe('HomeStartWorkout', () => {
     expect(screen.getByText('Available once you complete a workout')).toBeInTheDocument();
   });
 
-  it('sends "Repeat previous workout" to the Train picker', async () => {
+  it('opens the "Repeat a workout" picker in place on Home', async () => {
     const user = userEvent.setup();
     mockRows = { completed: [doneSession] };
     renderIt();
     await user.click(screen.getByRole('button', { name: /start workout/i }));
     await waitFor(() => expect(screen.getByText('Same exercises, fresh targets')).toBeInTheDocument());
     await user.click(screen.getByText('Repeat previous workout'));
-    expect(mockPush).toHaveBeenCalledWith('/dashboard/train?repeat=1');
+    expect(await screen.findByTestId('repeat-workout-sheet')).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('opens the AI suggestion sheet from the options', async () => {

@@ -43,13 +43,11 @@ import {
   IconChevronRight,
   IconHistory,
   IconListDetails,
-  IconLoader2,
   IconTemplate,
   IconTrendingUp,
 } from '@tabler/icons-react';
 import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { resolveAuthState } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
@@ -65,7 +63,6 @@ import {
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { buildTrainingSchedule, type ScheduleMode } from '@/lib/training/trainingSchedule';
 import {
-  createRepeatSession,
   deriveWorkoutTitle,
   RECENT_SESSION_SELECT,
   toRepeatableExercises,
@@ -89,6 +86,7 @@ import { CardioTracker } from '@/components/dashboard/CardioTracker';
 import { NonGymActivityLogger } from '@/components/dashboard/NonGymActivityLogger';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
+import { RepeatWorkoutSheet } from '@/components/workout/RepeatWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
 import { clearPersistedRestTimer } from '@/hooks/useRestTimer';
 import { fetchTrainingStyle } from '@/lib/training/trainingStyle';
@@ -218,7 +216,6 @@ export default function TrainPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [showAiSheet, setShowAiSheet] = useState(false);
   const [showRepeatSheet, setShowRepeatSheet] = useState(false);
-  const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
@@ -512,56 +509,6 @@ export default function TrainPage() {
       console.error('Failed to start workout:', err);
       setError('Failed to start workout. Please try again.');
       setIsStarting(false);
-    }
-  };
-
-  // Home's "Start workout" sheet sends "Repeat previous workout" here
-  // (?repeat=1): open the picker once the recent workouts have loaded.
-  // window.location, not useSearchParams, which would need a Suspense
-  // boundary around this whole page.
-  const [repeatRequested, setRepeatRequested] = useState(false);
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('repeat') === '1') {
-      setRepeatRequested(true);
-      router.replace('/dashboard/train', { scroll: false });
-    }
-  }, [router]);
-  useEffect(() => {
-    if (!repeatRequested || isLoading) return;
-    setRepeatRequested(false);
-    if (recentWorkouts.length > 0) setShowRepeatSheet(true);
-  }, [repeatRequested, isLoading, recentWorkouts.length]);
-
-  // Repeat a previous workout: clone its exercise list (not its logged
-  // weights) into a fresh session via the shared helper the History page's
-  // repeat button uses.
-  const handleRepeatWorkout = async (workout: RecentWorkout) => {
-    if (repeatingId) return;
-    if (workout.exercises.length === 0) {
-      setError('This workout has no exercises to repeat.');
-      setShowRepeatSheet(false);
-      return;
-    }
-    setRepeatingId(workout.id);
-    setError(null);
-    try {
-      const auth = await resolveAuthState(supabase);
-      if (auth.status === 'unauthenticated') {
-        router.push('/login');
-        return;
-      }
-      if (auth.status === 'error') {
-        setError("Couldn't verify your session. Check your connection and try again.");
-        setRepeatingId(null);
-        return;
-      }
-      const { sessionId } = await createRepeatSession(supabase, auth.userId, workout.exercises);
-      router.push(`/dashboard/workout/${sessionId}`);
-    } catch (err) {
-      console.error('Failed to repeat workout:', err);
-      setError('Failed to repeat workout. Please try again.');
-      setRepeatingId(null);
-      setShowRepeatSheet(false);
     }
   };
 
@@ -1015,73 +962,12 @@ export default function TrainPage() {
 
       {/* Repeat previous workout: pick a recent session to clone its
           exercise list (weights are re-estimated, not copied) */}
-      <BottomSheet
+      <RepeatWorkoutSheet
         isOpen={showRepeatSheet}
-        onClose={() => {
-          if (!repeatingId) setShowRepeatSheet(false);
-        }}
-        title="Repeat a workout"
-      >
-        <div className="space-y-3">
-          <p className="text-subhead text-ink-2">
-            Same exercises as a previous session — targets and weights are
-            re-estimated from your recent performance.
-          </p>
-          <div className="rounded-card bg-fill/60 overflow-hidden">
-            {recentWorkouts.map((workout) => (
-              <button
-                key={workout.id}
-                onClick={() => handleRepeatWorkout(workout)}
-                disabled={repeatingId !== null}
-                className="w-full flex items-center gap-2 px-3 py-2.5 border-b border-sep/50 last:border-b-0 text-left hover:bg-fill/50 transition-colors disabled:opacity-60"
-              >
-                <span className="flex-1 min-w-0">
-                  <span className="block text-subhead text-ink truncate">
-                    {workout.title}
-                  </span>
-                  <span className="block text-caption text-ink-3 mt-0.5">
-                    {workout.completedAt.toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                    {' · '}
-                    {workout.exercises.length}{' '}
-                    {workout.exercises.length === 1 ? 'exercise' : 'exercises'}
-                    {' · '}
-                    {workout.setCount} {workout.setCount === 1 ? 'set' : 'sets'}
-                  </span>
-                </span>
-                {repeatingId === workout.id ? (
-                  <IconLoader2
-                    size={16}
-                    className="text-action animate-spin flex-shrink-0"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <IconChevronRight
-                    size={16}
-                    className="text-ink-3 flex-shrink-0"
-                    aria-hidden="true"
-                  />
-                )}
-              </button>
-            ))}
-            {recentWorkouts.length === 0 && (
-              <p className="p-4 text-center text-caption text-ink-3">
-                No completed workouts yet.
-              </p>
-            )}
-          </div>
-          <button
-            onClick={() => setShowRepeatSheet(false)}
-            disabled={repeatingId !== null}
-            className="w-full py-2 rounded-lg text-subhead text-ink-2 hover:text-ink transition-colors disabled:opacity-60"
-          >
-            Cancel
-          </button>
-        </div>
-      </BottomSheet>
+        onClose={() => setShowRepeatSheet(false)}
+        workouts={recentWorkouts}
+        loading={isLoading}
+      />
 
       {/* Discard confirmation for the unfinished-workout banner's X */}
       {showDiscardConfirm && inProgress && (

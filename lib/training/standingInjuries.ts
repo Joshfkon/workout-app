@@ -85,3 +85,50 @@ export function standingAreasToUserInjuries(
     startDate: now,
   }));
 }
+
+/**
+ * General INJURY_TYPES entry per check-in body area (sides stripped). Areas
+ * with no matching type (chest, other) return null and are skipped.
+ */
+const CHECK_IN_AREA_INJURY_TYPE: Record<string, string> = {
+  ...STANDING_AREA_INJURY_TYPE,
+  upper_back: 'upper_back_strain',
+  neck: 'neck_strain',
+  ankle: 'ankle_sprain',
+};
+
+const CHECK_IN_SEVERITY: Record<number, UserInjury['severity']> = { 1: 'mild', 2: 'moderate', 3: 'severe' };
+
+/**
+ * A pre-workout check-in injury (`{ area: 'knee_left', severity: 1 }`) as the
+ * UserInjury the exercise-safety check understands. The check-in stores sided
+ * body areas and a 1–3 severity; the safety check looks injuries up by
+ * INJURY_TYPES id with a mild/moderate/severe severity. Passing the raw area
+ * and number (the old behaviour) matched nothing, so check-in injuries were
+ * silently ignored when generating a workout.
+ */
+export function checkInInjuryToUserInjury(
+  inj: { id?: string; area?: string; injuryTypeId?: string; severity?: unknown; affectedSide?: 'left' | 'right' | 'both'; startDate?: string | number | Date; isActive?: boolean },
+  now: Date
+): UserInjury | null {
+  if (inj.isActive === false) return null;
+  const raw = inj.area ?? '';
+  const side = /_left$/.test(raw) ? 'left' : /_right$/.test(raw) ? 'right' : undefined;
+  const base = raw.replace(/_(left|right)$/, '');
+  const injuryTypeId = CHECK_IN_AREA_INJURY_TYPE[base] ?? (inj.injuryTypeId || null);
+  if (!injuryTypeId) return null;
+  const severity =
+    typeof inj.severity === 'number'
+      ? CHECK_IN_SEVERITY[inj.severity] ?? 'moderate'
+      : inj.severity === 'mild' || inj.severity === 'moderate' || inj.severity === 'severe'
+        ? inj.severity
+        : 'moderate';
+  return {
+    id: inj.id || `checkin-${raw || injuryTypeId}`,
+    injuryTypeId,
+    severity,
+    isActive: true,
+    startDate: inj.startDate ? new Date(inj.startDate) : now,
+    ...(inj.affectedSide ?? side ? { affectedSide: inj.affectedSide ?? side } : {}),
+  };
+}

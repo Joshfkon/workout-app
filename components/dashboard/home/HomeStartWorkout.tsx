@@ -11,13 +11,13 @@
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { IconBarbell, IconPlayerPlay } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
 import { useLastRepeatableWorkout } from './FreestyleStartActions';
+import { RepeatWorkoutSheet, useRecentRepeatChoices } from '@/components/workout/RepeatWorkoutSheet';
 
 const SuggestedWorkoutSheet = dynamic(
   () => import('@/components/workout/SuggestedWorkoutSheet').then((m) => m.SuggestedWorkoutSheet),
@@ -41,9 +41,11 @@ const BUTTON =
   'flex w-full min-h-[50px] items-center justify-center gap-2 rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110 active:brightness-95';
 
 export function HomeStartWorkout({ userId }: { userId: string | null }) {
-  const router = useRouter();
   const [showOptions, setShowOptions] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
+  const [showRepeat, setShowRepeat] = useState(false);
+  // Fetched once the sheet opens, so Home doesn't pay for it on every visit.
+  const { data: repeatChoices, isLoading: repeatLoading } = useRecentRepeatChoices(userId, showRepeat || showOptions);
 
   // Live state: never trust a cached "nothing in progress" on revisit.
   const { data: inProgressId } = useQuery({
@@ -82,13 +84,18 @@ export function HomeStartWorkout({ userId }: { userId: string | null }) {
           }}
           onRepeat={() => {
             setShowOptions(false);
-            // Train owns the full repeat picker; ?repeat=1 opens it there.
-            router.push('/dashboard/train?repeat=1');
+            setShowRepeat(true);
           }}
           canRepeat={!!last}
         />
       </BottomSheet>
       {showSuggest && <SuggestedWorkoutSheet isOpen={showSuggest} onClose={() => setShowSuggest(false)} />}
+      <RepeatWorkoutSheet
+        isOpen={showRepeat}
+        onClose={() => setShowRepeat(false)}
+        workouts={repeatChoices ?? []}
+        loading={repeatLoading}
+      />
     </>
   );
 }

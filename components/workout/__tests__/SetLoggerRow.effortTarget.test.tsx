@@ -6,6 +6,7 @@
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { SetLoggerRow } from '../SetLoggerRow';
 
 jest.mock('@/lib/integrations/notifications', () => ({
@@ -42,5 +43,15 @@ describe('SetLoggerRow effort line vs the target', () => {
   it('says nothing extra when the set is close to the target', () => {
     render(<SetLoggerRow {...baseProps} effortCheck={check({ predictedRir: 2 })} />);
     expect(screen.getByTestId('predicted-rir')).not.toHaveTextContent('would leave');
+  });
+});
+
+describe('SetLoggerRow effort preset', () => {
+  it('says the chip is preset to the target until the lifter taps one', async () => {
+    const user = userEvent.setup();
+    render(<SetLoggerRow {...baseProps} />);
+    expect(screen.getByTestId('rir-preset-note')).toHaveTextContent('Preset to your target');
+    await user.click(screen.getByRole('button', { name: /^1 reps in reserve/ }));
+    expect(screen.queryByTestId('rir-preset-note')).toBeNull();
   });
 });

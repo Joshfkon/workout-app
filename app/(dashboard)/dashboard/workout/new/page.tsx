@@ -32,7 +32,7 @@ import {
   unavailableIdsFromLegacyAllowlist,
 } from '@/services/equipmentFilter';
 import type { UserInjury } from '@/lib/training/injury-types';
-import { parseStandingInjuryAreas, standingAreasToUserInjuries } from '@/lib/training/standingInjuries';
+import { parseStandingInjuryAreas, standingAreasToUserInjuries, checkInInjuryToUserInjury } from '@/lib/training/standingInjuries';
 import { now as clockNow } from '@/lib/clock';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
@@ -453,16 +453,9 @@ function NewWorkoutContent() {
           const checkIn = recentSession.pre_workout_check_in as any;
           if (checkIn.temporaryInjuries && Array.isArray(checkIn.temporaryInjuries)) {
             checkIn.temporaryInjuries.forEach((inj: any) => {
-              if (inj.isActive !== false) {
-                activeInjuries.push({
-                  id: inj.id || '',
-                  injuryTypeId: inj.area || inj.injuryTypeId || '',
-                  severity: (inj.severity as any) || 'moderate',
-                  isActive: true,
-                  startDate: new Date(inj.startDate || Date.now()),
-                  affectedSide: inj.affectedSide,
-                });
-              }
+              // Sided body area + 1–3 severity → INJURY_TYPES id + mild/moderate/severe.
+              const injury = checkInInjuryToUserInjury(inj, clockNow());
+              if (injury) activeInjuries.push(injury);
             });
           }
         }

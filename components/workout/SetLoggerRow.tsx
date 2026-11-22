@@ -677,6 +677,14 @@ export function SetLoggerRow({
           trigger. Asked in plain words; "RIR" stays in the accessible names. */}
       <p className="pl-1 text-caption text-ink-2" id={`effort-q-${setNumber}`}>
         How many more could you have done?
+        {!rirTouched && !rirFromSensor && (
+          // The chip starts on the target effort so logging stays one tap; say
+          // so, or an untouched chip reads as an answer the lifter never gave.
+          <span className="text-ink-3" data-testid="rir-preset-note">
+            {' '}
+            Preset to your target — tap the one that matches.
+          </span>
+        )}
       </p>
       <div className="flex items-stretch gap-1.5" role="group" aria-labelledby={`effort-q-${setNumber}`}>
         {RIR_CHIPS.map((chip) => (

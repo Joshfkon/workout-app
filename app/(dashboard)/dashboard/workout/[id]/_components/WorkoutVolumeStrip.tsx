@@ -216,7 +216,7 @@ export function WorkoutVolumeStrip({
           aria-expanded={!collapsed}
           aria-controls="workout-volume-strip-cards"
         >
-          Weekly sets · MEV–MRV
+          Sets this week vs your target range
           <IconChevronDown
             size={14}
             className={`transition-transform ${collapsed ? '-rotate-90' : ''}`}
@@ -234,6 +234,10 @@ export function WorkoutVolumeStrip({
 
       {!collapsed && (
         <>
+        {/* The cards are terse to fit; spell the two units out once. */}
+        <p className="px-0.5 mb-1.5 text-caption text-ink-3" data-testid="workout-volume-strip-legend">
+          eff = sets that count, weighted by how hard they were · unrated = no effort logged
+        </p>
         <div
           id="workout-volume-strip-cards"
           className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x"
