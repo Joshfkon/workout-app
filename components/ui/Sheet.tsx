@@ -73,6 +73,9 @@ function canAnimateExit(): boolean {
  * `Modal` and the workout `BottomSheet` both render through this, so every
  * pop-up in the app looks and behaves the same.
  */
+/** Open sheets, oldest first; the last entry is the one on top. */
+const openSheetStack: symbol[] = [];
+
 export function Sheet({
   isOpen,
   onClose,
@@ -115,10 +118,19 @@ export function Sheet({
   useEffect(() => {
     if (!isOpen) return undefined;
 
+    // Sheets can stack (e.g. the AI consent sheet over Describe meal). Only
+    // the TOPMOST handles Escape and touch locking: a lower sheet's handler
+    // would otherwise preventDefault every touch inside the sheet above it,
+    // so that sheet couldn't scroll to its buttons.
+    const token = Symbol('sheet');
+    openSheetStack.push(token);
+    const isTopmost = () => openSheetStack[openSheetStack.length - 1] === token;
+
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && isTopmost()) onClose();
     };
     const preventScroll = (e: globalThis.TouchEvent) => {
+      if (!isTopmost()) return;
       const panel = panelRef.current;
       const target = e.target as HTMLElement | null;
       // Range sliders (and other drag-based inputs) need touchmove.
@@ -145,8 +157,13 @@ export function Sheet({
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.removeEventListener('touchmove', preventScroll);
-      document.body.style.overflow = '';
-      document.body.style.paddingRight = '';
+      const i = openSheetStack.indexOf(token);
+      if (i !== -1) openSheetStack.splice(i, 1);
+      // Keep the page locked while another sheet is still open.
+      if (openSheetStack.length === 0) {
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+      }
     };
   }, [isOpen, onClose]);
 

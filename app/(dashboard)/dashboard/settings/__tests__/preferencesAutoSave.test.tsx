@@ -5,7 +5,7 @@
  * settings query) in step. A failed save puts the control back.
  */
 
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -164,6 +164,23 @@ describe('Settings → Preferences auto-save', () => {
     expect((screen.getByLabelText('Weight units') as HTMLSelectElement).value).toBe('kg');
     expect(mockApplyPreferenceLocally).not.toHaveBeenCalled();
     expect(mockRefreshUserStore).not.toHaveBeenCalled();
+  });
+
+  it('flushes a pending rest-timer change when leaving Settings inside the debounce window', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderSettings();
+    await openPreferences(user);
+    const slider = screen.getByLabelText(/Default rest timer/i);
+    fireEvent.change(slider, { target: { value: '120' } });
+    expect(mockUpdate).not.toHaveBeenCalled(); // still inside the 600 ms window
+
+    unmount();
+
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith({
+        preferences: expect.objectContaining({ restTimer: 120, units: 'kg', theme: 'dark' }),
+      })
+    );
   });
 
   it('saves a switch on change', async () => {

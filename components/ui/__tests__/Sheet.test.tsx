@@ -99,3 +99,62 @@ describe('BottomSheet (workout)', () => {
     expect(screen.getByRole('dialog', { name: 'Set type' })).toBe(sheet);
   });
 });
+
+describe('Sheet stacking (a sheet opened over another)', () => {
+  const touchMove = (el: Element) => {
+    const ev = new Event('touchmove', { bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev;
+  };
+
+  it('lets the top sheet take touches: the sheet underneath does not block them', () => {
+    render(
+      <>
+        <Sheet isOpen onClose={jest.fn()} title="Describe meal">
+          <p>below</p>
+        </Sheet>
+        <Sheet isOpen onClose={jest.fn()} title="Allow AI features?">
+          <div data-allow-touch-move data-testid="top-content">long disclosure</div>
+        </Sheet>
+      </>
+    );
+    expect(touchMove(screen.getByTestId('top-content')).defaultPrevented).toBe(false);
+  });
+
+  it('Escape closes only the top sheet', () => {
+    const lower = jest.fn();
+    const upper = jest.fn();
+    render(
+      <>
+        <Sheet isOpen onClose={lower} title="Lower"><p>x</p></Sheet>
+        <Sheet isOpen onClose={upper} title="Upper"><p>x</p></Sheet>
+      </>
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(upper).toHaveBeenCalledTimes(1);
+    expect(lower).not.toHaveBeenCalled();
+  });
+
+  it('keeps the page scroll-locked until the last sheet closes', () => {
+    const { rerender } = render(
+      <>
+        <Sheet isOpen onClose={jest.fn()} title="Lower"><p>x</p></Sheet>
+        <Sheet isOpen onClose={jest.fn()} title="Upper"><p>x</p></Sheet>
+      </>
+    );
+    rerender(
+      <>
+        <Sheet isOpen onClose={jest.fn()} title="Lower"><p>x</p></Sheet>
+        <Sheet isOpen={false} onClose={jest.fn()} title="Upper"><p>x</p></Sheet>
+      </>
+    );
+    expect(document.body.style.overflow).toBe('hidden');
+    rerender(
+      <>
+        <Sheet isOpen={false} onClose={jest.fn()} title="Lower"><p>x</p></Sheet>
+        <Sheet isOpen={false} onClose={jest.fn()} title="Upper"><p>x</p></Sheet>
+      </>
+    );
+    expect(document.body.style.overflow).toBe('');
+  });
+});
