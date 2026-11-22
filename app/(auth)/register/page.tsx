@@ -16,11 +16,11 @@ const EXPERIENCE_OPTIONS: { value: Experience; label: string }[] = [
 ];
 
 /**
- * What a skipped experience question signs up as. Starting light is the safe
- * default for someone who didn't say (a newcomer, or a food-only user); it
- * only shapes starting training volume and is editable in Settings.
+ * What a skipped experience question signs up as: the same default sign-up
+ * always used (intermediate), so making the question optional doesn't quietly
+ * change anyone's starting training volume. Editable in Settings.
  */
-const SKIPPED_EXPERIENCE: Experience = 'novice';
+const SKIPPED_EXPERIENCE: Experience = 'intermediate';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');

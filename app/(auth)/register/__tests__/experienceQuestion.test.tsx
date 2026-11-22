@@ -1,6 +1,6 @@
 /**
  * Sign-up asks "How long have you been lifting?" in plain words, optional,
- * with nothing preselected. Skipping it signs up as a novice (start light).
+ * with nothing preselected. Skipping it keeps the previous default (intermediate).
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -39,11 +39,11 @@ describe('RegisterPage — experience question', () => {
     expect(screen.queryByText(/hypertrophy/i)).not.toBeInTheDocument();
   });
 
-  it('signs up as a novice when skipped', async () => {
+  it('keeps the previous default (intermediate) when skipped', async () => {
     const user = await fillIn();
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
-    expect(sentExperience()).toBe('novice');
+    expect(sentExperience()).toBe('intermediate');
   });
 
   it('sends the picked answer', async () => {
