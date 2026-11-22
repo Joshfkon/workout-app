@@ -58,6 +58,13 @@ interface SuggestionBannerProps {
   roleTag?: string | null;
   /** One-sentence reason for the suggestion. */
   reason: string;
+  /**
+   * One short plain-language line saying where the number comes from
+   * ("From your last session: 70 kg × 10 → one step up", "Estimated from
+   * your profile — start light and adjust"). Always visible under the
+   * suggestion; the ⓘ sheet keeps the full reasoning.
+   */
+  source?: string | null;
   /** Plain-language explanation lines for the info sheet. */
   explanation: string[];
   /** Live effort check for the entered stepper values. Null = not computable. */
@@ -70,6 +77,26 @@ interface SuggestionBannerProps {
    * one-line reason moves to the top of the ⓘ sheet.
    */
   verdict?: string | null;
+}
+
+const RIR_EXPANSION = 'reps in reserve: how many more you could have done';
+const RIR_DEFINITION_LINE =
+  'RIR = reps in reserve: how many more reps you could have done. 0 = maxed, 1 = hard, 2 = good, 3 = easy, 4+ = cruise.';
+
+/**
+ * "RIR" with its meaning attached for assistive tech (and a hover title),
+ * without adding a second tap target to the strip — the ⓘ sheet carries the
+ * visible definition.
+ */
+function RirTerm() {
+  return (
+    <>
+      <abbr title={RIR_EXPANSION} className="no-underline">
+        RIR
+      </abbr>
+      <span className="sr-only"> ({RIR_EXPANSION})</span>
+    </>
+  );
 }
 
 /**
@@ -90,6 +117,7 @@ export function SuggestionBanner({
   showRir = true,
   roleTag = null,
   reason,
+  source = null,
   explanation,
   effortCheck = null,
   setKey,
@@ -167,7 +195,12 @@ export function SuggestionBanner({
           ) : (
             <span className="font-medium">
               {weightLabel} × {repsLabel}
-              {showRir ? ` @ ${rir} RIR` : ''}
+              {showRir ? (
+                <>
+                  {` @ ${rir} `}
+                  <RirTerm />
+                </>
+              ) : null}
             </span>
           )}
           {roleTag ? (
@@ -176,6 +209,14 @@ export function SuggestionBanner({
             </span>
           ) : null}
           {reason && !verdict ? <span> — {reason}</span> : null}
+          {source ? (
+            <span
+              data-testid="suggestion-source"
+              className="block mt-0.5 text-caption leading-snug text-ink-2"
+            >
+              {source}
+            </span>
+          ) : null}
         </p>
         {effortCheck != null && (
           <p
@@ -208,10 +249,12 @@ export function SuggestionBanner({
         title="How this suggestion works"
       >
         <ul className="space-y-2.5">
-          {(verdict && reason
-            ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
-            : explanation
-          ).map((line, i) => (
+          {[
+            ...(verdict && reason
+              ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
+              : explanation),
+            ...(showRir ? [RIR_DEFINITION_LINE] : []),
+          ].map((line, i) => (
             <li key={i} className="flex items-start gap-2 text-subhead text-ink">
               <span className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0" aria-hidden="true" />
               {line}

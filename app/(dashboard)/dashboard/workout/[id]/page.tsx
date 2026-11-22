@@ -7834,6 +7834,7 @@ export default function WorkoutPage() {
                           ? `starting point estimated from your ${weightRec.transferFrom} strength`
                           : 'starting point estimated from your training profile',
                         explanation: weightRec.rationale,
+                        transferFrom: weightRec.transferFrom || undefined,
                       }
                     : undefined;
 

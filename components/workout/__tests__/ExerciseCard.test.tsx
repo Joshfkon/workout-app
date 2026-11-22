@@ -1165,6 +1165,59 @@ describe('ExerciseCard', () => {
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
     });
 
+    it('cold start (no history): the banner says the number is a profile estimate', () => {
+      render(<ExerciseCard {...defaultProps} isActive={true} />);
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+        'Estimated from your profile — start light and adjust'
+      );
+    });
+
+    it('cold start transferred from a related lift names that lift in the source line', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          coldStartSuggestion={{
+            weightKg: 60,
+            reason: 'starting point estimated from your Barbell Back Squat strength',
+            explanation: 'Transferred from a logged related exercise.',
+            transferFrom: 'Barbell Back Squat',
+          }}
+        />
+      );
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+        'First time on this lift — estimated from your Barbell Back Squat; adjust to feel'
+      );
+      // The prescribed number is unchanged by the explanation.
+      expect(screen.getByTestId('suggestion-source').closest('p')).toHaveTextContent(
+        /^60 kg × 8–12 @ 2 RIR/
+      );
+    });
+
+    it('with history, the source line points at the user’s own sets', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          previousSets={[{ weightKg: 100, reps: 10, rpe: 8 }]}
+        />
+      );
+      expect(screen.getByTestId('suggestion-source').textContent).toMatch(
+        /^From your (last session|recent sets on this lift)/
+      );
+    });
+
+    it('explains "RIR" accessibly where the banner shows the target', () => {
+      render(<ExerciseCard {...defaultProps} isActive={true} />);
+      const abbr = screen
+        .getAllByText('RIR')
+        .find((el) => el.tagName === 'ABBR');
+      expect(abbr).toHaveAttribute('title', 'reps in reserve: how many more you could have done');
+      expect(abbr?.closest('span')).toHaveTextContent(
+        /@ \d RIR \(reps in reserve: how many more you could have done\)/
+      );
+    });
+
     it('surfaces the readiness easing in the suggestion reason', () => {
       render(
         <ExerciseCard
