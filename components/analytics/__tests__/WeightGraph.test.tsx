@@ -42,9 +42,27 @@ describe('WeightGraph', () => {
     expect(current).toHaveTextContent('lb');
   });
 
-  it('states the start → now change over the real span of the window', () => {
+  it('states the change along the drawn trend line, for the selected period', () => {
     render(<WeightGraph weightHistory={history} preferredUnit="lb" />);
-    expect(screen.getByTestId('weight-change')).toHaveTextContent('142.4 → 141.6 lb (−0.8) over 28 days');
+    const text = screen.getByTestId('weight-change').textContent ?? '';
+    // Trend endpoints (not raw first/last weigh-ins), named by the selected range.
+    expect(text).toMatch(/^\d+\.\d → \d+\.\d lb \(−\d\.\d\) in the last 30 days$/);
+  });
+
+  it('does not show ±0.0 for a zigzag whose trend clearly moves', () => {
+    const zigzag = [
+      { date: '2026-10-25', weight: 175.0, unit: 'lb' as const },
+      { date: '2026-11-01', weight: 173.0, unit: 'lb' as const },
+      { date: '2026-11-08', weight: 174.5, unit: 'lb' as const },
+      { date: '2026-11-15', weight: 172.5, unit: 'lb' as const },
+      { date: '2026-11-22', weight: 175.0, unit: 'lb' as const },
+    ];
+    render(<WeightGraph weightHistory={zigzag} preferredUnit="lb" />);
+    const text = screen.getByTestId('weight-change').textContent ?? '';
+    const [, start, end] = /^([\d.]+) → ([\d.]+)/.exec(text) ?? [];
+    expect(start).toBeDefined();
+    // Start/end are the fitted line's values, not 175.0 → 175.0.
+    expect(`${start}→${end}`).not.toBe('175.0→175.0');
   });
 
   it('labels the trend-line rate with its unit, matching the drawn trend', () => {

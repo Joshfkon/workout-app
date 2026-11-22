@@ -255,7 +255,12 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     );
   }
 
-  const change = summary.current - summary.start;
+  // The change line reads off the same fitted trend the chart draws, so a
+  // zigzag of water swings can't show "±0.0" next to a line that clearly
+  // moves (or the reverse). Raw endpoints only when there's no fit.
+  const changeStart = trend ? trend.fitStart : summary.start;
+  const changeEnd = trend ? trend.fitEnd : summary.current;
+  const change = changeEnd - changeStart;
   const sign = change > 0 ? '+' : change < 0 ? '−' : '±';
 
   return (
@@ -274,10 +279,10 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       <p className="text-subhead text-ink tabular-nums" data-testid="weight-change">
         {chartData.length >= 2 ? (
           <>
-            {summary.start.toFixed(1)} → {summary.current.toFixed(1)} {preferredUnit}{' '}
+            {changeStart.toFixed(1)} → {changeEnd.toFixed(1)} {preferredUnit}{' '}
             <span className="text-ink-2">
               ({sign}
-              {Math.abs(change).toFixed(1)}) over {summary.days} day{summary.days === 1 ? '' : 's'}
+              {Math.abs(change).toFixed(1)}) in the last {TIMEFRAME_DAYS[timeframe]} days
             </span>
           </>
         ) : (

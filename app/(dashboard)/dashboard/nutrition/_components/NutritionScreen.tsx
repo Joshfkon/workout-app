@@ -2056,7 +2056,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                     {hasEntries
                       ? `${mealFat}g fat · ${mealCarbs}g carbs · ${mealProtein}g protein`
                       : perMealAvailable > 0
-                        ? `About ${perMealAvailable.toLocaleString()} kcal for this meal`
+                        ? // Today's calories left, split across the meals not logged yet
+                          // — say it's a budget, or an unlogged meal reads like a
+                          // placeholder total (panel, polish lens).
+                          `Nothing logged yet · room for ~${perMealAvailable.toLocaleString()} kcal`
                         : 'Nothing logged yet'}
                   </p>
                 </div>
