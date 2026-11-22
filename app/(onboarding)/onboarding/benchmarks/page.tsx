@@ -46,8 +46,6 @@ function BenchmarkCard({
             <span className="capitalize">{benchmark.pattern.replace('_', ' ')}</span>
             <span>•</span>
             <span className="capitalize">{benchmark.equipment}</span>
-            <span>•</span>
-            <span>~17 min</span>
           </div>
         </div>
         <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -173,8 +171,7 @@ function BenchmarksContent() {
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">Test your strength? (optional)</h1>
         <p className="text-ink-2" data-testid="benchmarks-purpose">
-          These tests only set the starting weights we suggest in workouts. Skip them and
-          suggestions start from estimates that sharpen as you log sets.
+          These tests only set the starting weights we suggest in workouts.
         </p>
       </div>
 
@@ -191,6 +188,10 @@ function BenchmarksContent() {
         >
           Skip and start using the app
         </Button>
+        {/* What skipping costs, in one plain line: small, and it fixes itself. */}
+        <p className="text-body text-ink-2 text-center" data-testid="benchmarks-skip-cost">
+          Your first weight suggestions will be estimates; they sharpen after a workout or two.
+        </p>
         <p className="text-caption text-ink-3 text-center">
           Most people skip this. Not lifting? Nothing here affects food tracking. You can test any
           time later from Analytics.
@@ -263,9 +264,10 @@ function BenchmarksContent() {
         </div>
       </div>
       
-      {/* Time estimate: only once lifts are picked, so the page doesn't open
-          on an hour-long number for something optional. It sits by the Start
-          button so it appearing doesn't shift the list being tapped. */}
+      {/* Time estimate: only once lifts are picked, and only as one total (no
+          per-lift minutes on the cards), so the page doesn't open on a time
+          ask for something optional. It sits by the Start button so it
+          appearing doesn't shift the list being tapped. */}
       {selectedBenchmarks.length > 0 && (
         <Card className="bg-fill/50" data-testid="benchmark-time-estimate">
           <CardContent className="p-4">
@@ -277,13 +279,13 @@ function BenchmarksContent() {
                   </svg>
                 </div>
                 <div>
-                  <p className="font-medium text-ink">Estimated time</p>
+                  <p className="font-medium text-ink">Time at the gym</p>
                   <p className="text-body text-ink-2">
                     {selectedBenchmarks.length} {selectedBenchmarks.length === 1 ? 'lift' : 'lifts'} selected
                   </p>
                 </div>
               </div>
-              <p className="text-title font-bold text-ink">{estimatedTime} min</p>
+              <p className="text-title font-bold text-ink">~{estimatedTime} min</p>
             </div>
           </CardContent>
         </Card>
