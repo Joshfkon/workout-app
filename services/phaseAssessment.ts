@@ -257,7 +257,7 @@ export function assessProgress(input: AssessProgressInput): Assessment {
   if (!phase) {
     return {
       status: 'no_phase',
-      headline: 'No active phase set. Set one to get phase-aware progress checks.',
+      headline: 'No goal phase (cut / maintain / bulk) set. Set one to check your weight trend against it.',
       details: [],
     };
   }

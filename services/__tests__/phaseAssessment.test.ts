@@ -64,7 +64,7 @@ describe('assessProgress — gates', () => {
   it('no active phase -> no_phase with a set-one prompt', () => {
     const result = assessProgress({ phase: null, today: TODAY, weighIns: [], ...noData });
     expect(result.status).toBe('no_phase');
-    expect(result.headline.toLowerCase()).toContain('no active phase');
+    expect(result.headline.toLowerCase()).toContain('no goal phase (cut / maintain / bulk)');
     expect(result.details).toHaveLength(0);
   });
 

@@ -30,11 +30,11 @@ describe('PhaseVerdictCard', () => {
   it('renders the no-phase state without details', () => {
     render(
       <PhaseVerdictCard
-        assessment={{ status: 'no_phase', headline: 'No active phase set. Set one to get phase-aware progress checks.', details: [] }}
+        assessment={{ status: 'no_phase', headline: 'No goal phase (cut / maintain / bulk) set. Set one to check your weight trend against it.', details: [] }}
         href="/dashboard/phases"
       />
     );
-    expect(screen.getByText(/No active phase set/)).toBeInTheDocument();
+    expect(screen.getByText(/No goal phase \(cut \/ maintain \/ bulk\) set\./)).toBeInTheDocument();
   });
 });
 
@@ -42,7 +42,7 @@ describe('PhaseBanner', () => {
   it('shows the set-one CTA without an active phase', () => {
     render(<PhaseBanner phase={null} href="/dashboard/phases" />);
     expect(screen.getByTestId('phase-banner-empty')).toHaveAttribute('href', '/dashboard/phases');
-    expect(screen.getByText(/No active phase — set one/)).toBeInTheDocument();
+    expect(screen.getByText('No goal phase (cut / maintain / bulk) set')).toBeInTheDocument();
   });
 
   it('shows type, week, start, and target with a Manage link', () => {

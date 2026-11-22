@@ -8,7 +8,7 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader, LoadingState, Sheet, ListGroup, ListRow } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader, LoadingState, Sheet, ListGroup, ListRow, InfoTooltip } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
@@ -63,6 +63,7 @@ import { ProportionsTargetsCard } from '@/components/analytics/ProportionsTarget
 import { WellnessTrendsCard } from '@/components/analytics/WellnessTrendsCard';
 import { BodyHubTrends } from '@/components/body/BodyHubTrends';
 import { BodyHubNudges } from '@/components/body/BodyHubNudges';
+import { BodyAddMoreData } from '@/components/body/BodyAddMoreData';
 import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
 import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
@@ -71,6 +72,14 @@ import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
 import { useLiftTrends } from '@/hooks/useLiftTrends';
+import { useBodyOrFoodLogged } from '@/hooks/useBodyOrFoodLogged';
+import {
+  hasRecentLifting,
+  parseProgressTabParam,
+  resolveActiveProgressTab,
+  resolveDefaultProgressTab,
+  type ProgressTab,
+} from './progressTabs';
 import { listOutbox } from '@/lib/offline/setOutbox';
 import {
   rangeStartLocalDay,
@@ -159,22 +168,10 @@ const BloodPressureCard = dynamic(
 // Tab types. Down to three: Goals dissolved into Body (targets editor +
 // projections) and the Training tab was removed — its workout totals, volume
 // vs targets, and recent-workout content all live on the Train page.
-type TabType = 'body-composition' | 'strength' | 'wellness';
-
-// Valid ?tab= values — tab targeting is a route parameter so any surface
-// (home tiles, notifications, weekly summary) can deep-link a specific tab,
+// Valid ?tab= values and the default-tab rule live in ./progressTabs, so any
+// surface (home tiles, notifications, weekly summary) can deep-link a tab,
 // e.g. /dashboard/analytics?tab=strength&section=lift-trends.
-const TAB_IDS: readonly TabType[] = ['body-composition', 'strength', 'wellness'];
-
-function parseTabParam(value: string | null): TabType | null {
-  // Back-compat aliases so existing home tiles / notifications / deep links
-  // keep working after the tab restructures:
-  //   body  → Body (friendly alias the Home Weight tile links to)
-  //   goals → Body (goal-setting + projections moved here)
-  // Retired ids (volume/training) fall through to the default tab.
-  if (value === 'body' || value === 'goals') return 'body-composition';
-  return value && (TAB_IDS as readonly string[]).includes(value) ? (value as TabType) : null;
-}
+type TabType = ProgressTab;
 
 /** Get display name for a muscle group */
 function getMuscleDisplayName(muscle: string): string {
@@ -270,29 +267,30 @@ function AnalyticsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
-  const [activeTab, setActiveTab] = useState<TabType>(
-    () => parseTabParam(searchParams.get('tab')) ?? 'strength'
-  );
+  // Tab precedence (./progressTabs): a tab the user tapped, then the ?tab=
+  // deep link, then the data-driven default, then Strength.
+  const explicitTab = parseProgressTabParam(searchParams.get('tab'));
+  const [pickedTab, setPickedTab] = useState<TabType | null>(null);
   const sectionParam = searchParams.get('section');
   const [showPlateauIdeas, setShowPlateauIdeas] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Follow URL changes (back/forward, in-app deep links to another tab).
-  // No/invalid param means the default tab — a base-route navigation (e.g.
-  // the Progress nav item) must reset a previously deep-linked tab.
+  // Follow URL changes (back/forward, in-app deep links to another tab): a
+  // new URL drops the tapped tab so the param (or, with no param, the
+  // default) applies — a base-route navigation (e.g. the Progress nav item)
+  // must reset a previously deep-linked tab.
   useEffect(() => {
-    setActiveTab(parseTabParam(searchParams.get('tab')) ?? 'strength');
+    setPickedTab(null);
   }, [searchParams]);
 
   const handleTabChange = (tab: TabType) => {
     // Local state only — deliberately NO URL write. Changing the ?tab= search
     // param remounts page.tsx (the App Router keys the page segment by its
-    // search params; history.replaceState sync included), and this page still
-    // loads via fetch-in-useEffect, so a remount meant a full refetch behind
-    // a multi-second loading screen on every tab tap. Deep links IN
-    // (?tab=...) keep working via the searchParams read/effect above; the
-    // param just doesn't track subsequent taps.
-    setActiveTab(tab);
+    // search params; history.replaceState sync included), and a remount
+    // re-runs every fetch on the page. Deep links IN (?tab=...) keep working
+    // via the searchParams read above; the param just doesn't track
+    // subsequent taps.
+    setPickedTab(tab);
   };
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d' | '6m' | '1y' | 'all'>('30d');
 
@@ -326,6 +324,24 @@ function AnalyticsPageContent() {
   // Goals tab state
   const [activeMesocycle, setActiveMesocycle] = useState<Mesocycle | null>(null);
   const [activeTarget, setActiveTarget] = useState<BodyCompositionTarget | null>(null);
+  // The goals editor card shows once a goal exists, when the user asks for
+  // it ("Edit goals" / "Set body goals"), or on a ?section=body-targets deep
+  // link (the Composition Map's "Set a target"). An empty goals card is not
+  // rendered by default — it was setup noise on the Body tab.
+  const [goalsEditorOpened, setGoalsEditorOpened] = useState(false);
+  const [goalsScrollRequest, setGoalsScrollRequest] = useState(0);
+  const showGoalsEditor =
+    goalsEditorOpened || activeTarget != null || sectionParam === 'body-targets';
+  const openGoalsEditor = () => {
+    setGoalsEditorOpened(true);
+    setGoalsScrollRequest((n) => n + 1);
+  };
+  useEffect(() => {
+    if (goalsScrollRequest === 0) return;
+    document
+      .getElementById('body-targets')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [goalsScrollRequest]);
   const [weightHistory, setWeightHistory] = useState<Array<{ date: string; weightKg: number }>>([]);
   const [currentMeasurements, setCurrentMeasurements] = useState<Record<string, number>>({});
   // Observed-vs-assumed lean/fat partition for the projection, from the waist
@@ -340,7 +356,31 @@ function AnalyticsPageContent() {
   // Per-lift trend breakdown behind the home "Lifts" tile (shared function +
   // identical query window, so the tile aggregate and this detail agree).
   // Shared React Query cache with the single-lift screen (hooks/useLiftTrends).
-  const liftTrendsSummary = useLiftTrends().data ?? null;
+  const liftTrendsQuery = useLiftTrends();
+  const liftTrendsSummary = liftTrendsQuery.data ?? null;
+
+  // Data-driven default tab. Both signals are persisted React Query reads,
+  // so a revisit decides on first paint from cache; nothing blocks render —
+  // until they resolve the page shows Strength (the fallback). Once decided
+  // the default is locked for this mount so a background refetch never
+  // flips the tab under the user.
+  const bodyOrFoodLogged = useBodyOrFoodLogged().data;
+  const dataDefaultTab = resolveDefaultProgressTab({
+    hasRecentLifting: hasRecentLifting(liftTrendsQuery.data),
+    hasBodyOrFoodData:
+      bodyWeightHistory.length > 0 ? true : bodyOrFoodLogged ?? undefined,
+  });
+  const [lockedDefaultTab, setLockedDefaultTab] = useState<TabType | null>(null);
+  useEffect(() => {
+    if (lockedDefaultTab === null && dataDefaultTab !== null) {
+      setLockedDefaultTab(dataDefaultTab);
+    }
+  }, [lockedDefaultTab, dataDefaultTab]);
+  const activeTab = resolveActiveProgressTab({
+    pickedTab,
+    explicitTab,
+    dataDefaultTab: lockedDefaultTab ?? dataDefaultTab,
+  });
 
   // Per-time-range result cache (P1-2) — lives for the page's lifetime.
   const analyticsRangeCacheRef = useRef(
@@ -1460,6 +1500,7 @@ function AnalyticsPageContent() {
           ? 'map'
           : undefined
       }
+      onLogWeight={() => setLogSegment('weight')}
       phaseSpans={trainingPhases.map((p) => ({
         phaseType: p.phaseType,
         startDay: p.startDay,
@@ -1541,11 +1582,7 @@ function AnalyticsPageContent() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() =>
-                  document
-                    .getElementById('body-targets')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }
+                onClick={openGoalsEditor}
               >
                 Edit goals
               </Button>
@@ -1565,15 +1602,26 @@ function AnalyticsPageContent() {
             </div>
           </div>
 
-          {/* 1. Verdict card — the rules-based phase assessment. Tapping it
-              opens the phase editor. 2. Phase banner — compact current-phase
-              strip with the Manage link (or the set-one CTA). */}
-          <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
-          <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
+          {/* Chart first: the weight trend and its numbers lead the tab —
+              that's what people open Body for. With ≥2 body scans the same
+              module also carries the composition trend + Composition Map.
+              Setup prompts (goal phase, body scan, goals) live in the compact
+              "Add more data" list further down, never above the chart. */}
+          {bodyTrendModule}
 
-          {/* Recommendations — first thing on the tab. Correctly signed,
-              unit-aware, evidence-cited (deload-advisor style), and suppressed
-              inside the phase-boundary water window. */}
+          {/* Phase verdict + banner only once a phase exists — with none,
+              the set-one prompt is a row in "Add more data". Tapping either
+              opens the phase editor. */}
+          {currentPhase && (
+            <>
+              <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
+              <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
+            </>
+          )}
+
+          {/* Recommendations. Correctly signed, unit-aware, evidence-cited
+              (deload-advisor style), and suppressed inside the phase-boundary
+              water window. */}
           {recommendations.length > 0 && (
             <Card>
               <CardHeader>
@@ -1606,36 +1654,11 @@ function AnalyticsPageContent() {
             </Card>
           )}
 
-
-          {/* Prominence (getBodyCompLayout): with ≥2 DEXA scans the trend
-              module (incl. the Composition Map) leads the tab; below that
-              the existing order stands plus a subtle log-a-scan prompt. This
-              ONE module is the combined trend chart (weight + BF%/lean/FFMI
-              toggle + map) — the legacy duplicate area chart was deleted. */}
-          {bodyCompLayout.trendFirst && bodyTrendModule}
-
-          {/* Staleness + DEXA-due nudges */}
+          {/* Staleness + body-scan-due nudges */}
           <BodyHubNudges
             onLog={(segment) => setLogSegment(segment)}
             refreshKey={bodyRefreshKey}
           />
-
-          {!bodyCompLayout.trendFirst && bodyTrendModule}
-
-          {bodyCompLayout.showScanPrompt && (
-            <p className="text-caption text-ink-2 text-center">
-              {scans.length === 0
-                ? 'Track weight, measurements, and strength now. Log a DEXA scan to add composition trends and the Composition Map.'
-                : 'You can see overall progress. One more scan adds the Composition Map and phase-to-phase analysis.'}{' '}
-              <button
-                type="button"
-                onClick={() => setLogSegment('dexa')}
-                className="text-action font-medium"
-              >
-                Log scan
-              </button>
-            </p>
-          )}
 
           {/* Per-site tape trends. Entry happens via the header's
               "Log measurements" button (unified sheet); corrections/deletes
@@ -1673,12 +1696,23 @@ function AnalyticsPageContent() {
             onAddPhoto={() => setIsAddPhotoOpen(true)}
           />
 
+          <BodyAddMoreData
+            needsPhase={!currentPhase}
+            phaseHref="/dashboard/phases"
+            scanCount={scans.length}
+            onLogScan={() => setLogSegment('dexa')}
+            needsGoals={!activeTarget && !showGoalsEditor}
+            onSetGoals={openGoalsEditor}
+          />
+
           {/* The target EDITOR (weight / BF% / FFMI — what the Composition
               Map's goal vector reads). id-anchored so the header "Edit goals"
               action and the map's "Set a target" prompt both deep-link here.
               Muscle-priority config is no longer on this tab — it's
-              program-generation settings, reachable in Settings. */}
-          {userId && (
+              program-generation settings, reachable in Settings. Hidden while
+              no goal is set (an empty goals card above real data was noise);
+              "Edit goals" / the Add-more-data row open it. */}
+          {userId && showGoalsEditor && (
             <div id="body-targets" className="scroll-mt-4">
               <BodyTargets
                 userId={userId}
@@ -1690,32 +1724,6 @@ function AnalyticsPageContent() {
                 currentMeasurements={currentMeasurements}
               />
             </div>
-          )}
-
-          {/* No data state */}
-          {scans.length === 0 && (
-            <Card className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">
-                <svg className="w-8 h-8 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <h2 className="text-headline font-semibold text-ink">Building your body data</h2>
-              <p className="text-ink-2 mt-2 max-w-md mx-auto">
-                You&apos;re already tracking workouts, weight, and measurements. Add a DEXA scan to see lean vs. fat trends and unlock composition insights.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
-                <Link href="/dashboard/body-composition/add">
-                  <Button>Add DEXA scan</Button>
-                </Link>
-                <Button
-                  variant="outline"
-                  onClick={() => setLogSegment('weight')}
-                >
-                  Log weight
-                </Button>
-              </div>
-            </Card>
           )}
         </div>
       )}
@@ -1820,7 +1828,9 @@ function AnalyticsPageContent() {
                           <p className="text-headline font-bold text-ink">{strengthProfile.balanceScore}%</p>
                         </div>
                         <div className="p-2 bg-card/50 rounded-lg">
-                          <p className="text-caption text-ink-2">FFMI</p>
+                          <p className="text-caption text-ink-2 inline-flex items-center gap-0.5">
+                            Muscle (FFMI) <InfoTooltip term="FFMI" size="sm" />
+                          </p>
                           {/* Canonical FFMI (selectCanonicalFfmi) — NOT the
                               stale, normalized-in-one-field value frozen on
                               the calibration session. Falls back to the frozen
