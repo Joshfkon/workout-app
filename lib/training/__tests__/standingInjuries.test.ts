@@ -10,6 +10,7 @@ import {
   parseStandingInjuryAreas,
   standingAreasToCheckInInjuries,
   standingAreasToUserInjuries,
+  checkInInjuryToUserInjury,
 } from '../standingInjuries';
 
 describe('standing injury areas', () => {
@@ -40,5 +41,33 @@ describe('standing injury areas', () => {
     expect(standingAreasToUserInjuries(['shoulder'], now)).toEqual([
       { id: 'standing-shoulder', injuryTypeId: 'shoulder_impingement', severity: 'mild', isActive: true, startDate: now },
     ]);
+  });
+});
+
+describe('checkInInjuryToUserInjury', () => {
+  const now = new Date('2026-11-22T12:00:00Z');
+
+  it('maps a sided check-in area and 1–3 severity to an INJURY_TYPES id the safety check understands', () => {
+    expect(checkInInjuryToUserInjury({ id: 'a', area: 'knee_left', severity: 2 }, now)).toMatchObject({
+      injuryTypeId: 'knee_injury',
+      severity: 'moderate',
+      affectedSide: 'left',
+      isActive: true,
+    });
+    expect(checkInInjuryToUserInjury({ area: 'lower_back', severity: 1 }, now)).toMatchObject({ injuryTypeId: 'lower_back_strain', severity: 'mild' });
+    expect(checkInInjuryToUserInjury({ area: 'ankle_right', severity: 3 }, now)).toMatchObject({ injuryTypeId: 'ankle_sprain', severity: 'severe', affectedSide: 'right' });
+  });
+
+  it('every mapped id is a real injury type', () => {
+    for (const area of ['shoulder_left', 'elbow_right', 'wrist_left', 'hip_right', 'knee_right', 'lower_back', 'upper_back', 'neck', 'ankle_left']) {
+      const injury = checkInInjuryToUserInjury({ area, severity: 1 }, now);
+      expect(injury && getInjuryType(injury.injuryTypeId)).toBeTruthy();
+    }
+  });
+
+  it('skips inactive injuries and areas with no matching type', () => {
+    expect(checkInInjuryToUserInjury({ area: 'knee_left', severity: 1, isActive: false }, now)).toBeNull();
+    expect(checkInInjuryToUserInjury({ area: 'chest', severity: 1 }, now)).toBeNull();
+    expect(checkInInjuryToUserInjury({ area: 'other', severity: 1 }, now)).toBeNull();
   });
 });
