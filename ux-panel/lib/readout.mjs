@@ -51,7 +51,9 @@ export async function writeReadout({ llm, run }) {
     `TASK COMPLETION:\n${Object.entries(run.completion)
       .map(([j, c]) => `- ${run.journeyLabels[j] ?? j}: ${c.completed}/${c.ran} completed, ${c.gaveUp} gave up`)
       .join('\n')}`,
-    `ISSUES (already ranked by how many participants hit them):\n${issues
+    issues.length === 0
+      ? 'ISSUES: none were reported in this run. Say so plainly; do not ask for a list. Base the summary on task completion and what participants liked and suggested.'
+      : `ISSUES (already ranked by how many participants hit them):\n${issues
       .map(
         (c, i) =>
           `${i + 1}. [${c.severity}] ${c.personaCount} participant(s) on ${c.screen} during ${c.journeys.join(', ')}${envTaintedTasks(c, run.results).length ? ' — CAUTION: the session(s) behind this also hit a test-environment database error, so it may be the test setup rather than the app. Say that it needs verifying; do not call it the top priority.' : ''}:\n${c.items

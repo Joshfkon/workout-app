@@ -28,6 +28,7 @@ import { ssrPmf } from './lib/ssr.mjs';
 import { aggregateScores, clusterFrictions, completionRates } from './lib/aggregate.mjs';
 import { ensureStories, storyToJourney } from './lib/stories.mjs';
 import { writeReadout, plainReadout } from './lib/readout.mjs';
+import { problemsToFrictions } from './lib/issues.mjs';
 import { renderReport } from './lib/report.mjs';
 import { estimateCost, formatEstimate } from './lib/cost.mjs';
 
@@ -194,7 +195,9 @@ async function main() {
         const run = await runJourney({ page, llm, persona, journey, goalText, credentials: journey.account === 'fresh' ? creds : null, outDir, baseUrl: opts.baseUrl });
         if (journey.account === 'fresh') await tagAccount(admin, creds.email, runId);
         const review = await writeReview({ llm, persona, goalText, run });
-        rec = { ...rec, ...run, frictions: run.frictions.map((f) => ({ ...f, taskId, personaId: persona.id, journeyId: journey.id })), review };
+        rec = { ...rec, ...run, frictions: run.frictions.map((f) => ({ ...f, taskId, personaId: persona.id, journeyId: journey.id, source: 'live' })), review };
+        // Problems listed in the review count too (small annoyances rarely get flagged mid-task).
+        rec.frictions.push(...problemsToFrictions(rec));
       } catch (e) {
         rec = { ...rec, outcome: 'error', error: apiErrorMessage(e), log: [], frictions: [] };
         if (isFatalApiError(e)) fatal = rec.error;

@@ -51,6 +51,26 @@ export const STEP_TOOLS = [
 ].map((t) => ({ ...t, strict: true }));
 
 const reviewProps = Object.fromEntries(QUESTIONS.map((q) => [q.id, { type: 'string', description: q.prompt }]));
+/**
+ * Every separate problem, small annoyances included, one per item. Live
+ * report_friction calls only catch what a persona flags mid-task (mostly
+ * things that block it); without this a run with no blockers reported
+ * "0 issues" while every review complained about the same popup.
+ */
+export const PROBLEMS_SCHEMA = {
+  type: 'array',
+  description:
+    "Each separate problem you ran into, small annoyances included, one per item. Empty if there were none. Don't repeat the same problem twice.",
+  items: obj(
+    {
+      screen: { type: 'string', description: 'The screen path it happened on, as shown in [brackets] in your step list. Empty if unsure.' },
+      text: { type: 'string', description: 'What happened vs. what you expected, in one or two sentences.' },
+      severity: { type: 'string', enum: ['minor', 'major', 'blocker'] },
+    },
+    ['screen', 'text', 'severity'],
+  ),
+};
+
 export const REVIEW_TOOL = {
   name: 'submit_review',
   description: 'Submit your honest review of what you just did in the app, in your own words.',
@@ -61,8 +81,9 @@ export const REVIEW_TOOL = {
       liked: { type: 'string', description: 'What, if anything, you liked.' },
       confusing: { type: 'string', description: 'What confused or annoyed you most.' },
       simpler: { type: 'string', description: 'How this task could have been simpler for you, concretely.' },
+      problems: PROBLEMS_SCHEMA,
     },
-    [...QUESTIONS.map((q) => q.id), 'liked', 'confusing', 'simpler'],
+    [...QUESTIONS.map((q) => q.id), 'liked', 'confusing', 'simpler', 'problems'],
   ),
 };
 

@@ -102,6 +102,7 @@ export function fakeLLM({ ledger = new Ledger() } = {}) {
           liked: 'Clean layout.',
           confusing: 'Not sure what some labels mean.',
           simpler: 'Fewer steps to get to the main action.',
+          problems: [{ screen: '', text: 'Not sure what some labels mean.', severity: 'minor' }],
         });
       }
       if (toolNames.includes('submit_readout')) {
