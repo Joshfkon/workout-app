@@ -58,6 +58,7 @@ const opts = {
   estimateOnly: !!flag('estimate'),
   readout: !flag('no-readout'),
   reuse: flag('reuse', ''),
+  rerun: String(flag('rerun', '')).split(',').filter(Boolean),
 };
 
 // ---------- env (.env.local, never printed) ----------
@@ -78,7 +79,7 @@ const taskIdOf = (persona, journey) => `${persona.id}__${journey.id.replace(/[^a
  * environment only costs the sessions it broke.
  */
 function reusableResult(reuseDir, taskId) {
-  if (!reuseDir) return null;
+  if (!reuseDir || opts.rerun.includes(taskId)) return null;
   const file = path.join(reuseDir, 'tasks', taskId, 'result.json');
   if (!existsSync(file)) return null;
   const rec = JSON.parse(readFileSync(file, 'utf8'));

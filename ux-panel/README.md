@@ -190,7 +190,9 @@ still run a little high, because cache reads aren't modelled.
 **Rerunning only what the test environment broke.** When the report lists
 *Test environment problems*, fix the local DB (add to `local-db/fixups.sql`)
 and rerun with `--reuse=<runDir>`. Sessions that finished without any
-environment error are copied over; only the rest run (and cost) again.
+environment error are copied over; only the rest run (and cost) again. Add
+`--rerun=<taskId>,…` to force specific sessions to run again, for example
+ones broken by a harness bug that's since been fixed.
 
 ### Synthetic accounts
 
