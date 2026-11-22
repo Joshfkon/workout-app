@@ -1460,6 +1460,34 @@ describe('ExerciseCard', () => {
       expect(note).not.toHaveTextContent(/e1RM/);
     });
 
+    it('PANEL REPRO: a weight far below the working weight leaves reps alone instead of "~50 reps"', async () => {
+      const user = setupUser();
+      // Last session 88.2 lbs (40 kg) × 10 @ 2 RIR ⇒ ~123.5 lb est. max. A
+      // beginner types 45 lbs: the curve answers ~50 reps @ 2 RIR, far past
+      // the range it is valid for.
+      const prevSet = { weightKg: 40, reps: 10, rpe: 8 };
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          block={createMockBlock({ targetRepRange: [8, 12] as [number, number], targetWeightKg: 40 })}
+          previousSets={[prevSet]}
+          exerciseHistory={{ lastWorkoutDate: weeksAgo(1), lastWorkoutSets: [prevSet], estimatedE1RM: 56, personalRecord: null, totalSessions: 6 }}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+      const before = screen.getByRole('button', { name: /Reps: \d+ reps/ }).getAttribute('aria-label');
+
+      await editWeight(user, /Weight: /, '45');
+      flushDebounce();
+
+      expect(screen.getByRole('button', { name: /Reps: \d+ reps/ }).getAttribute('aria-label')).toBe(before);
+      expect(screen.getByTestId('weight-edit-recompute-note')).toHaveTextContent(
+        '45 lbs is far below your working weight, so reps were left as they were'
+      );
+    });
+
     it('note slot stays mounted at all times — toggling it must not move the steppers (layout stability)', async () => {
       const user = setupUser();
       render(

@@ -510,6 +510,16 @@ export interface ColdStartSuggestion {
 export type SetSyncStatus = 'saving' | 'saved' | 'queued' | 'failed';
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
+
+/**
+ * Past this many reps a weight edit stops refilling the reps field. The
+ * rep-max curve is only trustworthy to ~15 effective reps; well beyond it
+ * (a 45 lb edit against a 123 lb est. max read "~50 reps") the number is
+ * noise, so the field keeps its value and the note says why. A block whose
+ * own target range goes higher keeps refilling up to that range.
+ */
+const WEIGHT_EDIT_MAX_REPS = 20;
+
 export const ExerciseCard = memo(function ExerciseCard({
   exercise,
   block,
@@ -1656,6 +1666,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     reps: number;
     rir: number;
     e1rmKg: number;
+    /** The weight is so light the rep-max curve can't answer (see WEIGHT_EDIT_MAX_REPS). */
+    beyondCurve?: boolean;
   } | null>(null);
 
   // Track the last known completed sets count to detect changes
@@ -2156,6 +2168,16 @@ export const ExerciseCard = memo(function ExerciseCard({
                       targetRepRange: block.targetRepRange,
                       targetRir: rowTargetRir,
                     });
+                    // Far below the working weight the rep-max curve runs off
+                    // its valid range (45 lb against a 123 lb est. max read
+                    // "~50 reps"). Leave the reps alone and say why instead
+                    // of writing a number nobody would do.
+                    if (!isDurationBased && newReps != null && newReps > Math.max(WEIGHT_EDIT_MAX_REPS, block.targetRepRange?.[1] ?? 0)) {
+                      if (index === 0) {
+                        setWeightEditNote({ weightDisplay: value, reps: newReps, rir: rowTargetRir, e1rmKg: anchorE1RM ?? 0, beyondCurve: true });
+                      }
+                      return newInputs;
+                    }
                     // null = no e1RM after all — leave the reps field untouched.
                     if (newReps != null) {
                       newInputs[index] = { ...newInputs[index], reps: String(newReps) };
@@ -4794,7 +4816,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                   weightEditNote ? '' : 'invisible'
                 }`}
               >
-                {weightEditNote && (
+                {weightEditNote?.beyondCurve ? (
+                  <>
+                    {weightEditNote.weightDisplay} {weightLabel} is far below your working weight, so reps were left as they were
+                  </>
+                ) : weightEditNote && (
                   <>
                     {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
                     {isDurationBased ? 'seconds' : 'reps'} @ {clampToChip(weightEditNote.rir)} RIR (from your
