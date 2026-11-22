@@ -628,3 +628,93 @@ describe('determinism', () => {
     expect(a).toEqual(b);
   });
 });
+
+// ============================================================
+// Focus header vs. exercise list (synthetic-panel finding, 2026-11-22)
+// ============================================================
+
+describe('focus matches the picked exercises', () => {
+  /**
+   * The panel's returning user: recovery/volume report the COARSE 'calves'
+   * and 'triceps' rows, while the library tags calf and triceps work at head
+   * grain (gastrocnemius / soleus / triceps_lat_med / triceps_long). The
+   * header said "calves, side delts and triceps" over a list of Upright Row,
+   * Overhead Carry and two squats.
+   */
+  function panelLibrary(): SuggestedExerciseInput[] {
+    return [
+      makeExercise({ id: 'upright', name: 'Upright Row', primaryMuscle: 'lateral_delts', tier: 'B', defaultRepRange: [10, 15] }),
+      makeExercise({ id: 'latraise', name: 'Lateral Raise', primaryMuscle: 'lateral_delts', tier: 'C', mechanic: 'isolation' }),
+      makeExercise({
+        id: 'ohcarry',
+        name: 'Overhead Carry',
+        primaryMuscle: 'shoulders',
+        tier: 'C',
+        defaultRepRange: [30, 60],
+        exerciseType: 'duration_based',
+      }),
+      makeExercise({ id: 'squat', name: 'Barbell Back Squat', primaryMuscle: 'quads', tier: 'C' }),
+      makeExercise({ id: 'pendulum', name: 'Pendulum Squat', primaryMuscle: 'quads', tier: 'S' }),
+      makeExercise({ id: 'calfraise', name: 'Standing Calf Raise', primaryMuscle: 'gastrocnemius', tier: 'C', mechanic: 'isolation' }),
+      makeExercise({ id: 'seatedcalf', name: 'Seated Calf Raise', primaryMuscle: 'soleus', tier: 'C', mechanic: 'isolation' }),
+      makeExercise({ id: 'pushdown', name: 'Rope Tricep Pushdown', primaryMuscle: 'triceps_lat_med', tier: 'A', mechanic: 'isolation' }),
+      makeExercise({ id: 'ohext', name: 'Overhead Tricep Extension', primaryMuscle: 'triceps_long', tier: 'C', mechanic: 'isolation' }),
+    ];
+  }
+
+  const panelMuscles = [
+    makeMuscle('calves', { targetSets: 14 }),
+    makeMuscle('lateral_delts', { targetSets: 13 }),
+    makeMuscle('triceps', { targetSets: 12 }),
+    makeMuscle('quads', { targetSets: 11 }),
+  ];
+
+  it('trains a coarse parent muscle with exercises tagged at its heads', () => {
+    const plan = build({ muscles: panelMuscles, exercises: panelLibrary(), sessionMinutes: 45, maxExercises: 4 });
+    const ids = plan.exercises.map((p) => p.exerciseId);
+    expect(ids.some((id) => id === 'calfraise' || id === 'seatedcalf')).toBe(true);
+    expect(ids.some((id) => id === 'pushdown' || id === 'ohext')).toBe(true);
+    expect(plan.exercises.find((p) => p.exerciseId === 'calfraise' || p.exerciseId === 'seatedcalf')?.muscle).toBe('calves');
+  });
+
+  it('names every trained muscle and no others in the focus sentence (panel library)', () => {
+    const plan = build({ muscles: panelMuscles, exercises: panelLibrary(), sessionMinutes: 45, maxExercises: 4 });
+    expect(new Set(plan.exercises.map((p) => p.muscle))).toEqual(
+      new Set(['calves', 'lateral_delts', 'triceps', 'quads'])
+    );
+    expect(plan.focus).toBe(
+      'Focus: calves, side delts, triceps and quads — most recovered, furthest behind target this week.'
+    );
+  });
+
+  it('names only muscles that have a pick in the focus sentence', () => {
+    // No calf work in the library at all: calves must drop out of the header.
+    const library = panelLibrary().filter((ex) => !['calfraise', 'seatedcalf'].includes(ex.id));
+    const plan = build({ muscles: panelMuscles, exercises: library, sessionMinutes: 45, maxExercises: 4 });
+    const pickedMuscles = new Set(plan.exercises.map((p) => p.muscle));
+    expect(pickedMuscles.has('calves')).toBe(false);
+    expect(plan.focus).not.toMatch(/calves/i);
+    for (const m of Array.from(pickedMuscles)) {
+      // Every muscle the header names has at least one exercise.
+      expect(plan.focus.toLowerCase()).toContain(
+        ({ lateral_delts: 'side delts', triceps: 'triceps', quads: 'quads' } as Record<string, string>)[m] ?? m
+      );
+    }
+  });
+
+  it('prefers rep-based work over a timed carry for a hypertrophy pick', () => {
+    const plan = build({ muscles: [makeMuscle('lateral_delts')], exercises: panelLibrary() });
+    const ids = plan.exercises.map((p) => p.exerciseId);
+    expect(ids).toContain('upright');
+    expect(ids).toContain('latraise');
+    expect(ids).not.toContain('ohcarry');
+  });
+
+  it('lists one member of a parent/head family, not calves AND gastrocnemius', () => {
+    const plan = build({
+      muscles: [makeMuscle('calves', { targetSets: 14 }), makeMuscle('gastrocnemius'), makeMuscle('soleus'), makeMuscle('quads')],
+      exercises: panelLibrary(),
+    });
+    expect(plan.focus).toBe('Focus: calves and quads — most recovered, furthest behind target this week.');
+  });
+});

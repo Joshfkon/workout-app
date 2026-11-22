@@ -14,8 +14,12 @@
  *   2. Rank muscles: ready first, then largest volume deficit
  *      (targetSets - weeklySets). Sore muscles and muscles already at/over
  *      target are skipped entirely.
- *   3. Take the top 3-4 muscles; for each pick 1-2 exercises, preferring
- *      recently used, then staples, compounds before isolations.
+ *   3. Take the top 3-4 muscles the library can train (a coarse parent row
+ *      like 'calves' is trained by its head-tagged exercises; one entry per
+ *      parent/head family); for each pick 1-2 exercises, preferring
+ *      rep-based over timed carries/holds, then recently used, then staples,
+ *      compounds before isolations. The focus sentence names only muscles
+ *      that received a pick.
  *   4. Every pick carries set/rep/RIR targets:
  *        - sets sized to the session length, hard-capped so the muscle's
  *          weekly total never passes MRV;
@@ -28,9 +32,11 @@
  */
 
 import {
+  MUSCLE_VOLUME_AUTHORITY,
   muscleMatchesGroup,
   resolveMuscleToStandard,
   STANDARD_MUSCLE_DISPLAY_NAMES,
+  type ExerciseType,
   type StandardMuscleGroup,
 } from '@/types/schema';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
@@ -73,6 +79,11 @@ export interface SuggestedExerciseInput {
   equipment?: string | string[] | null;
   /** Bodyweight flag — untagged bodyweight exercises pass the equipment filter. */
   isBodyweight?: boolean | null;
+  /**
+   * 'duration_based' exercises (carries, holds) store SECONDS in their rep
+   * range. They are only picked when a muscle has no rep-based option.
+   */
+  exerciseType?: ExerciseType | null;
 }
 
 export interface BuildSuggestedWorkoutInput {
@@ -216,7 +227,12 @@ function rankMuscles(muscles: SuggestedMuscleInput[], injuredMuscles: string[]):
       if (readyDiff !== 0) return readyDiff;
       if (b.deficit !== a.deficit) return b.deficit - a.deficit;
       return a.muscle.localeCompare(b.muscle);
-    });
+    })
+    .filter(
+      // One entry per parent/head family (the best-ranked one): 'calves' and
+      // 'gastrocnemius' are the same calf work, not two session targets.
+      (m, i, all) => all.findIndex((o) => muscleFamily(o.muscle) === muscleFamily(m.muscle)) === i
+    );
 }
 
 /**
@@ -242,16 +258,52 @@ export function compareExerciseCandidates(
   return a.name.localeCompare(b.name);
 }
 
-/** Candidate exercises for a standard muscle, best first (compareExerciseCandidates). */
+/**
+ * The standard muscles an exercise's primary tag may resolve to and still
+ * train `muscle`: the muscle itself plus, for a group-capacity row, its
+ * bounded components. Recovery and volume report the coarse 'calves' /
+ * 'triceps' / 'traps' rows, but libraries tag that work at head grain
+ * (gastrocnemius, triceps_lat_med, ...) — without this a coarse row has no
+ * candidates and is skipped silently.
+ */
+function trainableTags(muscle: StandardMuscleGroup): Set<StandardMuscleGroup> {
+  const tags = new Set<StandardMuscleGroup>([muscle]);
+  for (const [component, authority] of Object.entries(MUSCLE_VOLUME_AUTHORITY)) {
+    if (authority.parent === muscle) tags.add(component as StandardMuscleGroup);
+  }
+  return tags;
+}
+
+/** Parent/head family a muscle belongs to (calves for gastrocnemius, etc.). */
+function muscleFamily(muscle: StandardMuscleGroup): StandardMuscleGroup {
+  return MUSCLE_VOLUME_AUTHORITY[muscle].parent ?? muscle;
+}
+
+function isDurationBased(ex: SuggestedExerciseInput): boolean {
+  return ex.exerciseType === 'duration_based';
+}
+
+/**
+ * Candidate exercises for a standard muscle, best first
+ * (compareExerciseCandidates). Timed carries/holds sit behind every
+ * rep-based option: a coarse 'shoulders' carry is not side-delt volume.
+ */
 function candidatesForMuscle(
   muscle: StandardMuscleGroup,
   exercises: SuggestedExerciseInput[],
   recentIds: Set<string>,
   stapleIds: Set<string>
 ): SuggestedExerciseInput[] {
+  const tags = trainableTags(muscle);
   return exercises
-    .filter((ex) => ex.primaryMuscle && resolveMuscleToStandard(ex.primaryMuscle).includes(muscle))
-    .sort((a, b) => compareExerciseCandidates(a, b, recentIds, stapleIds));
+    .filter(
+      (ex) => ex.primaryMuscle && resolveMuscleToStandard(ex.primaryMuscle).some((m) => tags.has(m))
+    )
+    .sort(
+      (a, b) =>
+        Number(isDurationBased(a)) - Number(isDurationBased(b)) ||
+        compareExerciseCandidates(a, b, recentIds, stapleIds)
+    );
 }
 
 function reasonForPick(muscle: RankedMuscle): string {
@@ -262,10 +314,9 @@ function reasonForPick(muscle: RankedMuscle): string {
     : `${label} — ${deficitText}, almost recovered`;
 }
 
-function buildFocus(topMuscles: RankedMuscle[]): string {
-  const names = topMuscles
-    .slice(0, 3)
-    .map((m) => muscleLabel(m.muscle).toLowerCase());
+/** Focus sentence over the muscles that actually received a pick, in rank order. */
+function buildFocus(trainedMuscles: RankedMuscle[]): string {
+  const names = trainedMuscles.map((m) => muscleLabel(m.muscle).toLowerCase());
   const joined =
     names.length <= 1
       ? names.join('')
@@ -458,13 +509,18 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
     return buildLightSession(ranked, usableExercises, recentIds, stapleIds, exerciseById);
   }
 
-  const topMuscles = ranked.slice(0, MAX_MUSCLES);
-  const remaining = new Map<StandardMuscleGroup, SuggestedExerciseInput[]>(
-    topMuscles.map((m) => [
-      m.muscle,
-      candidatesForMuscle(m.muscle, usableExercises, recentIds, stapleIds),
-    ])
-  );
+  // Top muscles are the best-ranked ones the library can actually train; a
+  // muscle with no usable exercise yields its slot to the next one instead
+  // of silently leaving the session to the others.
+  const remaining = new Map<StandardMuscleGroup, SuggestedExerciseInput[]>();
+  const topMuscles: RankedMuscle[] = [];
+  for (const m of ranked) {
+    if (topMuscles.length >= MAX_MUSCLES) break;
+    const candidates = candidatesForMuscle(m.muscle, usableExercises, recentIds, stapleIds);
+    if (candidates.length === 0) continue;
+    remaining.set(m.muscle, candidates);
+    topMuscles.push(m);
+  }
 
   const picks: SuggestedWorkoutPick[] = [];
   const pickedIds = new Set<string>();
@@ -513,9 +569,12 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
     );
   }
 
+  // The header names only muscles that got an exercise (MRV headroom or the
+  // exercise cap can leave a top muscle without one).
+  const pickedMuscles = new Set(picks.map((p) => p.muscle));
   return {
     exercises: orderCompoundsFirst(picks, exerciseById),
-    focus: buildFocus(topMuscles),
+    focus: buildFocus(topMuscles.filter((m) => pickedMuscles.has(m.muscle))),
     isLightSession: false,
   };
 }
