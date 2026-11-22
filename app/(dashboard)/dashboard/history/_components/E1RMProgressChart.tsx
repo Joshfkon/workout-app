@@ -36,7 +36,7 @@ export default function E1RMProgressChart({
   prLine: number;
   /**
    * Tooltip label for the plotted series. Duration exercises reuse this chart
-   * to plot longest hold per session ("Longest Hold", unit "s") — e1RM is
+   * to plot longest hold per session ("Longest hold", unit "s") — e1RM is
    * explicitly excluded for them.
    */
   seriesLabel?: string;

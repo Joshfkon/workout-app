@@ -370,7 +370,7 @@ export function CustomExerciseReviewForm({
 
         {/* Loading & Progression Section */}
         <AccordionItem id="loading">
-          <AccordionTrigger id="loading">Loading & Progression</AccordionTrigger>
+          <AccordionTrigger id="loading">Loading & progression</AccordionTrigger>
           <AccordionContent id="loading">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -437,7 +437,7 @@ export function CustomExerciseReviewForm({
 
         {/* Safety & Injury Section */}
         <AccordionItem id="safety">
-          <AccordionTrigger id="safety">Safety & Injury Considerations</AccordionTrigger>
+          <AccordionTrigger id="safety">Safety & injury considerations</AccordionTrigger>
           <AccordionContent id="safety">
             <div className="space-y-4">
               <div>

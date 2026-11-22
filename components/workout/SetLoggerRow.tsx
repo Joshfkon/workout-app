@@ -134,7 +134,7 @@ function DiscomfortSummaryRow({
 }) {
   const severityInfo = getSeverityInfo(discomfort.severity);
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-fill border border-sep px-2.5 py-1.5 text-[12px]">
+    <div className="flex items-center gap-2 rounded-lg bg-fill border border-sep px-2.5 py-1.5 text-caption">
       <span className={severityInfo.color}>
         {getBodyPartDisplayName(discomfort.bodyPart)} — {severityInfo.label}
       </span>
@@ -443,7 +443,7 @@ export function SetLoggerRow({
           min="0"
           step={field === 'weight' ? '0.5' : '1'}
           aria-label={ariaLabel}
-          className="w-full min-w-0 px-1 min-h-[56px] bg-card border border-action rounded-xl text-center text-[22px] font-bold tabular-nums text-ink focus:outline-none"
+          className="w-full min-w-0 px-1 min-h-[56px] bg-card border border-action rounded-xl text-center text-title font-bold tabular-nums text-ink focus:outline-none"
         />
       );
     }
@@ -455,7 +455,7 @@ export function SetLoggerRow({
         aria-label={`${ariaLabel}: ${displayText}${unitText ? ` ${unitText}` : ''}. Tap to type`}
         className="w-full min-w-0 min-h-[56px] flex flex-col items-center justify-center leading-tight"
       >
-        <span className="text-[22px] font-bold tabular-nums text-ink whitespace-nowrap">{displayText}</span>
+        <span className="text-title font-bold tabular-nums text-ink whitespace-nowrap">{displayText}</span>
         {unitText && (
           <span className="text-caption text-ink-2">{unitText}</span>
         )}
@@ -550,7 +550,7 @@ export function SetLoggerRow({
               aria-label={`Starting in ${holdTimer.countdownRemaining} seconds`}
               data-testid="hold-countdown"
             >
-              <span className="text-[22px] font-bold text-action whitespace-nowrap tabular-nums">
+              <span className="text-title font-bold text-action whitespace-nowrap tabular-nums">
                 {holdTimer.countdownRemaining}
               </span>
               <span className="text-caption text-ink-2">
@@ -564,7 +564,7 @@ export function SetLoggerRow({
               aria-live="polite"
               aria-label={`Holding: ${holdTimer.elapsed} seconds`}
             >
-              <span className="text-[22px] font-bold tabular-nums text-action whitespace-nowrap">
+              <span className="text-title font-bold tabular-nums text-action whitespace-nowrap">
                 {holdTimer.elapsed}s
               </span>
               {holdTargetSeconds ? (
@@ -613,7 +613,7 @@ export function SetLoggerRow({
                     ? 'Resume hold timer'
                     : 'Start hold timer'
             }
-            className={`relative flex-1 min-h-[44px] rounded-lg overflow-hidden flex items-center justify-center gap-2 text-[13px] font-semibold transition-colors ${
+            className={`relative flex-1 min-h-[44px] rounded-lg overflow-hidden flex items-center justify-center gap-2 text-subhead font-semibold transition-colors ${
               holdTimer.isRunning || holdTimer.isCountingDown
                 ? 'bg-action text-on-action'
                 : 'bg-card text-action'
@@ -682,7 +682,7 @@ export function SetLoggerRow({
         <div className="flex items-center justify-between gap-2 pl-1" data-testid="predicted-rir">
           <span
             aria-live="polite"
-            className={`text-[12px] leading-snug ${
+            className={`text-caption leading-snug ${
               effortCheck.predictedRir <= 0 ? 'text-status-warn' : 'text-ink-2'
             }`}
           >
@@ -731,8 +731,8 @@ export function SetLoggerRow({
               selectedRir === chip ? SELECTOR_CHIP_SELECTED : SELECTOR_CHIP_IDLE
             }`}
           >
-            <span className="text-[16px] font-semibold leading-tight">{RIR_CHIP_TEXT[chip]}</span>
-            <span className={`text-[10px] leading-tight ${selectedRir === chip ? 'opacity-80' : 'text-ink-2'}`}>
+            <span className="text-body font-semibold leading-tight">{RIR_CHIP_TEXT[chip]}</span>
+            <span className={`text-caption leading-tight ${selectedRir === chip ? 'opacity-80' : 'text-ink-2'}`}>
               {RIR_LABELS[chip]}
             </span>
           </button>
@@ -847,7 +847,7 @@ export function SetLoggerRow({
               exercise pain-pattern notices exactly as before. Collapsed behind
               a small neutral row (nothing is wrong, so no warning styling). */}
           <div className="space-y-2">
-            <span className="block text-sm font-medium text-ink">Injury / discomfort</span>
+            <span className="block text-subhead font-medium text-ink">Injury / discomfort</span>
             {discomfort ? (
               <DiscomfortSummaryRow
                 discomfort={discomfort}
@@ -867,7 +867,7 @@ export function SetLoggerRow({
                 onClick={() => setShowSheetDiscomfortPicker(true)}
                 disabled={disabled}
                 data-testid="joint-pain-trigger"
-                className="w-full min-h-[44px] flex items-center gap-1.5 rounded-lg bg-fill hover:brightness-110 px-3 text-[13px] text-ink-2 hover:text-ink transition-colors"
+                className="w-full min-h-[44px] flex items-center gap-1.5 rounded-lg bg-fill hover:brightness-110 px-3 text-subhead text-ink-2 hover:text-ink transition-colors"
               >
                 <IconPlus size={14} aria-hidden="true" />
                 Log injury or discomfort (optional)
@@ -894,7 +894,7 @@ export function SetLoggerRow({
           >
             Done
           </button>
-          <p className="text-[11px] text-ink-2 text-center">
+          <p className="text-caption text-ink-2 text-center">
             All optional — feedback is saved with the set when you tap Log set.
           </p>
         </div>
@@ -907,7 +907,7 @@ export function SetLoggerRow({
         title="Set type"
       >
         <div className="space-y-3">
-          <p className="text-[13px] text-ink-2">
+          <p className="text-subhead text-ink-2">
             Mark advanced training techniques so they don&apos;t contaminate progression estimates.
           </p>
           {(['normal', 'rest_pause', 'myorep', 'dropset'] as const).map((type) => {
@@ -925,7 +925,7 @@ export function SetLoggerRow({
                 desc: 'Activation set + mini-sets near failure',
               },
               dropset: {
-                name: 'Drop Set',
+                name: 'Drop set',
                 desc: 'Immediately reduce weight and continue',
               },
             };
@@ -946,11 +946,11 @@ export function SetLoggerRow({
                 }`}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-ink">{label.name}</div>
-                  <div className="text-[12px] text-ink-2 mt-0.5">{label.desc}</div>
+                  <div className="text-body font-medium text-ink">{label.name}</div>
+                  <div className="text-caption text-ink-2 mt-0.5">{label.desc}</div>
                 </div>
                 {selectedSetType === type && (
-                  <span className="text-action text-[12px] font-medium mt-0.5">✓</span>
+                  <span className="text-action text-caption font-medium mt-0.5">✓</span>
                 )}
               </button>
             );
@@ -970,7 +970,7 @@ export function SetLoggerRow({
         >
           <ul className="space-y-2.5" data-testid="predicted-rir-reasoning">
             {effortCheck.reasoning.map((line, i) => (
-              <li key={i} className="flex items-start gap-2 text-[13px] text-ink">
+              <li key={i} className="flex items-start gap-2 text-subhead text-ink">
                 <span
                   className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0"
                   aria-hidden="true"
@@ -979,7 +979,7 @@ export function SetLoggerRow({
               </li>
             ))}
           </ul>
-          <p className="mt-4 text-[11px] text-ink-2">
+          <p className="mt-4 text-caption text-ink-2">
             The prediction updates live as you change the weight or reps, and it uses the same
             math as the set suggestion above — it can be off on any given day, so trust how the
             set actually feels.

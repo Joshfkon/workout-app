@@ -217,7 +217,7 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
 
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-ink-2">
+      <div className="flex justify-between text-caption text-ink-2">
         <span>{label}</span>
         {showValue && <span className="font-medium">{percentile}th</span>}
       </div>
@@ -1536,7 +1536,7 @@ function AnalyticsPageContent() {
           {/* Body hub front door: Log + Edit goals. Goal-setting moved here
               from the dissolved Goals tab, behind this header action. */}
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold text-ink">Body</h2>
+            <h2 className="text-headline font-semibold text-ink">Body</h2>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -1623,7 +1623,7 @@ function AnalyticsPageContent() {
           {!bodyCompLayout.trendFirst && bodyTrendModule}
 
           {bodyCompLayout.showScanPrompt && (
-            <p className="text-xs text-ink-2 text-center">
+            <p className="text-caption text-ink-2 text-center">
               {scans.length === 0
                 ? 'Track weight, measurements, and strength now. Log a DEXA scan to add composition trends and the Composition Map.'
                 : 'You can see overall progress. One more scan adds the Composition Map and phase-to-phase analysis.'}{' '}
@@ -1700,19 +1700,19 @@ function AnalyticsPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-ink">Building Your Body Data</h2>
+              <h2 className="text-headline font-semibold text-ink">Building your body data</h2>
               <p className="text-ink-2 mt-2 max-w-md mx-auto">
                 You&apos;re already tracking workouts, weight, and measurements. Add a DEXA scan to see lean vs. fat trends and unlock composition insights.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
                 <Link href="/dashboard/body-composition/add">
-                  <Button>Add DEXA Scan</Button>
+                  <Button>Add DEXA scan</Button>
                 </Link>
                 <Button
                   variant="outline"
                   onClick={() => setLogSegment('weight')}
                 >
-                  Log Weight
+                  Log weight
                 </Button>
               </div>
             </Card>
@@ -1801,37 +1801,37 @@ function AnalyticsPageContent() {
                         </defs>
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-3xl font-bold text-ink">{strengthProfile.overallScore}</span>
-                        <span className="text-xs text-ink-2">/ 100</span>
+                        <span className="text-large-title font-bold text-ink">{strengthProfile.overallScore}</span>
+                        <span className="text-caption text-ink-2">/ 100</span>
                       </div>
                     </div>
 
                     <div className="flex-1 space-y-3">
                       <div>
-                        <p className="text-sm text-ink-2">Overall Strength Level</p>
-                        <p className={`text-2xl font-bold capitalize ${getStrengthLevelColor(strengthProfile.strengthLevel)}`}>
+                        <p className="text-subhead text-ink-2">Overall strength level</p>
+                        <p className={`text-title font-bold capitalize ${getStrengthLevelColor(strengthProfile.strengthLevel)}`}>
                           {formatStrengthLevel(strengthProfile.strengthLevel)}
                         </p>
                       </div>
 
                       <div className="grid grid-cols-3 gap-3">
                         <div className="p-2 bg-card/50 rounded-lg">
-                          <p className="text-xs text-ink-2">Balance</p>
-                          <p className="text-lg font-bold text-ink">{strengthProfile.balanceScore}%</p>
+                          <p className="text-caption text-ink-2">Balance</p>
+                          <p className="text-headline font-bold text-ink">{strengthProfile.balanceScore}%</p>
                         </div>
                         <div className="p-2 bg-card/50 rounded-lg">
-                          <p className="text-xs text-ink-2">FFMI</p>
+                          <p className="text-caption text-ink-2">FFMI</p>
                           {/* Canonical FFMI (selectCanonicalFfmi) — NOT the
                               stale, normalized-in-one-field value frozen on
                               the calibration session. Falls back to the frozen
                               value only when no scan/height exists. */}
-                          <p className="text-lg font-bold text-ink" data-testid="strength-ffmi-stat">
+                          <p className="text-headline font-bold text-ink" data-testid="strength-ffmi-stat">
                             {(ffmiResult?.ffmi ?? strengthProfile.bodyComposition.ffmi).toFixed(1)}
                           </p>
                         </div>
                         <div className="p-2 bg-card/50 rounded-lg">
-                          <p className="text-xs text-ink-2">Lean Mass</p>
-                          <p className="text-lg font-bold text-ink">{displayWeight(strengthProfile.bodyComposition.leanMassKg)} {weightUnit}</p>
+                          <p className="text-caption text-ink-2">Lean mass</p>
+                          <p className="text-headline font-bold text-ink">{displayWeight(strengthProfile.bodyComposition.leanMassKg)} {weightUnit}</p>
                         </div>
                       </div>
                     </div>
@@ -1842,7 +1842,7 @@ function AnalyticsPageContent() {
               {/* Calibrated Lifts */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Calibrated Lifts</CardTitle>
+                  <CardTitle>Calibrated lifts</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -1851,7 +1851,7 @@ function AnalyticsPageContent() {
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <h4 className="font-medium text-ink">{lift.lift}</h4>
-                            <p className="text-sm text-ink-2">
+                            <p className="text-subhead text-ink-2">
                               E1RM: {displayWeight(lift.estimated1RM)} {weightUnit}
                             </p>
                           </div>
@@ -1875,7 +1875,7 @@ function AnalyticsPageContent() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <IconAlertTriangle size={18} className="text-status-warn" aria-hidden="true" />
-                      Detected Imbalances
+                      Detected imbalances
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -1891,8 +1891,8 @@ function AnalyticsPageContent() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="text-sm font-medium text-ink">{imbalance.description}</p>
-                              <p className="text-xs text-ink-2 mt-1">{imbalance.recommendation}</p>
+                              <p className="text-subhead font-medium text-ink">{imbalance.description}</p>
+                              <p className="text-caption text-ink-2 mt-1">{imbalance.recommendation}</p>
                             </div>
                             <Badge size="sm" variant={imbalance.severity === 'significant' ? 'danger' : 'warning'}>
                               {imbalance.severity}
@@ -1912,12 +1912,12 @@ function AnalyticsPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <h2 className="text-base font-semibold text-ink">Calibrate Your Strength</h2>
-              <p className="text-sm text-ink-2 mt-1.5 max-w-md mx-auto">
+              <h2 className="text-body font-semibold text-ink">Calibrate your strength</h2>
+              <p className="text-subhead text-ink-2 mt-1.5 max-w-md mx-auto">
                 Log a few workouts to see strength trends, percentile rankings, and personalized recommendations.
               </p>
               <Button className="mt-4" size="sm" onClick={() => router.push('/onboarding')}>
-                Start Strength Test
+                Start strength test
               </Button>
             </Card>
           )}
@@ -1948,7 +1948,7 @@ function AnalyticsPageContent() {
               and blood pressure. Cardio logging moved to the Train page. */}
           {userId && (
             <div className="space-y-3" data-testid="wellness-today">
-              <h2 className="text-[15px] font-medium text-ink">Today</h2>
+              <h2 className="text-body font-medium text-ink">Today</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 <ActivityCard userId={userId} />
                 <HydrationTracker userId={userId} unit={units === 'kg' ? 'ml' : 'oz'} />
@@ -2027,7 +2027,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Muscle Group Priorities</CardTitle>
+          <CardTitle>Muscle group priorities</CardTitle>
         </CardHeader>
         <CardContent>
           <LoadingState label="Loading priorities..." size="sm" />
@@ -2045,42 +2045,42 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
   const hasCustomPriorities = priorities.length > 0 && !priorities.every(p => p.priority === 3);
 
   const PRIORITY_LABELS: Record<number, string> = {
-    1: 'High Priority',
+    1: 'High priority',
     2: 'Focus',
     3: 'Normal',
     4: 'Maintenance',
-    5: 'Low Priority',
+    5: 'Low priority',
   };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Muscle Group Priorities</span>
+          <span>Muscle group priorities</span>
           <Link href="/dashboard/settings">
-            <Button variant="ghost" size="sm">Edit in Settings</Button>
+            <Button variant="ghost" size="sm">Edit in settings</Button>
           </Link>
         </CardTitle>
-        <p className="text-sm text-ink-2 mt-1">
+        <p className="text-subhead text-ink-2 mt-1">
           These priorities influence volume allocation in program generation
         </p>
       </CardHeader>
       <CardContent>
         {!hasCustomPriorities ? (
           <div className="text-center py-4">
-            <p className="text-ink-2 text-sm mb-2">No custom priorities set</p>
-            <p className="text-xs text-ink-2 mb-3">
+            <p className="text-ink-2 text-subhead mb-2">No custom priorities set</p>
+            <p className="text-caption text-ink-2 mb-3">
               All muscle groups are set to normal priority (3). Set custom priorities in Settings to influence program generation.
             </p>
             <Link href="/dashboard/settings">
-              <Button variant="outline" size="sm">Go to Settings</Button>
+              <Button variant="outline" size="sm">Go to settings</Button>
             </Link>
           </div>
         ) : (
           <div className="space-y-4">
             {highPriority.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-ink-2 mb-2 uppercase tracking-wide">
+              <h4 className="text-caption font-medium text-ink-2 mb-2">
                 High Priority ({highPriority.length})
               </h4>
               <div className="flex flex-wrap gap-2">
@@ -2099,7 +2099,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
 
           {normalPriority.length > 0 && normalPriority.length < priorities.length && (
             <div>
-              <h4 className="text-xs font-medium text-ink-2 mb-2 uppercase tracking-wide">
+              <h4 className="text-caption font-medium text-ink-2 mb-2">
                 Normal Priority ({normalPriority.length})
               </h4>
               <div className="flex flex-wrap gap-2">
@@ -2118,7 +2118,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
 
           {lowPriority.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-ink-2 mb-2 uppercase tracking-wide">
+              <h4 className="text-caption font-medium text-ink-2 mb-2">
                 Low Priority ({lowPriority.length})
               </h4>
               <div className="flex flex-wrap gap-2">
@@ -2137,12 +2137,12 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
 
           {priorities.some(p => p.reason) && (
             <div className="pt-3 border-t border-sep">
-              <h4 className="text-xs font-medium text-ink-2 mb-2">Notes</h4>
+              <h4 className="text-caption font-medium text-ink-2 mb-2">Notes</h4>
               <div className="space-y-1">
                 {priorities
                   .filter(p => p.reason)
                   .map((p) => (
-                    <div key={p.muscleGroup} className="text-xs text-ink-2">
+                    <div key={p.muscleGroup} className="text-caption text-ink-2">
                       <span className="font-medium text-ink">{getMuscleDisplayName(p.muscleGroup)}:</span>{' '}
                       {p.reason}
                     </div>

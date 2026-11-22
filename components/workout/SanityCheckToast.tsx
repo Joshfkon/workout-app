@@ -123,14 +123,14 @@ export const SanityCheckToast = memo(function SanityCheckToast({
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h4 className={cn('font-medium text-sm mb-1', colors.title)}>
+            <h4 className={cn('font-medium text-subhead mb-1', colors.title)}>
               {title}
             </h4>
-            <p className="text-sm text-ink-2 leading-snug">
+            <p className="text-subhead text-ink-2 leading-snug">
               {check.message}
             </p>
             {check.suggestion && (
-              <p className="text-xs text-ink-3 mt-2">
+              <p className="text-caption text-ink-3 mt-2">
                 {check.suggestion}
               </p>
             )}
@@ -218,7 +218,7 @@ export const SanityCheckIndicator = memo(function SanityCheckIndicator({
       onClick={onClick}
       className={cn(
         'flex items-center gap-2 px-2 py-1 rounded-md',
-        'text-xs',
+        'text-caption',
         'hover:bg-fill transition-colors'
       )}
     >

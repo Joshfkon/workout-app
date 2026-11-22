@@ -111,7 +111,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   const cutQuestions = isOnCut ? [
     {
       id: 'focus',
-      title: 'Mental Focus',
+      title: 'Mental focus',
       icon: IconTarget,
       question: 'How clear is your mental focus?',
       type: 'rating' as const,
@@ -161,7 +161,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   const waistQuestions = trackWaist ? [
     {
       id: 'waist',
-      title: 'Morning Waist',
+      title: 'Morning waist',
       icon: IconRuler,
       question: 'Morning waist (optional)',
       type: 'waist' as const,
@@ -403,7 +403,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           </div>
           <button 
             onClick={handleReset}
-            className="text-xs text-ink-2 hover:text-ink"
+            className="text-caption text-ink-2 hover:text-ink"
           >
             Update
           </button>
@@ -413,39 +413,39 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         <div className="grid grid-cols-5 gap-2 text-center">
           <div className="p-2 bg-fill rounded-lg">
             <IconMoon size={18} className="mx-auto text-ink-2" aria-hidden="true" />
-            <p className="text-sm font-medium text-ink">{displayData.sleepHours}h</p>
-            <p className="text-xs text-ink-3">Sleep</p>
+            <p className="text-subhead font-medium text-ink">{displayData.sleepHours}h</p>
+            <p className="text-caption text-ink-3">Sleep</p>
           </div>
           <div className="p-2 bg-fill rounded-lg">
             <IconBolt size={18} className="mx-auto text-ink-2" aria-hidden="true" />
-            <p className="text-sm font-medium text-ink">{displayData.energyLevel}/5</p>
-            <p className="text-xs text-ink-3">Energy</p>
+            <p className="text-subhead font-medium text-ink">{displayData.energyLevel}/5</p>
+            <p className="text-caption text-ink-3">Energy</p>
           </div>
           <div className="p-2 bg-fill rounded-lg">
             <IconMoodSmile size={18} className="mx-auto text-ink-2" aria-hidden="true" />
-            <p className="text-sm font-medium text-ink">{displayData.moodRating}/5</p>
-            <p className="text-xs text-ink-3">Mood</p>
+            <p className="text-subhead font-medium text-ink">{displayData.moodRating}/5</p>
+            <p className="text-caption text-ink-3">Mood</p>
           </div>
           <div className="p-2 bg-fill rounded-lg">
             <IconMoodNervous size={18} className="mx-auto text-ink-2" aria-hidden="true" />
-            <p className="text-sm font-medium text-ink">{displayData.stressLevel}/5</p>
-            <p className="text-xs text-ink-3">Stress</p>
+            <p className="text-subhead font-medium text-ink">{displayData.stressLevel}/5</p>
+            <p className="text-caption text-ink-3">Stress</p>
           </div>
           <div className="p-2 bg-fill rounded-lg">
             <IconBarbell size={18} className="mx-auto text-ink-2" aria-hidden="true" />
-            <p className="text-sm font-medium text-ink">{displayData.sorenessLevel}/5</p>
-            <p className="text-xs text-ink-3">Recovery</p>
+            <p className="text-subhead font-medium text-ink">{displayData.sorenessLevel}/5</p>
+            <p className="text-caption text-ink-3">Recovery</p>
           </div>
         </div>
         
         {/* Morning waist (value only — never a day-over-day delta). */}
         {trackWaist && savedWaistCm !== null && (
           <div className="mt-3 flex items-center justify-between px-3 py-2 bg-fill rounded-lg" data-testid="checkin-waist-summary">
-            <span className="flex items-center gap-1.5 text-xs text-ink-2">
+            <span className="flex items-center gap-1.5 text-caption text-ink-2">
               <IconRuler size={14} aria-hidden="true" />
               Morning waist
             </span>
-            <span className="text-sm font-medium text-ink">
+            <span className="text-subhead font-medium text-ink">
               {measurementUnit === 'in' ? cmToIn(savedWaistCm).toFixed(1) : savedWaistCm.toFixed(1)} {measurementUnit}
             </span>
           </div>
@@ -455,20 +455,20 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         {isOnCut && refeedStatus && refeedStatus.level !== 'low' && (
           <div className={`mt-3 p-3 rounded-lg ${
             refeedStatus.level === 'high' 
-              ? 'bg-amber-500/20 border border-amber-500/30' 
-              : 'bg-yellow-500/10 border border-yellow-500/20'
+              ? 'bg-status-warn-tint' 
+              : 'bg-status-warn-tint'
           }`}>
             <div className="flex items-start gap-2">
               {refeedStatus.level === 'high' ? (
-                <IconAlertTriangle size={20} className="shrink-0 text-amber-400" aria-hidden="true" />
+                <IconAlertTriangle size={20} className="shrink-0 text-status-warn" aria-hidden="true" />
               ) : (
-                <IconBulb size={20} className="shrink-0 text-yellow-400" aria-hidden="true" />
+                <IconBulb size={20} className="shrink-0 text-status-warn" aria-hidden="true" />
               )}
               <div>
-                <p className={`text-sm font-medium ${refeedStatus.level === 'high' ? 'text-amber-400' : 'text-yellow-400'}`}>
+                <p className={`text-subhead font-medium ${refeedStatus.level === 'high' ? 'text-status-warn' : 'text-status-warn'}`}>
                   {refeedStatus.message}
                 </p>
-                <p className="text-xs text-ink-2 mt-1">{refeedStatus.recommendation}</p>
+                <p className="text-caption text-ink-2 mt-1">{refeedStatus.recommendation}</p>
               </div>
             </div>
           </div>
@@ -528,14 +528,14 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
                   placeholder={measurementUnit === 'in' ? 'e.g. 33.5' : 'e.g. 85.0'}
                   className="flex-1 bg-fill border border-sep rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-action"
                 />
-                <span className="text-sm text-ink-2 w-8">{measurementUnit}</span>
+                <span className="text-subhead text-ink-2 w-8">{measurementUnit}</span>
               </div>
               {!waistHintSeen && (
-                <p className="text-xs text-ink-3 leading-snug" data-testid="waist-protocol-hint">
+                <p className="text-caption text-ink-3 leading-snug" data-testid="waist-protocol-hint">
                   Morning, fasted, after using the bathroom, at navel level — consistency matters more than precision.
                 </p>
               )}
-              <p className="text-xs text-ink-3">
+              <p className="text-caption text-ink-3">
                 Optional — leave blank to skip. One entry per day; you can edit it anytime.
               </p>
             </div>
@@ -551,13 +551,13 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
                     className={`flex-1 flex flex-col items-center py-2 px-1 rounded-lg transition-colors ${
                       currentQuestion.value === rating
                         ? (currentQuestion as any).warning && rating <= 2
-                          ? 'bg-amber-500 text-white'
+                          ? 'bg-status-warn text-white'
                           : 'bg-action text-on-action'
                         : 'bg-fill text-ink-2 hover:bg-sep'
                     }`}
                   >
-                    <span className="text-lg font-medium">{rating}</span>
-                    <span className={`text-[10px] leading-tight text-center ${
+                    <span className="text-headline font-medium">{rating}</span>
+                    <span className={`text-caption leading-tight text-center ${
                       currentQuestion.value === rating ? 'text-white/80' : 'text-ink-3'
                     }`}>
                       {currentQuestion.labels?.[index]}
@@ -570,8 +570,8 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           
           {/* Warning for low cut metrics */}
           {(currentQuestion as any).warning && Number(currentQuestion.value) <= 2 && (
-            <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-              <p className="flex items-center gap-1.5 text-xs text-amber-400">
+            <div className="p-2 bg-status-warn-tint rounded-lg">
+              <p className="flex items-center gap-1.5 text-caption text-status-warn">
                 <IconAlertTriangle size={14} className="shrink-0" aria-hidden="true" />
                 Low {currentQuestion.title.toLowerCase()} can be a sign of diet fatigue
               </p>

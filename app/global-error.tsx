@@ -46,7 +46,7 @@ export default function GlobalError({
               cursor: 'pointer'
             }}
           >
-            Go Home
+            Go home
           </button>
         </div>
       </body>

@@ -83,7 +83,7 @@ function DayRing({ cell }: { cell: CalendarDayCell }) {
         )}
       </svg>
       <span
-        className={`relative text-[12px] tabular-nums ${
+        className={`relative text-caption tabular-nums ${
           cell.isToday
             ? 'font-bold text-action'
             : cell.isFuture
@@ -195,11 +195,11 @@ export function NutritionCalendarSheet({
             <IconChevronLeft size={20} aria-hidden="true" />
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-ink">{monthLabel}</span>
+            <span className="text-subhead font-semibold text-ink">{monthLabel}</span>
             {!isCurrentMonth && (
               <button
                 onClick={() => setMonthKey(todayKey.slice(0, 7))}
-                className="rounded-full border border-action/40 px-2 py-0.5 text-[11px] font-medium text-action transition-colors hover:bg-action/10"
+                className="rounded-full border border-action/40 px-2 py-0.5 text-caption font-medium text-action transition-colors hover:bg-action/10"
               >
                 Today
               </button>
@@ -217,11 +217,11 @@ export function NutritionCalendarSheet({
         {/* Grid: 7 day columns + the WEEK column */}
         <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_minmax(3.25rem,auto)] gap-x-0.5 gap-y-1 text-center">
           {WEEKDAYS.map((d, i) => (
-            <span key={`${d}-${i}`} className="py-1 text-[10px] uppercase text-ink-3">
+            <span key={`${d}-${i}`} className="py-1 text-caption text-ink-3">
               {d}
             </span>
           ))}
-          <span className="py-1 text-[10px] uppercase text-ink-3">Week</span>
+          <span className="py-1 text-caption text-ink-3">Week</span>
 
           {model.weeks.map((week, weekIdx) => (
             <FragmentRow key={`week-${weekIdx}`}>
@@ -254,12 +254,12 @@ export function NutritionCalendarSheet({
                 data-tone={week.summary.tone}
               >
                 <span
-                  className={`text-[11px] font-semibold tabular-nums ${WEEK_TEXT[week.summary.tone]}`}
+                  className={`text-caption font-semibold tabular-nums ${WEEK_TEXT[week.summary.tone]}`}
                 >
                   {week.summary.netKcal === null ? '—' : formatNetKcal(week.summary.netKcal)}
                 </span>
                 {week.summary.phaseLabel && week.summary.netKcal !== null && (
-                  <span className="text-[9px] uppercase tracking-wide text-ink-3">
+                  <span className="text-[9px] text-ink-3">
                     {week.summary.phaseLabel}
                   </span>
                 )}
@@ -269,7 +269,7 @@ export function NutritionCalendarSheet({
         </div>
 
         {/* Legend */}
-        <p className="mt-3 text-center text-[11px] text-ink-3">
+        <p className="mt-3 text-center text-caption text-ink-3">
           Ring = % of calorie target · color graded for that day&apos;s phase
           {model.spansPhases
             ? ` (${Array.from(

@@ -141,7 +141,7 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
                     {muscleDisplayName(entry.muscle)}
                   </span>
                   <span
-                    className={`text-xs font-medium ${
+                    className={`text-caption font-medium ${
                       entry.status === 'average'
                         ? 'text-status-ok'
                         : entry.percentDiff > 0
@@ -195,7 +195,7 @@ export default function VolumeProfilePage() {
 
   // Below-MEV muscles for the atrophy-risk warning come from the SAME coarse
   // rows the bars render (shared counter + band), so the warning, the bars and
-  // the "This Week vs MEV" card can never disagree on count or zone-status.
+  // the "This week vs MEV" card can never disagree on count or zone-status.
   const { stats: volumeStats, reachable, dailyGroupSets } = useWeeklyMevSummary();
 
   // Calculate confidence summary

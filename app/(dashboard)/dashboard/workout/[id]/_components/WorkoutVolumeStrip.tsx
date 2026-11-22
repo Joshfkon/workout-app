@@ -211,7 +211,7 @@ export function WorkoutVolumeStrip({
       <div className="flex items-center justify-between px-0.5 mb-1.5">
         <button
           onClick={toggleCollapsed}
-          className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-ink-3 hover:text-ink-2"
+          className="flex items-center gap-1 text-caption text-ink-3 hover:text-ink-2"
           data-testid="workout-volume-strip-toggle"
           aria-expanded={!collapsed}
           aria-controls="workout-volume-strip-cards"
@@ -225,7 +225,7 @@ export function WorkoutVolumeStrip({
         </button>
         <button
           onClick={onOpenDetail}
-          className="text-[11px] font-medium text-action"
+          className="text-caption font-medium text-action"
           data-testid="workout-volume-strip-details"
         >
           Details
@@ -265,7 +265,7 @@ export function WorkoutVolumeStrip({
                   data-testid={`workout-volume-readiness-dot-${row.muscle}`}
                   aria-hidden
                 />
-                <span className="text-xs font-medium text-ink truncate">{row.displayName}</span>
+                <span className="text-caption font-medium text-ink truncate">{row.displayName}</span>
               </div>
               <div className="mt-0.5">
                 {isLoading ? (
@@ -273,16 +273,16 @@ export function WorkoutVolumeStrip({
                 ) : (
                   <>
                     <span
-                      className={`text-sm font-semibold tabular-nums ${rowTextClass(row)}`}
+                      className={`text-subhead font-semibold tabular-nums ${rowTextClass(row)}`}
                       data-testid={`workout-volume-sets-${row.muscle}`}
                     >
                       {/* Effective (RIR-weighted) primary; the raw count rides
                           below with its unit — never "16.6/17", which reads as
                           current/target. */}
                       {formatEffectiveVolume(row.effectiveSets)}
-                      <span className="text-[10px] font-normal text-ink-3"> eff</span>
+                      <span className="text-caption font-normal text-ink-3"> eff</span>
                     </span>
-                    <span className="block text-[10px] tabular-nums text-ink-3">
+                    <span className="block text-caption tabular-nums text-ink-3">
                       of {row.sets} sets
                       {/* Unrated sets are EXCLUDED from the effective number
                           (services/effectiveVolume) — surfacing the count here
@@ -340,7 +340,7 @@ export function WorkoutVolumeStrip({
                   </>
                 )}
               </div>
-              <p className="mt-1 flex items-baseline justify-between gap-1 text-[10px] tabular-nums">
+              <p className="mt-1 flex items-baseline justify-between gap-1 text-caption tabular-nums">
                 <span className="text-ink-3">
                   {row.band.mev}–{row.band.mrv}
                 </span>
@@ -366,7 +366,7 @@ export function WorkoutVolumeStrip({
           {expanderVisible && (
             <button
               onClick={toggleShowAll}
-              className="flex-shrink-0 snap-start w-[104px] rounded-lg border border-dashed border-sep px-2.5 py-2 text-[11px] font-medium text-ink-2 hover:border-sep hover:text-ink-2 transition-colors"
+              className="flex-shrink-0 snap-start w-[104px] rounded-lg border border-dashed border-sep px-2.5 py-2 text-caption font-medium text-ink-2 hover:border-sep hover:text-ink-2 transition-colors"
               data-testid="workout-volume-strip-show-all"
               aria-expanded={showAll}
             >
@@ -382,7 +382,7 @@ export function WorkoutVolumeStrip({
           <div className="mt-1">
             <button
               onClick={() => setProjectionOpen((prev) => !prev)}
-              className="flex w-full items-center gap-1 px-0.5 text-[11px] text-ink-3 hover:text-ink-2"
+              className="flex w-full items-center gap-1 px-0.5 text-caption text-ink-3 hover:text-ink-2"
               data-testid="workout-volume-projection-summary"
               aria-expanded={projectionOpen}
               aria-controls="workout-volume-projection-list"
@@ -427,7 +427,7 @@ export function WorkoutVolumeStrip({
                 {projectionRows.map((row) => (
                   <div
                     key={row.key}
-                    className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-baseline gap-x-3 py-0.5 text-[11px] tabular-nums"
+                    className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-baseline gap-x-3 py-0.5 text-caption tabular-nums"
                     data-testid={`workout-volume-projection-row-${row.muscle}`}
                   >
                     <span className="truncate text-ink-2">{row.displayName}</span>
@@ -452,7 +452,7 @@ export function WorkoutVolumeStrip({
                   return (
                     <div
                       key={s.muscle}
-                      className="mt-1 flex items-center gap-2 border-t border-sep pt-1.5 text-[11px]"
+                      className="mt-1 flex items-center gap-2 border-t border-sep pt-1.5 text-caption"
                       data-testid={`volume-deficit-suggestion-${s.muscle}`}
                     >
                       <span className="min-w-0 flex-1 text-ink-2">
@@ -492,7 +492,7 @@ export function WorkoutVolumeStrip({
                   );
                 })}
                 {lockedCount > 0 && (
-                  <p className="mt-1 text-[11px] text-status-bad">
+                  <p className="mt-1 text-caption text-status-bad">
                     Locked in: recovery won’t allow more quality sets before this
                     week’s window closes.
                   </p>

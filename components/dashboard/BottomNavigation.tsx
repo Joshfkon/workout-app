@@ -161,13 +161,13 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
                 <Icon size={20} stroke={2} aria-hidden="true" />
                 {item.name === 'Train' && volumeGoalsMet && (
                   <span
-                    className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-green-400 ring-2 ring-card"
+                    className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-status-ok ring-2 ring-card"
                     role="img"
                     aria-label="All muscle groups at target weekly sets"
                   />
                 )}
               </span>
-              <span className="text-[10px] font-medium leading-none">{item.name}</span>
+              <span className="text-caption font-medium leading-none">{item.name}</span>
             </Link>
           );
         })}

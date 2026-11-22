@@ -54,7 +54,7 @@ export async function TodaysWorkoutServer({ userId }: Props) {
               Today&apos;s Workout
             </CardTitle>
             <Badge variant={todaysWorkout.state === 'in_progress' ? 'warning' : 'default'}>
-              {todaysWorkout.state === 'in_progress' ? 'In Progress' : 'Scheduled'}
+              {todaysWorkout.state === 'in_progress' ? 'In progress' : 'Scheduled'}
             </Badge>
           </div>
         </CardHeader>
@@ -62,11 +62,11 @@ export async function TodaysWorkoutServer({ userId }: Props) {
           <div className="space-y-4">
             <div>
               <h3 className="font-medium text-ink">{todaysWorkout.name}</h3>
-              <p className="text-sm text-ink-2">{todaysWorkout.exercises} exercises</p>
+              <p className="text-subhead text-ink-2">{todaysWorkout.exercises} exercises</p>
             </div>
 
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-subhead">
                 <span className="text-ink-2">Progress</span>
                 <span className="text-ink">{todaysWorkout.completedSets}/{todaysWorkout.totalSets} sets</span>
               </div>
@@ -82,7 +82,7 @@ export async function TodaysWorkoutServer({ userId }: Props) {
               href={`/dashboard/workout/${todaysWorkout.id}`}
               className="block w-full py-3 px-4 bg-action hover:bg-action text-on-action text-center font-medium rounded-lg transition-colors"
             >
-              {todaysWorkout.state === 'in_progress' ? 'Continue Workout' : 'Start Workout'}
+              {todaysWorkout.state === 'in_progress' ? 'Continue workout' : 'Start workout'}
             </Link>
           </div>
         </CardContent>
@@ -108,11 +108,11 @@ export async function TodaysWorkoutServer({ userId }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-ink-2 font-medium">Rest Day</p>
-          <p className="text-sm text-ink-3 mt-1">Recovery is part of the process</p>
+          <p className="text-ink-2 font-medium">Rest day</p>
+          <p className="text-subhead text-ink-3 mt-1">Recovery is part of the process</p>
         </div>
         <div className="mt-4 pt-4 border-t border-sep">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-subhead">
             <span className="text-ink-2">Week {mesocycle.currentWeek} of {mesocycle.weeks}</span>
             <span className="text-ink-2">{mesocycle.workoutsCompleted}/{mesocycle.totalWorkouts} workouts</span>
           </div>

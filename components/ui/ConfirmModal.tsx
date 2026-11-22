@@ -73,12 +73,12 @@ export const ConfirmModal = memo(function ConfirmModal({
         </div>
 
         {/* Title */}
-        <h3 className="text-lg font-semibold text-ink mb-2">
+        <h3 className="text-headline font-semibold text-ink mb-2">
           {title}
         </h3>
 
         {/* Message */}
-        <p className="text-sm text-ink-2 mb-6">
+        <p className="text-subhead text-ink-2 mb-6">
           {message}
         </p>
 

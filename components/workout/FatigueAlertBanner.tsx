@@ -55,7 +55,7 @@ export function FatigueAlertBanner({
             {onReduceVolume && (
               <button
                 onClick={onReduceVolume}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg ${
+                className={`px-3 py-1.5 text-subhead font-medium rounded-lg ${
                   isAlert
                     ? 'bg-status-bad hover:bg-status-bad text-white'
                     : 'bg-status-warn hover:bg-status-warn text-card'

@@ -52,12 +52,12 @@ export default function DashboardError({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-ink mb-2">This screen hit a problem</h2>
+        <h2 className="text-headline font-bold text-ink mb-2">This screen hit a problem</h2>
         <p className="text-ink-2 mb-6">
           Your data is safe. Try again, or use the navigation to open another tab.
         </p>
         {error.digest && (
-          <p className="text-xs text-ink-3 mb-4 font-mono">Ref: {error.digest}</p>
+          <p className="text-caption text-ink-3 mb-4 font-mono">Ref: {error.digest}</p>
         )}
         <Button onClick={() => reset()}>Try again</Button>
       </div>

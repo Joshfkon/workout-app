@@ -300,7 +300,7 @@ export default function AddDexaScanPage() {
               <button
                 type="button"
                 onClick={() => setInputMode('calculated')}
-                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                className={`flex-1 py-2 px-4 rounded-md text-subhead font-medium transition-colors ${
                   inputMode === 'calculated'
                     ? 'bg-action text-on-action'
                     : 'text-ink-2 hover:text-ink'
@@ -311,7 +311,7 @@ export default function AddDexaScanPage() {
               <button
                 type="button"
                 onClick={() => setInputMode('manual')}
-                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                className={`flex-1 py-2 px-4 rounded-md text-subhead font-medium transition-colors ${
                   inputMode === 'manual'
                     ? 'bg-action text-on-action'
                     : 'text-ink-2 hover:text-ink'
@@ -458,7 +458,7 @@ export default function AddDexaScanPage() {
                     <button
                       type="button"
                       onClick={() => setRegionalInputMode('combined')}
-                      className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
+                      className={`flex-1 py-2 px-3 rounded-md text-caption font-medium transition-colors ${
                         regionalInputMode === 'combined'
                           ? 'bg-action text-on-action'
                           : 'text-ink-2 hover:text-ink'
@@ -469,7 +469,7 @@ export default function AddDexaScanPage() {
                     <button
                       type="button"
                       onClick={() => setRegionalInputMode('split')}
-                      className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
+                      className={`flex-1 py-2 px-3 rounded-md text-caption font-medium transition-colors ${
                         regionalInputMode === 'split'
                           ? 'bg-action text-on-action'
                           : 'text-ink-2 hover:text-ink'
@@ -541,7 +541,7 @@ export default function AddDexaScanPage() {
                       {/* Arms - Split */}
                       <div>
                         <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
-                          💪 Arms
+                          Arms
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-3">
@@ -588,7 +588,7 @@ export default function AddDexaScanPage() {
                       {/* Legs - Split */}
                       <div>
                         <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
-                          🦵 Legs
+                          Legs
                         </h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-3">
@@ -637,7 +637,7 @@ export default function AddDexaScanPage() {
                   {/* Trunk */}
                   <div>
                     <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
-                      🫁 Trunk
+                      Trunk
                     </h4>
                     <div className="grid grid-cols-2 gap-4">
                       <Input
@@ -662,7 +662,7 @@ export default function AddDexaScanPage() {
                   {/* Android/Gynoid */}
                   <div>
                     <h4 className="text-body font-medium text-ink-2 mb-3 flex items-center gap-2">
-                      📊 Android/Gynoid Fat Regions
+                      Android/gynoid fat regions
                     </h4>
                     <p className="text-caption text-ink-3 mb-3">
                       These measurements help assess metabolic health risk. Lower android/gynoid ratio is generally better.
@@ -698,7 +698,7 @@ export default function AddDexaScanPage() {
                     if (result.error) {
                       return (
                         <div className="p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg">
-                          <p className="text-body text-status-warn font-medium">⚠️ Regional data incomplete</p>
+                          <p className="text-body text-status-warn font-medium">Regional data incomplete</p>
                           <p className="text-caption text-status-warn mt-1">{result.error}</p>
                         </div>
                       );

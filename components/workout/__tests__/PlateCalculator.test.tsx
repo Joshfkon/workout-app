@@ -9,7 +9,7 @@ describe('PlateCalculator equipment modes', () => {
     render(<PlateCalculator unit="lb" />);
 
     expect(screen.getByRole('button', { name: 'Barbell' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Barbell Type')).toBeInTheDocument();
+    expect(screen.getByText('Barbell type')).toBeInTheDocument();
     expect(screen.queryByText(/Starting Weight/)).not.toBeInTheDocument();
 
     const input = screen.getByPlaceholderText('Enter weight in lb');
@@ -27,7 +27,7 @@ describe('PlateCalculator equipment modes', () => {
 
     expect(screen.getByRole('button', { name: 'Machine (no bar)' })).toHaveAttribute('aria-pressed', 'true');
     // Barbell type selector is hidden; starting weight input appears
-    expect(screen.queryByText('Barbell Type')).not.toBeInTheDocument();
+    expect(screen.queryByText('Barbell type')).not.toBeInTheDocument();
     expect(screen.getByText(/Starting Weight/)).toBeInTheDocument();
 
     const input = screen.getByPlaceholderText('Enter weight in lb');
@@ -60,7 +60,7 @@ describe('PlateCalculator equipment modes', () => {
     render(<PlateCalculator unit="lb" startingWeightKg={0} onStartingWeightChange={jest.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Machine (no bar)' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('Barbell Type')).not.toBeInTheDocument();
+    expect(screen.queryByText('Barbell type')).not.toBeInTheDocument();
   });
 
   it('reports starting weight changes in kg', async () => {
@@ -174,7 +174,7 @@ describe('PlateCalculator default equipment from the exercise', () => {
   it('opens in machine mode when the exercise is a machine', () => {
     render(<PlateCalculator unit="lb" defaultEquipmentMode="machine" />);
     expect(screen.getByRole('button', { name: 'Machine (no bar)' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('Barbell Type')).not.toBeInTheDocument();
+    expect(screen.queryByText('Barbell type')).not.toBeInTheDocument();
   });
 
   it('maps exercise equipment to a calculator mode', () => {

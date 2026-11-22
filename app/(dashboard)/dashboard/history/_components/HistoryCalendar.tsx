@@ -79,7 +79,7 @@ export default function HistoryCalendar({
               onClick={() => onSelectDay(selectedDay === day ? null : day)}
               aria-label={`${day}${dotDates.has(day) ? ' — workout logged' : ''}`}
               aria-pressed={selectedDay === day}
-              className={`relative h-11 rounded-lg text-sm tabular-nums transition-colors ${
+              className={`relative h-11 rounded-lg text-subhead tabular-nums transition-colors ${
                 selectedDay === day
                   ? 'bg-action text-on-action font-semibold'
                   : day === today

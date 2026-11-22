@@ -316,9 +316,9 @@ export function MeasurementTrendCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Measurement Trends</CardTitle>
+        <CardTitle>Measurement trends</CardTitle>
         {!isLoading && summary.sites.length > 0 && (
-          <p className="text-xs text-ink-2 mt-1">
+          <p className="text-caption text-ink-2 mt-1">
             Tape trend per site over the {rangeSubtitle} · {aggregateParts.join(' · ')}
           </p>
         )}
@@ -332,7 +332,7 @@ export function MeasurementTrendCard({
                 type="button"
                 onClick={() => setRange(r.key)}
                 data-testid={`measurement-trend-range-${r.key}`}
-                className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                className={`px-2.5 py-1 text-caption rounded-full transition-colors ${
                   range === r.key
                     ? 'bg-action text-on-action'
                     : 'bg-fill text-ink-2 hover:text-ink'
@@ -347,7 +347,7 @@ export function MeasurementTrendCard({
         {isLoading ? (
           <div className="h-48 animate-pulse bg-fill/50 rounded-lg" />
         ) : summary.sites.length === 0 ? (
-          <p className="text-sm text-ink-2 py-6 text-center">
+          <p className="text-subhead text-ink-2 py-6 text-center">
             No measurements in this date range — try a longer range.
           </p>
         ) : (
@@ -367,7 +367,7 @@ export function MeasurementTrendCard({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-ink truncate">
+                      <p className="text-subhead font-medium text-ink truncate">
                         {trend.label}
                       </p>
                       {trend.direction == null ? (
@@ -392,7 +392,7 @@ export function MeasurementTrendCard({
                         A short-span site shows the RAW observed delta: a
                         per-month figure off a 17-day span is extrapolation
                         dressed as measurement. */}
-                    <p className="text-xs text-ink-2 mt-0.5">
+                    <p className="text-caption text-ink-2 mt-0.5">
                       {trend.direction == null
                         ? `${formatValue(trend.currentCm)} · ${trend.pointCount} ${
                             trend.pointCount === 1 ? 'entry' : 'entries'
@@ -412,12 +412,12 @@ export function MeasurementTrendCard({
             {selected && (
               <div className="mt-4 pt-3 border-t border-sep">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-ink-2">
+                  <p className="text-caption font-medium text-ink-2">
                     {selected.label} detail
                   </p>
                   {(hasTrendLine || chartData.gapCount > 0 || hasExcluded) && (
                     <span
-                      className="flex items-center gap-3 text-[10px] text-ink-2"
+                      className="flex items-center gap-3 text-caption text-ink-2"
                       data-testid="measurement-detail-legend"
                     >
                       <span className="flex items-center gap-1">
@@ -446,7 +446,7 @@ export function MeasurementTrendCard({
                   )}
                 </div>
                 {selected.history.length < 2 ? (
-                  <p className="text-sm text-ink-2 py-6 text-center">
+                  <p className="text-subhead text-ink-2 py-6 text-center">
                     {sitePointCount >= 2
                       ? 'Fewer than two entries in this date range — try a longer range.'
                       : 'Log this site a couple of times to see its trend.'}

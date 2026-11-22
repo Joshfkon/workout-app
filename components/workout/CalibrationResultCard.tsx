@@ -65,7 +65,7 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
     >
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">AMRAP Calibration Result</CardTitle>
+          <CardTitle className="text-body">AMRAP calibration result</CardTitle>
           <Badge variant={verdict.badgeVariant} size="sm">
             {verdict.badgeLabel}
           </Badge>
@@ -76,39 +76,39 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
         {/* Main Stats */}
         <div className="grid grid-cols-3 gap-3 text-center">
           <div className="space-y-1">
-            <p className="text-xs text-ink-2 uppercase tracking-wide">Predicted</p>
-            <p className="text-2xl font-semibold text-ink">
+            <p className="text-caption text-ink-2">Predicted</p>
+            <p className="text-title font-semibold text-ink">
               {result.predictedMaxReps.toFixed(0)}
             </p>
-            <p className="text-xs text-ink-3">reps</p>
+            <p className="text-caption text-ink-3">reps</p>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs text-ink-2 uppercase tracking-wide">Actual</p>
-            <p className="text-2xl font-semibold text-ink">
+            <p className="text-caption text-ink-2">Actual</p>
+            <p className="text-title font-semibold text-ink">
               {result.actualMaxReps}
             </p>
-            <p className="text-xs text-ink-3">reps</p>
+            <p className="text-caption text-ink-3">reps</p>
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs text-ink-2 uppercase tracking-wide">Bias</p>
-            <p className={cn('text-2xl font-semibold', colors.accent)}>
+            <p className="text-caption text-ink-2">Bias</p>
+            <p className={cn('text-title font-semibold', colors.accent)}>
               {formatBias(result.bias)}
             </p>
-            <p className="text-xs text-ink-3">difference</p>
+            <p className="text-caption text-ink-3">difference</p>
           </div>
         </div>
 
         {/* Interpretation (confidence-gated) */}
         <div className={cn('p-3 rounded-lg', colors.bg)}>
-          <p className={cn('text-sm', colors.text)}>
+          <p className={cn('text-subhead', colors.text)}>
             {verdict.message}
           </p>
         </div>
 
         {/* Confidence indicator */}
-        <div className="flex items-center gap-2 text-xs text-ink-3">
+        <div className="flex items-center gap-2 text-caption text-ink-3">
           <span>Confidence:</span>
           <div className="flex gap-1">
             <div className={cn(
@@ -132,7 +132,7 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
       <CardFooter className="flex justify-between gap-2">
         {onLearnMore && (
           <Button variant="ghost" size="sm" onClick={onLearnMore}>
-            Learn More
+            Learn more
           </Button>
         )}
         <Button variant="secondary" size="sm" onClick={onDismiss} className="ml-auto">

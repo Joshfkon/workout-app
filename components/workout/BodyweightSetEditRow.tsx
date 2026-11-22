@@ -116,7 +116,7 @@ export function BodyweightSetEditRow({
       <td className="px-3 py-2 text-ink-2 font-medium" colSpan={6}>
         <div className="space-y-3 p-3 bg-fill/50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-ink">Edit Set {set.setNumber}</span>
+            <span className="text-subhead font-medium text-ink">Edit set {set.setNumber}</span>
             <div className="flex gap-2">
               <Button
                 onClick={handleSave}
@@ -149,7 +149,7 @@ export function BodyweightSetEditRow({
           {/* Reps and RPE inputs */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-ink-3 mb-1">Reps</label>
+              <label className="block text-caption text-ink-3 mb-1">Reps</label>
               <input
                 type="number"
                 inputMode="numeric"
@@ -164,7 +164,7 @@ export function BodyweightSetEditRow({
               />
             </div>
             <div>
-              <label className="block text-xs text-ink-3 mb-1">RPE</label>
+              <label className="block text-caption text-ink-3 mb-1">RPE</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -180,7 +180,7 @@ export function BodyweightSetEditRow({
           </div>
 
           {/* Effective load display */}
-          <div className="text-xs text-ink-2 text-center">
+          <div className="text-caption text-ink-2 text-center">
             Effective Load: {formatWeightValue(bodyweightData.effectiveLoadKg, unit)} {unit}
           </div>
         </div>

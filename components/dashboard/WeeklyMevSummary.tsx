@@ -44,7 +44,7 @@ export function WeeklyMevSummary() {
           <span className="text-ink-3"> · {tiles.totalSets} total sets</span>
         </span>
       </div>
-      <p className={`text-xs mb-3 ${tiles.lowCount > 0 ? 'text-status-warn' : 'text-status-ok'}`}>
+      <p className={`text-caption mb-3 ${tiles.lowCount > 0 ? 'text-status-warn' : 'text-status-ok'}`}>
         {tiles.lowCount > 0
           ? `${tiles.lowCount} muscle${tiles.lowCount === 1 ? '' : 's'} below minimum effective volume (rolling 7 days)`
           : 'All muscles at or above minimum effective volume (rolling 7 days)'}

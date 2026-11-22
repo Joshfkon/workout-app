@@ -18,7 +18,7 @@ export function FoodEmojiAvatar({
   size?: 'sm' | 'md';
 }) {
   const sizeClasses =
-    size === 'sm' ? 'h-6 w-6 text-[13px]' : 'h-8 w-8 text-[15px]';
+    size === 'sm' ? 'h-6 w-6 text-subhead' : 'h-8 w-8 text-body';
   return (
     <span
       aria-hidden="true"

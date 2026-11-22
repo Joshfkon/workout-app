@@ -13,7 +13,7 @@ export function SubscriptionBadge() {
       {/* Trial/Subscription Badge */}
       {isTrialing && trialDaysRemaining > 0 && (
         isNative ? (
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-status-warn/10 border border-status-warn/20 text-status-warn text-sm font-medium">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-status-warn/10 border border-status-warn/20 text-status-warn text-subhead font-medium">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -22,7 +22,7 @@ export function SubscriptionBadge() {
         ) : (
           <Link
             href="/dashboard/pricing"
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-status-warn/10 border border-status-warn/20 text-status-warn text-sm font-medium hover:bg-status-warn/20 transition-colors"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-status-warn/10 border border-status-warn/20 text-status-warn text-subhead font-medium hover:bg-status-warn/20 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -36,7 +36,7 @@ export function SubscriptionBadge() {
       {needsUpgrade && !isTrialing && !isNative && (
         <Link
           href="/dashboard/pricing"
-          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-action hover:bg-action text-on-action text-sm font-medium transition-colors"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-action hover:bg-action text-on-action text-subhead font-medium transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
@@ -49,7 +49,7 @@ export function SubscriptionBadge() {
       {!needsUpgrade && !isTrialing && effectiveTier !== 'free' && (
         isNative ? (
           <div
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-subhead font-medium ${
               effectiveTier === 'elite'
                 ? 'bg-action/10 border border-action/20 text-action'
                 : 'bg-action/10 border border-action/20 text-action'
@@ -60,7 +60,7 @@ export function SubscriptionBadge() {
         ) : (
           <Link
             href="/dashboard/pricing"
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-subhead font-medium transition-colors ${
               effectiveTier === 'elite'
                 ? 'bg-action/10 border border-action/20 text-action hover:bg-action/20'
                 : 'bg-action/10 border border-action/20 text-action hover:bg-action/20'

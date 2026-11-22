@@ -124,7 +124,7 @@ export const Toast = memo(function Toast({
           </div>
 
           {/* Message */}
-          <p className={cn('flex-1 text-sm leading-snug', styles.text)}>
+          <p className={cn('flex-1 text-subhead leading-snug', styles.text)}>
             {message}
           </p>
 
@@ -135,7 +135,7 @@ export const Toast = memo(function Toast({
                 action.onClick();
                 handleDismiss();
               }}
-              className={cn('flex-shrink-0 text-sm font-semibold hover:underline', styles.icon)}
+              className={cn('flex-shrink-0 text-subhead font-semibold hover:underline', styles.icon)}
             >
               {action.label}
             </button>

@@ -38,7 +38,7 @@ function VolumeBar({ muscle, currentSets, estimatedMRV, status }: VolumeBarProps
 
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-sm">
+      <div className="flex justify-between text-subhead">
         <span className="text-ink-2">{displayName}</span>
         <span className="text-ink-2">
           {currentSets}/{estimatedMRV} sets{statusIcon}
@@ -59,7 +59,7 @@ interface VolumeDashboardCardProps {
   muscles?: MuscleGroup[];
   /** Maximum muscles to show */
   limit?: number;
-  /** Show "View Details" link */
+  /** Show "View details" link */
   showLink?: boolean;
 }
 
@@ -130,10 +130,10 @@ export function VolumeDashboardCard({
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-lg">{'\uD83D\uDCCA'}</span>
-          <h3 className="font-semibold text-ink">Volume & Recovery</h3>
+          <span className="text-headline">{'\uD83D\uDCCA'}</span>
+          <h3 className="font-semibold text-ink">Volume & recovery</h3>
         </div>
-        <span className="text-xs text-ink-3">{confidenceDesc}</span>
+        <span className="text-caption text-ink-3">{confidenceDesc}</span>
       </div>
 
       {/* Volume Bars */}
@@ -159,7 +159,7 @@ export function VolumeDashboardCard({
           }`}
         >
           <p
-            className={`text-sm font-medium ${
+            className={`text-subhead font-medium ${
               primaryAlert.severity === 'alert' ? 'text-status-bad' : 'text-status-warn'
             }`}
           >
@@ -172,9 +172,9 @@ export function VolumeDashboardCard({
       {showLink && (
         <Link
           href="/dashboard/volume"
-          className="flex items-center justify-between text-sm text-action transition-colors"
+          className="flex items-center justify-between text-subhead text-action transition-colors"
         >
-          <span>View Details</span>
+          <span>View details</span>
           <span>{'\u2192'}</span>
         </Link>
       )}

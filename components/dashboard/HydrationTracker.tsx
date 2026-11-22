@@ -118,11 +118,11 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
   
   // Determine status
   const getTrackingStatus = () => {
-    if (isComplete) return { status: 'complete', label: 'Goal reached!', color: 'text-status-ok', emoji: '🎉' };
-    if (progressDiff >= 10) return { status: 'ahead', label: 'Ahead of schedule', color: 'text-status-ok', emoji: '💪' };
-    if (progressDiff >= -10) return { status: 'ontrack', label: 'On track', color: 'text-action', emoji: '✓' };
-    if (progressDiff >= -25) return { status: 'behind', label: 'Slightly behind', color: 'text-status-warn', emoji: '⚠️' };
-    return { status: 'way-behind', label: 'Catch up!', color: 'text-status-bad', emoji: '🚰' };
+    if (isComplete) return { status: 'complete', label: 'Goal reached!', color: 'text-status-ok' };
+    if (progressDiff >= 10) return { status: 'ahead', label: 'Ahead of schedule', color: 'text-status-ok' };
+    if (progressDiff >= -10) return { status: 'ontrack', label: 'On track', color: 'text-action' };
+    if (progressDiff >= -25) return { status: 'behind', label: 'Slightly behind', color: 'text-status-warn' };
+    return { status: 'way-behind', label: 'Catch up!', color: 'text-status-bad' };
   };
   
   const trackingStatus = getTrackingStatus();
@@ -130,12 +130,12 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
   return (
     <Card data-testid="hydration-tracker-card">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center justify-between">
+        <CardTitle className="text-body flex items-center justify-between">
           <span className="flex items-center gap-2">
             <IconDroplet size={16} className="text-ink-2" aria-hidden="true" /> Hydration
           </span>
-          <span className={`text-xs ${trackingStatus.color} flex items-center gap-1`}>
-            {trackingStatus.emoji} {trackingStatus.label}
+          <span className={`text-caption ${trackingStatus.color} flex items-center gap-1`}>
+            {trackingStatus.label}
           </span>
         </CardTitle>
       </CardHeader>
@@ -143,7 +143,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
         {/* Progress Display */}
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <div className="flex justify-between text-sm mb-1">
+            <div className="flex justify-between text-subhead mb-1">
               <span className="text-ink-2">
                 {displayTotal.toLocaleString()} / {displayTarget.toLocaleString()} {displayUnit}
               </span>
@@ -175,7 +175,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
               />
             </div>
             {!isComplete && (
-              <div className="text-xs text-ink-3 mt-1">
+              <div className="text-caption text-ink-3 mt-1">
                 {progressDiff >= 0 ? (
                   <span>+{progressDiff}% vs expected</span>
                 ) : (
@@ -185,8 +185,8 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
             )}
           </div>
           {/* Water drop visual */}
-          <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-            <IconDroplet size={24} className="text-blue-400" aria-hidden="true" />
+          <div className="w-12 h-12 rounded-full bg-action-tint flex items-center justify-center">
+            <IconDroplet size={24} className="text-action" aria-hidden="true" />
           </div>
         </div>
 
@@ -198,7 +198,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
                 key={option.ml}
                 onClick={() => addWater(option.ml)}
                 disabled={isAdding}
-                className="py-2 px-1 bg-fill hover:bg-sep rounded-lg text-xs font-medium text-ink transition-colors disabled:opacity-50"
+                className="py-2 px-1 bg-fill hover:bg-sep rounded-lg text-caption font-medium text-ink transition-colors disabled:opacity-50"
               >
                 {unit === 'oz' ? option.labelOz : option.label}
               </button>
@@ -211,7 +211,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
               value={customAmount}
               onChange={(e) => setCustomAmount(e.target.value)}
               placeholder={`Amount in ${displayUnit}`}
-              className="flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-sm text-ink"
+              className="flex-1 px-3 py-2 bg-fill border border-sep rounded-lg text-subhead text-ink"
             />
             <Button onClick={handleCustomAdd} disabled={isAdding || !customAmount} size="sm">
               Add
@@ -226,7 +226,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
         {!showCustom && (
           <button
             onClick={() => setShowCustom(true)}
-            className="w-full py-1.5 text-xs text-ink-2 hover:text-ink transition-colors"
+            className="w-full py-1.5 text-caption text-ink-2 hover:text-ink transition-colors"
           >
             + Custom amount
           </button>

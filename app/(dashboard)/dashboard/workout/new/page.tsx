@@ -889,7 +889,7 @@ function NewWorkoutContent() {
       
       setSelectedMuscles(suggestedMuscles);
       
-      // Don't auto-advance - user must click "Review & Choose Exercises" button
+      // Don't auto-advance - user must click "Review & choose exercises" button
       
     } catch (err) {
       console.error('Failed to suggest exercises:', err);
@@ -1428,8 +1428,8 @@ function NewWorkoutContent() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-ink">
-          {templateName ? `${templateName} Workout` : 'New Workout'}
+        <h1 className="text-title font-bold text-ink">
+          {templateName ? `${templateName} Workout` : 'New workout'}
         </h1>
         <p className="text-ink-2 mt-1">
           {step === 1 
@@ -1450,7 +1450,7 @@ function NewWorkoutContent() {
       )}
 
       {error && (
-        <div className="p-4 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-sm">
+        <div className="p-4 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-subhead">
           {error}
         </div>
       )}
@@ -1464,18 +1464,18 @@ function NewWorkoutContent() {
                 <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Workout Setup
+                Workout setup
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Time Selection */}
               <div>
-                <label className="block text-sm font-medium text-ink mb-3">
+                <label className="block text-subhead font-medium text-ink mb-3">
                   How much time do you have?
                 </label>
                 {awaitingAiTime && (
-                  <p className="text-sm text-action bg-action/10 border border-action/20 rounded-lg px-3 py-2 mb-3">
-                    ⚡ Pick a time and we&apos;ll generate your workout
+                  <p className="text-subhead text-action bg-action/10 border border-action/20 rounded-lg px-3 py-2 mb-3">
+                    Pick a time and we&apos;ll generate your workout
                   </p>
                 )}
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -1498,31 +1498,31 @@ function NewWorkoutContent() {
                     }`}
                   >
                     <div className="font-semibold">{mins}</div>
-                    <div className="text-xs text-ink-3">min</div>
+                    <div className="text-caption text-ink-3">min</div>
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-ink-3 mt-2 text-center">
+              <p className="text-caption text-ink-3 mt-2 text-center">
                 {workoutDuration <= 25 
-                  ? '⚡ Quick mode: Only S & A-tier exercises'
+                  ? 'Quick mode: Only S & A-tier exercises'
                   : workoutDuration <= 45 
-                  ? '⏱️ Time-efficient: Focused on key compounds'
-                  : '💪 Full workout: Complete volume for optimal growth'}
+                  ? 'Time-efficient: Focused on key compounds'
+                  : 'Full workout: Complete volume for optimal growth'}
               </p>
               </div>
 
               {/* Location Selection */}
               {!isLoadingLocations && (
                 <div>
-                  <label className="block text-sm font-medium text-ink mb-3">
-                    Gym Location
+                  <label className="block text-subhead font-medium text-ink mb-3">
+                    Gym location
                   </label>
                   <div className="flex gap-2 flex-wrap">
                     {gymLocations.map((location) => (
                       <button
                         key={location.id}
                         onClick={() => setSelectedLocationId(location.id)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        className={`px-4 py-2 rounded-lg text-subhead font-medium transition-colors ${
                           selectedLocationId === location.id
                             ? 'bg-action text-on-action'
                             : 'bg-fill text-ink-2 hover:bg-sep'
@@ -1530,14 +1530,14 @@ function NewWorkoutContent() {
                       >
                         {location.name}
                         {location.is_default && selectedLocationId !== location.id && (
-                          <span className="ml-1 text-xs opacity-75">(Default)</span>
+                          <span className="ml-1 text-caption opacity-75">(Default)</span>
                         )}
                       </button>
                     ))}
                     {!isAddingLocation && (
                       <button
                         onClick={() => setIsAddingLocation(true)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium border border-dashed border-sep text-ink-2 hover:border-ink-3 hover:text-ink transition-colors"
+                        className="px-4 py-2 rounded-lg text-subhead font-medium border border-dashed border-sep text-ink-2 hover:border-ink-3 hover:text-ink transition-colors"
                       >
                         + Add
                       </button>
@@ -1558,12 +1558,12 @@ function NewWorkoutContent() {
                         }}
                         placeholder="Location name (e.g. Hotel Gym)"
                         autoFocus
-                        className="flex-1 px-3 py-2 rounded-lg bg-fill border border-sep text-sm text-ink placeholder-ink-3 focus:outline-none focus:border-action"
+                        className="flex-1 px-3 py-2 rounded-lg bg-fill border border-sep text-subhead text-ink placeholder-ink-3 focus:outline-none focus:border-action"
                       />
                       <button
                         onClick={handleAddLocation}
                         disabled={!newLocationName.trim() || isSavingLocation}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-action text-on-action hover:bg-action disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-4 py-2 rounded-lg text-subhead font-medium bg-action text-on-action hover:bg-action disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isSavingLocation ? 'Saving...' : 'Save'}
                       </button>
@@ -1572,13 +1572,13 @@ function NewWorkoutContent() {
                           setIsAddingLocation(false);
                           setNewLocationName('');
                         }}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-fill text-ink-2 hover:bg-sep transition-colors"
+                        className="px-4 py-2 rounded-lg text-subhead font-medium bg-fill text-ink-2 hover:bg-sep transition-colors"
                       >
                         Cancel
                       </button>
                     </div>
                   )}
-                  <p className="text-xs text-ink-3 mt-2">
+                  <p className="text-caption text-ink-3 mt-2">
                     Exercises will be filtered based on equipment available at this location.
                     Set up equipment for each location in{' '}
                     <Link href="/dashboard/settings" className="text-action hover:underline">
@@ -1601,7 +1601,7 @@ function NewWorkoutContent() {
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h3 className="font-semibold text-ink">Not sure what to train?</h3>
-                  <p className="text-sm text-ink-2 mt-0.5">
+                  <p className="text-subhead text-ink-2 mt-0.5">
                     We&apos;ll suggest muscles and exercises based on your recent history, goals, and {selectedLocationId && gymLocations.find((l: { id: string; name: string; is_default: boolean }) => l.id === selectedLocationId) ? `equipment at ${gymLocations.find((l: { id: string; name: string; is_default: boolean }) => l.id === selectedLocationId)?.name}` : 'available equipment'}
                   </p>
                 </div>
@@ -1619,20 +1619,20 @@ function NewWorkoutContent() {
                   <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  Suggest Workout
+                  Suggest workout
                 </Button>
               </div>
               
               {/* Show suggestions if available */}
               {suggestions && (
                 <div className="mt-4 pt-4 border-t border-action/20">
-                  <p className="text-sm text-action font-medium mb-2">Suggested:</p>
-                  <p className="text-sm text-ink-2">{suggestions.reason}</p>
+                  <p className="text-subhead text-action font-medium mb-2">Suggested:</p>
+                  <p className="text-subhead text-ink-2">{suggestions.reason}</p>
                   {suggestions.muscles.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="text-xs text-ink-3">Muscles:</span>
+                      <span className="text-caption text-ink-3">Muscles:</span>
                       {suggestions.muscles.map((muscle) => (
-                        <span key={muscle} className="px-2 py-1 bg-action/20 text-action rounded text-xs">
+                        <span key={muscle} className="px-2 py-1 bg-action/20 text-action rounded text-caption">
                           {muscleDisplayName(muscle)}
                         </span>
                       ))}
@@ -1665,7 +1665,7 @@ function NewWorkoutContent() {
                     if (!indicator) return 'bg-sep';
                     if (indicator.recoveryPercent >= 100) return 'bg-status-ok';
                     if (indicator.recoveryPercent >= 70) return 'bg-status-warn';
-                    return 'bg-error-500';
+                    return 'bg-status-bad';
                   };
 
                   // Determine volume indicator style
@@ -1676,7 +1676,7 @@ function NewWorkoutContent() {
                       case 'effective': return 'text-ink-2';
                       case 'optimal': return 'text-status-ok';
                       case 'approaching_mrv': return 'text-status-warn';
-                      case 'exceeding_mrv': return 'text-error-400';
+                      case 'exceeding_mrv': return 'text-status-bad';
                       default: return 'text-ink-3';
                     }
                   };
@@ -1701,7 +1701,7 @@ function NewWorkoutContent() {
                         )}
                       </div>
                       {indicator && !isLoadingVolume && (
-                        <div className={`text-xs mt-1 ${getVolumeStyle()}`}>
+                        <div className={`text-caption mt-1 ${getVolumeStyle()}`}>
                           {indicator.totalSets}/{indicator.targetSets} sets
                         </div>
                       )}
@@ -1711,7 +1711,7 @@ function NewWorkoutContent() {
               </div>
 
               {/* Subtle legend */}
-              <div className="flex items-center gap-4 mt-4 text-xs text-ink-3">
+              <div className="flex items-center gap-4 mt-4 text-caption text-ink-3">
                 <div className="flex items-center gap-1">
                   <div className="w-2 h-2 rounded-full bg-status-ok" />
                   <span>Recovered</span>
@@ -1721,7 +1721,7 @@ function NewWorkoutContent() {
                   <span>Recovering</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full bg-error-500" />
+                  <div className="w-2 h-2 rounded-full bg-status-bad" />
                   <span>Fatigued</span>
                 </div>
               </div>
@@ -1750,7 +1750,7 @@ function NewWorkoutContent() {
               <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="text-sm text-ink-2">
+              <span className="text-subhead text-ink-2">
                 <strong>{workoutDuration} min</strong> workout
               </span>
             </div>
@@ -1758,7 +1758,7 @@ function NewWorkoutContent() {
                 estimate for what's selected — that's the number the user is
                 deciding against. */}
             {plannedDuration ? (
-              <span className="text-sm text-ink-2" data-testid="planned-duration-estimate">
+              <span className="text-subhead text-ink-2" data-testid="planned-duration-estimate">
                 Estimated{' '}
                 <strong
                   className={
@@ -1772,7 +1772,7 @@ function NewWorkoutContent() {
                 <span className="text-ink-3"> · {plannedDuration.totalSets} sets</span>
               </span>
             ) : (
-              <span className="text-sm text-ink-3">
+              <span className="text-subhead text-ink-3">
                 Recommended: <strong>{getExerciseRangeForTime(workoutDuration)}</strong> exercises
               </span>
             )}
@@ -1789,7 +1789,7 @@ function NewWorkoutContent() {
                 <svg className="w-5 h-5 text-status-warn flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <span className="text-sm text-status-warn">
+                <span className="text-subhead text-status-warn">
                   These {selectedExercises.length} exercises run about {plannedDuration.label}, past
                   your {workoutDuration} min target. Consider removing {overBy} exercise
                   {overBy > 1 ? 's' : ''} or shortening rest.
@@ -1806,14 +1806,14 @@ function NewWorkoutContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
                 <div className="flex-1">
-                  <p className="font-medium text-action">AI Suggestion</p>
-                  <p className="text-sm text-ink-2 mt-0.5">{suggestions.reason}</p>
+                  <p className="font-medium text-action">AI suggestion</p>
+                  <p className="text-subhead text-ink-2 mt-0.5">{suggestions.reason}</p>
                   
                   {/* Expandable detailed explanations */}
                   {suggestions.detailedExplanations && suggestions.detailedExplanations.length > 0 && (
                     <button
                       onClick={() => setShowExplanations(!showExplanations)}
-                      className="mt-3 flex items-center gap-2 text-sm text-action transition-colors"
+                      className="mt-3 flex items-center gap-2 text-subhead text-action transition-colors"
                     >
                       <svg 
                         className={`w-4 h-4 transition-transform ${showExplanations ? 'rotate-180' : ''}`} 
@@ -1837,7 +1837,7 @@ function NewWorkoutContent() {
                         return (
                           <div key={item.exerciseId} className="bg-fill/50 rounded-lg p-3">
                             <p className="font-medium text-ink mb-1">{exercise.name}</p>
-                            <p className="text-sm text-ink-2">{item.explanation}</p>
+                            <p className="text-subhead text-ink-2">{item.explanation}</p>
                 </div>
                         );
                       })}
@@ -1845,9 +1845,9 @@ function NewWorkoutContent() {
                       {/* Skipped muscles (recovery considerations) */}
                       {suggestions.skippedMuscles && suggestions.skippedMuscles.length > 0 && (
                         <div className="mt-4 pt-3 border-t border-sep">
-                          <p className="text-xs font-medium text-ink-3 uppercase mb-2">Muscles Skipped (Recovery)</p>
+                          <p className="text-caption font-medium text-ink-3 mb-2">Muscles skipped (recovery)</p>
                           {suggestions.skippedMuscles.map((item, idx) => (
-                            <div key={idx} className="text-sm text-ink-2 mb-1">
+                            <div key={idx} className="text-subhead text-ink-2 mb-1">
                               <span className="font-medium text-ink-2">{muscleDisplayName(item.muscle)}</span>: {item.reason}
                             </div>
                           ))}
@@ -1867,7 +1867,7 @@ function NewWorkoutContent() {
                 <svg className="w-4 h-4 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span className="text-sm text-ink-2">Exercise Variety</span>
+                <span className="text-subhead text-ink-2">Exercise variety</span>
               </div>
               <div className="flex gap-1">
                 {(['low', 'medium', 'high'] as ExerciseVarietyLevel[]).map((level) => (
@@ -1879,7 +1879,7 @@ function NewWorkoutContent() {
                         await saveVarietyPreferences(currentUserId, { varietyLevel: level });
                       }
                     }}
-                    className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                    className={`px-3 py-1 text-caption rounded-md transition-colors ${
                       varietyLevel === level
                         ? 'bg-action text-on-action'
                         : 'bg-sep text-ink-2 hover:bg-sep hover:text-ink'
@@ -1890,7 +1890,7 @@ function NewWorkoutContent() {
                 ))}
               </div>
             </div>
-            <p className="text-xs text-ink-3 mt-2">
+            <p className="text-caption text-ink-3 mt-2">
               {VARIETY_LEVEL_DEFAULTS[varietyLevel].description}
             </p>
           </div>
@@ -1909,8 +1909,8 @@ function NewWorkoutContent() {
                   </svg>
                   <span>
                     {selectedLocationId && selectedLocationId !== 'fallback'
-                      ? gymLocations.find(l => l.id === selectedLocationId)?.name || 'Any Location'
-                      : 'Any Location'}
+                      ? gymLocations.find(l => l.id === selectedLocationId)?.name || 'Any location'
+                      : 'Any location'}
                   </span>
                 </div>
                 <svg className={`w-4 h-4 text-ink-2 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1927,7 +1927,7 @@ function NewWorkoutContent() {
                       !selectedLocationId || selectedLocationId === 'fallback' ? 'text-action' : 'text-ink'
                     }`}
                   >
-                    <span>Any Location</span>
+                    <span>Any location</span>
                     {(!selectedLocationId || selectedLocationId === 'fallback') && (
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1983,7 +1983,7 @@ function NewWorkoutContent() {
           
           {/* Search results count */}
           {exerciseSearch && (
-            <p className="text-sm text-ink-2">
+            <p className="text-subhead text-ink-2">
               {totalFilteredExercises} exercise{totalFilteredExercises !== 1 ? 's' : ''} found
               {totalFilteredExercises === 0 && (
                 <span className="ml-1">— try a different search or <button onClick={() => setExerciseSearch('')} className="text-action hover:underline">clear filter</button></span>
@@ -2049,7 +2049,7 @@ function NewWorkoutContent() {
                               <div className="flex items-center gap-2">
                                 <span className="text-ink">{exercise.name}</span>
                                 {isFrequent && (
-                                  <span className="text-xs text-amber-400" title={`Used ${usageCount} times recently`}>
+                                  <span className="text-caption text-status-warn" title={`Used ${usageCount} times recently`}>
                                     ★
                                   </span>
                                 )}
@@ -2076,7 +2076,7 @@ function NewWorkoutContent() {
                       {hiddenCount > 0 && (
                         <button
                           onClick={() => toggleMuscleExpanded(muscle)}
-                          className="w-full p-2.5 rounded-lg text-sm text-action hover:bg-fill transition-all flex items-center justify-center gap-1.5"
+                          className="w-full p-2.5 rounded-lg text-subhead text-action hover:bg-fill transition-all flex items-center justify-center gap-1.5"
                         >
                           Show {hiddenCount} more exercise{hiddenCount !== 1 ? 's' : ''}
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2087,7 +2087,7 @@ function NewWorkoutContent() {
                       {canCollapse && (
                         <button
                           onClick={() => toggleMuscleExpanded(muscle)}
-                          className="w-full p-2.5 rounded-lg text-sm text-ink-2 hover:bg-fill transition-all flex items-center justify-center gap-1.5"
+                          className="w-full p-2.5 rounded-lg text-subhead text-ink-2 hover:bg-fill transition-all flex items-center justify-center gap-1.5"
                         >
                           Show less
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2110,7 +2110,7 @@ function NewWorkoutContent() {
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    Add Custom Exercise
+                    Add custom exercise
                   </button>
                 </CardContent>
               </Card>
@@ -2128,7 +2128,7 @@ function NewWorkoutContent() {
               list — the recommendation bar at the top is long gone by then. */}
           {plannedDuration && (
             <span
-              className="px-2.5 py-1 rounded-full bg-card/90 border border-sep text-[11px] text-ink-2 shadow-lg"
+              className="px-2.5 py-1 rounded-full bg-card/90 border border-sep text-caption text-ink-2 shadow-lg"
               data-testid="planned-duration-pill"
             >
               ~{plannedDuration.label} · {plannedDuration.totalSets} sets
@@ -2138,7 +2138,7 @@ function NewWorkoutContent() {
             onClick={handleStartWorkout}
             disabled={isCreating}
             isLoading={isCreating}
-            className="shadow-lg shadow-action/25 px-6 py-3 text-base"
+            className="shadow-lg shadow-action/25 px-6 py-3 text-body"
           >
             <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -2164,7 +2164,7 @@ function NewWorkoutContent() {
             style={{ maxHeight: `calc(100vh - 2rem - ${customExerciseKbInset}px)` }}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-ink">Add Custom Exercise</h3>
+              <h3 className="text-headline font-bold text-ink">Add custom exercise</h3>
               <button
                 onClick={() => setShowCustomExerciseModal(false)}
                 className="text-ink-2 hover:text-ink"
@@ -2177,8 +2177,8 @@ function NewWorkoutContent() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
-                  Exercise Name
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
+                  Exercise name
                 </label>
                 <Input
                   value={customExerciseForm.name}
@@ -2194,7 +2194,7 @@ function NewWorkoutContent() {
                     action rejects them as a primary (validateExercisePrimary),
                     so offering one here would only fail at save. */}
                 <Select
-                  label="Muscle Group"
+                  label="Muscle group"
                   value={customExerciseForm.muscle}
                   onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, muscle: e.target.value }))}
                   options={PRECISE_MUSCLE_GROUP_OPTIONS}
@@ -2202,8 +2202,8 @@ function NewWorkoutContent() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
-                  Exercise Type
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
+                  Exercise type
                 </label>
                 <div className="flex gap-3">
                   <button
@@ -2215,7 +2215,7 @@ function NewWorkoutContent() {
                     }`}
                   >
                     <div className="font-medium">Compound</div>
-                    <div className="text-xs opacity-70">Multi-joint movement</div>
+                    <div className="text-caption opacity-70">Multi-joint movement</div>
                   </button>
                   <button
                     onClick={() => setCustomExerciseForm(prev => ({ ...prev, mechanic: 'isolation' }))}
@@ -2226,7 +2226,7 @@ function NewWorkoutContent() {
                     }`}
                   >
                     <div className="font-medium">Isolation</div>
-                    <div className="text-xs opacity-70">Single-joint movement</div>
+                    <div className="text-caption opacity-70">Single-joint movement</div>
                   </button>
                 </div>
               </div>
@@ -2236,9 +2236,9 @@ function NewWorkoutContent() {
                 <button
                   type="button"
                   onClick={() => setShowAdvancedFields(!showAdvancedFields)}
-                  className="flex items-center justify-between w-full text-sm text-ink-2 hover:text-ink transition-colors"
+                  className="flex items-center justify-between w-full text-subhead text-ink-2 hover:text-ink transition-colors"
                 >
-                  <span>Advanced Fields</span>
+                  <span>Advanced fields</span>
                   <svg 
                     className={`w-4 h-4 transition-transform ${showAdvancedFields ? 'rotate-180' : ''}`}
                     fill="none" 
@@ -2255,7 +2255,7 @@ function NewWorkoutContent() {
                 <div className="space-y-4 pt-2 border-t border-sep">
                   {/* Equipment Required (Multi-select) */}
                   <div>
-                    <label className="block text-sm font-medium text-ink-2 mb-2">
+                    <label className="block text-subhead font-medium text-ink-2 mb-2">
                       Equipment Required (select all that apply)
                     </label>
                     <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-fill/50 rounded-lg">
@@ -2282,12 +2282,12 @@ function NewWorkoutContent() {
                             }}
                             className="w-4 h-4 text-action bg-sep border-sep rounded focus:ring-action"
                           />
-                          <span className="text-sm text-ink-2">{eq.name}</span>
+                          <span className="text-subhead text-ink-2">{eq.name}</span>
                         </label>
                       ))}
                     </div>
                     {customExerciseForm.equipmentRequired.length > 0 && (
-                      <p className="text-xs text-ink-3 mt-1">
+                      <p className="text-caption text-ink-3 mt-1">
                         Selected: {customExerciseForm.equipmentRequired.join(', ')}
                       </p>
                     )}
@@ -2295,8 +2295,8 @@ function NewWorkoutContent() {
 
                   {/* Secondary Muscles */}
                   <div>
-                    <label className="block text-sm font-medium text-ink-2 mb-2">
-                      Secondary Muscles
+                    <label className="block text-subhead font-medium text-ink-2 mb-2">
+                      Secondary muscles
                     </label>
                     <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-fill/50 rounded-lg">
                       {ALL_MUSCLE_TAG_OPTIONS.filter(o => o.value !== customExerciseForm.muscle).map((option) => (
@@ -2322,7 +2322,7 @@ function NewWorkoutContent() {
                             }}
                             className="w-4 h-4 text-action bg-sep border-sep rounded focus:ring-action"
                           />
-                          <span className="text-xs text-ink-2">{option.label}</span>
+                          <span className="text-caption text-ink-2">{option.label}</span>
                         </label>
                       ))}
                     </div>
@@ -2331,7 +2331,7 @@ function NewWorkoutContent() {
                   {/* Movement Pattern */}
                   <div>
                     <Select
-                      label="Movement Pattern"
+                      label="Movement pattern"
                       value={customExerciseForm.movementPattern || ''}
                       onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, movementPattern: e.target.value }))}
                       options={[
@@ -2351,7 +2351,7 @@ function NewWorkoutContent() {
                   {/* Hypertrophy Tier */}
                   <div>
                     <Select
-                      label="Hypertrophy Tier"
+                      label="Hypertrophy tier"
                       value={customExerciseForm.hypertrophyTier || ''}
                       onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, hypertrophyTier: e.target.value as any }))}
                       options={[
@@ -2404,8 +2404,8 @@ function NewWorkoutContent() {
 
                   {/* Setup Note */}
                   <div>
-                    <label className="block text-sm font-medium text-ink-2 mb-1">
-                      Setup Note
+                    <label className="block text-subhead font-medium text-ink-2 mb-1">
+                      Setup note
                     </label>
                     <textarea
                       value={customExerciseForm.setupNote || ''}
@@ -2419,7 +2419,7 @@ function NewWorkoutContent() {
               )}
 
               {customExerciseError && (
-                <div className="p-3 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-sm">
+                <div className="p-3 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-subhead">
                   {customExerciseError}
                 </div>
               )}
@@ -2438,7 +2438,7 @@ function NewWorkoutContent() {
                   disabled={!customExerciseForm.name.trim()}
                   className="flex-1"
                 >
-                  Add Exercise
+                  Add exercise
                 </Button>
               </div>
             </div>

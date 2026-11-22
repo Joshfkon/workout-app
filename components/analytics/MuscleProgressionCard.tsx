@@ -28,7 +28,7 @@ function muscleDisplayName(muscle: string): string {
 function paceBadgeClasses(pace: ProgressionPace): string {
   switch (pace) {
     case 'ahead':
-      return 'bg-emerald-500/10 text-emerald-400';
+      return 'bg-status-ok-tint text-status-ok';
     case 'on_track':
       return 'bg-fill/60 text-ink';
     case 'behind':
@@ -94,7 +94,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
     <Card id="muscle-progression" padding="none" className="scroll-mt-4">
       <div className="p-4 border-b border-sep">
         <h3 className="font-medium text-ink">Progression by muscle group</h3>
-        <p className="text-xs text-ink-2 mt-0.5">{subtitle}</p>
+        <p className="text-caption text-ink-2 mt-0.5">{subtitle}</p>
       </div>
       <ul className="divide-y divide-sep">
         {activeGroups.map((group) => {
@@ -107,12 +107,12 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-fill/50 transition-colors"
                 aria-expanded={isOpen}
               >
-                <span className="flex-1 min-w-0 text-sm font-medium text-ink truncate">
+                <span className="flex-1 min-w-0 text-subhead font-medium text-ink truncate">
                   {muscleDisplayName(group.muscleGroup)}
                 </span>
                 {paceHasRate(group.pace) && (
                   <span
-                    className={`text-xs font-mono ${group.rateImplausible ? 'text-status-warn' : 'text-ink-2'}`}
+                    className={`text-caption font-mono ${group.rateImplausible ? 'text-status-warn' : 'text-ink-2'}`}
                     title={
                       group.rateImplausible
                         ? 'Rate exceeded the plausibility ceiling and was capped — usually a data issue (equipment change or mislogged load), not real progress'
@@ -124,12 +124,12 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                   </span>
                 )}
                 {group.plateauedCount > 0 && (
-                  <span className="text-[11px] text-status-warn">
+                  <span className="text-caption text-status-warn">
                     {group.plateauedCount} plateaued
                   </span>
                 )}
                 <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${paceBadgeClasses(group.pace)}`}
+                  className={`rounded-full px-2.5 py-1 text-caption font-medium leading-none flex-shrink-0 ${paceBadgeClasses(group.pace)}`}
                 >
                   {display.label}
                 </span>
@@ -151,16 +151,16 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                         key={insight.exerciseId}
                         className="flex items-center gap-3 pl-8 pr-4 py-1.5"
                       >
-                        <span className="flex-1 min-w-0 text-sm text-ink-2 truncate">
+                        <span className="flex-1 min-w-0 text-subhead text-ink-2 truncate">
                           {exerciseNames?.get(insight.exerciseId) ?? 'Exercise'}
                         </span>
                         {paceHasRate(insight.pace) && (
-                          <span className="text-xs font-mono text-ink-2">
+                          <span className="text-caption font-mono text-ink-2">
                             {formatWeeklyPct(insight.weeklyChangePct)}
                           </span>
                         )}
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium leading-none flex-shrink-0 ${paceBadgeClasses(insight.pace)}`}
+                          className={`rounded-full px-2 py-0.5 text-caption font-medium leading-none flex-shrink-0 ${paceBadgeClasses(insight.pace)}`}
                         >
                           {insightDisplay.label}
                         </span>
@@ -174,7 +174,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
         })}
         {calibratingGroups.length > 0 && (
           <li
-            className="px-4 py-3 text-xs text-ink-2"
+            className="px-4 py-3 text-caption text-ink-2"
             data-testid="muscle-progression-calibrating-summary"
           >
             <span className="font-medium text-ink-2">
@@ -186,7 +186,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
         )}
         {buildingGroups.length > 0 && (
           <li
-            className="px-4 py-3 text-xs text-ink-2"
+            className="px-4 py-3 text-caption text-ink-2"
             data-testid="muscle-progression-building-summary"
           >
             <span className="font-medium text-ink-2">

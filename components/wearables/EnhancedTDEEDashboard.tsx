@@ -7,6 +7,7 @@
  * base metabolism, step burn, and workout burn components.
  */
 
+import { IconFlame } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -49,7 +50,7 @@ export function EnhancedTDEEDashboard({
       <Card>
         <CardContent className="p-6 text-center text-ink-3">
           <p className="mb-2">Not enough data for TDEE estimate</p>
-          <p className="text-sm">Log your weight and calories daily for 2-3 weeks</p>
+          <p className="text-subhead">Log your weight and calories daily for 2-3 weeks</p>
         </CardContent>
       </Card>
     );
@@ -64,8 +65,8 @@ export function EnhancedTDEEDashboard({
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2">
-          <span>🔥</span>
-          <span>Your Metabolism</span>
+          <IconFlame className="h-5 w-5 text-action" stroke={1.75} aria-hidden="true" />
+          <span>Your metabolism</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -73,36 +74,36 @@ export function EnhancedTDEEDashboard({
         {hasActivityData && todayTDEE && (
           <div className="p-4 bg-fill rounded-lg">
             <div className="flex items-baseline justify-between mb-3">
-              <span className="text-sm text-ink-3">Today&apos;s Estimated Burn</span>
+              <span className="text-subhead text-ink-3">Today&apos;s Estimated Burn</span>
               <span
-                className={`text-sm font-medium ${
-                  todayTDEE.vsAverage > 0 ? 'text-green-500' : 'text-ink-3'
+                className={`text-subhead font-medium ${
+                  todayTDEE.vsAverage > 0 ? 'text-status-ok' : 'text-ink-3'
                 }`}
               >
                 {todayTDEE.vsAverage > 0 ? '+' : ''}
                 {todayTDEE.vsAverage} vs average
               </span>
             </div>
-            <div className="text-3xl font-bold mb-4">
+            <div className="text-large-title font-bold mb-4">
               {todayTDEE.totalTDEE.toLocaleString()} cal
             </div>
 
             {/* Breakdown */}
             <div className="space-y-2 border-t border-sep pt-3">
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-subhead">
                 <span className="text-ink-2">
                   Base metabolism
                 </span>
                 <span>{todayTDEE.baseTDEE.toLocaleString()} cal</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-subhead">
                 <span className="text-ink-2">
                   Steps ({todayActivity?.steps.total.toLocaleString()})
                 </span>
                 <span>+{todayTDEE.stepExpenditure.toLocaleString()} cal</span>
               </div>
               {todayTDEE.workoutExpenditure > 0 && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-subhead">
                   <span className="text-ink-2">
                     Workout
                   </span>
@@ -120,12 +121,12 @@ export function EnhancedTDEEDashboard({
         {/* Average TDEE */}
         <div className="p-4 bg-fill rounded-lg">
           <div className="flex items-baseline justify-between mb-2">
-            <span className="text-sm text-ink-3">Your Average TDEE</span>
-            <span className="text-sm text-ink-2">
+            <span className="text-subhead text-ink-3">Your average TDEE</span>
+            <span className="text-subhead text-ink-2">
               Based on {tdeeEstimate.dataPointsUsed} days of data
             </span>
           </div>
-          <div className="text-2xl font-semibold mb-3">
+          <div className="text-title font-semibold mb-3">
             {tdeeEstimate.estimatedTDEE.toLocaleString()} cal/day
           </div>
 
@@ -139,7 +140,7 @@ export function EnhancedTDEEDashboard({
                 style={{ width: `${tdeeEstimate.confidenceScore}%` }}
               />
             </div>
-            <span className="text-sm text-ink-3">
+            <span className="text-subhead text-ink-3">
               {tdeeEstimate.confidenceScore}% confident
             </span>
           </div>
@@ -150,18 +151,18 @@ export function EnhancedTDEEDashboard({
           <div className="grid grid-cols-2 gap-3">
             {tdeeEstimate.averageSteps > 0 && (
               <div className="p-3 bg-fill rounded-lg text-center">
-                <div className="text-lg font-semibold">
+                <div className="text-headline font-semibold">
                   {tdeeEstimate.averageSteps.toLocaleString()}
                 </div>
-                <div className="text-xs text-ink-3">Avg daily steps</div>
+                <div className="text-caption text-ink-3">Avg daily steps</div>
               </div>
             )}
             {tdeeEstimate.averageWorkoutCalories > 0 && (
               <div className="p-3 bg-fill rounded-lg text-center">
-                <div className="text-lg font-semibold">
+                <div className="text-headline font-semibold">
                   {tdeeEstimate.averageWorkoutCalories}
                 </div>
-                <div className="text-xs text-ink-3">Avg workout burn</div>
+                <div className="text-caption text-ink-3">Avg workout burn</div>
               </div>
             )}
           </div>
@@ -209,11 +210,11 @@ function calculateTodayTDEE(
 function getConfidenceColor(confidence: 'unstable' | 'stabilizing' | 'stable'): string {
   switch (confidence) {
     case 'stable':
-      return 'bg-green-500';
+      return 'bg-status-ok';
     case 'stabilizing':
-      return 'bg-yellow-500';
+      return 'bg-status-warn';
     case 'unstable':
-      return 'bg-red-500';
+      return 'bg-status-bad';
     default:
       return 'bg-ink-3';
   }
@@ -247,18 +248,18 @@ export function CompactTDEECard({
   return (
     <div className="flex items-center justify-between p-3 bg-fill rounded-lg">
       <div className="flex items-center gap-3">
-        <span className="text-xl">🔥</span>
+        <IconFlame className="h-5 w-5 text-action" stroke={1.75} aria-hidden="true" />
         <div>
           <div className="font-medium">
             {tdeeEstimate.estimatedTDEE.toLocaleString()} cal/day
           </div>
-          <div className="text-xs text-ink-3">
+          <div className="text-caption text-ink-3">
             {todaySteps.toLocaleString()} steps • {activityLevel}
             {todayWorkout && ' • Workout logged'}
           </div>
         </div>
       </div>
-      <div className="text-sm text-ink-2">
+      <div className="text-subhead text-ink-2">
         {tdeeEstimate.confidenceScore}%
       </div>
     </div>

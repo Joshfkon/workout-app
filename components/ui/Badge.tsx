@@ -25,8 +25,8 @@ export const Badge = memo(function Badge({
   };
 
   const sizes = {
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-2.5 py-1 text-xs',
+    sm: 'px-2 py-0.5 text-caption',
+    md: 'px-2.5 py-1 text-caption',
   };
 
   return (

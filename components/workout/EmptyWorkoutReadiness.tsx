@@ -191,7 +191,7 @@ export function EmptyWorkoutReadiness({
           onClick={() => setShowReadiness(!showReadiness)}
           aria-expanded={showReadiness}
           data-testid="readiness-inline-toggle"
-          className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-ink-3 hover:text-ink-2 transition-colors mb-3"
+          className="flex items-center gap-2 text-caption font-semibold text-ink-3 hover:text-ink-2 transition-colors mb-3"
         >
           <svg
             className={`w-3.5 h-3.5 transition-transform ${showReadiness ? 'rotate-90' : ''}`}
@@ -221,7 +221,7 @@ export function EmptyWorkoutReadiness({
       {/* Quick add: the user's frequent exercises, re-ordered by readiness. */}
       {sortedChips.length > 0 && (
         <div className="mt-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-ink-3 mb-3">
+          <p className="text-caption font-semibold text-ink-3 mb-3">
             Quick add · Ranked by readiness
           </p>
           <div className="flex flex-wrap gap-2.5">

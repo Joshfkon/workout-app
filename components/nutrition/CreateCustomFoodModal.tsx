@@ -125,7 +125,7 @@ export function CreateCustomFoodModal({
     if (!confidence) return null;
     return (
       <span
-        className={`ml-1.5 inline-block align-middle text-[10px] font-medium px-1.5 py-0.5 rounded ${
+        className={`ml-1.5 inline-block align-middle text-caption font-medium px-1.5 py-0.5 rounded ${
           confidence === 'low'
             ? 'bg-status-warn/15 text-status-warn'
             : 'bg-action/15 text-action'
@@ -206,12 +206,12 @@ export function CreateCustomFoodModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={editingFood ? 'Edit Custom Food' : 'Create Custom Food'}
+      title={editingFood ? 'Edit custom food' : 'Create custom food'}
       size="md"
     >
       <div className="space-y-4">
         {error && (
-          <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
+          <div className="p-3 text-subhead text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
             {error}
           </div>
         )}
@@ -219,7 +219,7 @@ export function CreateCustomFoodModal({
         {/* Scanned-label review banner: values are prefilled, never auto-saved */}
         {initialScan && !editingFood && (
           <div
-            className={`p-3 text-sm rounded-lg border space-y-1 ${
+            className={`p-3 text-subhead rounded-lg border space-y-1 ${
               initialScan.confidence === 'low' || initialScan.warnings.length > 0
                 ? 'bg-status-warn/10 border-status-warn/20 text-status-warn'
                 : 'bg-action/10 border-action/20 text-action'
@@ -230,17 +230,17 @@ export function CreateCustomFoodModal({
               {initialScan.source === 'ai' ? 'Read by AI scan' : 'Scanned from label'} — review before saving
             </p>
             {initialScan.warnings.map((warning) => (
-              <p key={warning} className="text-xs opacity-90">
+              <p key={warning} className="text-caption opacity-90">
                 {warning}
               </p>
             ))}
-            <p className="text-xs opacity-75">Add a name of your own — brand names aren&apos;t scanned.</p>
+            <p className="text-caption opacity-75">Add a name of your own — brand names aren&apos;t scanned.</p>
           </div>
         )}
 
         {/* Food Name */}
         <div>
-          <label className="block text-sm font-medium text-ink-2 mb-1">
+          <label className="block text-subhead font-medium text-ink-2 mb-1">
             Food Name *
           </label>
           <Input
@@ -254,7 +254,7 @@ export function CreateCustomFoodModal({
         <div className="flex items-center justify-between p-3 bg-fill rounded-lg">
           <div>
             <p className="font-medium text-ink">Track by weight</p>
-            <p className="text-xs text-ink-2">
+            <p className="text-caption text-ink-2">
               Enter nutrition per label amount, then weigh your portion
             </p>
           </div>
@@ -270,7 +270,7 @@ export function CreateCustomFoodModal({
           <div className="space-y-4 p-4 bg-fill/50 rounded-lg border border-sep">
             {/* Reference Amount */}
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-1">
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
                 Nutrition label is &quot;per...&quot;
               </label>
               <div className="flex gap-2">
@@ -286,24 +286,24 @@ export function CreateCustomFoodModal({
                 <select
                   value={referenceUnit}
                   onChange={(e) => setReferenceUnit(e.target.value as 'g' | 'oz')}
-                  className="px-3 py-2 bg-card rounded-lg text-ink text-sm focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
+                  className="px-3 py-2 bg-card rounded-lg text-ink text-subhead focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
                 >
                   <option value="g">grams (g)</option>
                   <option value="oz">ounces (oz)</option>
                 </select>
               </div>
-              <p className="text-xs text-ink-3 mt-1">
+              <p className="text-caption text-ink-3 mt-1">
                 Match the serving size on the food label (e.g., &quot;28g&quot;, &quot;100g&quot;, &quot;1 oz&quot;)
               </p>
             </div>
 
             {/* Nutrition per reference amount */}
-            <p className="text-sm text-action font-medium">
+            <p className="text-subhead text-action font-medium">
               Nutrition per {referenceAmount || '?'}{referenceUnit}
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Calories *
                 </label>
                 <Input
@@ -316,7 +316,7 @@ export function CreateCustomFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Protein (g)
                 </label>
                 <Input
@@ -329,7 +329,7 @@ export function CreateCustomFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Carbs (g)
                 </label>
                 <Input
@@ -342,7 +342,7 @@ export function CreateCustomFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Fat (g)
                 </label>
                 <Input
@@ -360,8 +360,8 @@ export function CreateCustomFoodModal({
           /* Per Serving Entry */
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-1">
-                Serving Size
+              <label className="block text-subhead font-medium text-ink-2 mb-1">
+                Serving size
                 <ScanBadge field="servingSize" />
               </label>
               <Input
@@ -374,7 +374,7 @@ export function CreateCustomFoodModal({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Calories *
                   <ScanBadge field="calories" />
                 </label>
@@ -390,7 +390,7 @@ export function CreateCustomFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Protein (g)
                   <ScanBadge field="protein" />
                 </label>
@@ -406,7 +406,7 @@ export function CreateCustomFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Carbs (g)
                   <ScanBadge field="carbs" />
                 </label>
@@ -422,7 +422,7 @@ export function CreateCustomFoodModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-2 mb-1">
+                <label className="block text-subhead font-medium text-ink-2 mb-1">
                   Fat (g)
                   <ScanBadge field="fat" />
                 </label>
@@ -443,7 +443,7 @@ export function CreateCustomFoodModal({
 
         {/* Optional Barcode */}
         <div>
-          <label className="block text-sm font-medium text-ink-2 mb-1">
+          <label className="block text-subhead font-medium text-ink-2 mb-1">
             Barcode (optional)
           </label>
           <Input
@@ -451,7 +451,7 @@ export function CreateCustomFoodModal({
             onChange={(e) => setBarcode(e.target.value)}
             placeholder="Scan or enter barcode for quick lookup"
           />
-          <p className="text-xs text-ink-3 mt-1">
+          <p className="text-caption text-ink-3 mt-1">
             Link a barcode for quick scanning later
           </p>
         </div>

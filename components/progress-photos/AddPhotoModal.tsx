@@ -247,7 +247,7 @@ export function AddPhotoModal({
         {!file && (
           <div className="rounded-lg bg-action/10 border border-action/20 p-3">
             <p className="text-caption font-medium text-action mb-1">
-              💡 Tips for consistent photos
+              Tips for consistent photos
             </p>
             <ul className="text-caption text-ink-2 space-y-0.5 list-disc list-inside">
               <li>Same lighting, time of day, and location each time</li>

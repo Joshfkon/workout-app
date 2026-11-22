@@ -29,7 +29,7 @@ export const SegmentedControl = memo(function SegmentedControl({
             onClick={() => onChange(option.value)}
             disabled={option.disabled}
             className={`
-              px-3 py-1 text-xs font-medium rounded transition-all
+              px-3 py-1 text-caption font-medium rounded transition-all
               ${isSelected
                 ? 'bg-action text-on-action shadow-sm'
                 : 'text-ink-2 hover:text-ink'

@@ -907,7 +907,7 @@ export function ImportExportSettings() {
                   <div className="flex items-center gap-2">
                     <span className="text-title">{result.success ? '✅' : '❌'}</span>
                     <div>
-                      <p className={`font-medium text-sm ${result.success ? 'text-status-ok' : 'text-status-bad'}`}>
+                      <p className={`font-medium text-subhead ${result.success ? 'text-status-ok' : 'text-status-bad'}`}>
                         {result.success ? 'Import complete' : 'Import failed'}
                       </p>
                       <p className="text-caption text-ink-2">
@@ -975,7 +975,7 @@ export function ImportExportSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           {fixResult && (
-            <div className={`p-3 rounded-lg text-sm ${
+            <div className={`p-3 rounded-lg text-subhead ${
               fixResult.success
                 ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
                 : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
@@ -1011,7 +1011,7 @@ export function ImportExportSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           {deleteResult && (
-            <div className={`p-3 rounded-lg text-sm ${
+            <div className={`p-3 rounded-lg text-subhead ${
               deleteResult.success
                 ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
                 : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'

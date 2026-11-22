@@ -81,7 +81,7 @@ export function RestTimer({
           </span>
         </span>
         <span
-          className={`block text-[28px] font-bold leading-8 tabular-nums ${
+          className={`block text-large-title font-bold leading-8 tabular-nums ${
             isFinished ? 'text-status-ok' : 'text-ink'
           }`}
         >

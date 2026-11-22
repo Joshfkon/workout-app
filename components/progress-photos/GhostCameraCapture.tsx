@@ -136,7 +136,7 @@ export function GhostCameraCapture({ ghostUrl, onCapture, onCancel }: GhostCamer
         )}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center p-6">
-            <p className="text-body text-red-400 text-center">{error}</p>
+            <p className="text-body text-status-bad text-center">{error}</p>
           </div>
         )}
         <button

@@ -51,7 +51,7 @@ export function WeightHistoryModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Weight History"
+      title="Weight history"
       description="Tap to edit, swipe left to delete"
       size="md"
     >
@@ -80,13 +80,13 @@ export function WeightHistoryModal({
                 >
                   {/* Date */}
                   <div className="flex-shrink-0 w-16 text-center">
-                    <div className="text-sm font-medium text-ink">
+                    <div className="text-subhead font-medium text-ink">
                       {new Date(entry.logged_at + 'T00:00:00').toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
                       })}
                     </div>
-                    <div className="text-xs text-ink-3">
+                    <div className="text-caption text-ink-3">
                       {new Date(entry.logged_at + 'T00:00:00').toLocaleDateString('en-US', {
                         weekday: 'short',
                       })}
@@ -95,11 +95,11 @@ export function WeightHistoryModal({
 
                   {/* Weight */}
                   <div className="flex-1">
-                    <div className="text-lg font-semibold text-ink">
+                    <div className="text-headline font-semibold text-ink">
                       {displayWeight.toFixed(1)} {preferredUnit === 'kg' ? 'kg' : 'lbs'}
                     </div>
                     {entry.notes && (
-                      <div className="text-xs text-ink-3 truncate max-w-[200px]">
+                      <div className="text-caption text-ink-3 truncate max-w-[200px]">
                         {entry.notes}
                       </div>
                     )}
@@ -110,10 +110,10 @@ export function WeightHistoryModal({
                     <div className={`flex-shrink-0 text-right ${
                       change > 0 ? 'text-status-bad' : change < 0 ? 'text-status-ok' : 'text-ink-2'
                     }`}>
-                      <div className="text-sm font-medium">
+                      <div className="text-subhead font-medium">
                         {change > 0 ? '+' : ''}{change.toFixed(1)}
                       </div>
-                      <div className="text-xs">{preferredUnit === 'kg' ? 'kg' : 'lbs'}</div>
+                      <div className="text-caption">{preferredUnit === 'kg' ? 'kg' : 'lbs'}</div>
                     </div>
                   )}
 

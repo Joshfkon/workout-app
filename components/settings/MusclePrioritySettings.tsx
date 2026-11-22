@@ -260,7 +260,7 @@ export function MusclePrioritySettings({
                           <button
                             key={level}
                             onClick={() => handlePriorityChange(muscle, level)}
-                            className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                            className={`w-8 h-8 rounded-lg text-caption font-medium transition-all ${
                               priority === level
                                 ? `${PRIORITY_COLORS[level]} text-white`
                                 : 'bg-sep text-ink-2 hover:bg-sep'

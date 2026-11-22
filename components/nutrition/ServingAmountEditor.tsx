@@ -86,7 +86,7 @@ export function ServingAmountEditor({
 
   return (
     <div className="space-y-3">
-      <label className="block text-sm font-medium text-ink-2">Amount</label>
+      <label className="block text-subhead font-medium text-ink-2">Amount</label>
 
       {/* Amount input + unit selector */}
       <div className="flex gap-2">
@@ -99,7 +99,7 @@ export function ServingAmountEditor({
           onChange={(e) => setAmount(e.target.value)}
           aria-label="Amount"
           data-testid={`${testIdPrefix}-amount`}
-          className="flex-1 min-w-0 px-4 py-2.5 text-lg font-medium bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
+          className="flex-1 min-w-0 px-4 py-2.5 text-headline font-medium bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
         />
         {model.units.length > 1 ? (
           <select
@@ -107,7 +107,7 @@ export function ServingAmountEditor({
             onChange={(e) => setUnit(e.target.value)}
             aria-label="Unit"
             data-testid={`${testIdPrefix}-unit`}
-            className="px-3 py-2.5 bg-card rounded-lg text-ink text-sm focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
+            className="px-3 py-2.5 bg-card rounded-lg text-ink text-subhead focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
           >
             {model.units.map((u) => (
               <option key={u.id} value={u.id}>
@@ -117,7 +117,7 @@ export function ServingAmountEditor({
           </select>
         ) : (
           <span
-            className="flex items-center px-3 text-sm text-ink-2 whitespace-nowrap"
+            className="flex items-center px-3 text-subhead text-ink-2 whitespace-nowrap"
             data-testid={`${testIdPrefix}-unit`}
           >
             {unit.label}
@@ -127,7 +127,7 @@ export function ServingAmountEditor({
 
       {/* Serving-weight helper text (keeps grams out of the ambiguous label) */}
       {servingGramsHint && (
-        <p className="text-xs text-ink-3" data-testid={`${testIdPrefix}-serving-hint`}>
+        <p className="text-caption text-ink-3" data-testid={`${testIdPrefix}-serving-hint`}>
           {servingGramsHint} · switch the unit to enter grams
         </p>
       )}
@@ -140,7 +140,7 @@ export function ServingAmountEditor({
               key={amt}
               type="button"
               onClick={() => setAmount(amt.toString())}
-              className={`py-1.5 px-3 rounded-lg text-sm font-medium transition-colors ${
+              className={`py-1.5 px-3 rounded-lg text-subhead font-medium transition-colors ${
                 currentAmount === amt
                   ? 'bg-action text-on-action'
                   : 'bg-fill text-ink-2 hover:bg-sep'
@@ -155,26 +155,26 @@ export function ServingAmountEditor({
       {/* Live macro preview */}
       {!hidePreview && (
         <div
-          className="grid grid-cols-4 gap-2 text-sm p-3 bg-card/50 rounded-lg"
+          className="grid grid-cols-4 gap-2 text-subhead p-3 bg-card/50 rounded-lg"
           data-testid={`${testIdPrefix}-preview`}
         >
           <div className="text-center">
-            <p className="text-2xl font-bold text-ink" data-testid={`${testIdPrefix}-preview-calories`}>
+            <p className="text-title font-bold text-ink" data-testid={`${testIdPrefix}-preview-calories`}>
               {preview.macros.calories}
             </p>
-            <p className="text-xs text-ink-2">Calories</p>
+            <p className="text-caption text-ink-2">Calories</p>
           </div>
           <div className="text-center">
-            <p className="text-lg font-medium text-ink">{preview.macros.protein}g</p>
-            <p className="text-xs text-ink-2">Protein</p>
+            <p className="text-headline font-medium text-ink">{preview.macros.protein}g</p>
+            <p className="text-caption text-ink-2">Protein</p>
           </div>
           <div className="text-center">
-            <p className="text-lg font-medium text-ink">{preview.macros.carbs}g</p>
-            <p className="text-xs text-ink-2">Carbs</p>
+            <p className="text-headline font-medium text-ink">{preview.macros.carbs}g</p>
+            <p className="text-caption text-ink-2">Carbs</p>
           </div>
           <div className="text-center">
-            <p className="text-lg font-medium text-ink">{preview.macros.fat}g</p>
-            <p className="text-xs text-ink-2">Fat</p>
+            <p className="text-headline font-medium text-ink">{preview.macros.fat}g</p>
+            <p className="text-caption text-ink-2">Fat</p>
           </div>
         </div>
       )}

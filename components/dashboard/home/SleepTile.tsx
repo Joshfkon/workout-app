@@ -92,7 +92,7 @@ export function SleepTile({ sleep, onLog }: { sleep: SleepGlance; onLog: () => v
           <button
             type="button"
             onClick={onLog}
-            className="text-xs font-medium text-action transition-colors"
+            className="text-caption font-medium text-action transition-colors"
             data-testid="sleep-log-action"
           >
             + log
@@ -101,24 +101,24 @@ export function SleepTile({ sleep, onLog }: { sleep: SleepGlance; onLog: () => v
       }
     >
       {lastNight ? (
-        <div className="text-xl font-semibold text-ink flex items-baseline gap-1.5">
+        <div className="text-headline font-semibold text-ink flex items-baseline gap-1.5">
           {formatHours(lastNight.hours)}
           <span
             className={`w-2 h-2 rounded-full self-center ${SLEEP_QUALITY_DOT_CLASS[lastNight.quality]}`}
             title={`Quality: ${SLEEP_QUALITY_LABELS[lastNight.quality]}`}
             data-testid="sleep-quality-dot"
           />
-          <span className="text-sm text-ink-2 font-normal">last night</span>
+          <span className="text-subhead text-ink-2 font-normal">last night</span>
         </div>
       ) : (
-        <div className="text-xl font-semibold text-ink">
+        <div className="text-headline font-semibold text-ink">
           Log sleep
-          <span className="text-sm text-action font-normal ml-1.5">+</span>
+          <span className="text-subhead text-action font-normal ml-1.5">+</span>
         </div>
       )}
       <SleepSparkline values={weekValues} />
       {sevenDayAvgHours != null && (
-        <div className="text-[11px] text-ink-2 mt-1" data-testid="sleep-avg">
+        <div className="text-caption text-ink-2 mt-1" data-testid="sleep-avg">
           {formatHours(Math.round(sevenDayAvgHours * 10) / 10)} avg this week
         </div>
       )}

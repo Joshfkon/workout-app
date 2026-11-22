@@ -32,9 +32,9 @@ function StatCard({
 }) {
   return (
     <div className="bg-fill/50 rounded-lg p-3">
-      <p className="text-[11px] text-ink-3 uppercase tracking-wider">{label}</p>
-      <p className="text-lg font-bold text-ink mt-0.5">{value}</p>
-      {detail && <p className="text-xs text-ink-3 mt-0.5">{detail}</p>}
+      <p className="text-caption text-ink-3">{label}</p>
+      <p className="text-headline font-bold text-ink mt-0.5">{value}</p>
+      {detail && <p className="text-caption text-ink-3 mt-0.5">{detail}</p>}
     </div>
   );
 }
@@ -73,8 +73,8 @@ export function RecordsTab({ sessions, unit, repTotalMode = false, mixedGyms = f
   if (!records || records.lifetime.totalSets === 0) {
     return (
       <div className="text-center py-10">
-        <p className="text-ink-2 text-sm">No records yet</p>
-        <p className="text-ink-3 text-xs mt-1">
+        <p className="text-ink-2 text-subhead">No records yet</p>
+        <p className="text-ink-3 text-caption mt-1">
           Log a few sets of this exercise and your PRs will show up here.
         </p>
       </div>
@@ -90,7 +90,7 @@ export function RecordsTab({ sessions, unit, repTotalMode = false, mixedGyms = f
   return (
     <div className="space-y-5" data-testid="exercise-detail-records">
       {mixedGyms && (
-        <p className="text-xs text-status-warn" data-testid="records-mixed-gyms">
+        <p className="text-caption text-status-warn" data-testid="records-mixed-gyms">
           These records combine machines from different gyms, which read differently.
           Pick a gym above for like-for-like records.
         </p>
@@ -139,13 +139,13 @@ export function RecordsTab({ sessions, unit, repTotalMode = false, mixedGyms = f
 
       {/* Rep records table */}
       <div>
-        <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
+        <p className="text-caption font-medium text-ink-2 mb-2">
           Rep records
         </p>
         <div className="bg-fill/40 rounded-lg overflow-hidden">
-          <table className="w-full text-sm" data-testid="exercise-detail-rep-records">
+          <table className="w-full text-subhead" data-testid="exercise-detail-rep-records">
             <thead>
-              <tr className="text-[11px] text-ink-3 uppercase tracking-wider border-b border-sep">
+              <tr className="text-caption text-ink-3 border-b border-sep">
                 <th className="text-left font-medium px-3 py-2">Reps</th>
                 <th className="text-right font-medium px-3 py-2">Best weight</th>
                 <th className="text-right font-medium px-3 py-2">Date</th>
@@ -164,7 +164,7 @@ export function RecordsTab({ sessions, unit, repTotalMode = false, mixedGyms = f
                         <span className="text-ink-3">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-right text-xs text-ink-3">
+                    <td className="px-3 py-1.5 text-right text-caption text-ink-3">
                       {record ? formatDetailDate(record.date) : ''}
                     </td>
                   </tr>
@@ -173,14 +173,14 @@ export function RecordsTab({ sessions, unit, repTotalMode = false, mixedGyms = f
             </tbody>
           </table>
         </div>
-        <p className="text-[11px] text-ink-3 mt-1.5">
+        <p className="text-caption text-ink-3 mt-1.5">
           Heaviest weight ever logged for at least that many reps.
         </p>
       </div>
 
       {/* Lifetime */}
       <div>
-        <p className="text-xs font-medium text-ink-2 uppercase tracking-wider mb-2">
+        <p className="text-caption font-medium text-ink-2 mb-2">
           Lifetime
         </p>
         <div className="grid grid-cols-3 gap-2">

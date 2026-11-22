@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { IconAlertTriangle } from '@tabler/icons-react';
+import { IconAlertTriangle, IconDeviceWatch, IconInfoCircle } from '@tabler/icons-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import type { WearableSource, WearableConnection } from '@/types/wearable';
@@ -50,7 +50,6 @@ async function getFitbitModule() {
 interface WearableOption {
   source: WearableSource;
   name: string;
-  icon: string;
   description: string;
   platforms: ('ios' | 'android' | 'web')[];
 }
@@ -59,28 +58,24 @@ const WEARABLE_OPTIONS: WearableOption[] = [
   {
     source: 'apple_healthkit',
     name: 'Apple Health',
-    icon: '⌚',
     description: 'Sleep, heart & steps for recovery and calorie estimates',
     platforms: ['ios'],
   },
   {
     source: 'google_fit',
     name: 'Google Fit',
-    icon: '📊',
     description: 'Connect your Android device',
     platforms: ['android'],
   },
   {
     source: 'fitbit',
     name: 'Fitbit',
-    icon: '💪',
     description: 'Connect your Fitbit account',
     platforms: ['ios', 'android', 'web'],
   },
   {
     source: 'garmin',
     name: 'Garmin',
-    icon: '🏃',
     description: 'Connect via Garmin Connect',
     platforms: ['ios', 'android', 'web'],
   },
@@ -326,7 +321,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
       {connectedDevices.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Connected Devices</CardTitle>
+            <CardTitle>Connected devices</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {connectedDevices.map((connection) => {
@@ -337,15 +332,15 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
                   className="flex items-center justify-between p-4 bg-fill rounded-lg"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="text-3xl">{option?.icon || '📱'}</div>
+                    <IconDeviceWatch className="h-8 w-8 text-ink-2" stroke={1.75} aria-hidden="true" />
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-medium">
                           {connection.deviceName || option?.name || connection.source}
                         </span>
-                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="w-2 h-2 rounded-full bg-status-ok" />
                       </div>
-                      <div className="text-sm text-ink-3">
+                      <div className="text-subhead text-ink-3">
                         Last sync: {formatLastSync(connection.lastSyncAt)}
                       </div>
                     </div>
@@ -368,7 +363,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
       {availableOptions.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Available Connections</CardTitle>
+            <CardTitle>Available connections</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {availableOptions.map((option) => (
@@ -377,10 +372,10 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
                 className="flex items-center justify-between p-4 bg-card rounded-lg shadow-card"
               >
                 <div className="flex items-center gap-4">
-                  <div className="text-3xl opacity-60">{option.icon}</div>
+                  <IconDeviceWatch className="h-8 w-8 text-ink-3" stroke={1.75} aria-hidden="true" />
                   <div>
                     <div className="font-medium">{option.name}</div>
-                    <div className="text-sm text-ink-3">{option.description}</div>
+                    <div className="text-subhead text-ink-3">{option.description}</div>
                   </div>
                 </div>
                 <Button
@@ -400,7 +395,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
       {connectError && (
         <div
           role="alert"
-          className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20 text-sm text-status-bad"
+          className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20 text-subhead text-status-bad"
         >
           {connectError}
         </div>
@@ -418,7 +413,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
                 <h3 className="font-semibold text-ink mb-2">
                   Apple Health Access Required
                 </h3>
-                <p className="text-sm text-ink-2 mb-4">
+                <p className="text-subhead text-ink-2 mb-4">
                   HyperTrack reads your sleep, steps, active energy, and heart-rate data from
                   Apple Health to improve recovery and calorie estimates.
                 </p>
@@ -428,7 +423,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
                     size="sm"
                     onClick={openAppSettings}
                   >
-                    Open Settings
+                    Open settings
                   </Button>
                   <Button
                     variant="ghost"
@@ -449,7 +444,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
         <Card>
           <CardContent className="p-8 text-center text-ink-3">
             <p>No wearable integrations available on this device.</p>
-            <p className="text-sm mt-2">
+            <p className="text-subhead mt-2">
               Apple Health connects from the HyperTrack iPhone app. You can still enter
               steps manually.
             </p>
@@ -461,8 +456,8 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
       <Card>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <span className="text-xl">ℹ️</span>
-            <div className="text-sm text-ink-2">
+            <IconInfoCircle className="h-5 w-5 flex-shrink-0 text-action" stroke={1.75} aria-hidden="true" />
+            <div className="text-subhead text-ink-2">
               <p className="font-medium mb-1">About wearable connections</p>
               <p>
                 Apple Health syncs automatically in the iOS app: sleep auto-fills your

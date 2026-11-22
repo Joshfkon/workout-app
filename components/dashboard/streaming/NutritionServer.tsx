@@ -28,7 +28,7 @@ export async function NutritionServer({ userId }: Props) {
           </CardTitle>
           <Link
             href="/dashboard/nutrition"
-            className="text-sm text-action"
+            className="text-subhead text-action"
           >
             Details
           </Link>
@@ -47,7 +47,7 @@ export async function NutritionServer({ userId }: Props) {
 
             return (
               <div key={macro.name} className="space-y-1">
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-subhead">
                   <span className="text-ink-2">{macro.name}</span>
                   <span className="text-ink">
                     {Math.round(macro.current)}{macro.unit} / {macro.target}{macro.unit}
@@ -68,7 +68,7 @@ export async function NutritionServer({ userId }: Props) {
           <div className="mt-4 pt-4 border-t border-sep">
             <Link
               href="/dashboard/nutrition"
-              className="text-sm text-action"
+              className="text-subhead text-action"
             >
               Set up nutrition targets →
             </Link>

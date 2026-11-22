@@ -337,7 +337,7 @@ export function ComparePhotos({
               role="tab"
               aria-selected={mode === value}
               onClick={() => setMode(value)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
+              className={`flex-1 rounded-md px-3 py-1.5 text-subhead transition-colors ${
                 mode === value
                   ? 'bg-sep text-ink'
                   : 'text-ink-2 hover:text-ink'

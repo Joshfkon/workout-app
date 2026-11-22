@@ -120,7 +120,7 @@ export function ShareNutritionText({
         <IconShare size={18} aria-hidden="true" />
       </button>
 
-      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Share Nutrition" size="sm">
+      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Share nutrition" size="sm">
         <div className="space-y-4">
           <div role="radiogroup" aria-label="Share format" className="grid grid-cols-3 gap-2">
             {MODES.map((m) => {
@@ -133,7 +133,7 @@ export function ShareNutritionText({
                   aria-checked={active}
                   title={m.hint}
                   onClick={() => handleSelectMode(m.value)}
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`rounded-lg border px-3 py-2 text-subhead font-medium transition-colors ${
                     active
                       ? 'border-action bg-action/10 text-action'
                       : 'border-sep bg-card text-ink-2 hover:bg-fill'
@@ -147,15 +147,15 @@ export function ShareNutritionText({
 
           <pre
             data-testid="nutrition-share-preview"
-            className="whitespace-pre-wrap break-words rounded-lg bg-card p-4 font-mono text-sm text-ink select-all shadow-card"
+            className="whitespace-pre-wrap break-words rounded-lg bg-card p-4 font-mono text-subhead text-ink select-all shadow-card"
           >
             {shareText}
           </pre>
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-ink">No numbers</p>
-              <p className="text-xs text-ink-3">Share compliance without disclosing intake</p>
+              <p className="text-subhead font-medium text-ink">No numbers</p>
+              <p className="text-caption text-ink-3">Share compliance without disclosing intake</p>
             </div>
             <Toggle checked={noNumbers} onChange={handleToggleNoNumbers} />
           </div>

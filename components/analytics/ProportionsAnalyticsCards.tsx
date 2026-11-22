@@ -1,5 +1,6 @@
 'use client';
 
+import { IconArrowsVertical, IconInfoCircle, IconRuler, IconScale, IconTarget } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import {
@@ -39,12 +40,12 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            Classic Proportions
+          <CardTitle className="text-subhead flex items-center gap-2">
+            Classic proportions
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-ink-3">
+          <p className="text-caption text-ink-3">
             Add more measurements to see your proportionality analysis.
           </p>
         </CardContent>
@@ -54,11 +55,11 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
 
   const getStatusBadge = (status: ProportionalityRatio['status']) => {
     const config = {
-      far_below: { variant: 'danger' as const, label: 'Needs Focus' },
-      below: { variant: 'warning' as const, label: 'Below Target' },
+      far_below: { variant: 'danger' as const, label: 'Needs focus' },
+      below: { variant: 'warning' as const, label: 'Below target' },
       optimal: { variant: 'success' as const, label: 'Optimal' },
-      above: { variant: 'info' as const, label: 'Above Target' },
-      far_above: { variant: 'default' as const, label: 'Well Developed' },
+      above: { variant: 'info' as const, label: 'Above target' },
+      far_above: { variant: 'default' as const, label: 'Well developed' },
     };
     return config[status];
   };
@@ -66,12 +67,12 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className="text-subhead flex items-center gap-2">
           Classic Proportions (Adonis Ratios)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-[10px] text-ink-3">
+        <div className="flex items-center gap-2 text-caption text-ink-3">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded bg-status-warn/50" />
             <span>Below</span>
@@ -106,8 +107,8 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
                   status={ratio.status}
                 />
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[10px] text-ink-3">{ratio.formula}</span>
-                  <span className="text-[10px] text-ink-3">
+                  <span className="text-caption text-ink-3">{ratio.formula}</span>
+                  <span className="text-caption text-ink-3">
                     {ratio.percentOfIdeal}% of ideal
                   </span>
                 </div>
@@ -115,9 +116,9 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
 
               {isExpanded && (
                 <div className="pl-2 border-l-2 border-sep space-y-1 mt-2">
-                  <p className="text-xs text-ink-2">{ratio.description}</p>
+                  <p className="text-caption text-ink-2">{ratio.description}</p>
                   {ratio.recommendation && (
-                    <p className="text-xs text-action">{ratio.recommendation}</p>
+                    <p className="text-caption text-action">{ratio.recommendation}</p>
                   )}
                 </div>
               )}
@@ -153,10 +154,10 @@ export function SuperheroBenchmarksCard({
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">How You Compare</CardTitle>
+          <CardTitle className="text-subhead">How you compare</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-ink-3">
+          <p className="text-caption text-ink-3">
             Add measurements to see how you compare to physique benchmarks.
           </p>
         </CardContent>
@@ -184,14 +185,14 @@ export function SuperheroBenchmarksCard({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm">How You Compare</CardTitle>
-          <span className="text-[10px] text-ink-3">
+          <CardTitle className="text-subhead">How you compare</CardTitle>
+          <span className="text-caption text-ink-3">
             Scaled for {formatHeight(heightCm, displayUnit)}
           </span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-[10px] text-ink-3">
+        <div className="flex items-center gap-2 text-caption text-ink-3">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded bg-status-warn/50" />
             <span>Attainable</span>
@@ -221,7 +222,7 @@ export function SuperheroBenchmarksCard({
         {benchmarks.length > 4 && (
           <button
             onClick={() => setShowAll(!showAll)}
-            className="w-full text-center text-xs text-action py-1"
+            className="w-full text-center text-caption text-action py-1"
           >
             {showAll ? 'Show less' : `Show ${benchmarks.length - 4} more`}
           </button>
@@ -252,8 +253,8 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          Symmetry Analysis
+        <CardTitle className="text-subhead flex items-center gap-2">
+          Symmetry analysis
           {allBalanced && (
             <Badge variant="success" size="sm">Balanced</Badge>
           )}
@@ -262,8 +263,8 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
       <CardContent className="space-y-3">
         {allBalanced ? (
           <div className="p-3 bg-status-ok/10 border border-status-ok/20 rounded-lg text-center">
-            <p className="text-sm text-status-ok">Excellent bilateral symmetry across all measurements!</p>
-            <p className="text-xs text-ink-3 mt-1">All differences are within the normal 3% range.</p>
+            <p className="text-subhead text-status-ok">Excellent bilateral symmetry across all measurements!</p>
+            <p className="text-caption text-ink-3 mt-1">All differences are within the normal 3% range.</p>
           </div>
         ) : (
           significantAsymmetries.map((asym) => (
@@ -279,11 +280,11 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
             >
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <span className="text-sm font-medium text-ink">{asym.bodyPart}</span>
+                  <span className="text-subhead font-medium text-ink">{asym.bodyPart}</span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`text-xs font-medium ${
+                    <span className={`text-caption font-medium ${
                       asym.severityColor === 'green' ? 'text-status-ok' :
-                      asym.severityColor === 'yellow' ? 'text-yellow-400' :
+                      asym.severityColor === 'yellow' ? 'text-status-warn' :
                       asym.severityColor === 'orange' ? 'text-status-warn' :
                       'text-status-bad'
                     }`}>
@@ -292,7 +293,7 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
                         : `${asym.dominantSide.charAt(0).toUpperCase() + asym.dominantSide.slice(1)} +${Math.abs(asym.percentDifference).toFixed(1)}%`
                       }
                     </span>
-                    <span className="text-xs text-ink-3">
+                    <span className="text-caption text-ink-3">
                       ({formatMeasurementDiff(asym.differenceCm, displayUnit)})
                     </span>
                   </div>
@@ -310,10 +311,10 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
                 </Badge>
               </div>
 
-              <p className="text-xs text-ink-2 mb-2">{asym.severityContext}</p>
+              <p className="text-caption text-ink-2 mb-2">{asym.severityContext}</p>
 
               {/* Visual comparison bar */}
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-2 text-caption">
                 <span className="text-ink-3 w-8">L</span>
                 <div className="flex-1 relative">
                   <div className="h-2 bg-sep rounded-full overflow-hidden flex">
@@ -333,13 +334,13 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
                 </div>
                 <span className="text-ink-3 w-8 text-right">R</span>
               </div>
-              <div className="flex justify-between mt-1 text-[10px] text-ink-3">
+              <div className="flex justify-between mt-1 text-caption text-ink-3">
                 <span>{formatMeasurement(asym.leftValueCm, displayUnit)}</span>
                 <span>{formatMeasurement(asym.rightValueCm, displayUnit)}</span>
               </div>
 
               {asym.severity !== 'normal' && (
-                <p className="text-xs text-action mt-2">{asym.recommendation}</p>
+                <p className="text-caption text-action mt-2">{asym.recommendation}</p>
               )}
             </div>
           ))
@@ -370,28 +371,28 @@ export function TrainingPrioritiesCard({ priorities, onTrackItems = [] }: Traini
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          Your Training Priorities
+        <CardTitle className="text-subhead flex items-center gap-2">
+          Your training priorities
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-ink-3">
+        <p className="text-caption text-ink-3">
           Based on your proportions, exercise suggestions are weighted by these priorities:
         </p>
 
         {highPriority.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 text-caption">
               <span className="text-status-bad font-medium">HIGH PRIORITY</span>
             </div>
             {highPriority.map((p, i) => (
               <div key={i} className="pl-3 border-l-2 border-status-bad/50 py-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-ink">{p.muscleGroup}</span>
+                  <span className="text-subhead font-medium text-ink">{p.muscleGroup}</span>
                   <Badge variant="danger" size="sm">{p.issueType}</Badge>
                 </div>
-                <p className="text-xs text-ink-2 mt-0.5">{p.reason}</p>
-                <p className="text-[10px] text-ink-3">({p.metricValue})</p>
+                <p className="text-caption text-ink-2 mt-0.5">{p.reason}</p>
+                <p className="text-caption text-ink-3">({p.metricValue})</p>
               </div>
             ))}
           </div>
@@ -399,16 +400,16 @@ export function TrainingPrioritiesCard({ priorities, onTrackItems = [] }: Traini
 
         {mediumPriority.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 text-caption">
               <span className="text-status-warn font-medium">MEDIUM PRIORITY</span>
             </div>
             {mediumPriority.map((p, i) => (
               <div key={i} className="pl-3 border-l-2 border-status-warn/50 py-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-ink-2">{p.muscleGroup}</span>
+                  <span className="text-subhead text-ink-2">{p.muscleGroup}</span>
                   <Badge variant="warning" size="sm">{p.issueType}</Badge>
                 </div>
-                <p className="text-xs text-ink-2 mt-0.5">{p.reason}</p>
+                <p className="text-caption text-ink-2 mt-0.5">{p.reason}</p>
               </div>
             ))}
           </div>
@@ -416,12 +417,12 @@ export function TrainingPrioritiesCard({ priorities, onTrackItems = [] }: Traini
 
         {onTrackItems.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 text-caption">
               <span className="text-status-ok font-medium">ON TRACK</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {onTrackItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-1 text-xs text-ink-2">
+                <div key={i} className="flex items-center gap-1 text-caption text-ink-2">
                   <span className="text-status-ok">✓</span>
                   <span>{item.label}</span>
                   <span className="text-ink-3">({item.detail})</span>
@@ -432,8 +433,8 @@ export function TrainingPrioritiesCard({ priorities, onTrackItems = [] }: Traini
         )}
 
         <div className="pt-2 border-t border-sep">
-          <p className="text-[10px] text-ink-3 flex items-center gap-1">
-            <span>ℹ️</span>
+          <p className="text-caption text-ink-3 flex items-center gap-1">
+            <IconInfoCircle className="h-4 w-4 flex-shrink-0" stroke={1.75} aria-hidden="true" />
             <span>Exercise suggestions are automatically weighted by these priorities</span>
           </p>
         </div>
@@ -464,23 +465,23 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
 
   const componentLabels: Record<keyof ScoreBreakdown['components'], string> = {
     symmetry: 'Symmetry (L/R Balance)',
-    classicRatios: 'Classic Ratios',
+    classicRatios: 'Classic ratios',
     upperLower: 'Upper/Lower Balance',
     vsBenchmark: 'vs. Target Physique',
   };
 
-  const componentIcons: Record<keyof ScoreBreakdown['components'], string> = {
-    symmetry: '⚖️',
-    classicRatios: '📐',
-    upperLower: '↕️',
-    vsBenchmark: '🎯',
+  const componentIcons: Record<keyof ScoreBreakdown['components'], typeof IconScale> = {
+    symmetry: IconScale,
+    classicRatios: IconRuler,
+    upperLower: IconArrowsVertical,
+    vsBenchmark: IconTarget,
   };
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm">Overall Proportionality</CardTitle>
+          <CardTitle className="text-subhead">Overall proportionality</CardTitle>
           <div className="flex items-center gap-2">
             <ProgressRing
               value={breakdown.overall}
@@ -492,11 +493,12 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        <p className="text-xs text-ink-3 mb-3">Breakdown:</p>
+        <p className="text-caption text-ink-3 mb-3">Breakdown:</p>
 
         {(Object.keys(breakdown.components) as Array<keyof ScoreBreakdown['components']>).map((key) => {
           const score = breakdown.components[key];
           const isExpanded = expandedComponent === key;
+          const ComponentIcon = componentIcons[key];
 
           return (
             <div key={key}>
@@ -507,7 +509,7 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
                 }}
                 className="w-full flex items-center gap-2 py-1 hover:bg-fill/50 rounded transition-colors"
               >
-                <span className="text-sm">{componentIcons[key]}</span>
+                <ComponentIcon className="h-4 w-4 flex-shrink-0 text-ink-2" stroke={1.75} aria-hidden="true" />
                 <div className="flex-1">
                   <ProgressBar
                     value={score}
@@ -520,7 +522,7 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
               </button>
 
               {isExpanded && (
-                <div className="pl-7 pr-2 py-2 text-xs text-ink-2 bg-fill/30 rounded-b">
+                <div className="pl-7 pr-2 py-2 text-caption text-ink-2 bg-fill/30 rounded-b">
                   {breakdown.explanations[key]}
                 </div>
               )}
@@ -528,7 +530,7 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
           );
         })}
 
-        <p className="text-[10px] text-ink-3 pt-2">
+        <p className="text-caption text-ink-3 pt-2">
           Tap any score to see details
         </p>
       </CardContent>

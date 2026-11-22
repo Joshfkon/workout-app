@@ -21,7 +21,7 @@ import {
 import { DEFAULT_EATING_WINDOW } from '@/services/intakePacing';
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-sm focus:outline-none focus:border-action';
+  'w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-subhead focus:outline-none focus:border-action';
 
 export function EatingWindowSettings() {
   const supabase = createUntypedClient();
@@ -111,7 +111,7 @@ export function EatingWindowSettings() {
           </div>
         </div>
         {message && (
-          <p className={`text-xs ${message.type === 'success' ? 'text-status-ok' : 'text-status-bad'}`}>
+          <p className={`text-caption ${message.type === 'success' ? 'text-status-ok' : 'text-status-bad'}`}>
             {message.text}
           </p>
         )}

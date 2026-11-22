@@ -61,7 +61,7 @@ function InstallContent() {
       <div className="flex items-center justify-center gap-2 mb-8">
         {[1, 2, 3, 4, 5].map((step) => (
           <div key={step} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
               step <= 4
                 ? 'bg-action text-on-action'
                 : step === 5

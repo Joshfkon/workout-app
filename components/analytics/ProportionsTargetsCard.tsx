@@ -10,7 +10,7 @@
  *
  * Each section is collapsed by default (Accordion) so the tab stays scannable.
  * The proportionality-ratio analysis itself renders ONCE inside the
- * BodyMeasurements card's "Proportions Analysis" section — this card
+ * BodyMeasurements card's "Proportions analysis" section — this card
  * deliberately does not repeat it.
  *
  * Scope honesty: none of these sections follow the page's global time-range
@@ -90,7 +90,7 @@ function HowYouCompareSection({
 
   if (benchmarks.length === 0) {
     return (
-      <p className="text-xs text-ink-3">
+      <p className="text-caption text-ink-3">
         Add measurements to see how you compare to physique benchmarks.
       </p>
     );
@@ -127,7 +127,7 @@ function HowYouCompareSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[10px] text-ink-3 flex-wrap">
+        <div className="flex items-center gap-2 text-caption text-ink-3 flex-wrap">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full border-2 border-sep" />
             <span>Current</span>
@@ -151,7 +151,7 @@ function HowYouCompareSection({
             <span>Superhero</span>
           </div>
         </div>
-        <span className="text-[10px] text-ink-3 flex-shrink-0">
+        <span className="text-caption text-ink-3 flex-shrink-0">
           Scaled for {formatHeight(heightCm, displayUnit)}
         </span>
       </div>
@@ -174,10 +174,10 @@ function HowYouCompareSection({
             />
             {targetDisplay != null && targetDisplay !== current && (
               <div className="flex items-center gap-2 pl-2">
-                <span className="text-[10px] text-action">
+                <span className="text-caption text-action">
                   Target: {targetDisplay} {displayUnit}
                 </span>
-                <span className="text-[10px] text-ink-3">
+                <span className="text-caption text-ink-3">
                   ({targetDisplay - current >= 0 ? '+' : ''}
                   {(targetDisplay - current).toFixed(1)} {displayUnit})
                 </span>
@@ -190,7 +190,7 @@ function HowYouCompareSection({
       {benchmarks.length > 4 && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="w-full text-center text-xs text-action py-1"
+          className="w-full text-center text-caption text-action py-1"
         >
           {showAll ? 'Show less' : `Show ${benchmarks.length - 4} more`}
         </button>
@@ -214,7 +214,7 @@ function FfmiCeilingSection({
 }) {
   if (currentFfmi == null) {
     return (
-      <p className="text-xs text-ink-3">
+      <p className="text-caption text-ink-3">
         Add body composition data to see your FFMI ceiling.
       </p>
     );
@@ -235,10 +235,10 @@ function FfmiCeilingSection({
   const getFeasibility = () => {
     if (!targetFfmi) return null;
     const change = targetFfmi - currentFfmi;
-    if (change <= 0.3) return { label: 'Very Achievable', color: 'text-status-ok' };
+    if (change <= 0.3) return { label: 'Very achievable', color: 'text-status-ok' };
     if (change <= 0.6) return { label: 'Achievable', color: 'text-action' };
     if (change <= 1.0) return { label: 'Ambitious', color: 'text-status-warn' };
-    if (change <= 1.5) return { label: 'Very Ambitious', color: 'text-status-warn' };
+    if (change <= 1.5) return { label: 'Very ambitious', color: 'text-status-warn' };
     return { label: 'Unrealistic', color: 'text-status-bad' };
   };
 
@@ -280,7 +280,7 @@ function FfmiCeilingSection({
           style={{ left: `${toPercent(currentFfmi)}%`, transform: 'translateX(-50%)' }}
         >
           <div className="w-1 h-4 bg-white rounded" />
-          <span className="text-[10px] text-white font-bold mt-0.5">▲</span>
+          <span className="text-caption text-white font-bold mt-0.5">▲</span>
         </div>
         {targetFfmi && (
           <div
@@ -288,41 +288,41 @@ function FfmiCeilingSection({
             style={{ left: `${toPercent(targetFfmi)}%`, transform: 'translateX(-50%)' }}
           >
             <div className="w-1 h-4 bg-action rounded" />
-            <span className="text-[10px] text-action font-bold mt-0.5">○</span>
+            <span className="text-caption text-action font-bold mt-0.5">○</span>
           </div>
         )}
       </div>
 
-      <div className="flex justify-between text-[10px] text-ink-3 mb-4">
+      <div className="flex justify-between text-caption text-ink-3 mb-4">
         {[18, 20, 22, 24, 26].map((val) => (
           <span key={val}>{val}</span>
         ))}
       </div>
 
       <div className="space-y-2">
-        <div className="flex justify-between text-xs">
+        <div className="flex justify-between text-caption">
           <span className="text-ink-2">Current FFMI</span>
           <span className="text-ink font-medium">{currentFfmi.toFixed(1)}</span>
         </div>
         {targetFfmi && (
-          <div className="flex justify-between text-xs">
+          <div className="flex justify-between text-caption">
             <span className="text-ink-2">Target FFMI</span>
             <span className="text-action font-medium">{targetFfmi.toFixed(1)}</span>
           </div>
         )}
         {feasibility && (
-          <div className="flex justify-between text-xs">
+          <div className="flex justify-between text-caption">
             <span className="text-ink-2">Feasibility</span>
             <span className={`font-medium ${feasibility.color}`}>{feasibility.label}</span>
           </div>
         )}
-        <div className="flex justify-between text-xs">
+        <div className="flex justify-between text-caption">
           <span className="text-ink-2">
             Natural ceiling estimate ({experience ?? 'intermediate'})
           </span>
           <span className="text-ink-2">~{naturalCeiling.toFixed(1)}</span>
         </div>
-        <div className="flex justify-between text-xs">
+        <div className="flex justify-between text-caption">
           <span className="text-ink-2">Distance to ceiling</span>
           <span className="text-ink-2">~{distanceToCeiling.toFixed(1)}</span>
         </div>
@@ -409,7 +409,7 @@ function WeightProjectionSection({
 
   if (weightHistory.length < 2) {
     return (
-      <p className="text-xs text-ink-3">
+      <p className="text-caption text-ink-3">
         Add more weigh-ins to see your weight projection.
       </p>
     );
@@ -428,7 +428,7 @@ function WeightProjectionSection({
 
   return (
     <div>
-      <p className="text-[10px] text-ink-3 mb-2">
+      <p className="text-caption text-ink-3 mb-2">
         {mesocycle
           ? `Scope: this mesocycle (week ${mesocycle.currentWeek} of ${mesocycle.totalWeeks})`
           : `Scope: last 90 days of weigh-ins, projected ${DEFAULT_PROJECTION_WEEKS - currentWeek} weeks ahead`}
@@ -489,9 +489,9 @@ function WeightProjectionSection({
 
       <div className="mt-3 pt-3 border-t border-sep grid grid-cols-3 gap-2 text-center">
         <div>
-          <p className="text-[10px] text-ink-3 uppercase">Weekly Rate</p>
+          <p className="text-caption text-ink-3">Weekly rate</p>
           <p
-            className={`text-sm font-medium ${
+            className={`text-subhead font-medium ${
               currentWeekRate < 0
                 ? 'text-status-ok'
                 : currentWeekRate > 0
@@ -504,16 +504,16 @@ function WeightProjectionSection({
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-ink-3 uppercase">Projected End</p>
-          <p className="text-sm font-medium text-ink">
+          <p className="text-caption text-ink-3">Projected end</p>
+          <p className="text-subhead font-medium text-ink">
             {projectedEndWeight.toFixed(1)} {unit}
           </p>
         </div>
         {targetWeightDisplay && (
           <div>
-            <p className="text-[10px] text-ink-3 uppercase">vs Target</p>
+            <p className="text-caption text-ink-3">vs Target</p>
             <p
-              className={`text-sm font-medium ${
+              className={`text-subhead font-medium ${
                 Math.abs(projectedEndWeight - targetWeightDisplay) < 1
                   ? 'text-status-ok'
                   : projectedEndWeight > targetWeightDisplay
@@ -537,17 +537,17 @@ function WeightProjectionSection({
       {partition && projectedGain > 0.1 && (
         <div className="mt-3 pt-3 border-t border-sep" data-testid="projection-partition">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] text-ink-3 uppercase">Projected gain split</p>
-            <span className="text-[10px] text-ink-2" data-testid="projection-partition-source">
+            <p className="text-caption text-ink-3">Projected gain split</p>
+            <span className="text-caption text-ink-2" data-testid="projection-partition-source">
               {partition.label}
             </span>
           </div>
-          <p className="text-xs text-ink-2 mt-1">
+          <p className="text-caption text-ink-2 mt-1">
             +{projectedGain.toFixed(1)} {unit} → ~{(projectedGain * partition.leanFractionOfGain).toFixed(1)} lean
             {' / '}~{(projectedGain * (1 - partition.leanFractionOfGain)).toFixed(1)} fat
           </p>
           {partition.source === 'waist' && partition.anchor && (
-            <p className="text-[10px] text-ink-3 mt-1">
+            <p className="text-caption text-ink-3 mt-1">
               Waist trend {partition.anchor.deltaWaistIn >= 0 ? '+' : ''}
               {partition.anchor.deltaWaistIn.toFixed(2)}&quot; vs{' '}
               {partition.anchor.deltaWeightLb >= 0 ? '+' : ''}

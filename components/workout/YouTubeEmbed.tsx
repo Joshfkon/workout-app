@@ -65,7 +65,7 @@ export function YouTubeEmbed({ videoId, title = 'Exercise video', fallback = nul
             </span>
           </button>
         )}
-        <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-ink-2 pointer-events-none">
+        <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-caption text-ink-2 pointer-events-none">
           YouTube
         </div>
       </div>

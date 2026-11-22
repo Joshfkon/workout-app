@@ -114,10 +114,10 @@ export function ExerciseHistorySparkline({
   return (
     <div className="p-3 bg-fill/50 rounded-lg" data-testid="history-sparkline">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-ink-2 uppercase tracking-wider">
+        <span className="text-caption font-medium text-ink-2">
           Last {Math.round(SPARKLINE_WINDOW_DAYS / 7)} Weeks
         </span>
-        <span className="text-xs text-ink-3">
+        <span className="text-caption text-ink-3">
           {METRIC_LABELS[metric]} · {points.length} sessions
           {gymLabel && (
             <span data-testid="history-sparkline-gym"> · {gymLabel}</span>
@@ -140,7 +140,7 @@ export function ExerciseHistorySparkline({
           strokeLinecap="round"
         />
       </svg>
-      <div className="mt-1 flex items-center justify-between text-xs">
+      <div className="mt-1 flex items-center justify-between text-caption">
         <span className="text-ink-3">{formatValue(firstDisplay)}</span>
         <span>
           <span className="text-ink">{formatValue(latestDisplay)}</span>{' '}

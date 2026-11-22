@@ -79,7 +79,7 @@ export const RPEExplainer = memo(function RPEExplainer({
       <div className="flex items-center justify-center gap-4">
         <div
           className={cn(
-            'w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold',
+            'w-16 h-16 rounded-full flex items-center justify-center text-title font-bold',
             'bg-fill border-2',
             explanation.color.replace('text-', 'border-')
           )}

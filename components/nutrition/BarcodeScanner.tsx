@@ -1,5 +1,6 @@
 'use client';
 
+import { IconPencil } from '@tabler/icons-react';
 import { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Capacitor } from '@capacitor/core';
@@ -180,7 +181,7 @@ function NativeScanOverlay({
       </div>
 
       <p
-        className="text-center text-white/90 text-sm"
+        className="text-center text-white/90 text-subhead"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 2.5rem)' }}
       >
         Point your camera at a barcode
@@ -189,7 +190,7 @@ function NativeScanOverlay({
   );
 }
 
-/** Error / info notice with an optional "Create Custom Food" CTA. */
+/** Error / info notice with an optional "Create custom food" CTA. */
 function ScanErrorNotice({
   message,
   type,
@@ -217,7 +218,7 @@ function ScanErrorNotice({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         )}
-        <p className={`text-sm ${type === 'error' ? 'text-status-bad' : 'text-ink-2'}`}>
+        <p className={`text-subhead ${type === 'error' ? 'text-status-bad' : 'text-ink-2'}`}>
           {message}
         </p>
       </div>
@@ -232,7 +233,7 @@ function ScanErrorNotice({
           <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Create Custom Food
+          Create custom food
         </Button>
       )}
     </div>
@@ -898,7 +899,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   };
 
   // Opening the scanner IS the request to scan: start the camera straight
-  // away instead of making the user tap "Start Camera Scanner" every time.
+  // away instead of making the user tap "Start camera scanner" every time.
   // The button stays as the fallback after an error or a manual stop.
   const autoStartedRef = useRef(false);
   useEffect(() => {
@@ -920,8 +921,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       <div className="bg-fill rounded-lg border border-sep overflow-hidden">
         <div className="flex items-center justify-between p-3 border-b border-sep">
           <div className="flex items-center gap-2">
-            <span className="text-lg">📝</span>
-            <span className="font-medium text-ink">New Food</span>
+            <IconPencil className="h-5 w-5 text-ink-2" stroke={1.75} aria-hidden="true" />
+            <span className="font-medium text-ink">New food</span>
           </div>
           <button onClick={() => setShowCustomForm(false)} className="p-1 text-ink-2 hover:text-ink">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -931,7 +932,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         </div>
 
         <div className="p-4 space-y-3">
-          <p className="text-xs text-ink-2">
+          <p className="text-caption text-ink-2">
             Barcode: <span className="font-mono text-ink-2">{notFoundBarcode}</span>
           </p>
 
@@ -957,7 +958,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           {/* Optional macros - default to 0 when left blank */}
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-xs text-ink-3 mb-1">Protein (g)</label>
+              <label className="block text-caption text-ink-3 mb-1">Protein (g)</label>
               <input
                 type="number"
                 step="0.1"
@@ -969,7 +970,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               />
             </div>
             <div>
-              <label className="block text-xs text-ink-3 mb-1">Carbs (g)</label>
+              <label className="block text-caption text-ink-3 mb-1">Carbs (g)</label>
               <input
                 type="number"
                 step="0.1"
@@ -981,7 +982,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               />
             </div>
             <div>
-              <label className="block text-xs text-ink-3 mb-1">Fat (g)</label>
+              <label className="block text-caption text-ink-3 mb-1">Fat (g)</label>
               <input
                 type="number"
                 step="0.1"
@@ -1003,7 +1004,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             Save &amp; log
           </Button>
 
-          <p className="text-[10px] text-ink-3 text-center">
+          <p className="text-caption text-ink-3 text-center">
             Logged as {DEFAULT_SERVING_SIZE}. Saved to your foods — scanning this barcode again logs it instantly.
           </p>
         </div>
@@ -1028,7 +1029,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
           </svg>
-          <span className="font-medium text-ink">Scan Barcode</span>
+          <span className="font-medium text-ink">Scan barcode</span>
         </div>
         <button onClick={onClose} className="p-1 text-ink-2 hover:text-ink">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1080,7 +1081,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                     <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                     </svg>
-                    Start Camera Scanner
+                    Start camera scanner
                   </Button>
                   {!Capacitor.isNativePlatform() && (
                     <Button
@@ -1093,10 +1094,10 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
-                      Take Photo Instead
+                      Take photo instead
                     </Button>
                   )}
-                  <p className="text-xs text-ink-3 mt-2 text-center">
+                  <p className="text-caption text-ink-3 mt-2 text-center">
                     Point your camera at a barcode to scan
                   </p>
                 </div>
@@ -1108,7 +1109,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                   {isLookingUp && (
                     <div className="absolute top-2 left-2 right-2 flex items-center justify-center gap-2 bg-black/60 rounded-lg px-3 py-2">
                       <LoadingAnimation type="dots" size="sm" />
-                      <span className="text-xs text-white">Looking up product...</span>
+                      <span className="text-caption text-white">Looking up product...</span>
                     </div>
                   )}
 
@@ -1129,7 +1130,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
                   <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2">
                     <Button onClick={stopWebScanner} variant="secondary" size="sm">
-                      Stop Scanner
+                      Stop scanner
                     </Button>
                     <Button
                       onClick={() => photoInputRef.current?.click()}
@@ -1140,7 +1141,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
-                      Take Photo
+                      Take photo
                     </Button>
                   </div>
                 </>
@@ -1149,7 +1150,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
             {/* Manual entry */}
             <div className="border-t border-sep pt-4">
-              <p className="text-sm text-ink-2 mb-2">Or enter barcode manually:</p>
+              <p className="text-subhead text-ink-2 mb-2">Or enter barcode manually:</p>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -1162,7 +1163,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                   className="flex-1 px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                 />
                 <Button onClick={handleManualLookup} disabled={!manualBarcode.trim()}>
-                  Look Up
+                  Look up
                 </Button>
               </div>
             </div>
@@ -1183,8 +1184,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       {/* Tips */}
       <div className="px-4 pb-2">
         <div className="p-2 bg-card/50 rounded-lg">
-          <p className="text-xs text-ink-3">
-            💡 Hold the barcode 6–10 inches (15–25 cm) from the camera — too close and it can&apos;t focus. If it stays blurry, use Take Photo instead.
+          <p className="text-caption text-ink-3">
+            Hold the barcode 6–10 inches (15–25 cm) from the camera — too close and it can&apos;t focus. If it stays blurry, use Take Photo instead.
           </p>
         </div>
       </div>
@@ -1193,8 +1194,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       {process.env.NODE_ENV === 'development' && (
         <div className="px-4 pb-4">
           <div className="p-2 bg-black/50 rounded-lg border border-sep">
-            <p className="text-[10px] text-yellow-400 font-mono mb-1">DEBUG:</p>
-            <pre className="text-[10px] text-green-400 font-mono overflow-x-auto whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+            <p className="text-caption text-yellow-400 font-mono mb-1">DEBUG:</p>
+            <pre className="text-caption text-green-400 font-mono overflow-x-auto whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
               {debugInfo}
             </pre>
           </div>

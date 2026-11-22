@@ -132,21 +132,21 @@ export function NutritionTargetsModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Set Nutrition Targets"
+      title="Set nutrition targets"
       description="Set your daily nutrition goals. You can adjust these anytime."
       size="md"
     >
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
           {error && (
-            <div className="p-3 text-sm text-status-warn bg-status-warn/10 border border-status-warn/20 rounded-lg">
+            <div className="p-3 text-subhead text-status-warn bg-status-warn/10 border border-status-warn/20 rounded-lg">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="calories" className="block text-sm font-medium text-ink-2 mb-1">
+              <label htmlFor="calories" className="block text-subhead font-medium text-ink-2 mb-1">
                 Calories
               </label>
               <Input
@@ -159,19 +159,19 @@ export function NutritionTargetsModal({
                 required
                 autoFocus
               />
-              <p className="mt-1 text-xs text-ink-3">
+              <p className="mt-1 text-caption text-ink-3">
                 Daily calorie target
               </p>
               {lowCalorieWarning && (
-                <p role="alert" data-testid="low-calorie-warning" className="mt-1 text-xs text-status-warn">
+                <p role="alert" data-testid="low-calorie-warning" className="mt-1 text-caption text-status-warn">
                   {lowCalorieWarning}
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="meals" className="block text-sm font-medium text-ink-2 mb-1">
-                Meals per Day
+              <label htmlFor="meals" className="block text-subhead font-medium text-ink-2 mb-1">
+                Meals per day
               </label>
               <Input
                 id="meals"
@@ -182,14 +182,14 @@ export function NutritionTargetsModal({
                 onChange={(e) => setMealsPerDay(e.target.value)}
                 placeholder="3"
               />
-              <p className="mt-1 text-xs text-ink-3">
+              <p className="mt-1 text-caption text-ink-3">
                 For calorie suggestions
               </p>
             </div>
           </div>
 
           <div>
-            <label htmlFor="protein" className="block text-sm font-medium text-ink-2 mb-1">
+            <label htmlFor="protein" className="block text-subhead font-medium text-ink-2 mb-1">
               Protein (g)
             </label>
             <Input
@@ -201,13 +201,13 @@ export function NutritionTargetsModal({
               placeholder="150"
               required
             />
-            <p className="mt-1 text-xs text-ink-3">
+            <p className="mt-1 text-caption text-ink-3">
               {protein ? `${Math.round(parseFloat(protein) * 4)} calories (4 cal/g)` : '4 calories per gram'}
             </p>
           </div>
 
           <div>
-            <label htmlFor="carbs" className="block text-sm font-medium text-ink-2 mb-1">
+            <label htmlFor="carbs" className="block text-subhead font-medium text-ink-2 mb-1">
               Carbs (g)
             </label>
             <Input
@@ -219,13 +219,13 @@ export function NutritionTargetsModal({
               placeholder="200"
               required
             />
-            <p className="mt-1 text-xs text-ink-3">
+            <p className="mt-1 text-caption text-ink-3">
               {carbs ? `${Math.round(parseFloat(carbs) * 4)} calories (4 cal/g)` : '4 calories per gram'}
             </p>
           </div>
 
           <div>
-            <label htmlFor="fat" className="block text-sm font-medium text-ink-2 mb-1">
+            <label htmlFor="fat" className="block text-subhead font-medium text-ink-2 mb-1">
               Fat (g)
             </label>
             <Input
@@ -237,14 +237,14 @@ export function NutritionTargetsModal({
               placeholder="65"
               required
             />
-            <p className="mt-1 text-xs text-ink-3">
+            <p className="mt-1 text-caption text-ink-3">
               {fat ? `${Math.round(parseFloat(fat) * 9)} calories (9 cal/g)` : '9 calories per gram'}
             </p>
           </div>
 
           {calories && protein && carbs && fat && (
             <div className="p-3 bg-fill rounded-lg">
-              <p className="text-sm text-ink-2">
+              <p className="text-subhead text-ink-2">
                 Macro breakdown: {Math.round((parseFloat(protein) * 4 / parseFloat(calories)) * 100)}% protein,{' '}
                 {Math.round((parseFloat(carbs) * 4 / parseFloat(calories)) * 100)}% carbs,{' '}
                 {Math.round((parseFloat(fat) * 9 / parseFloat(calories)) * 100)}% fat
@@ -259,10 +259,10 @@ export function NutritionTargetsModal({
               onClick={() => setShowMealNames(!showMealNames)}
               className="flex items-center justify-between w-full text-left"
             >
-              <span className="text-sm font-medium text-ink-2">
-                Customize Meal Names
+              <span className="text-subhead font-medium text-ink-2">
+                Customize meal names
               </span>
-              <span className="text-ink-3 text-sm">
+              <span className="text-ink-3 text-subhead">
                 {showMealNames ? '▲' : '▼'}
               </span>
             </button>
@@ -271,7 +271,7 @@ export function NutritionTargetsModal({
               <div className="mt-3 grid grid-cols-2 gap-3">
                 {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => (
                   <div key={meal}>
-                    <label className="block text-xs text-ink-3 mb-1">
+                    <label className="block text-caption text-ink-3 mb-1">
                       {DEFAULT_MEAL_NAMES[meal]}
                     </label>
                     <input
@@ -279,11 +279,11 @@ export function NutritionTargetsModal({
                       value={mealNames[meal] || ''}
                       onChange={(e) => setMealNames(prev => ({ ...prev, [meal]: e.target.value }))}
                       placeholder={DEFAULT_MEAL_NAMES[meal]}
-                      className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink placeholder-ink-3 shadow-card"
+                      className="w-full px-3 py-2 bg-card rounded-lg text-subhead text-ink placeholder-ink-3 shadow-card"
                     />
                   </div>
                 ))}
-                <p className="col-span-2 text-xs text-ink-3">
+                <p className="col-span-2 text-caption text-ink-3">
                   Leave blank to use default names
                 </p>
               </div>
@@ -296,7 +296,7 @@ export function NutritionTargetsModal({
             Cancel
           </Button>
           <Button type="submit" variant="primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving...' : 'Save Targets'}
+            {isSubmitting ? 'Saving...' : 'Save targets'}
           </Button>
         </ModalFooter>
       </form>

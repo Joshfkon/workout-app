@@ -88,7 +88,7 @@ export const SafetyTierBadge = memo(function SafetyTierBadge({
             'absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2',
             'w-64 p-3 rounded-lg',
             'bg-fill border border-sep shadow-lg',
-            'text-xs text-ink-2',
+            'text-caption text-ink-2',
             'animate-in fade-in-0 zoom-in-95 duration-200'
           )}
         >
@@ -170,7 +170,7 @@ export const SafetyTierLegend = memo(function SafetyTierLegend({
         return (
           <div key={tier} className="flex items-start gap-2">
             <SafetyTierBadge tier={tier} variant="short" showTooltip={false} />
-            <span className="text-sm text-ink-2">{info.description}</span>
+            <span className="text-subhead text-ink-2">{info.description}</span>
           </div>
         );
       })}

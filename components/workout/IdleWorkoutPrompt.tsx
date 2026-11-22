@@ -30,10 +30,10 @@ export function IdleWorkoutPrompt({ onDismiss, onFinish }: IdleWorkoutPromptProp
           <IconAlertCircle className="w-5 h-5 text-status-warn" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-status-warn mb-1">
+          <h3 className="text-subhead font-semibold text-status-warn mb-1">
             Still training?
           </h3>
-          <p className="text-sm text-status-warn/90 mb-3">
+          <p className="text-subhead text-status-warn/90 mb-3">
             It&apos;s been ~20 minutes since your last set. Are you still working out?
           </p>
           <div className="flex gap-2">

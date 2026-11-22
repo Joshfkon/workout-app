@@ -47,7 +47,7 @@ export function MuscleWikiVideo({ src, name }: MuscleWikiVideoProps) {
           }}
         />
       )}
-      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-ink-2">
+      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-caption text-ink-2">
         MuscleWiki
       </div>
     </div>

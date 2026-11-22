@@ -50,8 +50,8 @@ export function BodyCompChart({ data }: BodyCompChartsProps) {
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={(value: number, name: string) => {
-            if (name === 'leanMass') return [`${value.toFixed(1)} kg`, 'Lean Mass'];
-            if (name === 'fatMass') return [`${value.toFixed(1)} kg`, 'Fat Mass'];
+            if (name === 'leanMass') return [`${value.toFixed(1)} kg`, 'Lean mass'];
+            if (name === 'fatMass') return [`${value.toFixed(1)} kg`, 'Fat mass'];
             return [value, name];
           }}
         />
@@ -73,7 +73,7 @@ export function BodyCompChart({ data }: BodyCompChartsProps) {
           stroke="#22c55e"
           strokeWidth={2}
           fill="url(#leanGradient)"
-          name="Lean Mass"
+          name="Lean mass"
         />
         <Area
           type="monotone"
@@ -82,7 +82,7 @@ export function BodyCompChart({ data }: BodyCompChartsProps) {
           stroke="#ef4444"
           strokeWidth={2}
           fill="url(#fatGradient)"
-          name="Fat Mass"
+          name="Fat mass"
         />
       </AreaChart>
     </ResponsiveContainer>

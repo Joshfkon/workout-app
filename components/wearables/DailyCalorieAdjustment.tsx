@@ -35,11 +35,11 @@ export function DailyCalorieAdjustment({
         {/* Target Header */}
         <div>
           <div className="flex items-baseline justify-between">
-            <span className="text-sm text-ink-3">Calorie Target</span>
+            <span className="text-subhead text-ink-3">Calorie target</span>
             {hasAdjustment && (
               <span
-                className={`text-sm font-medium ${
-                  target.adjustment > 0 ? 'text-green-500' : 'text-yellow-500'
+                className={`text-subhead font-medium ${
+                  target.adjustment > 0 ? 'text-status-ok' : 'text-status-warn'
                 }`}
               >
                 {target.adjustment > 0 ? '+' : ''}
@@ -48,18 +48,18 @@ export function DailyCalorieAdjustment({
             )}
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold">
+            <span className="text-title font-bold">
               {target.adjustedTarget.toLocaleString()}
             </span>
             <span className="text-ink-3">cal</span>
             {hasAdjustment && (
-              <span className="text-sm text-ink-2">
+              <span className="text-subhead text-ink-2">
                 (base: {target.baseTarget.toLocaleString()})
               </span>
             )}
           </div>
           {hasAdjustment && (
-            <p className="text-sm text-ink-2 mt-1">
+            <p className="text-subhead text-ink-2 mt-1">
               {target.reason}
             </p>
           )}
@@ -67,13 +67,13 @@ export function DailyCalorieAdjustment({
 
         {/* Progress Bar */}
         <div className="space-y-1">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-subhead">
             <span className="text-ink-2">
               {currentCalories.toLocaleString()} eaten
             </span>
             <span
               className={`font-medium ${
-                remaining >= 0 ? 'text-ink-2' : 'text-red-500'
+                remaining >= 0 ? 'text-ink-2' : 'text-status-bad'
               }`}
             >
               {remaining >= 0
@@ -97,13 +97,13 @@ export function DailyCalorieAdjustment({
             className="w-full"
             onClick={() => setShowDetails(!showDetails)}
           >
-            {showDetails ? 'Hide Details' : 'Why is my target different?'}
+            {showDetails ? 'Hide details' : 'Why is my target different?'}
           </Button>
         )}
 
         {/* Details Panel */}
         {showDetails && (
-          <div className="p-3 bg-fill rounded-lg text-sm space-y-2">
+          <div className="p-3 bg-fill rounded-lg text-subhead space-y-2">
             <div className="flex justify-between">
               <span>Today&apos;s TDEE</span>
               <span>{target.tdeeEstimate.toLocaleString()} cal</span>
@@ -135,11 +135,11 @@ export function DailyCalorieAdjustment({
 }
 
 function getProgressColor(progress: number): string {
-  if (progress < 50) return 'bg-blue-500';
-  if (progress < 80) return 'bg-green-500';
-  if (progress < 95) return 'bg-yellow-500';
+  if (progress < 50) return 'bg-action';
+  if (progress < 80) return 'bg-status-ok';
+  if (progress < 95) return 'bg-status-warn';
   if (progress <= 100) return 'bg-orange-500';
-  return 'bg-red-500';
+  return 'bg-status-bad';
 }
 
 /**
@@ -162,17 +162,17 @@ export function CompactCalorieTarget({
       </span>
       {hasAdjustment && (
         <span
-          className={`text-xs px-1.5 py-0.5 rounded ${
+          className={`text-caption px-1.5 py-0.5 rounded ${
             target.adjustment > 0
-              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+              ? 'bg-status-ok-tint text-status-ok'
+              : 'bg-status-warn-tint text-status-warn'
           }`}
         >
           {target.adjustment > 0 ? '+' : ''}
           {target.adjustment}
         </span>
       )}
-      <span className="text-ink-3 text-sm">
+      <span className="text-ink-3 text-subhead">
         ({remaining >= 0 ? remaining.toLocaleString() : 0} left)
       </span>
     </div>
@@ -192,23 +192,23 @@ export function ActivityBadge({
   activityLevel: string;
 }) {
   const levelColors: Record<string, string> = {
-    sedentary: 'bg-ink-2 text-ink-3',
-    light: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-    moderate: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-    active: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
-    very_active: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+    sedentary: 'bg-fill text-ink-2',
+    light: 'bg-action-tint text-action',
+    moderate: 'bg-status-ok-tint text-status-ok',
+    active: 'bg-status-warn-tint text-status-warn',
+    very_active: 'bg-status-bad-tint text-status-bad',
   };
 
   return (
     <div className="flex items-center gap-2">
       <span className="text-ink-2">
-        👟 {steps.toLocaleString()} steps
+        {steps.toLocaleString()} steps
       </span>
       {workoutLogged && (
-        <span className="text-ink-2">💪 Workout</span>
+        <span className="text-ink-2">Workout</span>
       )}
       <span
-        className={`text-xs px-2 py-0.5 rounded-full ${levelColors[activityLevel] || levelColors.sedentary}`}
+        className={`text-caption px-2 py-0.5 rounded-full ${levelColors[activityLevel] || levelColors.sedentary}`}
       >
         {formatActivityLevel(activityLevel)}
       </span>

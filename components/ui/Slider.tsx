@@ -37,13 +37,13 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
             {label && (
               <label
                 htmlFor={sliderId}
-                className="text-sm font-medium text-ink"
+                className="text-subhead font-medium text-ink"
               >
                 {label}
               </label>
             )}
             {showValue && (
-              <span className="text-sm font-mono text-action">
+              <span className="text-subhead font-mono text-action">
                 {valueFormatter(currentValue)}
               </span>
             )}
@@ -86,7 +86,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
           />
         </div>
         {marks && (
-          <div className="relative mt-1 flex justify-between text-xs text-ink-3">
+          <div className="relative mt-1 flex justify-between text-caption text-ink-3">
             {marks.map((mark) => (
               <span key={mark.value}>{mark.label}</span>
             ))}

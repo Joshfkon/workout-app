@@ -71,7 +71,7 @@ export function WarmupProtocol({
       >
         <div className="flex items-center gap-2">
           <div
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-caption font-medium ${
               allCompleted
                 ? 'bg-status-ok/20 text-status-ok'
                 : 'bg-sep text-ink-2'
@@ -79,10 +79,10 @@ export function WarmupProtocol({
           >
             {allCompleted ? '✓' : completedSets.size}
           </div>
-          <span className="text-sm font-medium text-ink">
-            Warmup Protocol
+          <span className="text-subhead font-medium text-ink">
+            Warmup protocol
           </span>
-          <span className="text-xs text-ink-3">
+          <span className="text-caption text-ink-3">
             ({completedSets.size}/{warmupSets.length})
           </span>
           {/* Why-warmup rationale — stop propagation so opening the tooltip
@@ -167,7 +167,7 @@ export function WarmupProtocol({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3">
                       <span
-                        className={`font-mono text-sm ${
+                        className={`font-mono text-subhead ${
                           isCompleted ? 'text-ink-3' : 'text-ink'
                         }`}
                       >
@@ -175,20 +175,20 @@ export function WarmupProtocol({
                       </span>
                       <span className="text-ink-3">×</span>
                       <span
-                        className={`font-mono text-sm ${
+                        className={`font-mono text-subhead ${
                           isCompleted ? 'text-ink-3' : 'text-ink'
                         }`}
                       >
                         {set.targetReps} reps
                       </span>
                       {set.percentOfWorking > 0 && (
-                        <span className="text-xs text-ink-3">
+                        <span className="text-caption text-ink-3">
                           ({set.percentOfWorking}%)
                         </span>
                       )}
                     </div>
                     <p
-                      className={`text-xs mt-0.5 ${
+                      className={`text-caption mt-0.5 ${
                         isCompleted ? 'text-ink-3' : 'text-ink-3'
                       }`}
                     >
@@ -208,7 +208,7 @@ export function WarmupProtocol({
                   setCompletedSets(new Set(warmupSets.map((s) => s.setNumber)));
                   onComplete?.();
                 }}
-                className="w-full text-xs text-ink-3 hover:text-ink-2 transition-colors"
+                className="w-full text-caption text-ink-3 hover:text-ink-2 transition-colors"
               >
                 Skip warmup (already warm)
               </button>

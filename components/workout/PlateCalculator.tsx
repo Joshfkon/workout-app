@@ -188,13 +188,13 @@ export const PlateCalculator = memo(function PlateCalculator({
     <div className="space-y-4">
       {/* Equipment Mode Toggle */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-ink-2">Equipment</label>
+        <label className="text-subhead font-medium text-ink-2">Equipment</label>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => setEquipmentMode('barbell')}
             aria-pressed={!isMachine}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-2 rounded-lg text-subhead font-medium transition-colors ${
               !isMachine
                 ? 'bg-action text-on-action'
                 : 'bg-sep text-ink hover:bg-sep'
@@ -206,7 +206,7 @@ export const PlateCalculator = memo(function PlateCalculator({
             type="button"
             onClick={() => setEquipmentMode('machine')}
             aria-pressed={isMachine}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-2 rounded-lg text-subhead font-medium transition-colors ${
               isMachine
                 ? 'bg-action text-on-action'
                 : 'bg-sep text-ink hover:bg-sep'
@@ -220,8 +220,8 @@ export const PlateCalculator = memo(function PlateCalculator({
       {/* Starting Weight Input — machine mode only */}
       {isMachine && (
         <div className="space-y-2">
-          <label className="text-sm font-medium text-ink-2">
-            Starting Weight <span className="text-xs text-ink-2">(machine base, 0 if plates only)</span>
+          <label className="text-subhead font-medium text-ink-2">
+            Starting Weight <span className="text-caption text-ink-2">(machine base, 0 if plates only)</span>
           </label>
           <div className="relative">
             <input
@@ -241,14 +241,14 @@ export const PlateCalculator = memo(function PlateCalculator({
 
       {/* Weight Input with labeled ± steppers (step by the smallest plate pair) */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-ink-2">Target Weight</label>
+        <label className="text-subhead font-medium text-ink-2">Target weight</label>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => handleQuickAdjust(-increment)}
             aria-label={`Decrease target weight by ${increment}`}
             title={`−${increment}`}
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-sep text-base font-semibold text-ink transition-colors hover:bg-sep active:bg-fill"
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-sep text-body font-semibold text-ink transition-colors hover:bg-sep active:bg-fill"
           >
             −{increment}
           </button>
@@ -258,7 +258,7 @@ export const PlateCalculator = memo(function PlateCalculator({
               inputMode="decimal"
               value={targetWeight}
               onChange={handleWeightChange}
-              className="w-full px-4 py-2 bg-fill border border-sep rounded-lg text-ink text-center text-lg font-semibold focus:outline-none focus:border-action"
+              className="w-full px-4 py-2 bg-fill border border-sep rounded-lg text-ink text-center text-headline font-semibold focus:outline-none focus:border-action"
               placeholder={`Enter weight in ${unit}`}
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-2 font-medium">
@@ -270,7 +270,7 @@ export const PlateCalculator = memo(function PlateCalculator({
             onClick={() => handleQuickAdjust(increment)}
             aria-label={`Increase target weight by ${increment}`}
             title={`+${increment}`}
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-sep text-base font-semibold text-ink transition-colors hover:bg-sep active:bg-fill"
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-sep text-body font-semibold text-ink transition-colors hover:bg-sep active:bg-fill"
           >
             +{increment}
           </button>
@@ -280,8 +280,8 @@ export const PlateCalculator = memo(function PlateCalculator({
       {/* Weight Increment — which smallest plate pair the user owns */}
       <div className="space-y-2">
         <div className="flex items-baseline justify-between">
-          <label className="text-sm font-medium text-ink-2">Weight Increment</label>
-          <span className="text-xs text-ink-2">smallest plates you have</span>
+          <label className="text-subhead font-medium text-ink-2">Weight increment</label>
+          <span className="text-caption text-ink-2">smallest plates you have</span>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {smallestPlateOptions.map((plate) => (
@@ -290,14 +290,14 @@ export const PlateCalculator = memo(function PlateCalculator({
               type="button"
               onClick={() => handleSmallestPlateChange(plate)}
               aria-pressed={smallestPlate === plate}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-2 rounded-lg text-subhead font-medium transition-colors ${
                 smallestPlate === plate
                   ? 'bg-action text-on-action'
                   : 'bg-sep text-ink hover:bg-sep'
               }`}
             >
               <span className="block">±{plate * 2}{unit}</span>
-              <span className={`block text-xs ${smallestPlate === plate ? 'text-white/75' : 'text-ink-2'}`}>
+              <span className={`block text-caption ${smallestPlate === plate ? 'text-white/75' : 'text-ink-2'}`}>
                 {plate}{unit} plates
               </span>
             </button>
@@ -308,7 +308,7 @@ export const PlateCalculator = memo(function PlateCalculator({
       {/* Barbell Type Selector - only show if not a machine */}
       {!isMachine && (
         <div className="space-y-2">
-          <label className="text-sm font-medium text-ink-2">Barbell Type</label>
+          <label className="text-subhead font-medium text-ink-2">Barbell type</label>
           <div className="grid grid-cols-2 gap-2">
             {(Object.keys(BARBELL_WEIGHTS[unit]) as BarbellType[]).map((type) => (
               <button
@@ -316,7 +316,7 @@ export const PlateCalculator = memo(function PlateCalculator({
                 type="button"
                 onClick={() => setBarbellType(type)}
                 aria-pressed={barbellType === type}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-2 rounded-lg text-subhead font-medium transition-colors ${
                   barbellType === type
                     ? 'bg-action text-on-action'
                     : 'bg-sep text-ink hover:bg-sep'
@@ -331,7 +331,7 @@ export const PlateCalculator = memo(function PlateCalculator({
 
       {/* Visual Barbell Display */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-ink-2">Plates per Side</label>
+        <label className="text-subhead font-medium text-ink-2">Plates per side</label>
         <BarbellVisualization
           calculation={calculation}
           unit={unit}
@@ -385,13 +385,13 @@ function PlateBreakdown({
 
   return (
     <div className="bg-fill rounded-lg p-4">
-      <h4 className="text-sm font-semibold text-ink mb-2">Loading Instructions</h4>
+      <h4 className="text-subhead font-semibold text-ink mb-2">Loading instructions</h4>
       {!isMachine && (
-        <p className="text-sm text-ink-2 mb-2">
+        <p className="text-subhead text-ink-2 mb-2">
           Start with the {barbellLabel}
         </p>
       )}
-      <p className="text-sm text-ink-2 mb-2">Load each side, from the center out:</p>
+      <p className="text-subhead text-ink-2 mb-2">Load each side, from the center out:</p>
       <div className="flex flex-wrap items-center gap-2">
         {sortedPlates.map((p) => (
           <PlateChip key={p.weight} plate={p.weight} unit={unit} count={p.count} />
@@ -428,7 +428,7 @@ function CompactPlateDisplay({
     .sort((a, b) => b.weight - a.weight);
 
   return (
-    <div className="flex items-center gap-1 text-xs text-ink-2">
+    <div className="flex items-center gap-1 text-caption text-ink-2">
       <span>Load:</span>
       {sortedPlates.map((p, i) => (
         <span key={p.weight} className="flex items-center gap-0.5">

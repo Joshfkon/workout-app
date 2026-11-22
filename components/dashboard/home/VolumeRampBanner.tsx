@@ -25,7 +25,7 @@ export function VolumeRampBanner({ lowCount, week }: VolumeRampBannerProps) {
       <span className="w-9 h-9 rounded-lg bg-status-warn/15 text-status-warn flex items-center justify-center flex-shrink-0">
         <IconChartBar size={18} aria-hidden="true" />
       </span>
-      <p className="flex-1 text-[13px] text-ink leading-snug">
+      <p className="flex-1 text-subhead text-ink leading-snug">
         {week <= 1 ? (
           <>
             <span className="font-semibold text-ink">Wk 1 ramp:</span> {muscles} under the weekly minimum —

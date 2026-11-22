@@ -1,6 +1,6 @@
 'use client';
 
-import { IconTrophy, IconTarget, IconBarbell, IconCheck, IconChevronRight } from '@tabler/icons-react';
+import { IconBarbell, IconCheck, IconChevronRight, IconTarget, IconTrendingUp, IconTrophy } from '@tabler/icons-react';
 import { useState, useMemo } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import type {
@@ -42,7 +42,7 @@ import { successHaptic } from '@/lib/integrations/notifications';
 
 /**
  * Per-muscle end-of-session feedback. Captured in the finish popup
- * (MuscleGroupFeedbackModal, shown on the "Finish Workout" tap) and passed in
+ * (MuscleGroupFeedbackModal, shown on the "Finish workout" tap) and passed in
  * via initialMuscleRatings — the finish card itself no longer asks; it only
  * forwards the answers on submit. `pump` is optional: unanswered muscles
  * submit no pump and the default workload.
@@ -83,7 +83,7 @@ const QUALITY_CELL: Readonly<
   Record<SetQualityDisplay, { textClass: string; shortLabel: string }>
 > = {
   stimulative: { textClass: 'text-status-ok', shortLabel: '✓ Stim' },
-  maxed: { textClass: 'text-orange-400', shortLabel: '⚡ Max' },
+  maxed: { textClass: 'text-orange-400', shortLabel: 'Max' },
   effective: { textClass: 'text-action', shortLabel: '○ Eff' },
   easy: { textClass: 'text-ink-2', shortLabel: '– Easy' },
   junk: { textClass: 'text-ink-2', shortLabel: '— Junk' },
@@ -671,7 +671,7 @@ export function SessionSummary({
       return {
         blockId: block.id,
         exerciseId: block.exerciseId,
-        name: exercise?.name || 'Unknown Exercise',
+        name: exercise?.name || 'Unknown exercise',
         muscle: exercise?.primaryMuscle || 'other',
         isDuration,
         sets,
@@ -790,7 +790,7 @@ export function SessionSummary({
     <div data-testid="session-stat-strip" className="grid grid-cols-3 gap-2">
       {statTiles.map((tile) => (
         <div key={tile.label} className="rounded-card bg-card px-2 py-3 text-center shadow-card">
-          <p className={`text-[22px] font-bold leading-7 tabular-nums ${tile.tone === 'warn' ? 'text-status-warn' : 'text-ink'}`}>
+          <p className={`text-title font-bold leading-7 tabular-nums ${tile.tone === 'warn' ? 'text-status-warn' : 'text-ink'}`}>
             {tile.value}
           </p>
           <p className="text-caption text-ink-2">{tile.label}</p>
@@ -1029,7 +1029,7 @@ export function SessionSummary({
             </svg>
           )}
         </div>
-        <h2 className="text-2xl font-bold text-ink">Workout Summary</h2>
+        <h2 className="text-title font-bold text-ink">Workout summary</h2>
         <p className="text-ink-2 mt-1">
           {session.completedAt
             ? `Completed ${new Date(session.completedAt).toLocaleDateString()}`
@@ -1045,14 +1045,14 @@ export function SessionSummary({
         <Card >
           <div className="flex items-center gap-2 mb-3">
             <IconTrophy size={20} className="text-status-warn" aria-hidden="true" />
-            <h3 className="font-semibold text-status-warn">Personal Records</h3>
+            <h3 className="font-semibold text-status-warn">Personal records</h3>
           </div>
           <div className="space-y-2">
             {(showAllPRs ? personalRecords : personalRecords.slice(0, 3)).map((pr, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
                 <div>
                   <p className="font-medium text-ink">{pr.exerciseName}</p>
-                  <p className="text-xs text-ink-2">
+                  <p className="text-caption text-ink-2">
                     {pr.type === 'e1rm' && `New Est. 1RM: ${displayWeight(pr.value)}${weightUnit}`}
                     {pr.type === 'weight' && `New Weight PR: ${displayWeight(pr.value)}${weightUnit}`}
                     {pr.type === 'reps' && `New Reps PR: ${pr.value} reps`}
@@ -1060,13 +1060,13 @@ export function SessionSummary({
                     {pr.type === 'form' && 'Form PR: Cleaner technique!'}
                   </p>
                   {pr.formNote && (
-                    <p className={`text-xs mt-0.5 ${pr.form === 'clean' ? 'text-status-ok' : 'text-status-warn'}`}>
+                    <p className={`text-caption mt-0.5 ${pr.form === 'clean' ? 'text-status-ok' : 'text-status-warn'}`}>
                       {pr.formNote}
                     </p>
                   )}
                 </div>
                 <div className="text-right">
-                  <Badge variant="warning" className="bg-yellow-500/20 text-status-warn">
+                  <Badge variant="warning" className="bg-status-warn-tint text-status-warn">
                     {pr.type === 'reps' ? `+${pr.improvement}` : pr.type === 'duration' ? `+${pr.improvement}s` : pr.type === 'form' ? 'Form' : `+${pr.improvement}%`}
                   </Badge>
                 </div>
@@ -1075,7 +1075,7 @@ export function SessionSummary({
             {personalRecords.length > 3 && (
               <button
                 onClick={() => setShowAllPRs(!showAllPRs)}
-                className="text-sm text-status-warn hover:text-yellow-300"
+                className="text-subhead text-status-warn hover:text-status-warn"
               >
                 {showAllPRs ? 'Show less' : `+${personalRecords.length - 3} more PRs`}
               </button>
@@ -1089,9 +1089,9 @@ export function SessionSummary({
         <Card >
           <div className="flex items-center gap-2 mb-3">
             <IconTarget size={20} className="text-action" aria-hidden="true" />
-            <h3 className="font-semibold text-action">RPE Calibration Results</h3>
+            <h3 className="font-semibold text-action">RPE calibration results</h3>
           </div>
-          <p className="text-xs text-ink-2 mb-4">
+          <p className="text-caption text-ink-2 mb-4">
             AMRAP sets help calibrate your RPE perception for more accurate training prescriptions.
           </p>
           <div className="space-y-3">
@@ -1116,22 +1116,22 @@ export function SessionSummary({
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center mb-2">
                     <div>
-                      <p className="text-xs text-ink-2">Predicted</p>
-                      <p className="text-lg font-semibold text-ink">{cal.predictedMaxReps.toFixed(0)}</p>
+                      <p className="text-caption text-ink-2">Predicted</p>
+                      <p className="text-headline font-semibold text-ink">{cal.predictedMaxReps.toFixed(0)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-ink-2">Actual</p>
-                      <p className="text-lg font-semibold text-ink">{cal.actualMaxReps}</p>
+                      <p className="text-caption text-ink-2">Actual</p>
+                      <p className="text-headline font-semibold text-ink">{cal.actualMaxReps}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-ink-2">Bias</p>
-                      <p className={`text-lg font-semibold ${colors.text}`}>
+                      <p className="text-caption text-ink-2">Bias</p>
+                      <p className={`text-headline font-semibold ${colors.text}`}>
                         {cal.bias >= 0 ? '+' : ''}{cal.bias.toFixed(1)}
                       </p>
                     </div>
                   </div>
-                  <p className={`text-xs ${colors.text}`}>{verdict.message}</p>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-ink-2">
+                  <p className={`text-caption ${colors.text}`}>{verdict.message}</p>
+                  <div className="flex items-center gap-2 mt-2 text-caption text-ink-2">
                     <span>@ {displayWeight(cal.weightKg)}{weightUnit}</span>
                     <span>•</span>
                     <span className="capitalize">{cal.confidenceLevel} confidence</span>
@@ -1176,21 +1176,21 @@ export function SessionSummary({
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={`text-2xl font-bold ${
+                <span className={`text-title font-bold ${
                   qualityScore >= 80 ? 'text-status-ok' :
                   qualityScore >= 60 ? 'text-action' :
                   qualityScore >= 40 ? 'text-status-warn' : 'text-status-bad'
                 }`}>
                   {qualityScore}
                 </span>
-                <span className="text-xs text-ink-2">Quality</span>
+                <span className="text-caption text-ink-2">Quality</span>
               </div>
             </div>
 
             {/* Quality breakdown — one row per display bucket, ordered by
                 stimulus credit (see lib/training/setQualityDisplay) */}
             <div className="flex-1 space-y-2">
-              <p className="text-sm font-medium text-ink mb-2">Set Quality Breakdown</p>
+              <p className="text-subhead font-medium text-ink mb-2">Set quality breakdown</p>
               {QUALITY_BREAKDOWN_ROWS.map(({ bucket, name, dotClass }) => {
                 const count = qualityBreakdown[bucket] || 0;
                 if (count === 0) return null;
@@ -1201,8 +1201,8 @@ export function SessionSummary({
                     title={SET_QUALITY_DISPLAY_META[bucket].description}
                   >
                     <div className={`w-3 h-3 rounded-full ${dotClass}`} />
-                    <span className="text-sm text-ink">{count} {name}</span>
-                    <span className="text-xs text-ink-2 ml-auto">
+                    <span className="text-subhead text-ink">{count} {name}</span>
+                    <span className="text-caption text-ink-2 ml-auto">
                       {Math.round((count / totalSets) * 100)}%
                     </span>
                   </div>
@@ -1216,7 +1216,7 @@ export function SessionSummary({
       {/* Volume by Muscle Group */}
       {volumeByMuscle.length > 0 && (
         <Card>
-          <h3 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
+          <h3 className="text-subhead font-medium text-ink mb-3 flex items-center gap-2">
             <IconBarbell size={16} className="text-ink-2" aria-hidden="true" /> Volume by Muscle
           </h3>
           <div className="space-y-3">
@@ -1225,7 +1225,7 @@ export function SessionSummary({
               const percentage = (volume / maxVolume) * 100;
               return (
                 <div key={muscle}>
-                  <div className="flex justify-between text-sm mb-1">
+                  <div className="flex justify-between text-subhead mb-1">
                     <span className="text-ink">{muscleDisplayName(muscle)}</span>
                     <span className="text-ink-2">{sets} sets · {displayWeight(volume)}{weightUnit}</span>
                   </div>
@@ -1245,8 +1245,8 @@ export function SessionSummary({
       {/* Effort Timeline */}
       {effortTimeline.length > 0 && (
         <Card>
-          <h3 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
-            <span>📈</span> Effort Timeline
+          <h3 className="text-subhead font-medium text-ink mb-3 flex items-center gap-2">
+            <IconTrendingUp className="h-4 w-4" stroke={1.75} aria-hidden="true" /> Effort timeline
           </h3>
           <div className="h-20 flex items-end gap-1">
             {effortTimeline.map((point, idx) => {
@@ -1266,7 +1266,7 @@ export function SessionSummary({
               );
             })}
           </div>
-          <div className="flex justify-between mt-2 text-xs text-ink-2">
+          <div className="flex justify-between mt-2 text-caption text-ink-2">
             <span>Set 1</span>
             <span>Avg: {avgRpe}</span>
             <span>Set {effortTimeline.length}</span>
@@ -1276,29 +1276,29 @@ export function SessionSummary({
 
       {/* Intensity Distribution */}
       <Card>
-        <h3 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
-          <IconTarget size={16} className="text-ink-2" aria-hidden="true" /> Intensity Distribution
+        <h3 className="text-subhead font-medium text-ink mb-3 flex items-center gap-2">
+          <IconTarget size={16} className="text-ink-2" aria-hidden="true" /> Intensity distribution
         </h3>
         <div className="grid grid-cols-4 gap-2">
           <div className="text-center p-2 bg-status-ok/10 rounded-lg border border-status-ok/20">
-            <p className="text-lg font-bold text-status-ok">{rpeDistribution.easy}</p>
-            <p className="text-xs text-ink-2">Easy</p>
-            <p className="text-xs text-ink-3">RPE 1-6</p>
+            <p className="text-headline font-bold text-status-ok">{rpeDistribution.easy}</p>
+            <p className="text-caption text-ink-2">Easy</p>
+            <p className="text-caption text-ink-3">RPE 1-6</p>
           </div>
-          <div className="text-center p-2 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
-            <p className="text-lg font-bold text-status-warn">{rpeDistribution.moderate}</p>
-            <p className="text-xs text-ink-2">Moderate</p>
-            <p className="text-xs text-ink-3">RPE 7</p>
+          <div className="text-center p-2 bg-status-warn-tint rounded-lg border border-status-warn/20">
+            <p className="text-headline font-bold text-status-warn">{rpeDistribution.moderate}</p>
+            <p className="text-caption text-ink-2">Moderate</p>
+            <p className="text-caption text-ink-3">RPE 7</p>
           </div>
           <div className="text-center p-2 bg-orange-500/10 rounded-lg border border-orange-500/20">
-            <p className="text-lg font-bold text-orange-400">{rpeDistribution.hard}</p>
-            <p className="text-xs text-ink-2">Hard</p>
-            <p className="text-xs text-ink-3">RPE 8</p>
+            <p className="text-headline font-bold text-orange-400">{rpeDistribution.hard}</p>
+            <p className="text-caption text-ink-2">Hard</p>
+            <p className="text-caption text-ink-3">RPE 8</p>
           </div>
-          <div className="text-center p-2 bg-red-500/10 rounded-lg border border-red-500/20">
-            <p className="text-lg font-bold text-red-400">{rpeDistribution.maximal}</p>
-            <p className="text-xs text-ink-2">Max</p>
-            <p className="text-xs text-ink-3">RPE 9-10</p>
+          <div className="text-center p-2 bg-status-bad-tint rounded-lg border border-status-bad/20">
+            <p className="text-headline font-bold text-status-bad">{rpeDistribution.maximal}</p>
+            <p className="text-caption text-ink-2">Max</p>
+            <p className="text-caption text-ink-3">RPE 9-10</p>
           </div>
         </div>
       </Card>
@@ -1310,7 +1310,7 @@ export function SessionSummary({
             onClick={() => setShowExerciseDetails(!showExerciseDetails)}
             className="w-full flex items-center justify-between mb-3"
           >
-            <h3 className="text-sm font-medium text-ink flex items-center gap-2">
+            <h3 className="text-subhead font-medium text-ink flex items-center gap-2">
               Exercise Details ({exerciseDetails.length})
             </h3>
             <svg
@@ -1339,12 +1339,12 @@ export function SessionSummary({
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-ink">{exercise.name}</span>
                           {exercise.hasPR && (
-                            <Badge variant="warning" size="sm" className="bg-yellow-500/20 text-status-warn">
+                            <Badge variant="warning" size="sm" className="bg-status-warn-tint text-status-warn">
                               <IconTrophy size={12} className="inline -mt-0.5" aria-hidden="true" /> PR
                             </Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-ink-2">
+                        <div className="flex items-center gap-3 mt-1 text-caption text-ink-2">
                           <span>{muscleDisplayName(exercise.muscle)}</span>
                           <span>•</span>
                           <span>{exercise.sets.length} sets</span>
@@ -1359,10 +1359,10 @@ export function SessionSummary({
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-bold text-action">
+                        <p className="text-headline font-bold text-action">
                           {displayWeight(exercise.maxWeight)}{weightUnit}
                         </p>
-                        <p className="text-xs text-ink-2">top weight</p>
+                        <p className="text-caption text-ink-2">top weight</p>
                       </div>
                       <svg
                         className={`w-4 h-4 text-ink-2 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -1384,13 +1384,13 @@ export function SessionSummary({
                                   held at come from the same row (a pool-max
                                   pair beside "Top Wt" read as a hold that
                                   never happened). */}
-                              <p className="text-sm font-bold text-ink">
+                              <p className="text-subhead font-bold text-ink">
                                 {exercise.bestHoldSet ? `${exercise.bestHoldSet.reps}s` : '—'}
                               </p>
-                              <p className="text-xs text-ink-2">
+                              <p className="text-caption text-ink-2">
                                 {exercise.bestHoldSet && exercise.bestHoldSet.weightKg > 0
                                   ? `Best Hold @ ${displayWeight(exercise.bestHoldSet.weightKg)}${weightUnit}`
-                                  : 'Best Hold'}
+                                  : 'Best hold'}
                               </p>
                             </div>
                           ) : (
@@ -1398,47 +1398,47 @@ export function SessionSummary({
                               {/* 0 = no estimate (canonical estimator has no
                                   answer beyond 15 effective reps) — render
                                   absent, never a zero. */}
-                              <p className="text-sm font-bold text-ink">
+                              <p className="text-subhead font-bold text-ink">
                                 {exercise.bestE1RM > 0 ? <>{displayWeight(exercise.bestE1RM)}{weightUnit}</> : '—'}
                               </p>
-                              <p className="text-xs text-ink-2">Est. 1RM</p>
+                              <p className="text-caption text-ink-2">Est. 1RM</p>
                             </div>
                           )}
                           {exercise.isDuration ? (
                             <div className="text-center">
-                              <p className="text-sm font-bold text-ink">
+                              <p className="text-subhead font-bold text-ink">
                                 {exercise.sets.reduce((sum, s) => sum + s.reps, 0)}s
                               </p>
-                              <p className="text-xs text-ink-2">Total Time</p>
+                              <p className="text-caption text-ink-2">Total time</p>
                             </div>
                           ) : (
                             <div className="text-center">
-                              <p className="text-sm font-bold text-ink">{exercise.maxReps}</p>
-                              <p className="text-xs text-ink-2">Max Reps</p>
+                              <p className="text-subhead font-bold text-ink">{exercise.maxReps}</p>
+                              <p className="text-caption text-ink-2">Max reps</p>
                             </div>
                           )}
                           {exercise.isDuration ? (
                             <div className="text-center">
-                              <p className="text-sm font-bold text-ink">{displayWeight(exercise.maxWeight)}</p>
-                              <p className="text-xs text-ink-2">Top Wt ({weightUnit})</p>
+                              <p className="text-subhead font-bold text-ink">{displayWeight(exercise.maxWeight)}</p>
+                              <p className="text-caption text-ink-2">Top Wt ({weightUnit})</p>
                             </div>
                           ) : (
                             <div className="text-center">
-                              <p className="text-sm font-bold text-ink">{displayWeight(exercise.totalVolume)}</p>
-                              <p className="text-xs text-ink-2">Vol ({weightUnit})</p>
+                              <p className="text-subhead font-bold text-ink">{displayWeight(exercise.totalVolume)}</p>
+                              <p className="text-caption text-ink-2">Vol ({weightUnit})</p>
                             </div>
                           )}
                           <div className="text-center">
-                            <p className="text-sm font-bold text-ink">{exercise.avgRpe}</p>
-                            <p className="text-xs text-ink-2">Avg RPE</p>
+                            <p className="text-subhead font-bold text-ink">{exercise.avgRpe}</p>
+                            <p className="text-caption text-ink-2">Avg RPE</p>
                           </div>
                         </div>
 
                         {/* Set table */}
                         <div className="bg-card/50 rounded-lg overflow-hidden">
-                          <table className="w-full text-sm">
+                          <table className="w-full text-subhead">
                             <thead>
-                              <tr className="text-ink-2 text-xs">
+                              <tr className="text-ink-2 text-caption">
                                 <th className="px-2 py-1.5 text-left">Set</th>
                                 <th className="px-2 py-1.5 text-center">Weight</th>
                                 <th className="px-2 py-1.5 text-center">{exercise.isDuration ? 'Sec' : 'Reps'}</th>
@@ -1449,7 +1449,7 @@ export function SessionSummary({
                             <tbody>
                               {exercise.warmupSets.length > 0 && (
                                 <tr className="text-ink-2 bg-fill/30">
-                                  <td colSpan={5} className="px-2 py-1 text-xs">
+                                  <td colSpan={5} className="px-2 py-1 text-caption">
                                     Warmup: {exercise.warmupSets.length} sets
                                   </td>
                                 </tr>
@@ -1477,18 +1477,18 @@ export function SessionSummary({
                                     {set.reps}
                                   </td>
                                   <td className="px-2 py-1.5 text-center">
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                      set.rpe >= 9 ? 'bg-red-500/20 text-red-400' :
+                                    <span className={`px-1.5 py-0.5 rounded text-caption font-medium ${
+                                      set.rpe >= 9 ? 'bg-status-bad-tint text-status-bad' :
                                       set.rpe >= 8 ? 'bg-orange-500/20 text-orange-400' :
-                                      set.rpe >= 7 ? 'bg-yellow-500/20 text-status-warn' :
-                                      'bg-green-500/20 text-green-400'
+                                      set.rpe >= 7 ? 'bg-status-warn-tint text-status-warn' :
+                                      'bg-status-ok-tint text-status-ok'
                                     }`}>
                                       {set.rpe}
                                     </span>
                                   </td>
                                   <td className="px-2 py-1.5 text-right">
                                     <span
-                                      className={`text-xs ${QUALITY_CELL[bucket].textClass}`}
+                                      className={`text-caption ${QUALITY_CELL[bucket].textClass}`}
                                       title={SET_QUALITY_DISPLAY_META[bucket].description}
                                     >
                                       {QUALITY_CELL[bucket].shortLabel}
@@ -1503,8 +1503,8 @@ export function SessionSummary({
 
                         {/* PR comparison: hold time for duration, e1RM otherwise */}
                         {exercise.hasPR && exerciseHistories?.[exercise.exerciseId || '']?.previousBest && (
-                          <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                            <div className="flex items-center justify-between text-sm">
+                          <div className="mt-2 p-2 bg-status-warn-tint rounded-lg">
+                            <div className="flex items-center justify-between text-subhead">
                               <span className="flex items-center gap-1 text-status-warn"><IconTrophy size={14} aria-hidden="true" /> New personal record</span>
                               {exercise.isDuration ? (
                                 // The progression line shows the winning
@@ -1540,9 +1540,9 @@ export function SessionSummary({
 
       {/* Session RPE */}
       <Card>
-        <h3 className="text-sm font-medium text-ink mb-3">Session RPE</h3>
+        <h3 className="text-subhead font-medium text-ink mb-3">Session RPE</h3>
         <div className="flex items-center gap-3">
-          <div className={`px-4 py-2 rounded-lg font-bold text-lg ${
+          <div className={`px-4 py-2 rounded-lg font-bold text-headline ${
             sessionRpe >= 9
               ? 'bg-status-bad/20 text-status-bad'
               : sessionRpe >= 7
@@ -1551,8 +1551,8 @@ export function SessionSummary({
           }`}>
             {sessionRpe}/10
           </div>
-          <span className="text-ink-2 text-sm">
-            {sessionRpe >= 9 ? 'Maximum Effort' : sessionRpe >= 7 ? 'Hard' : sessionRpe >= 5 ? 'Moderate' : 'Easy'}
+          <span className="text-ink-2 text-subhead">
+            {sessionRpe >= 9 ? 'Maximum effort' : sessionRpe >= 7 ? 'Hard' : sessionRpe >= 5 ? 'Moderate' : 'Easy'}
           </span>
         </div>
       </Card>
@@ -1560,7 +1560,7 @@ export function SessionSummary({
       {/* Notes */}
       {notes && (
         <Card>
-          <h3 className="text-sm font-medium text-ink mb-3">Session Notes</h3>
+          <h3 className="text-subhead font-medium text-ink mb-3">Session notes</h3>
           <p className="text-ink">{notes}</p>
         </Card>
       )}
@@ -1570,7 +1570,7 @@ export function SessionSummary({
         <Card>
           <div className="flex items-center gap-2">
             <Badge variant="info" size="sm">Deload</Badge>
-            <span className="text-sm text-ink-2">
+            <span className="text-subhead text-ink-2">
               Logged as a deload session — held light on purpose.
             </span>
           </div>

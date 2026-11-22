@@ -30,7 +30,17 @@ import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
 import { IdleWorkoutPrompt } from '@/components/workout/IdleWorkoutPrompt';
-import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
+import {
+  IconBandage,
+  IconBarbell,
+  IconGripVertical,
+  IconInfoCircle,
+  IconMapPin,
+  IconMessageCircle,
+  IconRefresh,
+  IconTarget,
+  IconX,
+} from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
@@ -43,7 +53,7 @@ const ExerciseCard = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="animate-pulse bg-gray-800 rounded-xl h-64 w-full" />
+      <div className="animate-pulse bg-fill rounded-card h-64 w-full" />
     )
   }
 );
@@ -338,7 +348,7 @@ function getExerciseInjuryRisk(
 /**
  * Cancel-workout confirmation. Rendered from BOTH page branches (empty and
  * populated) — previously it only existed in the populated branch, so the
- * empty-workout "Cancel Workout" button silently did nothing (P0-1).
+ * empty-workout "Cancel workout" button silently did nothing (P0-1).
  */
 function CancelWorkoutModal({
   totalCompletedSets,
@@ -364,8 +374,8 @@ function CancelWorkoutModal({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-ink mb-2">Discard Workout?</h3>
-          <p className="text-sm text-ink-2 mb-6">
+          <h3 className="text-headline font-semibold text-ink mb-2">Discard Workout?</h3>
+          <p className="text-subhead text-ink-2 mb-6">
             {totalCompletedSets > 0
               ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Discarding will delete all progress and can't be undone.`
               : 'This will remove the workout session. You can start fresh later.'}
@@ -682,7 +692,7 @@ export default function WorkoutPage() {
   const [readinessBannerDismissed, setReadinessBannerDismissed] = useState(false);
   const [readinessOverridden, setReadinessOverridden] = useState(false);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
-  // Sleep behind each exercise's "Last Workout" block: the night that preceded
+  // Sleep behind each exercise's "Last workout" block: the night that preceded
   // that session (services/sessionContext picks it), fetched by exact local day
   // because a last session can be months old — no trailing window covers it.
   const lastSessionSleepDays = useMemo(
@@ -937,7 +947,7 @@ export default function WorkoutPage() {
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   // Per-muscle pump/workload answers from the finish popup, captured when the
-  // user confirms "Finish Workout". Rides into the summary's submit payload
+  // user confirms "Finish workout". Rides into the summary's submit payload
   // (session_muscle_feedback) via initialMuscleRatings.
   const [finishMuscleRatings, setFinishMuscleRatings] = useState<MuscleFeedbackRatings>({});
   // Duration + completion timestamp frozen once when the user hits Finish, so
@@ -3613,13 +3623,13 @@ export default function WorkoutPage() {
           const pct = pr.improvement > 0 ? ` · +${pr.improvement}%` : '';
           const celebrationByType: Record<typeof pr.type, { title: string; detail: string }> = {
             e1rm: { title: 'New e1RM PR', detail: `${fmtKg(pr.value)} est. 1RM${pct}` },
-            weight: { title: 'New Weight PR', detail: `${fmtKg(pr.value)}${pct}` },
+            weight: { title: 'New weight PR', detail: `${fmtKg(pr.value)}${pct}` },
             reps: {
-              title: 'New Reps PR',
+              title: 'New reps PR',
               detail: `${pr.value} reps${pr.improvement > 0 ? ` · +${pr.improvement}` : ''}`,
             },
             duration: {
-              title: 'New Hold PR',
+              title: 'New hold PR',
               detail: `${pr.value}s${pr.improvement > 0 ? ` · +${pr.improvement}s` : ''}`,
             },
           };
@@ -4246,7 +4256,7 @@ export default function WorkoutPage() {
     
     // Show adjustment message
     if (adjustments.length > 0) {
-      setAutoAdjustMessage(`🔄 Auto-adjusted for injury: ${adjustments.join('; ')}`);
+      setAutoAdjustMessage(`Auto-adjusted for injury: ${adjustments.join('; ')}`);
       // Clear message after 8 seconds
       setTimeout(() => setAutoAdjustMessage(null), 8000);
     }
@@ -6050,8 +6060,8 @@ export default function WorkoutPage() {
 
     // Tapping Finish IS finishing. The summary's questions are optional, so
     // the workout is saved as completed right now — closing the app or
-    // leaving the summary without "Save & Finish" used to leave it stuck
-    // in_progress (missing from history and progress). "Save & Finish" then
+    // leaving the summary without "Save & finish" used to leave it stuck
+    // in_progress (missing from history and progress). "Save & finish" then
     // re-submits with the user's answers; the completion write and the
     // post-finish work are idempotent (see _lib/finishWorkout).
     if (session && session.state !== 'completed') {
@@ -6126,7 +6136,7 @@ export default function WorkoutPage() {
   // Optimistic finish (see _lib/finishWorkout): the completion + feedback
   // writes are queued in the durable outbox and the UI responds immediately
   // — the old flow awaited two timeout-less network round-trips here, which
-  // froze the "Save & Finish" tap for 10-15s on a slow connection and LOST
+  // froze the "Save & finish" tap for 10-15s on a slow connection and LOST
   // the completion entirely when offline.
   const handleSummarySubmit = async (
     data: SessionSummarySubmitData,
@@ -6643,7 +6653,7 @@ export default function WorkoutPage() {
             <div className="h-11 w-24 bg-fill rounded-lg" />
           </div>
         </div>
-        <p className="text-sm text-ink-3">
+        <p className="text-subhead text-ink-3">
           {fromCreate ? 'Starting workout…' : 'Loading workout…'}
         </p>
         <SkeletonExercise />
@@ -6661,10 +6671,10 @@ export default function WorkoutPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
-          <p className="text-lg font-medium text-ink">Error Loading Workout</p>
+          <p className="text-headline font-medium text-ink">Error loading workout</p>
           <p className="text-ink-3 mt-1">{error}</p>
           <Button className="mt-4" onClick={() => router.push('/dashboard/workout')}>
-            Go Back
+            Go back
           </Button>
         </Card>
       </div>
@@ -6737,7 +6747,7 @@ export default function WorkoutPage() {
                 ← Back to History
               </Button>
               <Button variant="outline" onClick={() => setShowShareModal(true)}>
-                Share Workout
+                Share workout
               </Button>
             </>
           ) : (
@@ -6794,7 +6804,7 @@ export default function WorkoutPage() {
                 </svg>
               </button>
               <div className="min-w-0">
-                <h1 className="text-3xl font-bold text-ink">Workout</h1>
+                <h1 className="text-large-title font-bold text-ink">Workout</h1>
                 <div className="flex items-center gap-1.5 text-ink-2 mt-0.5">
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <circle cx="12" cy="12" r="9" />
@@ -6808,7 +6818,7 @@ export default function WorkoutPage() {
             </div>
             <button
               onClick={handleWorkoutComplete}
-              className="flex-shrink-0 px-6 py-3 rounded-2xl bg-fill text-ink-2 text-lg font-semibold hover:bg-sep hover:text-ink-2 transition-colors"
+              className="flex-shrink-0 px-6 py-3 rounded-2xl bg-fill text-ink-2 text-headline font-semibold hover:bg-sep hover:text-ink-2 transition-colors"
             >
               Finish
             </button>
@@ -7226,7 +7236,7 @@ export default function WorkoutPage() {
       {/* Offline banner (P0-2): honest state — nothing is lost, writes queue */}
       {!isOnline && (
         <div
-          className="flex items-center gap-2.5 rounded-xl border border-status-warn/45 bg-status-warn/10 px-4 py-2.5 text-[13px] text-status-warn"
+          className="flex items-center gap-2.5 rounded-xl border border-status-warn/45 bg-status-warn/10 px-4 py-2.5 text-subhead text-status-warn"
           role="status"
         >
           <span aria-hidden="true">⚠</span>
@@ -7242,7 +7252,7 @@ export default function WorkoutPage() {
           so instead of showing them as saved. */}
       {failedSyncCount > 0 && (
         <div
-          className="flex items-center gap-2.5 rounded-xl border border-status-bad/45 bg-status-bad/10 px-4 py-2.5 text-[13px] text-status-bad"
+          className="flex items-center gap-2.5 rounded-xl border border-status-bad/45 bg-status-bad/10 px-4 py-2.5 text-subhead text-status-bad"
           role="alert"
           data-testid="sync-failed-banner"
         >
@@ -7286,8 +7296,8 @@ export default function WorkoutPage() {
       {autoAdjustMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
           <div className="bg-action-tint dark:bg-action/20 backdrop-blur-sm border border-action/40 dark:border-action/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
-            <span className="text-action dark:text-action text-lg">🔄</span>
-            <p className="text-sm text-on-action dark:text-action flex-1">{autoAdjustMessage}</p>
+            <IconRefresh className="h-5 w-5 flex-shrink-0 text-action" stroke={1.75} aria-hidden="true" />
+            <p className="text-subhead text-on-action dark:text-action flex-1">{autoAdjustMessage}</p>
             <button
               onClick={() => setAutoAdjustMessage(null)}
               className="text-action hover:text-on-action dark:text-action dark:hover:text-action"
@@ -7395,13 +7405,13 @@ export default function WorkoutPage() {
         <InlineHint id="first-workout-intro">
           <div>
             <p className="font-medium mb-2">Welcome to your first workout!</p>
-            <ul className="space-y-1 text-sm text-on-action dark:text-action">
+            <ul className="space-y-1 text-subhead text-on-action dark:text-action">
               <li>• <strong>Log each set</strong> - Enter weight and reps after completing a set</li>
               <li>• <strong>Rate difficulty</strong> - tell us how many more reps you could have done</li>
               <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
               <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
             </ul>
-            <p className="text-xs text-action dark:text-action mt-2">
+            <p className="text-caption text-action dark:text-action mt-2">
               We&apos;ll learn your patterns and personalize recommendations as you train!
             </p>
           </div>
@@ -7414,7 +7424,7 @@ export default function WorkoutPage() {
           <svg className="w-5 h-5 text-status-bad flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="text-sm text-status-bad">{error}</span>
+          <span className="text-subhead text-status-bad">{error}</span>
           <button 
             onClick={() => setError(null)} 
             className="ml-auto p-1 hover:bg-status-bad/20 rounded"
@@ -7434,11 +7444,11 @@ export default function WorkoutPage() {
             className="w-full p-4 flex items-center gap-3 text-left"
           >
             <div className="w-10 h-10 rounded-full bg-action-tint flex items-center justify-center flex-shrink-0">
-              <span className="text-lg">🏋️</span>
+              <IconBarbell className="h-5 w-5 text-action" stroke={1.75} aria-hidden="true" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-ink">Coach&apos;s Notes</p>
-              <p className="text-sm text-ink-2 truncate">
+              <p className="font-semibold text-ink">Coach&apos;s notes</p>
+              <p className="text-subhead text-ink-2 truncate">
                 {showCoachMessage ? 'Tap to collapse' : coachMessage.greeting}
               </p>
             </div>
@@ -7457,7 +7467,7 @@ export default function WorkoutPage() {
               {/* Greeting & Overview */}
               <div className="pl-13 space-y-2">
                 <p className="text-ink font-medium">{coachMessage.greeting}</p>
-                <p className="text-sm text-ink-2">{coachMessage.overview}</p>
+                <p className="text-subhead text-ink-2">{coachMessage.overview}</p>
               </div>
 
               {/* AI-Powered Coach Notes - only show if enabled */}
@@ -7467,21 +7477,21 @@ export default function WorkoutPage() {
                     <div className="ml-13 p-3 rounded-lg bg-fill border border-sep">
                       <div className="flex items-center gap-3">
                         <LoadingAnimation type="dots" size="sm" />
-                        <p className="text-sm text-ink-2">Your coach is reviewing your session...</p>
+                        <p className="text-subhead text-ink-2">Your coach is reviewing your session...</p>
                       </div>
                     </div>
                   ) : aiCoachNotes ? (
                     <div className="ml-13 p-3 rounded-lg bg-action/10 border border-action/20">
                       <div className="flex items-start gap-2">
-                        <span className="text-action text-lg mt-0.5">💬</span>
-                        <p className="text-sm text-action leading-relaxed">
+                        <IconMessageCircle className="h-5 w-5 flex-shrink-0 text-action mt-0.5" stroke={1.75} aria-hidden="true" />
+                        <p className="text-subhead text-action leading-relaxed">
                           {aiCoachNotes}
                         </p>
                       </div>
                     </div>
                   ) : coachMessage.personalizedInsight && (
                     <div className="ml-13 p-3 rounded-lg bg-action/10 border border-action/20">
-                      <p className="text-sm text-action">
+                      <p className="text-subhead text-action">
                         {coachMessage.personalizedInsight}
                       </p>
                     </div>
@@ -7491,12 +7501,12 @@ export default function WorkoutPage() {
 
               {/* Tips */}
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-ink-3 uppercase tracking-wider pl-13">
-                  Pro Tips
+                <p className="text-caption font-semibold text-ink-3 pl-13">
+                  Pro tips
                 </p>
                 <div className="pl-13 space-y-1">
                   {coachMessage.tips.map((tip, idx) => (
-                    <p key={idx} className="text-xs text-ink-2 flex gap-2">
+                    <p key={idx} className="text-caption text-ink-2 flex gap-2">
                       <span className="text-action">•</span>
                       {tip}
                     </p>
@@ -7599,7 +7609,7 @@ export default function WorkoutPage() {
               {cluster.isFirst && (
                 <div
                   data-testid="superset-eyebrow"
-                  className="flex items-center justify-between px-1 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-action"
+                  className="flex items-center justify-between px-1 pt-1.5 pb-2 text-caption font-semibold text-action"
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -7672,7 +7682,7 @@ export default function WorkoutPage() {
                   {cluster.slot && (
                     <div
                       data-testid="superset-slot"
-                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-action-tint text-xs font-bold text-action"
+                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-action-tint text-caption font-bold text-action"
                       aria-label={`Superset position ${cluster.slot}`}
                     >
                       {cluster.slot}
@@ -7681,7 +7691,7 @@ export default function WorkoutPage() {
                   {/* Position badge */}
                   <span
                     data-testid="position-badge"
-                    className={`flex-shrink-0 rounded-md px-1.5 py-1 text-[11px] font-bold leading-none transition-colors ${
+                    className={`flex-shrink-0 rounded-md px-1.5 py-1 text-caption font-bold leading-none transition-colors ${
                       isComplete
                         ? 'bg-status-ok/20 text-status-ok'
                         : isCurrent
@@ -7692,13 +7702,13 @@ export default function WorkoutPage() {
                     {positionLabel}
                   </span>
                   <span
-                    className={`min-w-0 flex-1 truncate text-sm font-medium ${
+                    className={`min-w-0 flex-1 truncate text-subhead font-medium ${
                       isCurrent ? 'text-ink' : 'text-ink-2'
                     }`}
                   >
                     {block.exercise.name}
                   </span>
-                  <span className="flex-shrink-0 text-[11px] text-ink-3">
+                  <span className="flex-shrink-0 text-caption text-ink-3">
                     {blockSets.length}/{block.targetSets} · {formatMuscleName(block.exercise.primaryMuscle)}
                   </span>
                   {/* Row overflow menu — same items as the expanded card's ⋮
@@ -7776,10 +7786,10 @@ export default function WorkoutPage() {
                     {(() => {
                       const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
                       return injuryRisk.isRisky && isCurrent ? (
-                        <div className={`mb-2 text-xs ${
+                        <div className={`mb-2 text-caption ${
                           injuryRisk.severity === 3 ? 'text-status-bad' : 'text-status-warn'
                         }`}>
-                          ⚠️ {injuryRisk.reasons[0]}
+                          {injuryRisk.reasons[0]}
                           <button
                             className="ml-2 underline font-medium"
                             onClick={(e) => {
@@ -7989,14 +7999,14 @@ export default function WorkoutPage() {
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 mt-0.5">
                           <div className="w-8 h-8 rounded-full bg-action/20 flex items-center justify-center">
-                            <span className="text-action text-lg">🎯</span>
+                            <IconTarget className="h-4 w-4 text-action" stroke={1.75} aria-hidden="true" />
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-ink mb-1">
-                            AMRAP Set Suggestion
+                          <h3 className="text-subhead font-semibold text-ink mb-1">
+                            AMRAP set suggestion
                           </h3>
-                          <p className="text-xs text-ink-2 mb-3">
+                          <p className="text-caption text-ink-2 mb-3">
                             This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>.
                             Push to failure (RPE 9.5+) to calibrate your RPE perception.
                             This helps us adjust your future RIR prescriptions.
@@ -8012,7 +8022,7 @@ export default function WorkoutPage() {
                                 // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
                                 setAmrapSuggestion(null);
                               }}
-                              className="text-xs"
+                              className="text-caption"
                             >
                               Got it - I&apos;ll push hard
                             </Button>
@@ -8020,7 +8030,7 @@ export default function WorkoutPage() {
                               size="sm"
                               variant="ghost"
                               onClick={() => setAmrapSuggestion(null)}
-                              className="text-xs"
+                              className="text-caption"
                             >
                               Dismiss
                             </Button>
@@ -8063,7 +8073,7 @@ export default function WorkoutPage() {
         {/* Up next - compact rows for exercises not started yet */}
         {upNextEntries.length > 0 && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+            <p className="text-caption font-medium text-ink-3">
               Up next
             </p>
             {upNextEntries.map(({ block, index }) => {
@@ -8076,19 +8086,19 @@ export default function WorkoutPage() {
                 return (
                   <SwipeableRow key={block.id} onDelete={() => handleExerciseDelete(block.id)}>
                   <div className="flex items-center gap-3 bg-fill/30 rounded-lg px-3 py-2.5 opacity-60">
-                    <span className="text-[13px] text-ink-2 line-through truncate flex-1">
+                    <span className="text-subhead text-ink-2 line-through truncate flex-1">
                       {block.exercise.name}
                     </span>
-                    <span className="text-[11px] text-ink-3 flex-shrink-0">Skipped today</span>
+                    <span className="text-caption text-ink-3 flex-shrink-0">Skipped today</span>
                     <button
                       onClick={() => handleUnskipBlock(block.id)}
-                      className="text-[11px] font-medium text-action transition-colors flex-shrink-0"
+                      className="text-caption font-medium text-action transition-colors flex-shrink-0"
                     >
                       Undo
                     </button>
                     <button
                       onClick={() => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name })}
-                      className="text-[11px] font-medium text-ink-3 hover:text-status-bad transition-colors flex-shrink-0"
+                      className="text-caption font-medium text-ink-3 hover:text-status-bad transition-colors flex-shrink-0"
                     >
                       Remove
                     </button>
@@ -8120,15 +8130,15 @@ export default function WorkoutPage() {
                     setCurrentSetNumber(getSetsForBlock(block.id).length + 1);
                   }}
                 >
-                  <span className="text-[13px] text-ink truncate flex-1">
+                  <span className="text-subhead text-ink truncate flex-1">
                     {block.exercise.name}
                   </span>
-                  <span className="text-[11px] text-ink-3 flex-shrink-0">
+                  <span className="text-caption text-ink-3 flex-shrink-0">
                     {block.targetSets} sets · {muscleLabel}
                   </span>
                   <button
                     onClick={() => handleSkipBlock(block.id)}
-                    className="text-[11px] text-ink-3 hover:text-status-warn transition-colors flex-shrink-0"
+                    className="text-caption text-ink-3 hover:text-status-warn transition-colors flex-shrink-0"
                     title="Skip this exercise today"
                   >
                     Skip today
@@ -8197,7 +8207,7 @@ export default function WorkoutPage() {
                 <div className="w-4 h-0.5 bg-current rounded" />
               </div>
               {/* Position badge — same "3/8" format as the list rows */}
-              <div className="rounded-md px-1.5 py-1 text-[11px] font-bold leading-none bg-action text-on-action flex-shrink-0">
+              <div className="rounded-md px-1.5 py-1 text-caption font-bold leading-none bg-action text-on-action flex-shrink-0">
                 {(() => {
                   const pos = activeBlocks.findIndex((b) => b.id === draggedBlock.id);
                   const fallback = blocks.findIndex((b) => b.id === draggedBlock.id);
@@ -8211,7 +8221,7 @@ export default function WorkoutPage() {
                 <p className="font-medium text-ink">
                   {draggedBlock.exercise?.name}
                 </p>
-                <p className="text-xs text-ink-3">
+                <p className="text-caption text-ink-3">
                   {getSetsForBlock(draggedBlock.id).length}/{draggedBlock.targetSets} sets
                 </p>
               </div>
@@ -8229,13 +8239,13 @@ export default function WorkoutPage() {
           {blocks.length === 0
             ? 'No exercises yet'
             : overallProgress >= 100
-              ? '🎉 All exercises complete!'
+              ? 'All exercises complete'
               : `${Math.round(overallProgress)}% complete`}
         </p>
         {/* The plain-language version of the header pill: what's left, and what
             the whole session comes to. Hidden once there's nothing left to do. */}
         {durationEstimate.remainingSets > 0 && (
-          <p className="text-xs text-ink-3 mt-1 mb-4" data-testid="workout-duration-summary">
+          <p className="text-caption text-ink-3 mt-1 mb-4" data-testid="workout-duration-summary">
             About {formatDurationEstimate(durationEstimate.remainingSeconds)} left ·{' '}
             {durationTotalLabel} total for {durationEstimate.totalSets} sets
           </p>
@@ -8245,7 +8255,7 @@ export default function WorkoutPage() {
             + Add Exercise
           </Button>
           <Button onClick={handleWorkoutComplete}>
-            Finish Workout
+            Finish workout
           </Button>
         </div>
       </Card>
@@ -8372,7 +8382,7 @@ export default function WorkoutPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-                <h2 className="text-lg font-semibold text-ink">Create Custom Exercise</h2>
+                <h2 className="text-headline font-semibold text-ink">Create custom exercise</h2>
               </div>
             </div>
 
@@ -8452,8 +8462,8 @@ export default function WorkoutPage() {
           <div className="relative w-full max-w-md max-h-[85vh] bg-card rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col shadow-card">
             <div className="p-4 border-b border-sep flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xl">🤕</span>
-                <h2 className="text-lg font-semibold text-ink">Report Pain/Injury</h2>
+                <IconBandage className="h-5 w-5 text-ink-2" stroke={1.75} aria-hidden="true" />
+                <h2 className="text-headline font-semibold text-ink">Report pain or injury</h2>
               </div>
               <button
                 onClick={() => setShowInjuryModal(false)}
@@ -8466,31 +8476,31 @@ export default function WorkoutPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <p className="text-sm text-ink-2">
+              <p className="text-subhead text-ink-2">
                 Tell us about any pain or discomfort. We&apos;ll suggest exercise swaps to avoid aggravating it.
               </p>
 
               {/* Current injuries */}
               {temporaryInjuries.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-ink-2">Currently reported:</p>
+                  <p className="text-caption font-medium text-ink-2">Currently reported:</p>
                   <div className="flex flex-wrap gap-2">
                     {temporaryInjuries.map(injury => {
                       const areaLabels: Record<string, string> = {
-                        lower_back: '🔻 Lower Back', upper_back: '🔺 Upper Back', neck: '🦴 Neck',
-                        shoulder_left: '💪 Left Shoulder', shoulder_right: '💪 Right Shoulder',
-                        elbow_left: '🦾 Left Elbow', elbow_right: '🦾 Right Elbow',
-                        wrist_left: '🤚 Left Wrist', wrist_right: '🤚 Right Wrist',
-                        hip_left: '🦵 Left Hip', hip_right: '🦵 Right Hip',
-                        knee_left: '🦿 Left Knee', knee_right: '🦿 Right Knee',
-                        ankle_left: '🦶 Left Ankle', ankle_right: '🦶 Right Ankle',
-                        chest: '❤️ Chest', other: '⚠️ Other'
+                        lower_back: 'Lower back', upper_back: 'Upper back', neck: 'Neck',
+                        shoulder_left: 'Left shoulder', shoulder_right: 'Right shoulder',
+                        elbow_left: 'Left elbow', elbow_right: 'Right elbow',
+                        wrist_left: 'Left wrist', wrist_right: 'Right wrist',
+                        hip_left: 'Left hip', hip_right: 'Right hip',
+                        knee_left: 'Left knee', knee_right: 'Right knee',
+                        ankle_left: 'Left ankle', ankle_right: 'Right ankle',
+                        chest: 'Chest', other: 'Other'
                       };
                       const severityLabels = ['Mild', 'Moderate', 'Significant'];
                       return (
                         <div 
                           key={injury.area}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-subhead ${
                             injury.severity === 3 
                               ? 'bg-status-bad/20 text-status-bad' 
                               : injury.severity === 2 
@@ -8499,7 +8509,7 @@ export default function WorkoutPage() {
                           }`}
                         >
                           <span>{areaLabels[injury.area] || injury.area}</span>
-                          <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
+                          <span className="text-caption opacity-70">({severityLabels[injury.severity - 1]})</span>
                           <button
                             onClick={() => setTemporaryInjuries(temporaryInjuries.filter(i => i.area !== injury.area))}
                             className="ml-1 p-0.5 hover:bg-sep rounded-full"
@@ -8517,51 +8527,51 @@ export default function WorkoutPage() {
 
               {/* Add new injury */}
               <div className="space-y-3 p-4 bg-fill/50 rounded-lg">
-                <p className="text-xs font-medium text-ink-2">Add an issue:</p>
+                <p className="text-caption font-medium text-ink-2">Add an issue:</p>
                 
                 <div>
-                  <label className="block text-xs text-ink-2 mb-1">Area affected</label>
+                  <label className="block text-caption text-ink-2 mb-1">Area affected</label>
                   <select
                     value={selectedInjuryArea}
                     onChange={(e) => setSelectedInjuryArea(e.target.value)}
-                    className="w-full px-3 py-2 bg-sep border border-sep rounded-lg text-ink text-sm"
+                    className="w-full px-3 py-2 bg-sep border border-sep rounded-lg text-ink text-subhead"
                   >
                     <option value="">Select area...</option>
-                    <optgroup label="Back & Core">
-                      <option value="lower_back">🔻 Lower Back</option>
-                      <option value="upper_back">🔺 Upper Back</option>
-                      <option value="neck">🦴 Neck</option>
-                      <option value="chest">❤️ Chest</option>
+                    <optgroup label="Back and core">
+                      <option value="lower_back">Lower back</option>
+                      <option value="upper_back">Upper back</option>
+                      <option value="neck">Neck</option>
+                      <option value="chest">Chest</option>
                     </optgroup>
                     <optgroup label="Upper Body">
-                      <option value="shoulder_left">💪 Left Shoulder</option>
-                      <option value="shoulder_right">💪 Right Shoulder</option>
-                      <option value="elbow_left">🦾 Left Elbow</option>
-                      <option value="elbow_right">🦾 Right Elbow</option>
-                      <option value="wrist_left">🤚 Left Wrist</option>
-                      <option value="wrist_right">🤚 Right Wrist</option>
+                      <option value="shoulder_left">Left shoulder</option>
+                      <option value="shoulder_right">Right shoulder</option>
+                      <option value="elbow_left">Left elbow</option>
+                      <option value="elbow_right">Right elbow</option>
+                      <option value="wrist_left">Left wrist</option>
+                      <option value="wrist_right">Right wrist</option>
                     </optgroup>
                     <optgroup label="Lower Body">
-                      <option value="hip_left">🦵 Left Hip</option>
-                      <option value="hip_right">🦵 Right Hip</option>
-                      <option value="knee_left">🦿 Left Knee</option>
-                      <option value="knee_right">🦿 Right Knee</option>
-                      <option value="ankle_left">🦶 Left Ankle</option>
-                      <option value="ankle_right">🦶 Right Ankle</option>
+                      <option value="hip_left">Left hip</option>
+                      <option value="hip_right">Right hip</option>
+                      <option value="knee_left">Left knee</option>
+                      <option value="knee_right">Right knee</option>
+                      <option value="ankle_left">Left ankle</option>
+                      <option value="ankle_right">Right ankle</option>
                     </optgroup>
-                    <option value="other">⚠️ Other</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-ink-2 mb-1">Severity</label>
+                  <label className="block text-caption text-ink-2 mb-1">Severity</label>
                   <div className="flex gap-2">
                     {[1, 2, 3].map(level => (
                       <button
                         key={level}
                         type="button"
                         onClick={() => setSelectedInjurySeverity(level as 1 | 2 | 3)}
-                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                        className={`flex-1 py-2 px-3 rounded-lg text-caption font-medium transition-colors ${
                           selectedInjurySeverity === level
                             ? level === 3 
                               ? 'bg-status-bad text-white'
@@ -8597,8 +8607,8 @@ export default function WorkoutPage() {
               {/* What will happen info */}
               {temporaryInjuries.length > 0 && (
                 <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
-                  <p className="text-xs text-action font-medium mb-1">What happens now?</p>
-                  <p className="text-xs text-ink-2">
+                  <p className="text-caption text-action font-medium mb-1">What happens now?</p>
+                  <p className="text-caption text-ink-2">
                     We&apos;ll flag exercises that could aggravate these areas. You can easily swap them for safer alternatives.
                   </p>
                 </div>
@@ -8608,10 +8618,10 @@ export default function WorkoutPage() {
             <div className="p-4 border-t border-sep space-y-2">
               {/* Show risky exercises count */}
               {temporaryInjuries.length > 0 && (
-                <div className="text-center text-sm text-ink-2 mb-2">
+                <div className="text-center text-subhead text-ink-2 mb-2">
                   {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).isRisky).length > 0 ? (
                     <span className="text-status-warn">
-                      ⚠️ {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).severity >= 2).length} exercise(s) may need swapping
+                      {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).severity >= 2).length} exercise(s) may need swapping
                     </span>
                   ) : (
                     <span className="text-status-ok">✓ All exercises look safe!</span>
@@ -8619,7 +8629,7 @@ export default function WorkoutPage() {
                 </div>
               )}
               <Button onClick={handleApplyInjuries} className="w-full">
-                {temporaryInjuries.length > 0 ? 'Apply & Continue Workout' : 'Close'}
+                {temporaryInjuries.length > 0 ? 'Apply & continue workout' : 'Close'}
               </Button>
             </div>
           </div>
@@ -8750,8 +8760,8 @@ export default function WorkoutPage() {
               <div className="p-4 border-b border-sep">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-ink">Swap Exercise</h3>
-                    <p className="text-sm text-ink-2">
+                    <h3 className="text-headline font-semibold text-ink">Swap exercise</h3>
+                    <p className="text-subhead text-ink-2">
                       Replace <span className="text-status-warn font-medium">{targetBlock.exercise.name}</span>
                     </p>
                   </div>
@@ -8783,12 +8793,12 @@ export default function WorkoutPage() {
                     : 'bg-status-warn/10 border border-status-warn/20'
                 }`}>
                   {safeAlternatives.length > 0 ? (
-                    <p className="text-xs text-status-ok">
+                    <p className="text-caption text-status-ok">
                       ✓ <span className="font-medium">{safeAlternatives.filter(a => a.risk.risk === 'safe').length} safe alternative(s)</span> found for {targetBlock.exercise.primaryMuscle}
                     </p>
                   ) : (
-                    <p className="text-xs text-status-warn">
-                      ⚠️ No safe alternatives found. Consider skipping this exercise.
+                    <p className="text-caption text-status-warn">
+                      No safe alternatives found. Consider skipping this exercise.
                     </p>
                   )}
                 </div>
@@ -8825,17 +8835,17 @@ export default function WorkoutPage() {
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-ink truncate">{alt.name}</p>
                           {risk.risk === 'safe' && temporaryInjuries.length > 0 && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-ok/20 text-status-ok">
+                            <span className="px-1.5 py-0.5 rounded text-caption font-medium bg-status-ok/20 text-status-ok">
                               ✓ Safe
                             </span>
                           )}
                           {risk.risk === 'caution' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-warn/20 text-status-warn">
-                              ⚠️ Caution
+                            <span className="px-1.5 py-0.5 rounded text-caption font-medium bg-status-warn/20 text-status-warn">
+                              Caution
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-ink-3 capitalize">
+                        <p className="text-caption text-ink-3 capitalize">
                           {alt.primary_muscle} • {alt.mechanic}
                         </p>
                       </div>
@@ -8862,7 +8872,7 @@ export default function WorkoutPage() {
                     setShowPageLevelSwapModal(false);
                     setShowCustomExercise(true);
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-sep hover:bg-sep text-action text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-sep hover:bg-sep text-action text-subhead font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -8876,7 +8886,7 @@ export default function WorkoutPage() {
                     setAutoAdjustMessage(`Removed ${targetBlock.exercise.name} from workout`);
                     setTimeout(() => setAutoAdjustMessage(null), 5000);
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-sep hover:bg-sep text-ink-2 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-sep hover:bg-sep text-ink-2 text-subhead font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -8955,7 +8965,7 @@ export default function WorkoutPage() {
         );
       })()}
 
-      {/* Sanity Check "Performance Drop" toast is rendered inside the bottom
+      {/* Sanity Check "Performance drop" toast is rendered inside the bottom
           chrome stack above (so it stacks over the rest timer instead of
           overlapping it), not as its own independent fixed layer here. */}
 
@@ -9003,7 +9013,7 @@ export default function WorkoutPage() {
             setDeleteConfirmBlock(null);
           }
         }}
-        title="Remove Exercise"
+        title="Remove exercise"
         message={deleteConfirmBlock
           ? completedSets.some(s => s.exerciseBlockId === deleteConfirmBlock.id)
             ? `Remove "${deleteConfirmBlock.name}" from this workout? This will delete any logged sets for this exercise.`

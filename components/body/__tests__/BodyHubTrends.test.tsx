@@ -191,7 +191,7 @@ describe('BodyHubTrends — Composition Map', () => {
     renderTrends({ trend: twoScanTrend });
 
     await user.click(screen.getByRole('button', { name: 'Map' }));
-    expect(screen.getByText('Composition Map')).toBeInTheDocument();
+    expect(screen.getByText('Composition map')).toBeInTheDocument();
     // Decomposition caption + direction legend from the map itself.
     expect(screen.getByText(/FMI \+ FFMI = BMI/)).toBeInTheDocument();
     expect(screen.getByText(/↑ muscle gained · ← fat lost · ↖ recomp/)).toBeInTheDocument();
@@ -199,13 +199,13 @@ describe('BodyHubTrends — Composition Map', () => {
 
   it('opens the map directly when deep-linked via initialMetric', () => {
     renderTrends({ trend: twoScanTrend, initialMetric: 'map' });
-    expect(screen.getByText('Composition Map')).toBeInTheDocument();
+    expect(screen.getByText('Composition map')).toBeInTheDocument();
   });
 
   it('falls back gracefully when a map deep link is not satisfiable', () => {
     renderTrends({ trend: [twoScanTrend[0]], initialMetric: 'map' });
     // <2 scans: the map option doesn't exist — the default view renders.
-    expect(screen.getByText('Body Composition Trend')).toBeInTheDocument();
+    expect(screen.getByText('Body composition trend')).toBeInTheDocument();
     expect(screen.queryByText(/↑ muscle gained/)).not.toBeInTheDocument();
   });
 });

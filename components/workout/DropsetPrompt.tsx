@@ -155,10 +155,10 @@ export function DropsetPrompt({
                   <svg className="w-5 h-5 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                   </svg>
-                  <span className="font-bold text-lg">DROP NOW</span>
+                  <span className="font-bold text-headline">DROP NOW</span>
                 </div>
                 {totalDrops > 1 && (
-                  <span className="text-xs text-action bg-action-tint px-2 py-0.5 rounded-full">
+                  <span className="text-caption text-action bg-action-tint px-2 py-0.5 rounded-full">
                     Drop {dropNumber}/{totalDrops}
                   </span>
                 )}
@@ -175,14 +175,14 @@ export function DropsetPrompt({
 
             {/* Target weight display */}
             <div className="text-center mb-3">
-              <span className="text-3xl font-bold text-ink">
+              <span className="text-large-title font-bold text-ink">
                 {displayTargetWeight} {unit}
               </span>
             </div>
 
             {/* Plate math helper for barbell exercises */}
             {plateChange && (
-              <div className="text-center mb-3 text-sm text-action bg-action/10 rounded-lg py-2 px-3">
+              <div className="text-center mb-3 text-subhead text-action bg-action/10 rounded-lg py-2 px-3">
                 <span className="font-medium">Remove:</span> {plateChange.plates}
               </div>
             )}
@@ -190,18 +190,18 @@ export function DropsetPrompt({
             {/* Input row */}
             <div className="flex gap-2 items-center">
               <div className="flex-1">
-                <label className="text-xs text-ink-2 block mb-1">Weight</label>
+                <label className="text-caption text-ink-2 block mb-1">Weight</label>
                 <input
                   type="number"
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
                   onKeyDown={handleKeyDown}
                   step="0.5"
-                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-lg text-ink focus:ring-2 focus:ring-action focus:border-transparent"
+                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-headline text-ink focus:ring-2 focus:ring-action focus:border-transparent"
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-ink-2 block mb-1">Reps</label>
+                <label className="text-caption text-ink-2 block mb-1">Reps</label>
                 <input
                   ref={repsInputRef}
                   type="number"
@@ -209,11 +209,11 @@ export function DropsetPrompt({
                   onChange={(e) => setReps(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="?"
-                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-lg text-ink placeholder-ink-3 focus:ring-2 focus:ring-action focus:border-transparent"
+                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-headline text-ink placeholder-ink-3 focus:ring-2 focus:ring-action focus:border-transparent"
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-ink-2 block mb-1">RPE</label>
+                <label className="text-caption text-ink-2 block mb-1">RPE</label>
                 <input
                   type="number"
                   value={rpe}
@@ -222,7 +222,7 @@ export function DropsetPrompt({
                   step="0.5"
                   min="1"
                   max="10"
-                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-lg text-ink focus:ring-2 focus:ring-action focus:border-transparent"
+                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-headline text-ink focus:ring-2 focus:ring-action focus:border-transparent"
                 />
               </div>
               <div className="pt-5">
@@ -239,7 +239,7 @@ export function DropsetPrompt({
             </div>
 
             {/* No rest indicator */}
-            <div className="mt-2 text-center text-xs text-ink-3">
+            <div className="mt-2 text-center text-caption text-ink-3">
               No rest between drops - go immediately!
             </div>
           </div>

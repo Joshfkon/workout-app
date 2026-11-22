@@ -1,5 +1,6 @@
 'use client';
 
+import { IconTrophy } from '@tabler/icons-react';
 import { useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { successHaptic } from '@/lib/integrations/notifications';
@@ -8,7 +9,7 @@ export interface PRCelebrationData {
   /** Keyed per celebration so back-to-back PRs re-run the animation. */
   id: string;
   exerciseName: string;
-  /** e.g. "New e1RM PR" / "New Weight PR". */
+  /** e.g. "New e1RM PR" / "New weight PR". */
   title: string;
   /** e.g. "230 lbs · +4%". */
   detail: string;
@@ -144,7 +145,7 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
           <motion.button
             type="button"
             onClick={onDone}
-            className="pointer-events-auto relative flex flex-col items-center gap-1 rounded-2xl bg-card/95 border border-yellow-500/40 shadow-xl shadow-yellow-500/20 px-8 py-6 text-center backdrop-blur"
+            className="pointer-events-auto relative flex flex-col items-center gap-1 rounded-2xl bg-card/95 border border-status-warn/40 shadow-xl shadow-status-warn/20 px-8 py-6 text-center backdrop-blur"
             initial={reduceMotion ? { opacity: 0 } : { scale: 0.5, opacity: 0, y: 20 }}
             animate={reduceMotion ? { opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
@@ -154,18 +155,18 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
             aria-label={`${celebration.title}: ${celebration.exerciseName}, ${celebration.detail}. Dismiss.`}
           >
             <motion.span
-              className="text-5xl"
+              className="text-status-warn"
               aria-hidden="true"
               animate={reduceMotion ? undefined : { rotate: [0, -12, 12, -8, 8, 0] }}
               transition={{ duration: 0.8, delay: 0.15 }}
             >
-              🏆
+              <IconTrophy className="h-12 w-12" stroke={1.75} aria-hidden="true" />
             </motion.span>
-            <span className="text-xl font-bold text-yellow-400 uppercase tracking-wide">
+            <span className="text-headline font-bold text-status-warn">
               {celebration.title}
             </span>
             <span className="text-ink font-medium">{celebration.exerciseName}</span>
-            <span className="text-ink-2 text-sm tabular-nums">{celebration.detail}</span>
+            <span className="text-ink-2 text-subhead tabular-nums">{celebration.detail}</span>
           </motion.button>
         </motion.div>
       )}

@@ -355,7 +355,7 @@ export function BodyTargets({
             <div className="flex bg-fill rounded-lg p-0.5">
               <button
                 onClick={() => setDisplayUnit('in')}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-caption rounded transition-colors ${
                   displayUnit === 'in' ? 'bg-action text-on-action' : 'text-ink-2'
                 }`}
               >
@@ -363,7 +363,7 @@ export function BodyTargets({
               </button>
               <button
                 onClick={() => setDisplayUnit('cm')}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-caption rounded transition-colors ${
                   displayUnit === 'cm' ? 'bg-action text-on-action' : 'text-ink-2'
                 }`}
               >
@@ -371,7 +371,7 @@ export function BodyTargets({
               </button>
             </div>
             <Button variant="outline" size="sm" onClick={startEditing}>
-              {activeTarget ? 'Edit' : 'Set Goals'}
+              {activeTarget ? 'Edit' : 'Set goals'}
             </Button>
           </div>
         </div>
@@ -382,11 +382,11 @@ export function BodyTargets({
             {/* Header with name and overall progress */}
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-ink">
-                  {activeTarget.name || 'Current Goals'}
+                <h3 className="text-subhead font-medium text-ink">
+                  {activeTarget.name || 'Current goals'}
                 </h3>
                 {progress.daysRemaining !== undefined && (
-                  <p className="text-xs text-ink-3">
+                  <p className="text-caption text-ink-3">
                     {progress.daysRemaining > 0
                       ? `${progress.daysRemaining} days remaining`
                       : progress.daysRemaining === 0
@@ -405,11 +405,11 @@ export function BodyTargets({
             <div className="grid grid-cols-3 gap-3">
               {progress.weight && (
                 <div className="p-3 bg-fill/50 rounded-lg">
-                  <p className="text-xs text-ink-3 mb-1">Weight</p>
-                  <p className={`text-lg font-medium ${getProgressColor(progress.weight.progress)}`}>
+                  <p className="text-caption text-ink-3 mb-1">Weight</p>
+                  <p className={`text-headline font-medium ${getProgressColor(progress.weight.progress)}`}>
                     {formatWeight(progress.weight.current, weightUnit)}
                   </p>
-                  <p className="text-xs text-ink-2">
+                  <p className="text-caption text-ink-2">
                     → {formatWeight(progress.weight.target, weightUnit)}
                   </p>
                   <div className="mt-1 h-1 bg-sep rounded-full overflow-hidden">
@@ -423,11 +423,11 @@ export function BodyTargets({
 
               {progress.bodyFat && (
                 <div className="p-3 bg-fill/50 rounded-lg">
-                  <p className="text-xs text-ink-3 mb-1">Body Fat</p>
-                  <p className={`text-lg font-medium ${getProgressColor(progress.bodyFat.progress)}`}>
+                  <p className="text-caption text-ink-3 mb-1">Body fat</p>
+                  <p className={`text-headline font-medium ${getProgressColor(progress.bodyFat.progress)}`}>
                     {progress.bodyFat.current.toFixed(1)}%
                   </p>
-                  <p className="text-xs text-ink-2">
+                  <p className="text-caption text-ink-2">
                     → {progress.bodyFat.target.toFixed(1)}%
                   </p>
                   <div className="mt-1 h-1 bg-sep rounded-full overflow-hidden">
@@ -441,11 +441,11 @@ export function BodyTargets({
 
               {progress.ffmi && (
                 <div className="p-3 bg-fill/50 rounded-lg">
-                  <p className="text-xs text-ink-3 mb-1">FFMI</p>
-                  <p className={`text-lg font-medium ${getProgressColor(progress.ffmi.progress)}`}>
+                  <p className="text-caption text-ink-3 mb-1">FFMI</p>
+                  <p className={`text-headline font-medium ${getProgressColor(progress.ffmi.progress)}`}>
                     {progress.ffmi.current.toFixed(1)}
                   </p>
-                  <p className="text-xs text-ink-2">
+                  <p className="text-caption text-ink-2">
                     → {progress.ffmi.target.toFixed(1)}
                   </p>
                   <div className="mt-1 h-1 bg-sep rounded-full overflow-hidden">
@@ -465,8 +465,8 @@ export function BodyTargets({
                   onClick={() => setShowMeasurements(!showMeasurements)}
                   className="w-full flex items-center justify-between text-left"
                 >
-                  <span className="text-sm font-medium text-ink-2">Measurement Goals</span>
-                  <span className="text-ink-3 text-xs">{showMeasurements ? '▲' : '▼'}</span>
+                  <span className="text-subhead font-medium text-ink-2">Measurement goals</span>
+                  <span className="text-ink-3 text-caption">{showMeasurements ? '▲' : '▼'}</span>
                 </button>
 
                 {showMeasurements && (
@@ -475,13 +475,13 @@ export function BodyTargets({
                       const label = MEASUREMENT_LABELS.find(l => l.key === key)?.label || key;
                       return (
                         <div key={key} className="flex items-center justify-between py-1">
-                          <span className="text-xs text-ink-2">{label}</span>
+                          <span className="text-caption text-ink-2">{label}</span>
                           <div className="flex items-center gap-2">
-                            <span className={`text-sm ${getProgressColor(m.progress)}`}>
+                            <span className={`text-subhead ${getProgressColor(m.progress)}`}>
                               {formatMeasurementValue(m.current)}
                             </span>
-                            <span className="text-xs text-ink-3">→</span>
-                            <span className="text-xs text-ink-2">
+                            <span className="text-caption text-ink-3">→</span>
+                            <span className="text-caption text-ink-2">
                               {formatMeasurementValue(m.target)} {displayUnit}
                             </span>
                           </div>
@@ -496,7 +496,7 @@ export function BodyTargets({
             {/* Linked mesocycle */}
             {activeTarget.mesocycleId && (
               <div className="pt-2 border-t border-sep">
-                <p className="text-xs text-ink-3">
+                <p className="text-caption text-ink-3">
                   Linked to mesocycle: {mesocycles.find(m => m.id === activeTarget.mesocycleId)?.name || 'Unknown'}
                 </p>
               </div>
@@ -504,23 +504,23 @@ export function BodyTargets({
           </div>
         ) : (
           <div className="text-center py-6">
-            <p className="text-ink-2 text-sm mb-2">No goals set yet</p>
-            <p className="text-xs text-ink-3 mb-3">
+            <p className="text-ink-2 text-subhead mb-2">No goals set yet</p>
+            <p className="text-caption text-ink-3 mb-3">
               Set target weight, body fat, FFMI, or measurements to track progress
             </p>
             <Button variant="outline" size="sm" onClick={startEditing}>
-              Set Goals
+              Set goals
             </Button>
           </div>
         )}
       </CardContent>
 
       {/* Edit Modal */}
-      <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Set Body Composition Goals">
+      <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Set body composition goals">
         <div className="space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Goal name */}
           <div>
-            <label className="block text-sm text-ink-2 mb-1">Goal Name (optional)</label>
+            <label className="block text-subhead text-ink-2 mb-1">Goal Name (optional)</label>
             <Input
               placeholder="e.g., Summer Cut, Bulk Phase 1"
               value={formData.name}
@@ -531,7 +531,7 @@ export function BodyTargets({
           {/* Main targets */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm text-ink-2 mb-1">Target Weight ({weightUnit})</label>
+              <label className="block text-subhead text-ink-2 mb-1">Target Weight ({weightUnit})</label>
               <Input
                 type="number"
                 step="0.1"
@@ -547,7 +547,7 @@ export function BodyTargets({
               />
             </div>
             <div>
-              <label className="block text-sm text-ink-2 mb-1">Target Body Fat %</label>
+              <label className="block text-subhead text-ink-2 mb-1">Target Body Fat %</label>
               <Input
                 type="number"
                 step="0.1"
@@ -560,7 +560,7 @@ export function BodyTargets({
               />
             </div>
             <div>
-              <label className="block text-sm text-ink-2 mb-1">Target FFMI</label>
+              <label className="block text-subhead text-ink-2 mb-1">Target FFMI</label>
               <Input
                 type="number"
                 step="0.1"
@@ -576,7 +576,7 @@ export function BodyTargets({
 
           {/* Target date */}
           <div>
-            <label className="block text-sm text-ink-2 mb-1">Target Date (optional)</label>
+            <label className="block text-subhead text-ink-2 mb-1">Target Date (optional)</label>
             <Input
               type="date"
               value={formData.targetDate || ''}
@@ -587,7 +587,7 @@ export function BodyTargets({
           {/* Link to mesocycle */}
           {mesocycles.length > 0 && (
             <div>
-              <label className="block text-sm text-ink-2 mb-1">Link to Mesocycle (optional)</label>
+              <label className="block text-subhead text-ink-2 mb-1">Link to Mesocycle (optional)</label>
               <select
                 className="w-full px-3 py-2 bg-card rounded-lg text-ink shadow-card"
                 value={formData.mesocycleId || ''}
@@ -605,14 +605,14 @@ export function BodyTargets({
 
           {/* Measurement targets */}
           <div className="pt-2 border-t border-sep">
-            <h4 className="text-sm font-medium text-ink-2 mb-3">Measurement Targets ({displayUnit})</h4>
+            <h4 className="text-subhead font-medium text-ink-2 mb-3">Measurement Targets ({displayUnit})</h4>
             {Object.entries(groupedMeasurements).map(([group, fields]) => (
               <div key={group} className="mb-4">
-                <p className="text-xs text-ink-3 uppercase tracking-wide mb-2">{group}</p>
+                <p className="text-caption text-ink-3 mb-2">{group}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {fields.map((field) => (
                     <div key={field.key} className="flex items-center gap-2">
-                      <label className="text-xs text-ink-2 w-24 flex-shrink-0">{field.label}</label>
+                      <label className="text-caption text-ink-2 w-24 flex-shrink-0">{field.label}</label>
                       <Input
                         type="number"
                         step="0.1"
@@ -639,9 +639,9 @@ export function BodyTargets({
 
           {/* Notes */}
           <div>
-            <label className="block text-sm text-ink-2 mb-1">Notes (optional)</label>
+            <label className="block text-subhead text-ink-2 mb-1">Notes (optional)</label>
             <textarea
-              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-sm shadow-card"
+              className="w-full px-3 py-2 bg-card rounded-lg text-ink text-subhead shadow-card"
               rows={2}
               placeholder="Any notes about this goal..."
               value={formData.notes || ''}
@@ -652,7 +652,7 @@ export function BodyTargets({
           {/* Actions */}
           <div className="flex gap-2 pt-2">
             <Button onClick={handleSave} isLoading={isSaving} className="flex-1">
-              Save Goals
+              Save goals
             </Button>
             <Button variant="secondary" onClick={() => setIsEditing(false)}>
               Cancel

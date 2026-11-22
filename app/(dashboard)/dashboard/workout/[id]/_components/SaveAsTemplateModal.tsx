@@ -145,7 +145,7 @@ export function SaveAsTemplateModal({
         )}
 
         <div>
-          <p className="flex items-center gap-1.5 text-sm font-medium text-ink mb-1.5">
+          <p className="flex items-center gap-1.5 text-subhead font-medium text-ink mb-1.5">
             <IconFolder size={16} className="text-ink-2" />
             {exercises.length} {exercises.length === 1 ? 'exercise' : 'exercises'}
           </p>
@@ -156,10 +156,10 @@ export function SaveAsTemplateModal({
             {exercises.map((exercise) => (
               <li
                 key={`${exercise.exercise_id}-${exercise.sort_order}`}
-                className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-3 px-3 py-2 text-subhead"
               >
                 <span className="text-ink truncate">{exercise.exercise_name}</span>
-                <span className="flex-shrink-0 text-xs text-ink-3 tabular-nums">
+                <span className="flex-shrink-0 text-caption text-ink-3 tabular-nums">
                   {exercise.default_sets} × {exercise.default_reps}
                   {exercise.default_weight
                     ? ` · ${formatWeight(exercise.default_weight, units, 0)}`
@@ -171,7 +171,7 @@ export function SaveAsTemplateModal({
         </div>
 
         {error && (
-          <p className="text-sm text-status-bad" role="alert">
+          <p className="text-subhead text-status-bad" role="alert">
             {error}
           </p>
         )}

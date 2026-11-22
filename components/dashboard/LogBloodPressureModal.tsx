@@ -149,7 +149,7 @@ export function LogBloodPressureModal({
               max={250}
             />
           </div>
-          <div className="pb-3 text-2xl font-semibold text-ink-3 select-none">
+          <div className="pb-3 text-title font-semibold text-ink-3 select-none">
             /
           </div>
           <div className="flex-1">
@@ -171,12 +171,12 @@ export function LogBloodPressureModal({
         {/* Live category / crisis guidance */}
         {preview && (
           <div
-            className={`rounded-lg border px-3 py-2.5 text-sm ${TONE_BANNER[preview.tone]}`}
+            className={`rounded-lg border px-3 py-2.5 text-subhead ${TONE_BANNER[preview.tone]}`}
             role={preview.id === 'crisis' ? 'alert' : undefined}
             data-testid="bp-category-preview"
           >
             <p className="font-medium">{preview.label}</p>
-            <p className="text-xs mt-0.5 opacity-90">{preview.advice}</p>
+            <p className="text-caption mt-0.5 opacity-90">{preview.advice}</p>
           </div>
         )}
 
@@ -211,7 +211,7 @@ export function LogBloodPressureModal({
         <div>
           <label
             htmlFor="bp-notes"
-            className="block text-sm font-medium text-ink mb-1.5"
+            className="block text-subhead font-medium text-ink mb-1.5"
           >
             Notes (optional)
           </label>
@@ -226,7 +226,7 @@ export function LogBloodPressureModal({
         </div>
 
         {saveError && (
-          <p className="text-sm text-status-bad" role="alert">
+          <p className="text-subhead text-status-bad" role="alert">
             {saveError}
           </p>
         )}

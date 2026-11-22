@@ -206,10 +206,10 @@ export function EditFoodModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-sep">
-          <h2 className="text-lg font-semibold text-ink">Edit Food</h2>
+          <h2 className="text-headline font-semibold text-ink">Edit food</h2>
           <button
             onClick={onClose}
-            className="text-ink-2 hover:text-ink text-2xl leading-none"
+            className="text-ink-2 hover:text-ink text-title leading-none"
           >
             ×
           </button>
@@ -219,12 +219,12 @@ export function EditFoodModal({
         <div className="p-4 space-y-5">
           {/* Food Info */}
           <div className="p-4 bg-fill/50 rounded-lg">
-            <h3 className="font-medium text-ink text-lg">{entry.food_name}</h3>
-            <p className="text-sm text-ink-2 mt-1">
+            <h3 className="font-medium text-ink text-headline">{entry.food_name}</h3>
+            <p className="text-subhead text-ink-2 mt-1">
               {entry.serving_size || '1 serving'}
             </p>
             <div className="flex items-center justify-between gap-2 mt-2">
-              <p className="text-xs text-ink-3" data-testid="edit-food-per-serving">
+              <p className="text-caption text-ink-3" data-testid="edit-food-per-serving">
                 Per serving: {Math.round(baseNutrition.calories)} cal ·
                 P: {Math.round(baseNutrition.protein)}g ·
                 C: {Math.round(baseNutrition.carbs)}g ·
@@ -246,7 +246,7 @@ export function EditFoodModal({
               </button>
             </div>
             {macrosMismatchCalories && (
-              <p className="text-[11px] text-status-warn/80 mt-1.5">
+              <p className="text-caption text-status-warn/80 mt-1.5">
                 Heads up: these macros don&apos;t quite match the calories.
               </p>
             )}
@@ -262,7 +262,7 @@ export function EditFoodModal({
                 <svg className="w-4 h-4 text-status-warn flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <p className="text-sm text-status-warn">
+                <p className="text-subhead text-status-warn">
                   This entry looks incomplete — tap to edit nutrition.
                 </p>
               </div>
@@ -272,7 +272,7 @@ export function EditFoodModal({
           {/* Per-serving nutrition editor */}
           {showNutritionEditor && (
             <div className="p-4 bg-fill/50 border border-sep rounded-lg space-y-3">
-              <p className="text-sm font-medium text-ink-2">
+              <p className="text-subhead font-medium text-ink-2">
                 Edit nutrition <span className="text-ink-3 font-normal">(per serving)</span>
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -283,7 +283,7 @@ export function EditFoodModal({
                   { key: 'fat', label: 'Fat (g)', step: '0.1' },
                 ] as const).map(({ key, label, step }) => (
                   <div key={key}>
-                    <label className="block text-xs text-ink-3 mb-1">{label}</label>
+                    <label className="block text-caption text-ink-3 mb-1">{label}</label>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -299,7 +299,7 @@ export function EditFoodModal({
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-ink-3">
+              <p className="text-caption text-ink-3">
                 Corrections are saved to this food, so future logs use the updated values.
               </p>
             </div>
@@ -307,7 +307,7 @@ export function EditFoodModal({
 
           {/* Shared AMOUNT + UNIT editor — identical to the add sheet */}
           <div>
-            <label className="block text-sm font-medium text-ink-2 mb-2">
+            <label className="block text-subhead font-medium text-ink-2 mb-2">
               How much did you have?
             </label>
             <ServingAmountEditor
@@ -322,29 +322,29 @@ export function EditFoodModal({
 
           {/* Updated Nutrition */}
           <div className="p-4 bg-action/10 border border-action/20 rounded-lg">
-            <p className="text-sm font-medium text-action mb-3">Updated Nutrition</p>
+            <p className="text-subhead font-medium text-action mb-3">Updated nutrition</p>
             <div className="grid grid-cols-4 gap-3 text-center">
               <div>
-                <div className="text-2xl font-bold text-ink" data-testid="edit-food-calories">{result.macros.calories}</div>
-                <div className="text-xs text-ink-2">Calories</div>
+                <div className="text-title font-bold text-ink" data-testid="edit-food-calories">{result.macros.calories}</div>
+                <div className="text-caption text-ink-2">Calories</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-action">{result.macros.protein}g</div>
-                <div className="text-xs text-ink-2">Protein</div>
+                <div className="text-headline font-bold text-action">{result.macros.protein}g</div>
+                <div className="text-caption text-ink-2">Protein</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-status-warn">{result.macros.carbs}g</div>
-                <div className="text-xs text-ink-2">Carbs</div>
+                <div className="text-headline font-bold text-status-warn">{result.macros.carbs}g</div>
+                <div className="text-caption text-ink-2">Carbs</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-status-bad">{result.macros.fat}g</div>
-                <div className="text-xs text-ink-2">Fat</div>
+                <div className="text-headline font-bold text-status-bad">{result.macros.fat}g</div>
+                <div className="text-caption text-ink-2">Fat</div>
               </div>
             </div>
           </div>
 
           {error && (
-            <div className="p-3 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-sm">
+            <div className="p-3 bg-status-bad/10 border border-status-bad/20 rounded-lg text-status-bad text-subhead">
               {error}
             </div>
           )}
@@ -354,7 +354,7 @@ export function EditFoodModal({
         <div className="flex items-center justify-between p-4 border-t border-sep">
           <button
             onClick={handleDelete}
-            className="text-status-bad hover:text-status-bad text-sm flex items-center gap-1"
+            className="text-status-bad hover:text-status-bad text-subhead flex items-center gap-1"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -370,7 +370,7 @@ export function EditFoodModal({
               isLoading={isSubmitting}
               disabled={result.servings <= 0}
             >
-              Save Changes
+              Save changes
             </Button>
           </div>
         </div>

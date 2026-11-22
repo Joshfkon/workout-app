@@ -152,7 +152,7 @@ export function EducationPreferencesCard() {
                         : 'bg-sep/50 border border-sep hover:border-ink-3'
                     }`}
                   >
-                    <p className={`text-sm font-medium ${isSelected ? 'text-action' : 'text-ink'}`}>
+                    <p className={`text-subhead font-medium ${isSelected ? 'text-action' : 'text-ink'}`}>
                       {info.label}
                     </p>
                     <p className="text-caption text-ink-3 mt-0.5">{info.sublabel}</p>

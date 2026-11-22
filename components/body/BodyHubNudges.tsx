@@ -156,12 +156,12 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
       {showMeasureNudge && (
         <div className="flex items-center gap-3 p-3 rounded-xl bg-status-warn/10 border border-status-warn/20">
           <IconRuler2 size={18} className="text-status-warn flex-shrink-0" aria-hidden="true" />
-          <p className="flex-1 text-[13px] text-ink">
+          <p className="flex-1 text-subhead text-ink">
             Last measurements: {tapeWeeks} {tapeWeeks === 1 ? 'week' : 'weeks'} ago — log a set?
           </p>
           <button
             onClick={() => onLog('measurements')}
-            className="px-3 py-1.5 rounded-lg bg-status-warn/20 text-status-warn text-xs font-medium hover:bg-status-warn/30 transition-colors flex-shrink-0"
+            className="px-3 py-1.5 rounded-lg bg-status-warn/20 text-status-warn text-caption font-medium hover:bg-status-warn/30 transition-colors flex-shrink-0"
           >
             Log
           </button>
@@ -181,12 +181,12 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
       {showDexaNudge && (
         <div className="flex items-center gap-3 p-3 rounded-xl bg-action/10 border border-action/20">
           <IconScan size={18} className="text-action flex-shrink-0" aria-hidden="true" />
-          <p className="flex-1 text-[13px] text-ink">
+          <p className="flex-1 text-subhead text-ink">
             DEXA due — last scan {scanWeeks} {scanWeeks === 1 ? 'week' : 'weeks'} ago.
           </p>
           <button
             onClick={() => onLog('dexa')}
-            className="px-3 py-1.5 rounded-lg bg-action/20 text-action text-xs font-medium hover:bg-action/30 transition-colors flex-shrink-0"
+            className="px-3 py-1.5 rounded-lg bg-action/20 text-action text-caption font-medium hover:bg-action/30 transition-colors flex-shrink-0"
           >
             Log scan
           </button>
@@ -206,12 +206,12 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
       {showDexaSuggestion && (
         <div className="flex items-center gap-3 p-3 rounded-card bg-card shadow-card">
           <IconScan size={18} className="text-ink-2 flex-shrink-0" aria-hidden="true" />
-          <p className="flex-1 text-[13px] text-ink-2">
+          <p className="flex-1 text-subhead text-ink-2">
             Want a &quot;DEXA due&quot; reminder? Suggested: every {SUGGESTED_DEXA_WEEKS} weeks.
           </p>
           <button
             onClick={() => savePrefs({ dexaReminderWeeks: SUGGESTED_DEXA_WEEKS })}
-            className="px-3 py-1.5 rounded-lg bg-fill text-ink text-xs font-medium hover:bg-fill transition-colors flex-shrink-0"
+            className="px-3 py-1.5 rounded-lg bg-fill text-ink text-caption font-medium hover:bg-fill transition-colors flex-shrink-0"
           >
             Enable
           </button>
@@ -229,7 +229,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
           discoverable where their effects appear. */}
       <button
         onClick={() => setShowSettings(true)}
-        className="flex items-center gap-1.5 text-[11px] text-ink-2 hover:text-ink transition-colors"
+        className="flex items-center gap-1.5 text-caption text-ink-2 hover:text-ink transition-colors"
       >
         <IconSettings size={13} aria-hidden="true" />
         Reminder settings
@@ -242,14 +242,14 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-[13px] text-ink mb-1.5" htmlFor="measure-nudge-weeks">
+            <label className="block text-subhead text-ink mb-1.5" htmlFor="measure-nudge-weeks">
               Tape measurement nudge
             </label>
             <select
               id="measure-nudge-weeks"
               value={measureWeeksSetting}
               onChange={(e) => savePrefs({ measurementNudgeWeeks: Number(e.target.value) })}
-              className="w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-[13px]"
+              className="w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-subhead"
             >
               <option value={0}>Off</option>
               {[2, 4, 6, 8].map((w) => (
@@ -258,14 +258,14 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-ink-2 mt-1">
+            <p className="text-caption text-ink-2 mt-1">
               Shows once your last tape entry is older than this. Never shows
               before your first entry.
             </p>
           </div>
 
           <div>
-            <label className="block text-[13px] text-ink mb-1.5" htmlFor="dexa-reminder-weeks">
+            <label className="block text-subhead text-ink mb-1.5" htmlFor="dexa-reminder-weeks">
               DEXA due reminder
             </label>
             <select
@@ -275,7 +275,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
                 const value = Number(e.target.value);
                 savePrefs({ dexaReminderWeeks: value > 0 ? value : null });
               }}
-              className="w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-[13px]"
+              className="w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-subhead"
             >
               <option value={0}>Off</option>
               {[8, 12, 16, 24].map((w) => (
@@ -288,7 +288,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
 
           <button
             onClick={() => setShowSettings(false)}
-            className="w-full py-2 rounded-lg text-[13px] text-ink-2 hover:text-ink transition-colors"
+            className="w-full py-2 rounded-lg text-subhead text-ink-2 hover:text-ink transition-colors"
           >
             Done
           </button>

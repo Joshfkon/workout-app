@@ -116,7 +116,7 @@ export function MacroSummaryCard({
         colorClassName={over ? 'stroke-status-bad' : 'stroke-action'}
         label={`${kcal.toLocaleString()} of ${target.toLocaleString()} kcal eaten`}
       >
-        <span className="text-[24px] font-bold leading-7 tabular-nums text-ink">
+        <span className="text-title font-bold leading-7 tabular-nums text-ink">
           {Math.abs(remaining).toLocaleString()}
         </span>
         <span className={`text-caption ${over ? 'text-status-bad' : 'text-ink-2'}`}>

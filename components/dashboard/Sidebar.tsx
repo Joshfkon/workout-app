@@ -45,9 +45,9 @@ const primaryNavigation: SidebarNavItem[] = [
 
 // Secondary links — the "More" section
 const moreNavigation: SidebarNavItem[] = [
-  { name: 'Blood Pressure', href: '/dashboard/blood-pressure', icon: IconHeartbeat },
-  { name: 'Social Feed', href: '/dashboard/feed', icon: IconUsers },
-  { name: 'AI Coach', href: '/dashboard/ai-coach', icon: IconSparkles },
+  { name: 'Blood pressure', href: '/dashboard/blood-pressure', icon: IconHeartbeat },
+  { name: 'Social feed', href: '/dashboard/feed', icon: IconUsers },
+  { name: 'AI coach', href: '/dashboard/ai-coach', icon: IconSparkles },
   { name: 'Settings', href: '/dashboard/settings', icon: IconSettings },
   { name: 'Science', href: '/dashboard/science', icon: IconFlask },
 ];
@@ -77,7 +77,7 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
         href={item.href}
         onClick={() => setSidebarOpen(false)}
         className={cn(
-          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-subhead font-medium transition-colors',
           isActive
             ? 'bg-action/10 text-action'
             : 'text-ink-2 hover:bg-fill hover:text-ink'
@@ -87,7 +87,7 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
         {item.name}
         {item.name === 'Train' && volumeGoalsMet && (
           <span
-            className="ml-auto w-2 h-2 rounded-full bg-green-400"
+            className="ml-auto w-2 h-2 rounded-full bg-status-ok"
             role="img"
             aria-label="All muscle groups at target weekly sets"
           />
@@ -133,7 +133,7 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
             <div className="w-9 h-9 rounded-lg bg-action flex items-center justify-center">
               <IconBolt size={20} stroke={2} className="text-white" aria-hidden="true" />
             </div>
-            <span className="text-lg font-bold text-ink">HyperTrack</span>
+            <span className="text-headline font-bold text-ink">HyperTrack</span>
           </Link>
         </div>
 
@@ -142,7 +142,7 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
           {primaryNavigation.map(renderNavItem)}
 
           {/* More section */}
-          <p className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-wider text-ink-3">
+          <p className="px-3 pt-4 pb-1 text-caption font-medium text-ink-3">
             More
           </p>
           {moreNavigation.map(renderNavItem)}
@@ -152,10 +152,10 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-sep">
           <button
             onClick={onSignOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-ink-2 hover:bg-fill hover:text-ink transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-subhead font-medium text-ink-2 hover:bg-fill hover:text-ink transition-colors"
           >
             <IconLogout size={20} stroke={2} aria-hidden="true" />
-            Sign Out
+            Sign out
           </button>
         </div>
       </aside>

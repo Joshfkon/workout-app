@@ -236,7 +236,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                 <button
                   key={preset.type}
                   onClick={() => selectPreset(preset.type)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-caption font-medium transition-colors ${
                     activityType === preset.type
                       ? 'bg-action/20 text-action border border-action/40'
                       : 'bg-fill text-ink-2 border border-sep hover:bg-sep'
@@ -272,7 +272,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                 <button
                   key={option.value}
                   onClick={() => setIntensity(option.value)}
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-2 py-1.5 rounded-lg text-caption font-medium transition-colors ${
                     intensity === option.value
                       ? 'bg-action/20 text-action border border-action/40'
                       : 'bg-fill text-ink-2 border border-sep hover:bg-sep'
@@ -308,7 +308,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                   <button
                     key={option}
                     onClick={() => setDay(option)}
-                    className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
+                    className={`flex-1 px-2 py-2 rounded-lg text-caption font-medium capitalize transition-colors ${
                       day === option
                         ? 'bg-action/20 text-action border border-action/40'
                         : 'bg-fill text-ink-2 border border-sep hover:bg-sep'
@@ -331,7 +331,7 @@ export function NonGymActivityLogger({ userId }: NonGymActivityLoggerProps) {
                 <button
                   key={option.key}
                   onClick={() => toggleMuscleKey(option.key)}
-                  className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                  className={`px-2.5 py-1 rounded-full text-caption transition-colors ${
                     selectedKeys.has(option.key)
                       ? 'bg-action/20 text-action border border-action/40'
                       : 'bg-fill text-ink-2 border border-sep hover:bg-sep'

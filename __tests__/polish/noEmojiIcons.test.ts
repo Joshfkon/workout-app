@@ -29,9 +29,26 @@ const FILES = [
   'components/social/feed/ActivityCard.tsx',
   'components/social/leaderboards/LeaderboardEntry.tsx',
   'components/social/leaderboards/LeaderboardTable.tsx',
+  // Workout and Eat flows (FeedbackChips' faces are the answer options, not icons).
+  'app/(dashboard)/dashboard/workout/[id]/page.tsx',
+  'app/(dashboard)/dashboard/workout/new/page.tsx',
+  'app/(dashboard)/dashboard/body-composition/add/page.tsx',
+  'components/workout/ExerciseCard.tsx',
+  'components/workout/ExerciseSafetyWarning.tsx',
+  'components/workout/ReadinessCheckIn.tsx',
+  'components/workout/SessionSummary.tsx',
+  'components/workout/PRCelebration.tsx',
+  'components/nutrition/TDEEDashboard.tsx',
+  'components/nutrition/BarcodeScanner.tsx',
+  'components/dashboard/HydrationTracker.tsx',
+  'components/analytics/ProportionsAnalyticsCards.tsx',
+  'components/wearables/WearableConnectionsScreen.tsx',
+  'components/wearables/EnhancedTDEEDashboard.tsx',
+  'components/wearables/DailyCalorieAdjustment.tsx',
 ];
 
-// Pictographic emoji (not ✓ ✕ ⚠ arrows or other text symbols).
+// Pictographic emoji (not ✓ ✕ ⚠ arrows or other text symbols). The scan
+// counts JSX comments ({/* … */}) too, so keep glyphs out of those as well.
 const PICTOGRAPH = new RegExp('\\p{Extended_Pictographic}', 'u');
 const ALLOWED = new Set(['✓', '✕', '✗', '⚠', '♥']);
 
