@@ -42,6 +42,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
+import { useWatchBridge } from '@/hooks/useWatchBridge';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
@@ -6663,6 +6664,38 @@ export default function WorkoutPage() {
     setShowClaimPrompt(false);
     finishToDashboard();
   };
+
+  // Apple Watch: mirror the active set and take logs/navigation back. A watch
+  // log goes through the active ExerciseCard's completeLoggedSet, i.e. this
+  // page's handleSetComplete → logSet (outbox) — never a separate write.
+  const watchRestEndsAtS = restTimer.endsAt != null ? Math.round(restTimer.endsAt / 1000) : null;
+  const watchRest = useMemo(
+    () =>
+      watchRestEndsAtS != null
+        ? { endsAt: watchRestEndsAtS * 1000, totalSeconds: restTimer.initialSeconds }
+        : null,
+    [watchRestEndsAtS, restTimer.initialSeconds]
+  );
+  useWatchBridge({
+    enabled: phase === 'workout' && !showFinishConfirm,
+    sessionId,
+    blocks,
+    currentBlockIndex,
+    skippedBlockIds,
+    rest: watchRest,
+    defaultRestSeconds: currentBlock?.targetRestSeconds ?? 180,
+    currentBlockCompletedSets: currentBlock ? getSetsForBlock(currentBlock.id).length : 0,
+    unit: preferences.units,
+    goToBlock: (index) => {
+      const target = blocks[index];
+      if (!target) return;
+      setCurrentBlockIndex(index);
+      // Resume a partially-done block at its next set (as handleNextExercise does).
+      setCurrentSetNumber(getSetsForBlock(target.id).length + 1);
+      setAmrapAcceptedBlockId(null);
+    },
+    finishWorkout: handleWorkoutComplete,
+  });
 
   if (phase === 'loading') {
     // Skeleton matching the workout layout instead of a full-screen spinner

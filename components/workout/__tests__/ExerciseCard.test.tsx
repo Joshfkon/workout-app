@@ -944,6 +944,68 @@ describe('ExerciseCard', () => {
       );
     });
 
+    it('publishes the active row to the Apple Watch and logs a wrist set through onSetComplete', async () => {
+      const onSetComplete = jest.fn().mockResolvedValue('new-set-id');
+      const { getActiveLogger } = jest.requireActual<typeof import('@/lib/watch/activeLogger')>(
+        '@/lib/watch/activeLogger'
+      );
+      const { createWatchMessageHandler } = jest.requireActual<
+        typeof import('@/lib/watch/handleWatchMessage')
+      >('@/lib/watch/handleWatchMessage');
+
+      const { unmount } = render(
+        <ExerciseCard {...defaultProps} isActive={true} onSetComplete={onSetComplete} />
+      );
+
+      const active = getActiveLogger();
+      expect(active?.snapshot).toMatchObject({
+        blockId: defaultProps.block.id,
+        setNumber: 1,
+        weight: '60',
+        reps: '10',
+        targetRir: 2,
+      });
+
+      const handle = createWatchMessageHandler({
+        getContext: () => ({
+          sessionId: 's1',
+          blocks: [{ id: defaultProps.block.id }],
+          currentBlockIndex: 0,
+          skippedBlockIds: new Set(),
+        }),
+        getActiveLogger,
+        goToBlock: jest.fn(),
+        finishWorkout: jest.fn(),
+        resendState: jest.fn(),
+      });
+      await act(async () => {
+        await handle({
+          type: 'logSet',
+          id: 'w1',
+          sessionId: 's1',
+          blockId: defaultProps.block.id,
+          setNumber: 1,
+          weight: 62.5,
+          reps: 9,
+          rir: 1,
+        });
+      });
+
+      expect(onSetComplete).toHaveBeenCalledTimes(1);
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weightKg: 62.5,
+          reps: 9,
+          rpe: 9, // rirToRpe(1)
+          setType: 'normal',
+          feedback: expect.objectContaining({ repsInTank: 1, form: 'clean' }),
+        })
+      );
+
+      unmount();
+      expect(getActiveLogger()).toBeNull();
+    });
+
     it('changing the RIR chip changes the logged RIR and derived RPE', async () => {
       const user = userEvent.setup();
       const onSetComplete = jest.fn().mockResolvedValue('new-set-id');
