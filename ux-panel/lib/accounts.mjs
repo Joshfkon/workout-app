@@ -119,7 +119,10 @@ export async function seedReturningUser(admin, userId, persona) {
         weight_kg: a.weightKg,
         height_cm: a.heightCm,
         birth_date: `${a.birthYear}-06-15`,
-        preferences: { units: a.units },
+        // Standing injuries the persona would have told onboarding about
+        // (users.preferences.injuryAreas: shoulder, lower_back, knee, …), so a
+        // returning-user journey doesn't read as "the app never asked".
+        preferences: { units: a.units, ...(a.injuryAreas?.length ? { injuryAreas: a.injuryAreas } : {}) },
       })
       .eq('id', userId),
     'update users',
@@ -177,8 +180,11 @@ export async function seedReturningUser(admin, userId, persona) {
           .select('id'),
         'exercise_blocks',
       );
-      // Small, steady progression across the history (2.5 kg every other session).
-      const load = Math.max(5, Math.round((a.weightKg * lift.base * strength + 2.5 * Math.floor(w / 2)) / 2.5) * 2.5);
+      // Realistic progression: ~1.5% per time this lift is trained (each lift
+      // comes round every other session), rounded to plate steps. A flat
+      // +2.5 kg per session read as an implausible +10%/week on light lifts.
+      const timesTrained = Math.floor(w / 2);
+      const load = Math.max(5, Math.round((a.weightKg * lift.base * strength * (1 + 0.015 * timesTrained)) / 2.5) * 2.5);
       const sets = [10, 9, 8].map((reps, i) => ({
         exercise_block_id: block.id,
         set_number: i + 1,
