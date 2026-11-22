@@ -242,7 +242,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             .order('name'),
           supabase
             .from('exercise_blocks')
-            .select('exercise_id, workout_sessions!inner(user_id, started_at)')
+            .select('exercise_id, workout_sessions!inner(user_id, started_at, state)')
             .eq('workout_sessions.user_id', userId)
             .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString()),
           supabase
@@ -283,8 +283,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           if (at > (lastDone.get(block.exercise_id) ?? 0)) lastDone.set(block.exercise_id, at);
         });
         // Group blocks into sessions (by start time), most recent first.
+        // Completed sessions only: a started-but-abandoned suggestion has its
+        // blocks before any set is logged and must not advance the rotation.
         const bySession = new Map<string, string[]>();
-        for (const block of (usageRes.data ?? []) as { exercise_id: string; workout_sessions: { started_at: string } }[]) {
+        for (const block of (usageRes.data ?? []) as {
+          exercise_id: string;
+          workout_sessions: { started_at: string; state?: string | null };
+        }[]) {
+          if (block.workout_sessions.state !== 'completed') continue;
           const key = block.workout_sessions.started_at;
           const ids = bySession.get(key) ?? [];
           ids.push(block.exercise_id);
