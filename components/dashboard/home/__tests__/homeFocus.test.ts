@@ -55,4 +55,10 @@ describe('homeFocus', () => {
       homeFocus({ ...foodOnly, completedWorkoutsCount: undefined, recentCompletedWorkouts: undefined })
     ).toBe('training');
   });
+
+  it('keeps a lapsed lifter on training unless their food or weight logs are recent', () => {
+    const lapsed = { completedWorkoutsCount: 40, recentCompletedWorkouts: 0, hasPlan: false, hasTodaysWorkout: false };
+    expect(homeFocus({ ...lapsed, hasRecentWeighIn: false, hasFoodToday: false, hasLoggedBodyOrFood: true })).toBe('training');
+    expect(homeFocus({ ...lapsed, hasRecentWeighIn: true, hasFoodToday: false, hasLoggedBodyOrFood: true })).toBe('food');
+  });
 });

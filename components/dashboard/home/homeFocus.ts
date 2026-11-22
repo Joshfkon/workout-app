@@ -37,7 +37,11 @@ export function homeFocus(input: HomeFocusInput): HomeFocus {
   const noRecentWorkouts = input.recentCompletedWorkouts === 0;
   if (!noWorkoutsEver && !noRecentWorkouts) return 'training';
 
+  const recentFoodOrWeight = input.hasRecentWeighIn || input.hasFoodToday;
+  // "Ever logged food or weight" is enough only for someone who has never
+  // lifted with the app. A lapsed lifter needs RECENT food/weight logs: one
+  // old food entry shouldn't swap their Home away from training.
   const logsFoodOrWeight =
-    input.hasRecentWeighIn || input.hasFoodToday || input.hasLoggedBodyOrFood === true;
+    recentFoodOrWeight || (noWorkoutsEver && input.hasLoggedBodyOrFood === true);
   return logsFoodOrWeight ? 'food' : 'training';
 }
