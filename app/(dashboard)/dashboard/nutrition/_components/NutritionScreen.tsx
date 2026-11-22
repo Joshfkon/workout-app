@@ -2605,7 +2605,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           fat: nutritionTargets.fat || undefined,
         } : undefined}
         userStats={userProfile}
-        workoutsPerWeek={userProfile.workoutsPerWeek || 4}
+        workoutsPerWeek={userProfile.workoutsPerWeek || undefined}
         currentPhase={currentPhase ?? undefined}
       />
 
