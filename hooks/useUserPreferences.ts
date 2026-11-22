@@ -176,3 +176,14 @@ export function useUserPreferences() {
     toggleUnits
   };
 }
+
+/**
+ * Reflect a preference that was ALREADY persisted (e.g. by Settings'
+ * auto-save) in every useUserPreferences consumer, without another DB write.
+ */
+export function applyPreferenceLocally<K extends keyof UserPreferences>(
+  key: K,
+  value: UserPreferences[K]
+): void {
+  notifyListeners({ ...globalPreferences, [key]: value });
+}

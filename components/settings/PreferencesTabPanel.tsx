@@ -1,11 +1,21 @@
 'use client';
 
 import type { WeightUnit } from '@/types/schema';
-import { Card, CardHeader, CardTitle, CardContent, Select, Slider, Toggle, Button } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Select, Slider, Toggle } from '@/components/ui';
 import { EatingWindowSettings } from '@/components/settings/EatingWindowSettings';
 import { BloodPressureSettings } from '@/components/settings/BloodPressureSettings';
 import { MealReminderSettings } from '@/components/settings/MealReminderSettings';
 import { EducationPreferencesCard } from '@/components/settings/EducationPreferencesCard';
+
+/**
+ * Auto-save state for the App preferences card: every choice there saves the
+ * moment it changes (no Save button), confirmed with a brief "Saved".
+ */
+export type PreferenceSaveStatus =
+  | { state: 'saving' }
+  | { state: 'saved' }
+  | { state: 'error'; message: string }
+  | null;
 
 interface PreferencesTabPanelProps {
   // Units
@@ -28,10 +38,8 @@ interface PreferencesTabPanelProps {
   showAiCoachNotes: boolean;
   setShowAiCoachNotes: (value: boolean) => void;
   
-  // Save handling
-  onSave: () => void;
-  isSaving: boolean;
-  hasUnsavedChanges: boolean;
+  /** Auto-save feedback ("Saving…" / "Saved" / error). */
+  saveStatus: PreferenceSaveStatus;
 }
 
 export function PreferencesTabPanel({
@@ -51,19 +59,35 @@ export function PreferencesTabPanel({
   setTrackWaistInCheckin,
   showAiCoachNotes,
   setShowAiCoachNotes,
-  onSave,
-  isSaving,
-  hasUnsavedChanges,
+  saveStatus,
 }: PreferencesTabPanelProps) {
   return (
     <div className="space-y-6">
       {/* Preferences */}
       <Card>
         <CardHeader>
-          <CardTitle>App preferences</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>App preferences</CardTitle>
+            <span
+              role="status"
+              aria-live="polite"
+              data-testid="preferences-save-status"
+              className={`text-caption font-medium ${
+                saveStatus?.state === 'saved' ? 'text-status-ok' : 'text-ink-3'
+              }`}
+            >
+              {saveStatus?.state === 'saving' ? 'Saving…' : saveStatus?.state === 'saved' ? 'Saved' : ''}
+            </span>
+          </div>
           <p className="text-body text-ink-2 mt-1">
-            Customize how the app works and what you see during workouts
+            Customize how the app works and what you see during workouts. Changes save
+            automatically.
           </p>
+          {saveStatus?.state === 'error' && (
+            <p role="alert" className="mt-2 text-caption text-status-bad">
+              {saveStatus.message}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-6">
           <Select
@@ -176,22 +200,6 @@ export function PreferencesTabPanel({
 
       {/* Education & Tips */}
       <EducationPreferencesCard />
-
-      {/* Sticky Save Button with unsaved indicator */}
-      <div className="sticky bottom-4 z-10">
-        <div className="relative">
-          {hasUnsavedChanges && !isSaving && (
-            <div className="absolute -top-8 left-0 right-0 text-center">
-              <span className="text-caption text-status-warn bg-card/95 px-3 py-1 rounded-full border border-status-warn/30">
-                Unsaved changes
-              </span>
-            </div>
-          )}
-          <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
-            Save preferences
-          </Button>
-        </div>
-      </div>
-    </div>
+</div>
   );
 }

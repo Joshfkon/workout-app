@@ -23,12 +23,35 @@ import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } fro
 import { createUntypedClient } from '@/lib/supabase/client';
 import { refreshUserStore } from '@/components/providers/UserStoreHydrator';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
-import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { useUserPreferences, applyPreferenceLocally } from '@/hooks/useUserPreferences';
+import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
 import { ProfileTabPanel } from '@/components/settings/ProfileTabPanel';
 import { TrainingTabPanel } from '@/components/settings/TrainingTabPanel';
 import { PreferencesTabPanel } from '@/components/settings/PreferencesTabPanel';
 import { AccountTabPanel } from '@/components/settings/AccountTabPanel';
+import type { PreferenceSaveStatus } from '@/components/settings/PreferencesTabPanel';
+
+/**
+ * Preferences-tab choices that save the moment they change (keys of the
+ * users.preferences JSONB). Everything else still goes through Save.
+ */
+interface AutoSavedPreferences {
+  units: WeightUnit;
+  restTimer: number;
+  showFormCues: boolean;
+  showWarmupSuggestions: boolean;
+  prioritizeHypertrophy: boolean;
+  skipPreWorkoutCheckIn: boolean;
+  trackWaistInCheckin: boolean;
+  showAiCoachNotes: boolean;
+}
+
+/** How long the "Saved" confirmation stays up. */
+const SAVED_CONFIRMATION_MS = 2000;
+/** The rest-timer slider saves once the user stops dragging. */
+const REST_TIMER_SAVE_DEBOUNCE_MS = 600;
 
 // Helper functions for unit conversion
 const cmToInches = (cm: number) => cm / 2.54;
@@ -77,6 +100,20 @@ export default function SettingsPage() {
   const snapshotPendingRef = useRef(false);
   // Snapshot of loaded values to detect real changes vs. initial data population
   const [initialValues, setInitialValues] = useState<Record<string, any>>({});
+  const initialValuesRef = useRef(initialValues);
+  initialValuesRef.current = initialValues;
+
+  // Preferences-tab auto-save state (see autoSavePreferences).
+  const [prefSaveStatus, setPrefSaveStatus] = useState<PreferenceSaveStatus>(null);
+  // Saves run one after another: each is a read-merge-write of the
+  // preferences JSONB, so two in flight could drop each other's key.
+  const prefSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restTimerSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when WE write the settings cache after an auto-save, so the fan-out
+  // effect below doesn't reset the form (and any unsaved Profile edits).
+  const skipNextFanOutRef = useRef(false);
+  const ensureAiConsent = useAiConsentGate();
 
   // Extended profile fields
   const [age, setAge] = useState('');
@@ -86,32 +123,59 @@ export default function SettingsPage() {
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
 
-  // Convert display values when units change
+  // Convert display values when units change, then save the choice at once.
   const handleUnitsChange = (newUnits: WeightUnit) => {
+    if (newUnits === units) return;
+    const prevUnits = units;
+    const prevHeightDisplay = heightDisplay;
+    const prevWeightDisplay = weightDisplay;
+    let nextHeightDisplay = heightDisplay;
+    let nextWeightDisplay = weightDisplay;
+
     // Convert existing display values to new units
     if (heightDisplay) {
       const heightVal = parseFloat(heightDisplay);
       if (units === 'kg' && newUnits === 'lb') {
         // cm -> inches
-        setHeightDisplay(cmToInches(heightVal).toFixed(1));
+        nextHeightDisplay = cmToInches(heightVal).toFixed(1);
       } else if (units === 'lb' && newUnits === 'kg') {
         // inches -> cm
-        setHeightDisplay(inchesToCm(heightVal).toFixed(1));
+        nextHeightDisplay = inchesToCm(heightVal).toFixed(1);
       }
     }
-    
+
     if (weightDisplay) {
       const weightVal = parseFloat(weightDisplay);
       if (units === 'kg' && newUnits === 'lb') {
         // kg -> lbs
-        setWeightDisplay(kgToLbs(weightVal).toFixed(1));
+        nextWeightDisplay = kgToLbs(weightVal).toFixed(1);
       } else if (units === 'lb' && newUnits === 'kg') {
         // lbs -> kg
-        setWeightDisplay(lbsToKg(weightVal).toFixed(1));
+        nextWeightDisplay = lbsToKg(weightVal).toFixed(1);
       }
     }
-    
+
+    setHeightDisplay(nextHeightDisplay);
+    setWeightDisplay(nextWeightDisplay);
     setUnits(newUnits);
+
+    // Height/weight are stored metric, so converting their display is not an
+    // edit: move the saved snapshot along with them unless the user had
+    // already typed an unsaved value (that one stays "unsaved").
+    const snapshot = initialValuesRef.current;
+    const snapshotExtras: Record<string, unknown> = {};
+    if (prevHeightDisplay === snapshot.heightDisplay) snapshotExtras.heightDisplay = nextHeightDisplay;
+    if (prevWeightDisplay === snapshot.weightDisplay) snapshotExtras.weightDisplay = nextWeightDisplay;
+
+    autoSavePreferences(
+      { units: newUnits },
+      () => {
+        setUnits(prevUnits);
+        setHeightDisplay(prevHeightDisplay);
+        setWeightDisplay(prevWeightDisplay);
+      },
+      snapshotExtras
+    );
   };
 
   // Load settings on mount and when page becomes visible
@@ -157,6 +221,10 @@ export default function SettingsPage() {
 
   // Fan the cached settings bundle into local editing state.
   useEffect(() => {
+    if (skipNextFanOutRef.current) {
+      skipNextFanOutRef.current = false;
+      return;
+    }
     if (settingsQuery.data === null) {
       setIsLoading(false);
       return;
@@ -474,6 +542,105 @@ export default function SettingsPage() {
     }
   };
 
+  /**
+   * Save Preferences-tab choices the moment they change, with a brief
+   * "Saved". Only the given users.preferences keys are written (merged into
+   * what is stored now), never unsaved edits from other tabs. On failure the
+   * control is put back and the error is shown.
+   */
+  const autoSavePreferences = (
+    patch: Partial<AutoSavedPreferences>,
+    revert: () => void,
+    snapshotExtras: Record<string, unknown> = {}
+  ) => {
+    if (!settingsLoaded) {
+      revert();
+      setPrefSaveStatus({
+        state: 'error',
+        message: "Your settings haven't loaded yet, so nothing was saved. Check your connection and try again.",
+      });
+      return;
+    }
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    setPrefSaveStatus({ state: 'saving' });
+
+    prefSaveChainRef.current = prefSaveChainRef.current.then(async () => {
+      try {
+        const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not logged in');
+
+        const merged = await savePreferencesPatch(supabase, user.id, patch);
+
+        // Every other reader of these prefs: the shared preferences hook…
+        if (patch.units !== undefined) applyPreferenceLocally('units', patch.units);
+        if (patch.restTimer !== undefined) applyPreferenceLocally('restTimerDefault', patch.restTimer);
+        if (patch.showFormCues !== undefined) applyPreferenceLocally('showFormCues', patch.showFormCues);
+        if (patch.showWarmupSuggestions !== undefined) {
+          applyPreferenceLocally('showWarmupSuggestions', patch.showWarmupSuggestions);
+        }
+        if (patch.skipPreWorkoutCheckIn !== undefined) {
+          applyPreferenceLocally('skipPreWorkoutCheckIn', patch.skipPreWorkoutCheckIn);
+        }
+        if (patch.trackWaistInCheckin !== undefined) {
+          applyPreferenceLocally('trackWaistInCheckin', patch.trackWaistInCheckin);
+        }
+        // …the user store (units drive formatWeight everywhere)…
+        void refreshUserStore(user.id);
+        // …and this page's cached row, so a revisit shows the saved value.
+        queryClient.setQueryData<typeof settingsQuery.data>(SETTINGS_KEY, (old) => {
+          if (!old?.userRow) return old;
+          skipNextFanOutRef.current = true;
+          return { ...old, userRow: { ...old.userRow, preferences: merged } };
+        });
+
+        setInitialValues((prev) => ({ ...prev, ...patch, ...snapshotExtras }));
+        setPrefSaveStatus({ state: 'saved' });
+        savedTimerRef.current = setTimeout(() => setPrefSaveStatus(null), SAVED_CONFIRMATION_MS);
+      } catch (err) {
+        revert();
+        setPrefSaveStatus({
+          state: 'error',
+          message: err instanceof Error ? `Couldn't save: ${err.message}` : "Couldn't save. Please try again.",
+        });
+      }
+    });
+  };
+
+  /** A Preferences-tab switch: flip it and save it. */
+  const autoSaveToggle =
+    (key: Exclude<keyof AutoSavedPreferences, 'units' | 'restTimer'>, setter: (value: boolean) => void) =>
+    (value: boolean) => {
+      setter(value);
+      autoSavePreferences({ [key]: value }, () => setter(!value));
+    };
+
+  // AI coach notes send workout data to xAI: turning them on is a first AI
+  // use, so it asks for consent (and stays off if the user declines).
+  const handleShowAiCoachNotesChange = async (value: boolean) => {
+    if (value && !(await ensureAiConsent())) return;
+    autoSaveToggle('showAiCoachNotes', setShowAiCoachNotes)(value);
+  };
+
+  // The slider fires on every step: save once the user lets go.
+  const handleRestTimerChange = (value: number) => {
+    setRestTimer(value);
+    if (restTimerSaveRef.current) clearTimeout(restTimerSaveRef.current);
+    restTimerSaveRef.current = setTimeout(() => {
+      autoSavePreferences({ restTimer: value }, () =>
+        setRestTimer(initialValuesRef.current.restTimer ?? 180)
+      );
+    }, REST_TIMER_SAVE_DEBOUNCE_MS);
+  };
+
+  useEffect(
+    () => () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (restTimerSaveRef.current) clearTimeout(restTimerSaveRef.current);
+    },
+    []
+  );
+
   const handleExperienceChange = (exp: Experience) => {
     setVolumeLandmarks(DEFAULT_VOLUME_LANDMARKS[exp]);
   };
@@ -584,22 +751,20 @@ export default function SettingsPage() {
           units={units}
           handleUnitsChange={handleUnitsChange}
           restTimer={restTimer}
-          setRestTimer={setRestTimer}
+          setRestTimer={handleRestTimerChange}
           showFormCues={showFormCues}
-          setShowFormCues={setShowFormCues}
+          setShowFormCues={autoSaveToggle('showFormCues', setShowFormCues)}
           showWarmupSuggestions={showWarmupSuggestions}
-          setShowWarmupSuggestions={setShowWarmupSuggestions}
+          setShowWarmupSuggestions={autoSaveToggle('showWarmupSuggestions', setShowWarmupSuggestions)}
           prioritizeHypertrophy={prioritizeHypertrophy}
-          setPrioritizeHypertrophy={setPrioritizeHypertrophy}
+          setPrioritizeHypertrophy={autoSaveToggle('prioritizeHypertrophy', setPrioritizeHypertrophy)}
           skipPreWorkoutCheckIn={skipPreWorkoutCheckIn}
-          setSkipPreWorkoutCheckIn={setSkipPreWorkoutCheckIn}
+          setSkipPreWorkoutCheckIn={autoSaveToggle('skipPreWorkoutCheckIn', setSkipPreWorkoutCheckIn)}
           trackWaistInCheckin={trackWaistInCheckin}
-          setTrackWaistInCheckin={setTrackWaistInCheckin}
+          setTrackWaistInCheckin={autoSaveToggle('trackWaistInCheckin', setTrackWaistInCheckin)}
           showAiCoachNotes={showAiCoachNotes}
-          setShowAiCoachNotes={setShowAiCoachNotes}
-          onSave={handleSave}
-          isSaving={isSaving}
-          hasUnsavedChanges={hasUnsavedChanges}
+          setShowAiCoachNotes={(value) => void handleShowAiCoachNotesChange(value)}
+          saveStatus={prefSaveStatus}
         />
       )}
 
