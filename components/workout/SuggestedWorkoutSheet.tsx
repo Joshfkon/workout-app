@@ -64,7 +64,8 @@ import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
-import type { Experience, MuscleGroup, WarmupSet } from '@/types/schema';
+import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
+import { formatTargetRange } from '@/services/shared/setModality';
 
 interface SheetExercise {
   id: string;
@@ -78,6 +79,7 @@ interface SheetExercise {
   hypertrophy_tier: string | null;
   equipment_required: string[] | null;
   is_bodyweight: boolean | null;
+  exercise_type: ExerciseType | null;
 }
 
 /** Shape the location substitution pass consumes. */
@@ -183,7 +185,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           supabase
             .from('exercises')
             .select(
-              'id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, default_rep_range, default_rir, hypertrophy_tier, equipment_required, is_bodyweight'
+              'id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, default_rep_range, default_rir, hypertrophy_tier, equipment_required, is_bodyweight, exercise_type'
             )
             .is('deleted_at', null) // hide merge-soft-deleted duplicates
             .order('name'),
@@ -338,6 +340,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         defaultRir: ex.default_rir,
         equipment: ex.equipment_required,
         isBodyweight: ex.is_bodyweight,
+        exerciseType: ex.exercise_type,
       })),
       recentExerciseIds,
       maxExercises: maxExercisesForDuration(aiDuration),
@@ -896,8 +899,12 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                       </span>
                       <span className="block text-caption text-ink-3">
                         {STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle} · {pick.sets}{' '}
-                        {pick.sets === 1 ? 'set' : 'sets'} · {pick.repRange[0]}–{pick.repRange[1]}{' '}
-                        reps · {pick.targetRir} RIR
+                        {pick.sets === 1 ? 'set' : 'sets'} ·{' '}
+                        {formatTargetRange(pick.repRange, {
+                          exerciseType: exercise.exercise_type,
+                        })}
+                        {exercise.exercise_type === 'duration_based' ? '' : ' reps'} ·{' '}
+                        {pick.targetRir} RIR
                       </span>
                       <span className="block text-caption text-ink-3">{pick.reason}</span>
                       {sub && (
