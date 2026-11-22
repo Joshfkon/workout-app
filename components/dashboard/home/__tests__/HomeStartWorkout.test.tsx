@@ -60,11 +60,11 @@ const doneSession: RecentSessionRow = {
   ],
 };
 
-function renderIt() {
+function renderIt(compact = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <HomeStartWorkout userId="user-1" />
+      <HomeStartWorkout userId="user-1" compact={compact} />
     </QueryClientProvider>
   );
 }
@@ -110,5 +110,20 @@ describe('HomeStartWorkout', () => {
     await user.click(screen.getByRole('button', { name: /start workout/i }));
     await user.click(screen.getByText('AI-suggested workout'));
     expect(screen.getByText('Suggestion sheet')).toBeInTheDocument();
+  });
+});
+
+describe('HomeStartWorkout — compact entry (food-focused Home)', () => {
+  it('is one quiet row with a start button and a program link', async () => {
+    const user = userEvent.setup();
+    renderIt(true);
+    expect(screen.getByTestId('home-compact-workout-entry')).toBeInTheDocument();
+    expect(screen.getByText('Lifting too?')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /build a program/i })).toHaveAttribute(
+      'href',
+      '/dashboard/mesocycle/new'
+    );
+    await user.click(screen.getByRole('button', { name: /start workout/i }));
+    expect(screen.getByText('Start empty workout')).toBeInTheDocument();
   });
 });

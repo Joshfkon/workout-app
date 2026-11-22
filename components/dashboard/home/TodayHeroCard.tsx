@@ -70,6 +70,12 @@ interface TodayHeroCardProps {
    * a single link to the Train tab.
    */
   freestyleActions?: ReactNode;
+  /**
+   * Home leads with food for this user (homeFocus === 'food'): the meal hero
+   * shows without a plan, and the "Ready to train?" / program prompt never
+   * does — Home renders a compact workout entry lower down instead.
+   */
+  foodFocus?: boolean;
 }
 
 /**
@@ -159,10 +165,12 @@ export function todayHeroVariant({
   hasPlan,
   freestyle = false,
   meal,
-}: Pick<TodayHeroCardProps, 'workout' | 'scheduled' | 'hasPlan' | 'freestyle' | 'meal'>): TodayHeroVariant {
+  foodFocus = false,
+}: Pick<TodayHeroCardProps, 'workout' | 'scheduled' | 'hasPlan' | 'freestyle' | 'meal' | 'foodFocus'>): TodayHeroVariant {
   if (workout && workout.state !== 'completed') return 'workout';
   if (!workout && scheduled) return 'scheduled';
-  if (meal && (hasPlan || freestyle)) return 'meal';
+  if (meal && (hasPlan || freestyle || foodFocus)) return 'meal';
+  if (foodFocus && !workout) return 'none';
   if (workout && workout.state === 'completed') return 'done';
   if (freestyle) return 'freestyle';
   if (!hasPlan) return 'no-plan';
@@ -197,8 +205,9 @@ export function TodayHeroCard({
   onStartWorkout,
   isStarting = false,
   freestyleActions,
+  foodFocus = false,
 }: TodayHeroCardProps) {
-  const variant = todayHeroVariant({ workout, scheduled, hasPlan, freestyle, meal });
+  const variant = todayHeroVariant({ workout, scheduled, hasPlan, freestyle, meal, foodFocus });
 
   // Pending workout — the primary recommendation when the user hasn't trained yet.
   if (variant === 'workout' && workout) {

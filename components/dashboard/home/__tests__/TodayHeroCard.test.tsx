@@ -393,3 +393,34 @@ describe('todayHeroVariant / heroOffersWorkoutStart', () => {
     expect(heroOffersWorkoutStart('no-plan')).toBe(true);
   });
 });
+
+describe('TodayHeroCard — food-focused Home', () => {
+  it('shows the meal hero without a plan instead of "Ready to train?"', () => {
+    expect(todayHeroVariant({ workout: null, hasPlan: false, meal, foodFocus: true })).toBe('meal');
+    render(<TodayHeroCard workout={null} hasPlan={false} mesocycleName={null} meal={meal} foodFocus />);
+    expect(screen.getByText('Log dinner')).toBeInTheDocument();
+    expect(screen.queryByText('Ready to train?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Want a program?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Build a program')).not.toBeInTheDocument();
+  });
+
+  it('renders no workout hero (and no program popup) when there is no meal to suggest', () => {
+    expect(todayHeroVariant({ workout: null, hasPlan: false, meal: null, foodFocus: true })).toBe('none');
+    const { container } = render(
+      <TodayHeroCard workout={null} hasPlan={false} mesocycleName={null} meal={null} foodFocus />
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('lifters without a plan keep the "Ready to train?" hero', () => {
+    expect(todayHeroVariant({ workout: null, hasPlan: false, meal })).toBe('no-plan');
+    render(<TodayHeroCard workout={null} hasPlan={false} mesocycleName={null} meal={meal} />);
+    expect(screen.getByText('Ready to train?')).toBeInTheDocument();
+  });
+
+  it('a pending workout still wins over food focus', () => {
+    expect(
+      todayHeroVariant({ workout: baseWorkout, hasPlan: false, meal, foodFocus: true })
+    ).toBe('workout');
+  });
+});

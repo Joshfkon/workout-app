@@ -112,6 +112,12 @@ export interface LiftTrendsSummary {
    */
   insufficientData: number;
   /**
+   * Completed sessions the summary was computed over (the caller's window).
+   * Home uses 0 to tell a food-only user from a lifter. Optional: older
+   * persisted summaries predate it.
+   */
+  sessionsInWindow?: number;
+  /**
    * Those not-yet-trended lifts with their best recent set, so the Strength
    * tab can show real numbers before a trend exists (heaviest top set in the
    * window; most-trained first, capped at MAX_TRACKED_LIFTS).
@@ -491,6 +497,7 @@ export function computeLiftTrends(
     down: confident.filter((l) => l.direction === 'down').length,
     rebuilding: lifts.length - confident.length,
     insufficientData,
+    sessionsInWindow: sessions.length,
     earlyLifts,
     stalled,
     windowDays: LIFT_TREND_WINDOW_DAYS,

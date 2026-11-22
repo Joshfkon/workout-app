@@ -40,7 +40,21 @@ async function fetchInProgressWorkoutId(userId: string): Promise<string | null> 
 const BUTTON =
   'flex w-full min-h-[50px] items-center justify-center gap-2 rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110 active:brightness-95';
 
-export function HomeStartWorkout({ userId }: { userId: string | null }) {
+const COMPACT_BUTTON =
+  'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-button bg-action-tint px-3 text-action text-subhead font-semibold transition-[filter] hover:brightness-110 active:brightness-95';
+
+export function HomeStartWorkout({
+  userId,
+  compact = false,
+}: {
+  userId: string | null;
+  /**
+   * One quiet row for users who track food, not workouts (homeFocus 'food'):
+   * "Lifting too?" with a small Start workout button and a Build a program
+   * link, so both stay reachable without leading Home.
+   */
+  compact?: boolean;
+}) {
   const [showOptions, setShowOptions] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
   const [showRepeat, setShowRepeat] = useState(false);
@@ -58,24 +72,56 @@ export function HomeStartWorkout({ userId }: { userId: string | null }) {
 
   if (inProgressId) {
     return (
-      <Link href={`/dashboard/workout/${inProgressId}`} className={BUTTON} data-testid="home-resume-workout">
-        <IconPlayerPlay size={20} aria-hidden="true" />
+      <Link
+        href={`/dashboard/workout/${inProgressId}`}
+        className={compact ? COMPACT_BUTTON : BUTTON}
+        data-testid="home-resume-workout"
+      >
+        <IconPlayerPlay size={compact ? 16 : 20} aria-hidden="true" />
         Resume workout
       </Link>
     );
   }
 
-  return (
-    <>
+  const startButton = compact ? (
+    <div
+      className="flex items-center gap-3 rounded-card bg-card shadow-card px-4 py-3"
+      data-testid="home-compact-workout-entry"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="text-body font-semibold text-ink">Lifting too?</div>
+        <Link
+          href="/dashboard/mesocycle/new"
+          className="text-subhead text-ink-2 hover:text-ink transition-colors"
+        >
+          Or build a program
+        </Link>
+      </div>
       <button
         type="button"
         onClick={() => setShowOptions(true)}
-        className={BUTTON}
+        className={COMPACT_BUTTON}
         data-testid="home-start-workout"
       >
-        <IconBarbell size={20} aria-hidden="true" />
+        <IconBarbell size={16} aria-hidden="true" />
         Start workout
       </button>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setShowOptions(true)}
+      className={BUTTON}
+      data-testid="home-start-workout"
+    >
+      <IconBarbell size={20} aria-hidden="true" />
+      Start workout
+    </button>
+  );
+
+  return (
+    <>
+      {startButton}
       <BottomSheet isOpen={showOptions} onClose={() => setShowOptions(false)} title="Start a workout">
         <StartWorkoutOptions
           onSuggest={() => {
