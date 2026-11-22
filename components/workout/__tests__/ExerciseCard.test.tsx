@@ -1167,7 +1167,7 @@ describe('ExerciseCard', () => {
       // No history and a target weight -> the plain source line is on the
       // strip, and the profile-estimate reason (which says the same thing in
       // other words) is not repeated next to it.
-      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/Starting guess/);
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting guess/);
       expect(screen.queryByText(/starting point estimated/)).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'How this suggestion works' }));
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
@@ -1198,7 +1198,25 @@ describe('ExerciseCard', () => {
     it('cold start (no history): the banner says the number is a profile estimate', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'Starting guess — pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust'
+      );
+    });
+
+    it('cold start from a profile estimate says what the guess rests on', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          coldStartSuggestion={{
+            weightKg: 30,
+            reason: 'starting point estimated from your training profile',
+            explanation: 'Based on typical strength for your experience level.',
+            estimateSource: 'strength_standards',
+          }}
+        />
+      );
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+        'First time on this lift — starting guess from typical strength for your experience and bodyweight; pick a weight'
       );
     });
 
@@ -1216,7 +1234,7 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'Starting guess from your Barbell Back Squat — pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting guess from your Barbell Back Squat; pick a weight you could lift ~12 times, then adjust'
       );
       // The prescribed number is unchanged by the explanation.
       expect(screen.getByTestId('suggestion-source').closest('p')).toHaveTextContent(

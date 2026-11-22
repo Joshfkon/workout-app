@@ -499,6 +499,8 @@ export interface ColdStartSuggestion {
   explanation: string;
   /** Name of the logged lift the estimate transferred from, when it did. */
   transferFrom?: string;
+  /** Which estimation rung produced the number, so the source line can name it plainly. */
+  estimateSource?: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio' | 'calibration' | 'exercise_transfer';
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -519,6 +521,14 @@ export type SetSyncStatus = 'saving' | 'saved' | 'queued' | 'failed';
  * own target range goes higher keeps refilling up to that range.
  */
 const WEIGHT_EDIT_MAX_REPS = 20;
+
+/** Plain words for what a cold-start estimate rests on (weightEstimationEngine sources). */
+const COLD_START_BASIS: Record<string, string> = {
+  related_exercise: 'similar lifts you’ve logged',
+  strength_standards: 'typical strength for your experience and bodyweight',
+  bodyweight_ratio: 'your bodyweight',
+  calibration: 'your strength test',
+};
 
 export const ExerciseCard = memo(function ExerciseCard({
   exercise,
@@ -3012,11 +3022,16 @@ export const ExerciseCard = memo(function ExerciseCard({
         const transferFrom =
           coldStartSuggestion.transferFrom ??
           coldStartSuggestion.reason.match(/from your (.+?) strength/i)?.[1];
-        sourceLine = transferFrom
-          ? `Starting guess from your ${transferFrom} — ${coldStartPickLine}`
-          : `Starting guess — ${coldStartPickLine}`;
+        // Name what the guess rests on, in plain words: "no explanation of
+        // why 65 lbs" was the panel's complaint about a bare "Starting guess".
+        const basis = transferFrom
+          ? `your ${transferFrom}`
+          : COLD_START_BASIS[coldStartSuggestion.estimateSource ?? ''] ?? null;
+        sourceLine = basis
+          ? `First time on this lift — starting guess from ${basis}; ${coldStartPickLine}`
+          : `First time on this lift — starting guess; ${coldStartPickLine}`;
       } else if (weight) {
-        sourceLine = `Starting guess — ${coldStartPickLine}`;
+        sourceLine = `First time on this lift — starting guess; ${coldStartPickLine}`;
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else if (isDurationBased) {
