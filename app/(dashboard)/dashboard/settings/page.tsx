@@ -553,16 +553,19 @@ export default function SettingsPage() {
     revert: () => void,
     snapshotExtras: Record<string, unknown> = {}
   ) => {
+    // Which control changed, so "Saved" shows next to it (not only in a header).
+    const field = Object.keys(patch)[0] as keyof AutoSavedPreferences | undefined;
     if (!settingsLoaded) {
       revert();
       setPrefSaveStatus({
         state: 'error',
+        field,
         message: "Your settings haven't loaded yet, so nothing was saved. Check your connection and try again.",
       });
       return;
     }
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    setPrefSaveStatus({ state: 'saving' });
+    setPrefSaveStatus({ state: 'saving', field });
 
     prefSaveChainRef.current = prefSaveChainRef.current.then(async () => {
       try {
@@ -595,12 +598,13 @@ export default function SettingsPage() {
         });
 
         setInitialValues((prev) => ({ ...prev, ...patch, ...snapshotExtras }));
-        setPrefSaveStatus({ state: 'saved' });
+        setPrefSaveStatus({ state: 'saved', field });
         savedTimerRef.current = setTimeout(() => setPrefSaveStatus(null), SAVED_CONFIRMATION_MS);
       } catch (err) {
         revert();
         setPrefSaveStatus({
           state: 'error',
+          field,
           message: err instanceof Error ? `Couldn't save: ${err.message}` : "Couldn't save. Please try again.",
         });
       }
