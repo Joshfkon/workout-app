@@ -86,7 +86,9 @@ export function comparableQuestions(a, b, legacy = {}) {
 }
 
 /** Compare two score tables ({group: {question: cell}}) on the given questions. */
-export function compareScoreTables(ta = {}, tb = {}, questions) {
+export function compareScoreTables(ta, tb, questions) {
+  ta ??= {}; // a run without week reviews stores weekScores: null
+  tb ??= {};
   const out = {};
   for (const g of new Set([...Object.keys(ta), ...Object.keys(tb)])) {
     out[g] = {};

@@ -103,6 +103,14 @@ describe('compareRuns with a question filter', () => {
     expect(cmp.scores.all.keep_using).toBeUndefined();
     expect(cmp.weekScores.all.switch.sharpDelta).toBeCloseTo(1.5);
   });
+
+  it('handles a run without week reviews (weekScores: null) on either side', () => {
+    const withWeek = { scores: { all: { ease: { n: 1, pmf: FLAT, mean: 3 } } }, weekScores: { all: { switch: { n: 1, pmf: FLAT, mean: 3 } } }, frictions: [] };
+    const noWeek = { scores: { all: { ease: { n: 1, pmf: HIGH, mean: 4.2 } } }, weekScores: null, frictions: [] };
+    expect(compareRuns(noWeek, withWeek, { questions: ['ease', 'switch'] }).scores.all.ease.delta).toBeCloseTo(-1.2);
+    expect(compareRuns(withWeek, noWeek, { questions: ['ease', 'switch'] }).weekScores.all.switch.meanB).toBeNaN();
+    expect(compareRuns(noWeek, noWeek).weekScores).toEqual({});
+  });
 });
 
 describe('report with end-of-week reviews', () => {
