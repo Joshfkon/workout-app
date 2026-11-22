@@ -14,7 +14,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { toolUses } from './llm.mjs';
-import { QUESTIONS } from '../anchors.mjs';
+import { TASK_QUESTIONS, WEEK_QUESTIONS } from '../anchors.mjs';
 
 const thought = {
   type: 'string',
@@ -50,7 +50,8 @@ export const STEP_TOOLS = [
   },
 ].map((t) => ({ ...t, strict: true }));
 
-const reviewProps = Object.fromEntries(QUESTIONS.map((q) => [q.id, { type: 'string', description: q.prompt }]));
+const propsFor = (qs) => Object.fromEntries(qs.map((q) => [q.id, { type: 'string', description: q.prompt }]));
+const reviewProps = propsFor(TASK_QUESTIONS);
 /**
  * Every separate problem, small annoyances included, one per item. Live
  * report_friction calls only catch what a persona flags mid-task (mostly
@@ -83,7 +84,30 @@ export const REVIEW_TOOL = {
       simpler: { type: 'string', description: 'How this task could have been simpler for you, concretely.' },
       problems: PROBLEMS_SCHEMA,
     },
-    [...QUESTIONS.map((q) => q.id), 'liked', 'confusing', 'simpler', 'problems'],
+    [...TASK_QUESTIONS.map((q) => q.id), 'liked', 'confusing', 'simpler', 'problems'],
+  ),
+};
+
+/** End-of-week review: one per persona, after all of their sessions. */
+export const WEEK_REVIEW_TOOL = {
+  name: 'submit_week_review',
+  description: 'Submit your honest end-of-week verdict on HyperTrack, in your own words.',
+  strict: true,
+  input_schema: obj(
+    {
+      // The verdict is scored on its own: a long answer full of reasons scores
+      // near 3 whatever its first word says (round 1 of the week review: a
+      // plain "No" scored 3.2 inside a paragraph, 1.95 on its own).
+      ...Object.fromEntries(
+        WEEK_QUESTIONS.flatMap((q) => [
+          [q.id, { type: 'string', description: `${q.prompt.replace(/ Say what tips it either way\.| Say why\./, '').replace(/Answer honestly,.*$/, '')}Your answer in ONE short sentence, with no reasons (they go in ${q.id}_why).` }],
+          [`${q.id}_why`, { type: 'string', description: 'Why, in one to three sentences: what tipped it.' }],
+        ]),
+      ),
+      best: { type: 'string', description: 'The one thing that would most make you stay, if any.' },
+      dealbreaker: { type: 'string', description: 'The one thing that would most make you leave, if any.' },
+    },
+    [...WEEK_QUESTIONS.flatMap((q) => [q.id, `${q.id}_why`]), 'best', 'dealbreaker'],
   ),
 };
 
@@ -358,5 +382,38 @@ export async function writeReview({ llm, persona, goalText, run, lens = null }) 
   });
   const use = toolUses(msg).find((u) => u.name === 'submit_review');
   if (!use) throw new Error('persona did not submit a review');
+  return use.input;
+}
+
+/**
+ * The persona's end-of-week verdict, written once after all of their
+ * sessions. Asked relative to what they use now, because "would you keep
+ * using it?" after a single short task only ever gets an honest "maybe".
+ *
+ * @param {{llm, persona, sessions: Array<{label: string, outcome: string, summary?: string, review?: object}>, lens?: string|null}} args
+ */
+export async function writeWeekReview({ llm, persona, sessions, lens = null }) {
+  const lines = sessions.map((s) => {
+    const how = s.outcome === 'completed' ? 'got it done' : 'gave up';
+    const notes = [s.summary, s.review?.liked && `Liked: ${s.review.liked}`, s.review?.confusing && `Bothered you: ${s.review.confusing}`].filter(Boolean).join(' ');
+    return `- ${s.label}: you ${how}. ${notes}`;
+  });
+  const msg = await llm.call({
+    system: [{ type: 'text', text: personaSystemPrompt(persona, lens), cache_control: { type: 'ephemeral' } }],
+    tools: [WEEK_REVIEW_TOOL],
+    messages: [
+      {
+        role: 'user',
+        content: [
+          `It's the end of your first week with HyperTrack. Over the week you used it for these things:\n${lines.join('\n')}`,
+          `What you use now: ${persona.previousApps || 'nothing in particular'}. What you want: ${persona.goals}`,
+          "Now decide, as yourself, whether HyperTrack earns a place over what you already do. Judge it against your current way, not against perfection. If it's clearly better or clearly worse for you, say so plainly; only say you're unsure if you truly are.",
+          'Answer with submit_week_review, briefly and honestly; do not give numeric ratings.',
+        ].join('\n\n'),
+      },
+    ],
+  });
+  const use = toolUses(msg).find((u) => u.name === 'submit_week_review');
+  if (!use) throw new Error('persona did not submit a week review');
   return use.input;
 }

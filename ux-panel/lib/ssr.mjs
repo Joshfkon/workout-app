@@ -24,6 +24,15 @@
 
 export const LIKERT_POINTS = [1, 2, 3, 4, 5];
 
+/**
+ * Temperature for the "sharper" score shown beside the standard (T = 1) one.
+ * At T = 1 the five probabilities come out nearly flat, so every mean lands
+ * near 3. On the App Store calibration set, T = 0.3 matched real star
+ * distributions better (mean KS 0.76 -> 0.89 for keep_using; see README).
+ * The standard score stays the headline so runs remain comparable.
+ */
+export const SHARP_TEMPERATURE = 0.3;
+
 /** Cosine similarity of two equal-length numeric vectors. */
 export function cosine(a, b) {
   if (a.length !== b.length) throw new Error(`cosine: length mismatch ${a.length} vs ${b.length}`);

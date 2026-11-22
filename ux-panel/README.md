@@ -38,27 +38,48 @@ Similarity Elicitation of Likert Ratings* (arXiv 2510.08338).
    documentation, so getting lost is a finding. It takes one action per step,
    flags friction on the screen where it happens, and gives up when that
    persona would.
-4. **Free-text review**: afterwards the persona answers four questions in its
-   own words, plus what it liked, what confused it, and how the task could
-   have been simpler. It is never asked for a number.
+4. **Free-text review**: after each task the persona answers two questions
+   about that task in its own words (ease of use, perceived polish), plus what
+   it liked, what confused it, and how the task could have been simpler. It is
+   never asked for a number.
    It also lists each separate **problem** it ran into, small annoyances
    included. Those count as issues next to what it flagged mid-task: personas
    flag blockers live but mention most annoyances only afterwards, so a run
    with no blockers otherwise reads "0 issues" while every review complains
    about the same popup. `node ux-panel/extract-issues.mjs <runDir>` back-fills
    this for runs recorded before it existed (one call, about $0.07 on Sonnet).
-5. **SSR scoring** (`lib/ssr.mjs`) embeds each answer and compares it with five
+5. **End-of-week verdict**: once all of a persona's sessions are done (two or
+   more), it gets a digest of its week (each task, how it went, what it liked
+   and what bothered it) and answers two questions **relative to what it uses
+   now** (`previousApps`: another app, a notebook, or nothing): would it
+   switch to HyperTrack, and would it pay the real Pro price ($9.99/month)
+   rather than stay with that. These replaced "would you keep using it?" and
+   "would you pay?" after every task. After one short task the honest answer
+   is "maybe" (20 of 24 reviews in the round 5 run), so those scores sat near
+   3 whatever the build did. `--no-week` skips the verdict.
+   Each verdict is one short sentence, with the reasons in a separate `_why`
+   field, and only the sentence is scored. In the first baseline the answers
+   came as paragraphs: a plain "No, I wouldn't switch" followed by three
+   sentences of reasons scored 3.2, and the same "No" alone scored about 2.
+6. **SSR scoring** (`lib/ssr.mjs`) embeds each answer and compares it with five
    anchor statements per question (`anchors.mjs`), using the paper's Eq. 7–9:
    `p(r) ∝ cos(anchor_r, answer) − min_r' cos(anchor_r', answer)`, with ε = 0
-   and T = 1, averaged over 4 anchor sets. The four questions are likelihood
-   to keep using, ease of use, perceived polish, and willingness to pay.
-6. **Aggregation** (`lib/aggregate.mjs`):
+   and T = 1, averaged over 4 anchor sets. Each answer also gets a **sharp**
+   score at T = 0.3, shown beside the standard one. At T = 1 the five
+   probabilities come out nearly flat, which pulls every mean toward 3; T = 0.3
+   matched real App Store star distributions better (see *Checking the
+   anchors*). The standard score stays the headline, so runs stay comparable.
+7. **Aggregation** (`lib/aggregate.mjs`):
    - Mean distribution per journey.
    - Friction reports are clustered per screen by embedding similarity and
      ranked by how many **distinct** personas hit each cluster.
    - Run-vs-run comparison uses the mean shift and KS similarity (paper
-     Eq. 3), and sorts issues into new, gone and still present.
-7. **Readout** (`lib/readout.mjs` + `lib/report.mjs`): one "researcher" LLM
+     Eq. 3), and sorts issues into new, gone and still present. Scores are
+   compared only on questions whose anchors match in both runs (each run
+   records a hash per question). Ease and polish kept their anchors, so they
+   compare with runs from before the end-of-week verdict; the week questions
+   start a new baseline.
+8. **Readout** (`lib/readout.mjs` + `lib/report.mjs`): one "researcher" LLM
    call writes the summary, issue titles and recommendations. It never counts
    or ranks anything; every number comes from the aggregation.
 
@@ -69,7 +90,7 @@ Similarity Elicitation of Likert Ratings* (arXiv 2510.08338).
 | Elicitation | Free text, "reply briefly" | Same |
 | Mapping | Cosine → subtract min → normalise, ε = 0, T = 1, average over anchor sets | Same |
 | Anchors | 6 sets, tuned on their 57 surveys; only 2 statements published | 4 sets per question, written for this panel, **untuned** |
-| Questions | Purchase intent only (validated) | Keep-using, ease, polish, pay (**not validated** by the paper) |
+| Questions | Purchase intent only (validated) | Ease and polish per task; switch and pay-at-price once per persona, relative to their current app (**not validated** by the paper) |
 | Stimulus | A static product concept | The persona actually uses the app |
 | Personas | Real respondents' demographics, 1:1 | Hand-written behavioural personas |
 | Samples | 2 per prompt at T = 0.5 | 1 per question (current models reject `temperature`) |
@@ -150,6 +171,7 @@ node ux-panel/run.mjs --estimate --personas=all   # cost only, no run
 | `--effort` | `low` | thinking effort per step |
 | `--embed` | `local` | `local` or `openai` |
 | `--lens` | none | `polish`: personas look hard at visual consistency, rough edges, feedback and wording, and report polish problems even when they don't block them. Recorded on the run; reports flag comparisons across lenses. |
+| `--no-week` | | skip the end-of-week verdict (one extra call per persona) |
 | `--concurrency` | `2` | parallel browser sessions |
 | `--yes` | | skip the spend confirmation |
 | `--base-url` | `http://localhost:3100` | |

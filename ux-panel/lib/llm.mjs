@@ -95,14 +95,22 @@ export function fakeLLM({ ledger = new Ledger() } = {}) {
       const use = (name, input) => ({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: `t${step}`, name, input }] });
       if (toolNames.includes('submit_review')) {
         return use('submit_review', {
-          keep_using: 'Maybe, it was okay but I am not sure yet.',
           ease: 'Mostly easy to figure out, one or two confusing bits.',
           polish: 'It looks like a typical app.',
-          pay: "I'm not sure whether I'd pay for this.",
           liked: 'Clean layout.',
           confusing: 'Not sure what some labels mean.',
           simpler: 'Fewer steps to get to the main action.',
           problems: [{ screen: '', text: 'Not sure what some labels mean.', severity: 'minor' }],
+        });
+      }
+      if (toolNames.includes('submit_week_review')) {
+        return use('submit_week_review', {
+          switch: "It's about the same as what I use now, so I'm not sure switching is worth it.",
+          switch_why: 'Some parts were better, some worse.',
+          pay_price: "I might pay that, but I'm not sure it's worth it.",
+          pay_price_why: 'Not sure the extras are worth it yet.',
+          best: 'Quick logging.',
+          dealbreaker: 'Too many screens.',
         });
       }
       if (toolNames.includes('submit_readout')) {
