@@ -11,6 +11,13 @@
  */
 import { randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
+
+/** Deterministic noise in [-1, 1] from a key (no Math.random: reproducible). */
+function seededNoise(key) {
+  const h = createHash('sha1').update(key).digest();
+  return (h.readUInt16BE(0) / 0xffff) * 2 - 1;
+}
 
 export const SYNTHETIC_DOMAIN = 'synthetic-panel.test';
 
@@ -139,8 +146,11 @@ export async function seedReturningUser(admin, userId, persona) {
   const weighIns = [];
   for (let i = 0; i < h.weighIns; i++) {
     const offset = -Math.round((h.spanDays * (h.weighIns - 1 - i)) / Math.max(1, h.weighIns - 1));
-    // Trend toward today's weight (offset ≤ 0), plus a little day-to-day noise.
-    const kg = a.weightKg + trend * offset + ((i * 37) % 5) * 0.1 - 0.2;
+    // Trend toward today's weight (offset ≤ 0), plus irregular day-to-day
+    // water noise (±0.6 kg, deterministic per user and day). The old
+    // ((i*37)%5) pattern repeated every 5 weigh-ins and read as a fake sine
+    // wave to the personas.
+    const kg = a.weightKg + trend * offset + seededNoise(`${userId}:${i}`) * 0.6;
     weighIns.push({ user_id: userId, logged_at: ymd(day(offset)), weight: a.units === 'lb' ? +(kg * 2.20462).toFixed(1) : +kg.toFixed(1), unit: a.units });
   }
   if (weighIns.length) await must(admin.from('weight_log').insert(weighIns), 'weight_log');
