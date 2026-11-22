@@ -158,8 +158,12 @@ ul{padding-left:20px}
 @media (max-width:700px){.issue-body{grid-template-columns:1fr}.issue-body img{width:100%;max-width:260px}.grid3{grid-template-columns:1fr}}
 </style></head><body><main>
 <h1>HyperTrack synthetic panel readout</h1>
-<p class="muted">${esc(run.label || run.runId)} · ${esc(run.createdAt.slice(0, 16).replace('T', ' '))} · build <code>${esc(run.gitSha || 'unknown')}</code>${baseline ? ` · compared with <code>${esc(baseline.label || baseline.runId)}</code>` : ''}</p>
-<div class="banner"><strong>Read this as relative, not absolute.</strong> Participants are AI personas, not people, and the scores are semantic-similarity ratings (Maier et al., arXiv 2510.08338) without a human baseline. They are useful for comparing builds and for finding friction; they are <em>not</em> predicted App Store ratings.${baseline && !comparable ? ' <strong>The baseline used a different embedding model or anchor set, so scores are not compared.</strong>' : ''}</div>
+<p class="muted">${esc(run.label || run.runId)}${run.lens ? ` · <strong>${esc(run.lens)} lens</strong>` : ''} · ${esc(run.createdAt.slice(0, 16).replace('T', ' '))} · build <code>${esc(run.gitSha || 'unknown')}</code>${baseline ? ` · compared with <code>${esc(baseline.label || baseline.runId)}</code>` : ''}</p>
+<div class="banner"><strong>Read this as relative, not absolute.</strong> Participants are AI personas, not people, and the scores are semantic-similarity ratings (Maier et al., arXiv 2510.08338) without a human baseline. They are useful for comparing builds and for finding friction; they are <em>not</em> predicted App Store ratings.${baseline && !comparable ? ' <strong>The baseline used a different embedding model or anchor set, so scores are not compared.</strong>' : ''}${
+  baseline && comparable && (baseline.lens ?? null) !== (run.lens ?? null)
+    ? ` <strong>The two runs used different lenses (${esc(baseline.lens ?? 'none')} vs ${esc(run.lens ?? 'none')}): personas were asked to look for different things, so treat score shifts with extra care.</strong>`
+    : ''
+}</div>
 <div class="kpis">
  <div class="kpi"><span class="muted">Participants</span><b>${run.panel.personas}</b></div>
  <div class="kpi"><span class="muted">Sessions</span><b>${totalSessions}</b></div>

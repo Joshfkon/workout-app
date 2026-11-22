@@ -89,7 +89,29 @@ export const REVIEW_TOOL = {
 
 const LEVEL = ['', 'very low', 'low', 'average', 'high', 'very high'];
 
-export function personaSystemPrompt(p) {
+/**
+ * Optional lenses: an extra brief layered on every persona, for a run that
+ * should look at one quality in particular. The lens is recorded on the run,
+ * and the report flags comparisons across different lenses.
+ */
+export const LENSES = {
+  polish: {
+    persona: [
+      '',
+      'Pay particular attention to how polished and finished the app feels, the way a careful user notices it:',
+      '- Visual consistency: spacing, alignment, sizes, colours and type that look the same for the same kind of thing.',
+      '- Rough edges: text cut off or wrapping awkwardly, overlapping elements, things that jump or flash while loading, blank or broken-looking states, placeholder or debug text.',
+      '- Feedback: does every tap visibly respond, and is it clear something saved or is still loading?',
+      '- Wording: clear, consistent, friendly copy, without typos, jargon or mixed terms for the same thing.',
+      '- Call report_friction for these even when they do not stop you, with severity minor unless they really get in the way. Say exactly what looks off and where on the screen.',
+    ],
+    review:
+      'Also judge polish closely: in "polish" say what felt finished and what felt rough, and list each visual, wording or feedback rough edge you noticed as its own problem.',
+  },
+};
+
+export function personaSystemPrompt(p, lens = null) {
+  const lensLines = lens && LENSES[lens] ? LENSES[lens].persona : [];
   return [
     `You are role-playing ${p.name}, ${p.age}, a real person trying the HyperTrack fitness app on an iPhone for the first time in this situation.`,
     `About you: ${p.summary}`,
@@ -103,6 +125,7 @@ export function personaSystemPrompt(p) {
     '- Each turn, take ONE action with a tool. When something on this screen confuses, slows or bothers you, also call report_friction in the same turn.',
     `- If you'd realistically give up (close the app, ask someone), call done with outcome 'gave_up'. With ${LEVEL[p.patience]} patience, don't keep trying forever.`,
     '- Never type real personal data other than what the task gives you.',
+    ...lensLines,
   ].join('\n');
 }
 
@@ -235,9 +258,9 @@ const describe = (name, input) =>
  * Run one persona through one journey.
  * @returns {Promise<{outcome, steps, log, frictions, finalUrl, summary}>}
  */
-export async function runJourney({ page, llm, persona, journey, goalText, credentials, outDir, baseUrl }) {
+export async function runJourney({ page, llm, persona, journey, goalText, credentials, outDir, baseUrl, lens = null }) {
   await mkdir(outDir, { recursive: true });
-  const system = [{ type: 'text', text: personaSystemPrompt(persona), cache_control: { type: 'ephemeral' } }];
+  const system = [{ type: 'text', text: personaSystemPrompt(persona, lens), cache_control: { type: 'ephemeral' } }];
   const budget = stepBudget(journey, persona);
   const log = [];
   const frictions = [];
@@ -313,9 +336,9 @@ export async function runJourney({ page, llm, persona, journey, goalText, creden
 }
 
 /** The persona's free-text review of the journey they just did (no numbers asked). */
-export async function writeReview({ llm, persona, goalText, run }) {
+export async function writeReview({ llm, persona, goalText, run, lens = null }) {
   const msg = await llm.call({
-    system: [{ type: 'text', text: personaSystemPrompt(persona), cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: personaSystemPrompt(persona, lens), cache_control: { type: 'ephemeral' } }],
     tools: [REVIEW_TOOL],
     messages: [
       {
@@ -325,6 +348,7 @@ export async function writeReview({ llm, persona, goalText, run }) {
           `How it went: ${run.outcome === 'completed' ? 'you got it done' : 'you gave up'} after ${run.steps} actions. ${run.summary}`,
           `What you did, step by step:\n${run.log.map((l) => `- [${l.screen}] ${l.action} — "${l.thought}"`).join('\n')}`,
           run.frictions.length ? `Things that bothered you along the way:\n${run.frictions.map((f) => `- [${f.screen}] ${f.text}`).join('\n')}` : '',
+          lens && LENSES[lens] ? LENSES[lens].review : '',
           'Now answer as yourself, briefly and honestly, using submit_review. Reply briefly to each question; do not give numeric ratings.',
         ]
           .filter(Boolean)
