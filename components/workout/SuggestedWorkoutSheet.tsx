@@ -164,10 +164,10 @@ function rememberDuration(mins: number) {
   }
 }
 
-/** "2 reps left (RIR)" — the target effort in plain words, term kept. */
+/** The target effort in plain words ("stop 2 reps short of failure"), no RIR jargon. */
 function rirTargetLabel(rir: number): string {
-  if (rir <= 0) return 'to failure (0 RIR)';
-  return `${rir} rep${rir === 1 ? '' : 's'} left (RIR)`;
+  if (rir <= 0) return 'to failure';
+  return `stop ${rir} rep${rir === 1 ? '' : 's'} short of failure`;
 }
 
 export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheetProps) {

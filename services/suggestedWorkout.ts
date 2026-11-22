@@ -320,12 +320,21 @@ function candidatesForMuscle(
     );
 }
 
+/** Set counts can be fractional (a set credited to two muscles counts half). */
+function fmtSets(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/**
+ * Plain reason: where the muscle stands against its weekly target ("0 of 10
+ * weekly sets done"), not a deficit in jargon ("10 sets below target").
+ */
 function reasonForPick(muscle: RankedMuscle): string {
   const label = muscleLabel(muscle.muscle);
-  const deficitText = `${muscle.deficit} ${setsNoun(muscle.deficit)} below target this week`;
+  const progress = `${fmtSets(Math.max(0, muscle.weeklySets))} of ${fmtSets(muscle.targetSets)} weekly ${setsNoun(muscle.targetSets)} done`;
   return muscle.recoveryStatus === 'ready'
-    ? `${label} — ${deficitText}`
-    : `${label} — ${deficitText}, almost recovered`;
+    ? `${label}: ${progress}`
+    : `${label}: ${progress}, almost recovered`;
 }
 
 /** Focus sentence over the muscles that actually received a pick, in rank order. */
@@ -335,7 +344,7 @@ function buildFocus(trainedMuscles: RankedMuscle[]): string {
     names.length <= 1
       ? names.join('')
       : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  return `Focus: ${joined} — most recovered, furthest behind target this week.`;
+  return `Today: ${joined} — rested, and furthest behind on this week's sets.`;
 }
 
 /** Compounds first in the final session order (stable within mechanic). */
