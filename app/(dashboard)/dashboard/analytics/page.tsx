@@ -1760,7 +1760,7 @@ function AnalyticsPageContent() {
           <ListGroup>
             <ListRow
               title="Sets per week"
-              subtitle="Each muscle against its weekly range (MEV–MRV)"
+              subtitle="Weekly sets per muscle vs its recommended range"
               href="/dashboard/volume"
             />
           </ListGroup>

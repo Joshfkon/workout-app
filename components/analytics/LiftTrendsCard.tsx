@@ -81,12 +81,30 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
         )}
       </div>
 
-      {summary.lifts.length === 0 ? (
+      {summary.lifts.length === 0 && (summary.earlyLifts?.length ?? 0) > 0 ? (
+        <div className="space-y-2" data-testid="lift-early-bests">
+          <p className="px-1 text-subhead text-ink-2">
+            Your best recent sets. A trend line appears once a lift has {MIN_SESSIONS_FOR_TREND} workouts.
+          </p>
+          <ListGroup>
+            {(summary.earlyLifts ?? []).map((l) => (
+              <div key={l.name} className="flex min-h-[52px] items-center gap-3 px-4">
+                <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">{l.name}</span>
+                <span className="text-body text-ink tabular-nums">
+                  {l.bestWeightKg > 0 ? `${formatWeight(l.bestWeightKg, units)} × ${l.bestReps}` : `${l.bestReps} reps`}
+                </span>
+                <span className="w-[76px] flex-shrink-0 text-right text-caption text-ink-2">
+                  {l.sessions} of {MIN_SESSIONS_FOR_TREND} workouts
+                </span>
+              </div>
+            ))}
+          </ListGroup>
+        </div>
+      ) : summary.lifts.length === 0 ? (
         <div className="rounded-card bg-card p-6 text-center shadow-card">
           <p className="text-body text-ink">No lift has enough history for a trend yet.</p>
           <p className="mt-1 text-subhead text-ink-2">
-            Trends need {MIN_SESSIONS_FOR_TREND}+ sessions per lift — keep logging and they&apos;ll appear within a
-            couple of weeks.
+            Log a lift in {MIN_SESSIONS_FOR_TREND} workouts and its trend shows up here.
           </p>
         </div>
       ) : (

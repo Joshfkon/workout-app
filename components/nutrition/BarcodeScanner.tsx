@@ -504,7 +504,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       }
       const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       setDebugInfo(`Error: ${msg}\nBarcode: ${barcode}`);
-      setError('Something went wrong. See debug info.');
+      setError("Couldn't look that barcode up. Check your connection and try again, or enter it manually.");
       setErrorType('error');
       setIsLookingUp(false);
     } finally {
@@ -1190,8 +1190,10 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         </div>
       </div>
 
-      {/* Debug info (development only) */}
-      {process.env.NODE_ENV === 'development' && (
+      {/* Debug info: opt-in only (NEXT_PUBLIC_SCANNER_DEBUG=1). Plain dev builds
+          are what testers and the synthetic panel see, and a raw DEBUG box
+          with exception names reads as a broken screen. */}
+      {process.env.NEXT_PUBLIC_SCANNER_DEBUG === '1' && (
         <div className="px-4 pb-4">
           <div className="p-2 bg-black/50 rounded-lg border border-sep">
             <p className="text-caption text-yellow-400 font-mono mb-1">DEBUG:</p>

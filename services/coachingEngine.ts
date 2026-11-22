@@ -490,17 +490,25 @@ export function calculateBodyComposition(
   };
 }
 
-export function getFFMIBracket(ffmi: number): FFMIBracket {
-  if (ffmi < 18) return 'below_average';
-  if (ffmi < 20) return 'average';
-  if (ffmi < 22) return 'above_average';
-  if (ffmi < 24) return 'excellent';
+/**
+ * FFMI bracket. Thresholds are the male scale; women's FFMI runs about 3
+ * points lower, so a woman's value is shifted up by the same 3 points that
+ * getFFMIAssessment uses — the label and the sentence must never disagree.
+ */
+export function getFFMIBracket(ffmi: number, sex: 'male' | 'female' = 'male'): FFMIBracket {
+  const adjusted = ffmi + FFMI_FEMALE_OFFSET * (sex === 'female' ? 1 : 0);
+  if (adjusted < 18) return 'below_average';
+  if (adjusted < 20) return 'average';
+  if (adjusted < 22) return 'above_average';
+  if (adjusted < 24) return 'excellent';
   return 'elite';
 }
 
+/** Women's FFMI sits ~3 points below men's at the same relative development. */
+export const FFMI_FEMALE_OFFSET = 3;
+
 export function getFFMIAssessment(ffmi: number, sex: 'male' | 'female'): string {
-  const adjustment = sex === 'female' ? -3 : 0;
-  const adjustedFFMI = ffmi - adjustment;
+  const adjustedFFMI = ffmi + (sex === 'female' ? FFMI_FEMALE_OFFSET : 0);
   
   if (adjustedFFMI < 18) {
     return `Your FFMI of ${ffmi.toFixed(1)} indicates below-average muscle mass. ` +

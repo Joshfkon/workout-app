@@ -281,7 +281,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
   const [addFoodTab, setAddFoodTab] = useState<AddFoodTab>('search');
-  const [selectedMealType, setSelectedMealType] = useState<MealType>('breakfast');
+  const [selectedMealType, setSelectedMealType] = useState<MealType>(getMealTypeForNow);
+  // The meal the user last chose (opening a meal card, or switching the meal
+  // in the Add food sheet). Quick-log chips follow it; until the user picks
+  // one, they follow the time of day. null = no explicit choice yet.
+  const [quickMeal, setQuickMeal] = useState<MealType | null>(null);
   const [showDescribeMeal, setShowDescribeMeal] = useState(false);
   // Meal type a reminder deep-linked into Describe for (?describe=lunch).
   const [describeMealType, setDescribeMealType] = useState<MealType | null>(null);
@@ -1130,9 +1134,13 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     applyInsertedEntries(inserted);
   }
 
-  /** Frequent chip: one tap logs to the time-appropriate meal */
-  async function handleQuickLogFrequent(food: FrequentFood) {
-    await handleAddFood({
+  /**
+   * Frequent chip: one tap logs to the meal shown above the chips (the
+   * user's last chosen meal, else the time-appropriate one), with an undo
+   * toast naming that meal so it's never a silent guess.
+   */
+  async function handleQuickLogFrequent(food: FrequentFood, mealType: MealType, mealLabel: string) {
+    const inserted = await insertFoodEntry({
       food_name: food.food_name,
       serving_size: food.serving_size || '1 serving',
       servings: 1,
@@ -1140,8 +1148,14 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       protein: Math.round(food.avg_protein * 10) / 10,
       carbs: Math.round(food.avg_carbs * 10) / 10,
       fat: Math.round(food.avg_fat * 10) / 10,
-      meal_type: getMealTypeForNow(),
+      meal_type: mealType,
       source: 'manual',
+    });
+    applyInsertedEntries([inserted]);
+    mutateRecentFoodsCache((prev) => [inserted, ...prev]);
+    addToast('success', `Added ${toTitleCase(food.food_name)} to ${mealLabel}`, 5000, {
+      label: 'Undo',
+      onClick: () => { void undoQuickAdd([inserted]); },
     });
   }
 
@@ -1540,6 +1554,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     void ensureSystemFoodsLoaded();
     setRecentsEnabled(true); // latch on the recents/meals query
     setSelectedMealType(mealType);
+    setQuickMeal(mealType);
     setAddFoodTab(tab);
     setShowAddFood(true);
   }
@@ -1743,6 +1758,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       });
   const timeMealType = getMealTypeForNow();
   const timeMealLabel = mealConfig.find((meal) => meal.type === timeMealType)?.label || 'Snacks';
+  const chipMealType = quickMeal ?? timeMealType;
+  const chipMealLabel = mealConfig.find((meal) => meal.type === chipMealType)?.label || 'Snacks';
 
   // Has the user weighed in today? Drives the Weight-tab reminder dot and CTAs.
   const todayWeightEntry = weightEntries.find((entry) => entry.logged_at === todayDateString);
@@ -1946,21 +1963,37 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         onMeals={() => setShowSavedMeals(true)}
       />
 
-      {/* Frequent-food chips: one tap logs to the time-appropriate meal */}
+      {/* Frequent-food chips: one tap logs to the meal named above them */}
       {frequentChips.length > 0 && (
+        <div>
+        <div className="mb-1.5 flex items-center gap-1.5 px-1 text-subhead text-ink-2">
+          <span id="quick-add-label">Quick add to</span>
+          <select
+            aria-labelledby="quick-add-label"
+            value={chipMealType}
+            onChange={(e) => setQuickMeal(e.target.value as MealType)}
+            className="rounded-md bg-transparent font-medium text-ink underline decoration-dotted underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-action"
+            data-testid="quick-add-meal"
+          >
+            {mealConfig.map((meal) => (
+              <option key={meal.type} value={meal.type}>{meal.label}</option>
+            ))}
+          </select>
+        </div>
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           {frequentChips.map((food) => (
             <Chip
               key={food.food_name}
-              onClick={() => handleQuickLogFrequent(food)}
+              onClick={() => handleQuickLogFrequent(food, chipMealType, chipMealLabel)}
               title={toTitleCase(food.food_name)}
-              aria-label={`Log ${toTitleCase(food.food_name)}`}
+              aria-label={`Log ${toTitleCase(food.food_name)} to ${chipMealLabel}`}
               icon={<IconPlus size={16} />}
               className="max-w-[14rem]"
             >
               <span className="truncate">{toTitleCase(food.food_name)}</span>
             </Chip>
           ))}
+        </div>
         </div>
       )}
 
@@ -2431,6 +2464,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         onClose={() => setShowAddFood(false)}
         onAdd={handleAddFood}
         defaultMealType={selectedMealType}
+        onMealTypeChange={(m) => { setSelectedMealType(m); setQuickMeal(m); }}
         initialTab={addFoodTab}
         onOpenDescribe={() => {
           setShowAddFood(false);

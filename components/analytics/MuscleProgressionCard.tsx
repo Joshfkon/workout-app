@@ -85,10 +85,10 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
   const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
   const subtitle =
     normalizedGoal === 'cut'
-      ? 'E1RM trend · on a cut, holding strength counts as on track'
+      ? 'Estimated max over time · on a cut, holding strength counts as on track'
       : normalizedGoal === 'maintenance'
-        ? 'E1RM trend · at maintenance, holding strength counts as on track'
-        : `E1RM trend vs the ~${expectedPct}%/week expected for your level`;
+        ? 'Estimated max over time · at maintenance, holding strength counts as on track'
+        : `Estimated max over time vs the ~${expectedPct}%/week expected for your level`;
 
   return (
     <Card id="muscle-progression" padding="none" className="scroll-mt-4">
@@ -190,9 +190,9 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
             data-testid="muscle-progression-building-summary"
           >
             <span className="font-medium text-ink-2">
-              {buildingGroups.length} building history
+              Not enough workouts yet to judge:
             </span>{' '}
-            — {buildingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
+            {buildingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}. A few more sessions each and these fill in.
           </li>
         )}
       </ul>

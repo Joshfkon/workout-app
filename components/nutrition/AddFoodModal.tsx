@@ -111,6 +111,8 @@ interface AddFoodModalProps {
     barcode?: string;
   }) => Promise<void>;
   defaultMealType: MealType;
+  /** Called when the user switches the meal in the sheet, so the page can follow it */
+  onMealTypeChange?: (mealType: MealType) => void;
   /** Tab to open on (Scan quick action opens 'barcode') */
   initialTab?: AddFoodTab;
   /** Called when a scanned barcode isn't found and the user wants to create a custom food */
@@ -318,6 +320,7 @@ export function AddFoodModal({
   onClose,
   onAdd,
   defaultMealType,
+  onMealTypeChange,
   initialTab,
   onCreateCustomFood,
   onLabelScanned,
@@ -877,7 +880,10 @@ export function AddFoodModal({
         <SegmentedControl
           label="Meal"
           value={mealType}
-          onChange={(v) => setMealType(v as MealType)}
+          onChange={(v) => {
+            setMealType(v as MealType);
+            onMealTypeChange?.(v as MealType);
+          }}
           options={[
             { value: 'breakfast', label: 'Breakfast' },
             { value: 'lunch', label: 'Lunch' },
