@@ -1,0 +1,73 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import BenchmarksPage from '../page';
+
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => new URLSearchParams('session=sess-1'),
+}));
+
+const mockComplete = jest.fn();
+const mockUpdateStep = jest.fn();
+jest.mock('@/lib/onboarding/onboardingProgress', () => ({
+  completeOnboarding: (...args: unknown[]) => mockComplete(...args),
+  updateOnboardingStep: (...args: unknown[]) => mockUpdateStep(...args),
+}));
+
+jest.mock('@/lib/supabase/client', () => ({
+  createUntypedClient: () => ({
+    auth: { getUser: () => Promise.resolve({ data: { user: { id: 'u1' } } }) },
+    from: () => ({ update: () => ({ eq: () => Promise.resolve({ error: null }) }) }),
+  }),
+}));
+
+describe('Onboarding benchmarks page', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockComplete.mockResolvedValue({ error: null });
+  });
+
+  it('starts with no lifts chosen and no time estimate; recommended lifts are badged', () => {
+    render(<BenchmarksPage />);
+
+    expect(screen.queryByTestId('benchmark-time-estimate')).not.toBeInTheDocument();
+    expect(screen.queryByText(/68 min/)).not.toBeInTheDocument();
+    expect(screen.getAllByText('Recommended').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Pick lifts to test/ })).toBeDisabled();
+  });
+
+  it('shows the time estimate once a lift is chosen', async () => {
+    const user = userEvent.setup();
+    render(<BenchmarksPage />);
+
+    await user.click(screen.getByRole('button', { name: /Bench Press/i }));
+
+    const estimate = screen.getByTestId('benchmark-time-estimate');
+    expect(estimate).toHaveTextContent('1 lift selected');
+    expect(estimate).toHaveTextContent('17 min');
+    expect(screen.getByRole('button', { name: /Start Testing \(1 lift\)/ })).toBeEnabled();
+  });
+
+  it('skip finishes onboarding and lands on the dashboard in one tap', async () => {
+    const user = userEvent.setup();
+    render(<BenchmarksPage />);
+
+    await user.click(screen.getByTestId('skip-benchmarks'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
+    expect(mockComplete).toHaveBeenCalledTimes(1);
+    expect(mockComplete).toHaveBeenCalledWith(expect.anything(), 'u1');
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
+  it('still lands on the dashboard if saving completion fails', async () => {
+    mockComplete.mockRejectedValue(new Error('offline'));
+    const user = userEvent.setup();
+    render(<BenchmarksPage />);
+
+    await user.click(screen.getByTestId('skip-benchmarks'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
+  });
+});
