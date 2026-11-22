@@ -2450,6 +2450,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     const progressionPhrase = (p: string | undefined) =>
       p === 'add_load' ? 'one step up' : p === 'add_rep' ? 'one more rep' : 'same again';
 
+    // Cold start (no history on this lift): the number is a guess, so the
+    // honest instruction is how to pick the weight, not a claim about it. A
+    // weight you could do ~(mid reps + target RIR) times leaves the target in
+    // reserve at the prefilled mid-range reps.
+    const coldStartMaxReps =
+      Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2) +
+      Math.max(0, Math.round(effectiveTargetRir));
+    const coldStartPickLine = isDurationBased
+      ? 'adjust to a weight you can hold for the target time'
+      : `pick a weight you could lift ~${coldStartMaxReps} times, then adjust`;
+
     // Observed RIR for the reason string. Half-step values are real data (the
     // RIR-2 "good" chip stores RPE 7.5) — show one decimal, not a rounded lie.
     const fmtRir = (r: number) => (Number.isInteger(r) ? String(r) : r.toFixed(1));
@@ -2980,10 +2991,10 @@ export const ExerciseCard = memo(function ExerciseCard({
           coldStartSuggestion.transferFrom ??
           coldStartSuggestion.reason.match(/from your (.+?) strength/i)?.[1];
         sourceLine = transferFrom
-          ? `First time on this lift — estimated from your ${transferFrom}; adjust to feel`
-          : 'Estimated from your profile — start light and adjust';
+          ? `Starting guess from your ${transferFrom} — ${coldStartPickLine}`
+          : `Starting guess — ${coldStartPickLine}`;
       } else if (weight) {
-        sourceLine = 'Estimated from your profile — start light and adjust';
+        sourceLine = `Starting guess — ${coldStartPickLine}`;
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else if (isDurationBased) {
@@ -3505,25 +3516,29 @@ export const ExerciseCard = memo(function ExerciseCard({
             the active card's live plan. */}
         {sessionVolume && sessionVolume.projected > 0 && (isActive || completedSets.length > 0) && (
           <p className="mt-1 text-caption text-ink-2" data-testid="session-volume-line">
+            {/* "Volume" is tonnage here — say so in plain words (weight ×
+                reps, added up) the first time it shows; the term stays. */}
             {completedSets.length > 0 ? (
               <>
-                Volume{' '}
+                Lifted so far{' '}
                 <span className="text-ink">
                   {sessionVolume.current.toLocaleString('en-US')} {weightLabel}
                 </span>
                 {pendingSetsCount > 0 && sessionVolume.projected > sessionVolume.current && (
                   <>
                     <span className="text-ink-3"> · </span>
-                    {sessionVolume.projected.toLocaleString('en-US')} {weightLabel} projected
+                    {sessionVolume.projected.toLocaleString('en-US')} {weightLabel} if you finish
                   </>
                 )}
+                <span className="text-ink-3"> (volume: weight × reps, all sets)</span>
               </>
             ) : (
               <>
-                Projected volume{' '}
+                Planned total{' '}
                 <span className="text-ink">
                   {sessionVolume.projected.toLocaleString('en-US')} {weightLabel}
                 </span>
+                <span className="text-ink-3"> (volume: weight × reps, all sets)</span>
               </>
             )}
           </p>
@@ -4766,8 +4781,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {weightEditNote && (
                   <>
                     {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
-                    {isDurationBased ? 'seconds' : 'reps'} @ {weightEditNote.rir} RIR (from your{' '}
-                    {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel} e1RM)
+                    {isDurationBased ? 'seconds' : 'reps'} @ {weightEditNote.rir} RIR (from your est.
+                    1-rep max, e1RM {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel})
                   </>
                 )}
               </p>

@@ -40,7 +40,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         class="mt-1 text-caption text-ink-2"
         data-testid="session-volume-line"
       >
-        Projected volume
+        Planned total
          
         <span
           class="text-ink"
@@ -48,6 +48,11 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           1,800
            
           kg
+        </span>
+        <span
+          class="text-ink-3"
+        >
+           (volume: weight × reps, all sets)
         </span>
       </p>
     </div>
@@ -105,6 +110,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                   reps in reserve: how many more you could have done
                   )
                 </span>
+                <span
+                  class="font-normal"
+                  data-testid="suggestion-rir-plain"
+                >
+                   (stop 2 reps short of failure)
+                </span>
               </span>
               <span>
                  — 
@@ -114,7 +125,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 class="block mt-0.5 text-caption leading-snug text-ink-2"
                 data-testid="suggestion-source"
               >
-                Estimated from your profile — start light and adjust
+                Starting guess — pick a weight you could lift ~12 times, then adjust
               </span>
             </p>
           </div>
@@ -1240,7 +1251,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         class="mt-1 text-caption text-ink-2"
         data-testid="session-volume-line"
       >
-        Volume
+        Lifted so far
          
         <span
           class="text-ink"
@@ -1257,7 +1268,12 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         2,700
          
         kg
-         projected
+         if you finish
+        <span
+          class="text-ink-3"
+        >
+           (volume: weight × reps, all sets)
+        </span>
       </p>
     </div>
     <div

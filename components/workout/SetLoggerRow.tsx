@@ -737,9 +737,13 @@ export function SetLoggerRow({
             }`}
           >
             {effortCheck.predictedRir < 0
-              ? `Predicted: ${Math.abs(effortCheck.predictedRir)} rep${
-                  Math.abs(effortCheck.predictedRir) === 1 ? '' : 's'
-                } past your max`
+              ? effortCheck.softened
+                ? // No history on this lift: the number is a starting guess,
+                  // so say what to do rather than claim a max.
+                  'This starting guess may be more than you can do — lower it if it feels heavy'
+                : `Predicted: ${Math.abs(effortCheck.predictedRir)} rep${
+                    Math.abs(effortCheck.predictedRir) === 1 ? '' : 's'
+                  } more than you can likely do`
               : // A forecast for the entered weight, not the chip below (which is
                 // how the set actually felt) — say so, or the two read as a clash.
                 `At this weight: about ${effortCheck.predictedRir} more in the tank (${
@@ -1046,7 +1050,9 @@ export function SetLoggerRow({
           isOpen={showPredictionInfo}
           onClose={() => setShowPredictionInfo(false)}
           title={`Why ${effortCheck.weightLabel} × ${effortCheck.reps} ≈ ${
-            effortCheck.predictedRir < 0 ? 'past max' : `${effortCheck.predictedRir} RIR`
+            effortCheck.predictedRir < 0
+              ? 'past max'
+              : `${effortCheck.predictedRir} left in the tank (RIR)`
           }`}
         >
           <ul className="space-y-2.5" data-testid="predicted-rir-reasoning">

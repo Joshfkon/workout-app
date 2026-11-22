@@ -84,6 +84,15 @@ const RIR_DEFINITION_LINE =
   'RIR = reps in reserve: how many more reps you could have done. 0 = maxed, 1 = hard, 2 = good, 3 = easy, 4+ = cruise.';
 
 /**
+ * The RIR target in plain words, shown right after "@ N RIR" so the first
+ * place a beginner meets the term also says what it asks for.
+ */
+export function rirPlainLabel(rir: number): string {
+  if (rir <= 0) return 'go to failure';
+  return `stop ${rir} rep${rir === 1 ? '' : 's'} short of failure`;
+}
+
+/**
  * "RIR" with its meaning attached for assistive tech (and a hover title),
  * without adding a second tap target to the strip — the ⓘ sheet carries the
  * visible definition.
@@ -134,18 +143,21 @@ export function SuggestionBanner({
   }, [setKey]);
 
   // Debounced (~250ms) recompute with hysteresis: enter the warning at
-  // predicted RIR ≤ 0, leave it only at ≥ 1.
+  // predicted RIR ≤ 0, leave it only at ≥ 1. When the target itself is 0 RIR
+  // (an AMRAP / to-failure set) a predicted 0 is the plan, not a warning —
+  // only going PAST max is.
+  const warnAt = showRir && rir <= 0 ? -1 : 0;
   useEffect(() => {
     const timer = setTimeout(() => {
       setWarningActive((prev) => {
         if (predictedRir == null) return false;
-        if (!prev && predictedRir <= 0) return true;
-        if (prev && predictedRir >= 1) return false;
+        if (!prev && predictedRir <= warnAt) return true;
+        if (prev && predictedRir >= warnAt + 1) return false;
         return prev;
       });
     }, 250);
     return () => clearTimeout(timer);
-  }, [predictedRir]);
+  }, [predictedRir, warnAt]);
 
   const showWarning = warningActive && effortCheck != null;
 
@@ -155,8 +167,8 @@ export function SuggestionBanner({
           effortCheck.sourceLabel ?? 'estimated for you'
         }`
       : effortCheck.predictedRir < 0
-        ? `${effortCheck.weightLabel} × ${effortCheck.reps} — past your predicted max at this weight`
-        : `${effortCheck.weightLabel} × ${effortCheck.reps} ≈ 0 RIR — predicted max for you`
+        ? `${effortCheck.weightLabel} × ${effortCheck.reps} — more reps than we think you can do at this weight`
+        : `${effortCheck.weightLabel} × ${effortCheck.reps} — likely all you've got (0 left in the tank)`
     : '';
 
   return (
@@ -199,6 +211,9 @@ export function SuggestionBanner({
                 <>
                   {` @ ${rir} `}
                   <RirTerm />
+                  <span className="font-normal" data-testid="suggestion-rir-plain">
+                    {` (${rirPlainLabel(rir)})`}
+                  </span>
                 </>
               ) : null}
             </span>

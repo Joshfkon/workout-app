@@ -236,7 +236,9 @@ export function WorkoutVolumeStrip({
         <>
         {/* The cards are terse to fit; spell the two units out once. */}
         <p className="px-0.5 mb-1.5 text-caption text-ink-3" data-testid="workout-volume-strip-legend">
-          eff = sets that count, weighted by how hard they were · unrated = no effort logged
+          eff = sets that count, weighted by how hard they were · unrated = no effort logged ·
+          low–high = useful weekly sets, from the minimum that grows muscle (MEV) to the most you
+          recover from (MRV)
         </p>
         <div
           id="workout-volume-strip-cards"
@@ -308,14 +310,14 @@ export function WorkoutVolumeStrip({
                       style={{ left: `${(row.band.mev / row.band.mrv) * 100}%` }}
                       data-testid={`workout-volume-mev-marker-${row.muscle}`}
                       aria-label={`MEV marker at ${row.band.mev} sets`}
-                      title={`MEV: ${row.band.mev} sets`}
+                      title={`Minimum that grows muscle (MEV): ${row.band.mev} sets`}
                     />
                     <div
                       className="absolute -top-px -bottom-px w-px bg-ink-3"
                       style={{ left: '100%' }}
                       data-testid={`workout-volume-mrv-marker-${row.muscle}`}
                       aria-label={`MRV marker at ${row.band.mrv} sets`}
-                      title={`MRV: ${row.band.mrv} sets`}
+                      title={`Most you can recover from (MRV): ${row.band.mrv} sets`}
                     />
                     {/* Progress fills */}
                     <div className="h-full rounded-full overflow-hidden flex">

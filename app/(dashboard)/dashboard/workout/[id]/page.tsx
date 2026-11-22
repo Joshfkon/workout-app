@@ -154,6 +154,7 @@ import {
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
 import { detectLiveSetPr, prBaselineFromRecord } from '@/services/livePrDetector';
+import { prCelebrationCopy } from './_lib/prCelebrationCopy';
 import type { PRCelebrationData } from '@/components/workout/PRCelebration';
 import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
@@ -3654,23 +3655,10 @@ export default function WorkoutPage() {
             const v = convertWeightForDisplay(kg, preferences.units, 1);
             return `${Number.isInteger(v) ? v.toFixed(0) : v} ${unitLabel}`;
           };
-          const pct = pr.improvement > 0 ? ` · +${pr.improvement}%` : '';
-          const celebrationByType: Record<typeof pr.type, { title: string; detail: string }> = {
-            e1rm: { title: 'New e1RM PR', detail: `${fmtKg(pr.value)} est. 1RM${pct}` },
-            weight: { title: 'New weight PR', detail: `${fmtKg(pr.value)}${pct}` },
-            reps: {
-              title: 'New reps PR',
-              detail: `${pr.value} reps${pr.improvement > 0 ? ` · +${pr.improvement}` : ''}`,
-            },
-            duration: {
-              title: 'New hold PR',
-              detail: `${pr.value}s${pr.improvement > 0 ? ` · +${pr.improvement}s` : ''}`,
-            },
-          };
           setPrCelebration({
             id: setId,
             exerciseName: currentBlock.exercise.name,
-            ...celebrationByType[pr.type],
+            ...prCelebrationCopy(pr, fmtKg),
           });
         }
       });
