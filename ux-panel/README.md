@@ -41,6 +41,12 @@ Similarity Elicitation of Likert Ratings* (arXiv 2510.08338).
 4. **Free-text review**: afterwards the persona answers four questions in its
    own words, plus what it liked, what confused it, and how the task could
    have been simpler. It is never asked for a number.
+   It also lists each separate **problem** it ran into, small annoyances
+   included. Those count as issues next to what it flagged mid-task: personas
+   flag blockers live but mention most annoyances only afterwards, so a run
+   with no blockers otherwise reads "0 issues" while every review complains
+   about the same popup. `node ux-panel/extract-issues.mjs <runDir>` back-fills
+   this for runs recorded before it existed (one call, about $0.07 on Sonnet).
 5. **SSR scoring** (`lib/ssr.mjs`) embeds each answer and compares it with five
    anchor statements per question (`anchors.mjs`), using the paper's Eq. 7–9:
    `p(r) ∝ cos(anchor_r, answer) − min_r' cos(anchor_r', answer)`, with ε = 0
