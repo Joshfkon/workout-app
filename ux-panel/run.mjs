@@ -123,10 +123,20 @@ async function main() {
   const admin = adminClient();
   const browser = await chromium.launch({ headless: !flag('headed') });
 
+  // Fail before creating any accounts if the API can't be used (no credit, bad auth).
+  if (!FAKE) {
+    try {
+      await llm.call({ max_tokens: 16, messages: [{ role: 'user', content: 'Reply with: ok' }] });
+    } catch (e) {
+      throw new Error(`Anthropic API check failed, nothing was run: ${apiErrorMessage(e)}`);
+    }
+  }
+
   const results = [];
   let next = 0;
+  let fatal = '';
   async function worker() {
-    while (next < tasks.length) {
+    while (next < tasks.length && !fatal) {
       const { persona, journey } = tasks[next++];
       const taskId = `${persona.id}__${journey.id.replace(/[^a-z0-9-]+/gi, '_')}`;
       const outDir = path.join(runDir, 'tasks', taskId);
@@ -148,7 +158,8 @@ async function main() {
         const review = await writeReview({ llm, persona, goalText, run });
         rec = { ...rec, ...run, frictions: run.frictions.map((f) => ({ ...f, taskId, personaId: persona.id, journeyId: journey.id })), review };
       } catch (e) {
-        rec = { ...rec, outcome: 'error', error: e.message, log: [], frictions: [] };
+        rec = { ...rec, outcome: 'error', error: apiErrorMessage(e), log: [], frictions: [] };
+        if (isFatalApiError(e)) fatal = rec.error;
         if (journey.account === 'fresh') await tagAccount(admin, creds.email, runId).catch(() => {});
       } finally {
         await context.close();
@@ -163,6 +174,10 @@ async function main() {
   console.log(`Running ${tasks.length} sessions → ${path.relative(process.cwd(), runDir)}`);
   await Promise.all(Array.from({ length: Math.max(1, opts.concurrency) }, worker));
   await browser.close();
+  if (fatal) {
+    console.error(`\nStopped early: ${fatal}\nRemove this run's accounts with: node ux-panel/cleanup.mjs --run=${runId}`);
+    process.exit(1);
+  }
 
   // ---------- scoring ----------
   const embedder = await createEmbedder({ provider: opts.embed, cacheDir: path.join(HERE, '.cache') });
@@ -249,6 +264,15 @@ function watchSchemaErrors(page) {
     if (body && SCHEMA_CODES.has(body.code)) seen.add(body.message);
   });
   return seen;
+}
+
+/** Billing/auth/permission errors won't fix themselves on the next session. */
+function isFatalApiError(e) {
+  return [401, 403].includes(e?.status) || /credit balance|billing|invalid x-api-key|authentication/i.test(String(e?.message));
+}
+
+function apiErrorMessage(e) {
+  return e?.error?.error?.message || e?.message || String(e);
 }
 
 main().catch((e) => {
