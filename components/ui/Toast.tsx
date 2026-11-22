@@ -3,6 +3,7 @@
 import { memo, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import { useIsOverlayOpen } from '@/hooks/useOverlayRegistry';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -178,12 +179,24 @@ export interface ToastContainerProps {
  * A top-anchored toast covers full-screen sheet headers (e.g. Add food's
  * close button) because toasts sit at z-[100], above the modal's z-50 —
  * so the top-right stack is desktop (sm+) only.
+ *
+ * While a sheet/modal is open (overlay registry) the bottom of the screen is
+ * the sheet's content and actions (e.g. Add food's list and Scan button), so
+ * the mobile snackbar moves to the top instead, inset on the right to clear
+ * the sheet header's close button. Desktop keeps its top-right stack.
  */
+export function toastPlacementClasses(overlayOpen: boolean): string {
+  return overlayOpen
+    ? 'left-4 right-16 top-[calc(env(safe-area-inset-top)+0.5rem)] items-center sm:left-auto sm:right-4 sm:top-4 sm:items-end'
+    : 'inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] items-center sm:inset-x-auto sm:bottom-auto sm:top-4 sm:right-4 sm:items-end';
+}
+
 export const ToastContainer = memo(function ToastContainer({
   toasts,
   onDismiss,
 }: ToastContainerProps) {
   const [mounted, setMounted] = useState(false);
+  const overlayOpen = useIsOverlayOpen();
 
   useEffect(() => {
     setMounted(true);
@@ -192,7 +205,11 @@ export const ToastContainer = memo(function ToastContainer({
   if (!mounted || toasts.length === 0) return null;
 
   const content = (
-    <div className="fixed z-[100] flex flex-col gap-2 inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] items-center sm:inset-x-auto sm:bottom-auto sm:top-4 sm:right-4 sm:items-end">
+    <div
+      className={cn('fixed z-[100] flex flex-col gap-2', toastPlacementClasses(overlayOpen))}
+      data-testid="toast-container"
+      data-placement={overlayOpen ? 'top' : 'bottom'}
+    >
       {toasts.map((toast) => (
         <Toast
           key={toast.id}
