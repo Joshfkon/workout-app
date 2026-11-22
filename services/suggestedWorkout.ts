@@ -109,6 +109,12 @@ export interface BuildSuggestedWorkoutInput {
    */
   avoidExerciseIds?: ReadonlySet<string> | string[];
   cautionExerciseIds?: ReadonlySet<string> | string[];
+  /**
+   * The day the user's push/pull/legs rotation is up to (detectSplitDay).
+   * When set, only that day's muscles (plus neutral core work) are picked,
+   * as long as one of them is under target; otherwise the split is ignored.
+   */
+  splitDay?: SplitDay | null;
 }
 
 export interface SuggestedWorkoutPick {
@@ -132,7 +138,86 @@ export interface SuggestedWorkoutPlan {
    * muscle was out of weekly MRV headroom.
    */
   isLightSession: boolean;
+  /** Set when the plan follows the user's push/pull/legs rotation. */
+  splitDay?: SplitDay;
 }
+
+// ============================================================
+// Push / pull / legs
+// ============================================================
+
+export type SplitDay = 'push' | 'pull' | 'legs';
+
+/**
+ * Which split day a muscle belongs to. Muscles left out (core, erectors,
+ * rotator cuff) are neutral: they don't decide a session's day and can be
+ * trained on any of them.
+ */
+const SPLIT_OF: Partial<Record<StandardMuscleGroup, SplitDay>> = {
+  chest_upper: 'push',
+  chest_lower: 'push',
+  front_delts: 'push',
+  lateral_delts: 'push',
+  triceps: 'push',
+  triceps_long: 'push',
+  triceps_lat_med: 'push',
+  rear_delts: 'pull',
+  lats: 'pull',
+  upper_back: 'pull',
+  traps: 'pull',
+  upper_traps: 'pull',
+  mid_lower_traps: 'pull',
+  biceps: 'pull',
+  forearms: 'pull',
+  quads: 'legs',
+  hamstrings: 'legs',
+  glutes: 'legs',
+  glute_med: 'legs',
+  adductors: 'legs',
+  calves: 'legs',
+  gastrocnemius: 'legs',
+  soleus: 'legs',
+};
+
+export function splitDayOfMuscle(muscle: StandardMuscleGroup): SplitDay | null {
+  return SPLIT_OF[muscle] ?? null;
+}
+
+/** Share of a session's non-neutral exercises that must fall on one day for it to count as that day. */
+const SPLIT_DAY_SHARE = 0.75;
+
+/** A session's split day from its exercises' primary muscles, or null for a mixed session. */
+export function classifySessionDay(muscles: StandardMuscleGroup[]): SplitDay | null {
+  const counts: Record<SplitDay, number> = { push: 0, pull: 0, legs: 0 };
+  let total = 0;
+  for (const m of muscles) {
+    const d = splitDayOfMuscle(m);
+    if (!d) continue;
+    counts[d] += 1;
+    total += 1;
+  }
+  if (total === 0) return null;
+  const best = (Object.keys(counts) as SplitDay[]).reduce((a, b) => (counts[b] > counts[a] ? b : a));
+  return counts[best] / total >= SPLIT_DAY_SHARE ? best : null;
+}
+
+/**
+ * The next day of a push/pull/legs rotation, read from the user's own recent
+ * sessions (most recent first, each the primary muscles of its exercises).
+ * Only a clear signature counts: the last three sessions are a push, a pull
+ * and a legs day in some order. The next day is the one done longest ago.
+ * Anything else (full body, upper/lower, a mixed session) returns null and
+ * the suggestion stays recovery-driven.
+ */
+export function detectSplitDay(sessions: StandardMuscleGroup[][]): SplitDay | null {
+  if (sessions.length < 3) return null;
+  const days = sessions.slice(0, 3).map(classifySessionDay);
+  if (days.some((d) => d === null)) return null;
+  if (new Set(days).size !== 3) return null;
+  return days[2];
+}
+
+const SPLIT_LABEL: Record<SplitDay, string> = { push: 'Push', pull: 'Pull', legs: 'Legs' };
 
 // ============================================================
 // Internals
@@ -522,7 +607,18 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
     if (m.mrvSets != null) headroomByMuscle.set(m.muscle, m.mrvSets - m.weeklySets);
   });
 
-  const ranked = rankMuscles(input.muscles, injuredMuscles);
+  const allRanked = rankMuscles(input.muscles, injuredMuscles);
+  // Follow the user's push/pull/legs rotation when one of today's muscles is
+  // under target; core/neutral work may join any day.
+  const splitDay = input.splitDay ?? null;
+  const dayRanked = splitDay
+    ? allRanked.filter((m) => {
+        const d = splitDayOfMuscle(m.muscle);
+        return d === splitDay || d === null;
+      })
+    : allRanked;
+  const followSplit = !!splitDay && dayRanked.some((m) => splitDayOfMuscle(m.muscle) === splitDay);
+  const ranked = followSplit ? dayRanked : allRanked;
   if (ranked.length === 0) {
     // No recovery/volume data (or nothing trainable) — balanced full body.
     return buildFullBodyFallback(
@@ -605,9 +701,13 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
   // The header names only muscles that got an exercise (MRV headroom or the
   // exercise cap can leave a top muscle without one).
   const pickedMuscles = new Set(picks.map((p) => p.muscle));
+  const focus = buildFocus(topMuscles.filter((m) => pickedMuscles.has(m.muscle)));
   return {
     exercises: orderCompoundsFirst(picks, exerciseById),
-    focus: buildFocus(topMuscles.filter((m) => pickedMuscles.has(m.muscle))),
+    focus: followSplit && splitDay
+      ? `${SPLIT_LABEL[splitDay]} day, next in your push/pull/legs rotation. ${focus}`
+      : focus,
     isLightSession: false,
+    ...(followSplit && splitDay ? { splitDay } : {}),
   };
 }
