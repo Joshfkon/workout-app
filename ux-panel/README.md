@@ -57,6 +57,10 @@ Similarity Elicitation of Likert Ratings* (arXiv 2510.08338).
    "would you pay?" after every task. After one short task the honest answer
    is "maybe" (20 of 24 reviews in the round 5 run), so those scores sat near
    3 whatever the build did. `--no-week` skips the verdict.
+   Each verdict is one short sentence, with the reasons in a separate `_why`
+   field, and only the sentence is scored. In the first baseline the answers
+   came as paragraphs: a plain "No, I wouldn't switch" followed by three
+   sentences of reasons scored 3.2, and the same "No" alone scored about 2.
 6. **SSR scoring** (`lib/ssr.mjs`) embeds each answer and compares it with five
    anchor statements per question (`anchors.mjs`), using the paper's Eq. 7–9:
    `p(r) ∝ cos(anchor_r, answer) − min_r' cos(anchor_r', answer)`, with ε = 0

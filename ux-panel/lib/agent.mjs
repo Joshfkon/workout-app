@@ -95,11 +95,19 @@ export const WEEK_REVIEW_TOOL = {
   strict: true,
   input_schema: obj(
     {
-      ...propsFor(WEEK_QUESTIONS),
+      // The verdict is scored on its own: a long answer full of reasons scores
+      // near 3 whatever its first word says (round 1 of the week review: a
+      // plain "No" scored 3.2 inside a paragraph, 1.95 on its own).
+      ...Object.fromEntries(
+        WEEK_QUESTIONS.flatMap((q) => [
+          [q.id, { type: 'string', description: `${q.prompt.replace(/ Say what tips it either way\.| Say why\./, '').replace(/Answer honestly,.*$/, '')}Your answer in ONE short sentence, with no reasons (they go in ${q.id}_why).` }],
+          [`${q.id}_why`, { type: 'string', description: 'Why, in one to three sentences: what tipped it.' }],
+        ]),
+      ),
       best: { type: 'string', description: 'The one thing that would most make you stay, if any.' },
       dealbreaker: { type: 'string', description: 'The one thing that would most make you leave, if any.' },
     },
-    [...WEEK_QUESTIONS.map((q) => q.id), 'best', 'dealbreaker'],
+    [...WEEK_QUESTIONS.flatMap((q) => [q.id, `${q.id}_why`]), 'best', 'dealbreaker'],
   ),
 };
 

@@ -96,7 +96,7 @@ function weekSection(run, cmp, baseline) {
     .map((w) => {
       const p = run.personas[w.personaId] ?? { name: w.personaId };
       const m = (q) => (w.scores?.[q] ? fmt(w.scores[q].reduce((s, x, i) => s + x * (i + 1), 0), 1) : '–');
-      return `<tr><th scope="row">${esc(p.name)}</th><td class="small">“${esc(w.review.switch)}” <span class="muted">(${m('switch')})</span></td><td class="small">“${esc(w.review.pay_price)}” <span class="muted">(${m('pay_price')})</span></td><td class="small">${esc(w.review.dealbreaker)}</td></tr>`;
+      return `<tr><th scope="row">${esc(p.name)}</th><td class="small"><strong>“${esc(w.review.switch)}”</strong> <span class="muted">(${m('switch')})</span>${w.review.switch_why ? `<div>${esc(w.review.switch_why)}</div>` : ''}</td><td class="small"><strong>“${esc(w.review.pay_price)}”</strong> <span class="muted">(${m('pay_price')})</span>${w.review.pay_price_why ? `<div>${esc(w.review.pay_price_why)}</div>` : ''}</td><td class="small">${esc(w.review.dealbreaker)}</td></tr>`;
     })
     .join('');
   const note = baseline && !baseline.weekScores ? '<p class="muted small">The baseline run predates the end-of-week review, so there is nothing to compare these with yet.</p>' : '';

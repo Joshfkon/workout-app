@@ -32,7 +32,7 @@ describe('questions', () => {
     expect(taskProps).toEqual(expect.arrayContaining(['ease', 'polish', 'problems']));
     expect(taskProps).not.toContain('keep_using');
     expect(taskProps).not.toContain('pay');
-    expect(Object.keys(WEEK_REVIEW_TOOL.input_schema.properties)).toEqual(['switch', 'pay_price', 'best', 'dealbreaker']);
+    expect(Object.keys(WEEK_REVIEW_TOOL.input_schema.properties)).toEqual(['switch', 'switch_why', 'pay_price', 'pay_price_why', 'best', 'dealbreaker']);
   });
 });
 
