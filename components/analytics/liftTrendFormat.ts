@@ -69,6 +69,8 @@ export function estMaxLabel(
 ): string {
   const head = `Est. max ${formatWeight(e1rmKg, units)}`;
   const w = topSet?.weightKg ?? 0;
+  // Modality-safe: lift trends skip duration_based exercises (liftTrends.ts),
+  // and an est. max only exists for rep-counted lifts.
   const r = topSet?.reps ?? 0;
   return w > 0 && r > 0 ? `${head} (from ${setLabel(w, r, units)})` : head;
 }
