@@ -21,7 +21,7 @@ import { chromium } from 'playwright';
 import { JOURNEYS, journeyById } from './journeys.mjs';
 import { QUESTIONS } from './anchors.mjs';
 import { adminClient, createAccount, newCredentials, seedReturningUser, tagAccount, assertLocalSupabase } from './lib/accounts.mjs';
-import { runJourney, writeReview } from './lib/agent.mjs';
+import { runJourney, writeReview, LENSES } from './lib/agent.mjs';
 import { anthropicLLM, fakeLLM, Ledger, DEFAULT_MODEL } from './lib/llm.mjs';
 import { createEmbedder } from './lib/embed.mjs';
 import { ssrPmf } from './lib/ssr.mjs';
@@ -50,6 +50,7 @@ const opts = {
   effort: flag('effort', 'low'),
   embed: flag('embed', 'local'),
   label: flag('label', ''),
+  lens: flag('lens', '') || null,
   concurrency: Number(flag('concurrency', 2)),
   personas: flag('personas', DRY ? '2' : 'all'),
   journeys: flag('journeys', DRY ? 'log-meal' : 'core'),
@@ -95,6 +96,7 @@ async function main() {
     throw new Error(`--base-url ${opts.baseUrl} is not local. The panel runs against \`npm run dev\` (or a preview with --allow-remote-preview); never production.`);
   }
   assertLocalSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://missing');
+  if (opts.lens && !LENSES[opts.lens]) throw new Error(`unknown --lens=${opts.lens} (available: ${Object.keys(LENSES).join(', ')})`);
 
   const { personas: allPersonas } = JSON.parse(await readFile(path.join(HERE, 'personas.json'), 'utf8'));
   const personas =
@@ -122,6 +124,9 @@ async function main() {
   if (reuseDir) {
     const prev = JSON.parse(await readFile(path.join(reuseDir, 'run.json'), 'utf8'));
     if (prev.model !== opts.model) throw new Error(`--reuse run used ${prev.model}, this run uses ${opts.model}; mixing models would muddy the scores.`);
+    if ((prev.lens ?? null) !== (opts.lens ?? null)) {
+      throw new Error(`--reuse run used lens "${prev.lens ?? 'none'}", this run uses "${opts.lens ?? 'none'}"; reused sessions would carry the other lens's prompts.`);
+    }
   }
   const fresh = tasks.filter((t) => !reusableResult(reuseDir, taskIdOf(t.persona, t.journey)));
   if (reuseDir) console.log(`Reusing ${tasks.length - fresh.length} clean session(s) from ${path.relative(process.cwd(), reuseDir)}; running ${fresh.length}.`);
@@ -192,9 +197,9 @@ async function main() {
           await seedReturningUser(admin, userId, persona);
           await signIn(page, creds);
         }
-        const run = await runJourney({ page, llm, persona, journey, goalText, credentials: journey.account === 'fresh' ? creds : null, outDir, baseUrl: opts.baseUrl });
+        const run = await runJourney({ page, llm, persona, journey, goalText, credentials: journey.account === 'fresh' ? creds : null, outDir, baseUrl: opts.baseUrl, lens: opts.lens });
         if (journey.account === 'fresh') await tagAccount(admin, creds.email, runId);
-        const review = await writeReview({ llm, persona, goalText, run });
+        const review = await writeReview({ llm, persona, goalText, run, lens: opts.lens });
         rec = { ...rec, ...run, frictions: run.frictions.map((f) => ({ ...f, taskId, personaId: persona.id, journeyId: journey.id, source: 'live' })), review };
         // Problems listed in the review count too (small annoyances rarely get flagged mid-task).
         rec.frictions.push(...problemsToFrictions(rec));
@@ -241,6 +246,7 @@ async function main() {
     schema: 1,
     runId,
     label: opts.label,
+    lens: opts.lens,
     createdAt: new Date().toISOString(),
     baseUrl: opts.baseUrl,
     gitSha: safeGit('git rev-parse --short HEAD') + (safeGit('git status --porcelain --untracked-files=no') ? '+dirty' : ''),

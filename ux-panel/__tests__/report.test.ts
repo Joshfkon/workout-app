@@ -98,3 +98,12 @@ describe('issues from sessions with test-environment errors', () => {
     expect(renderReport(makeRun())).not.toContain('Check before acting');
   });
 });
+
+describe('lenses', () => {
+  it('shows the lens and warns when comparing runs with different lenses', () => {
+    const run = makeRun({ lens: 'polish' });
+    const html = renderReport(run, { baseline: makeRun({ runId: 'r0', lens: null }) });
+    expect(html).toContain('polish lens');
+    expect(html).toContain('different lenses');
+  });
+});

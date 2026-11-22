@@ -149,6 +149,7 @@ node ux-panel/run.mjs --estimate --personas=all   # cost only, no run
 | `--model` | `claude-opus-5-5` | persona, review and readout model |
 | `--effort` | `low` | thinking effort per step |
 | `--embed` | `local` | `local` or `openai` |
+| `--lens` | none | `polish`: personas look hard at visual consistency, rough edges, feedback and wording, and report polish problems even when they don't block them. Recorded on the run; reports flag comparisons across lenses. |
 | `--concurrency` | `2` | parallel browser sessions |
 | `--yes` | | skip the spend confirmation |
 | `--base-url` | `http://localhost:3100` | |
