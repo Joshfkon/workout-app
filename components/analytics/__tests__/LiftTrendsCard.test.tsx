@@ -57,7 +57,7 @@ describe('LiftTrendsCard', () => {
 
     const squat = screen.getByTestId('lift-row-squat');
     expect(squat).toHaveTextContent('Squat');
-    expect(squat).toHaveTextContent('Est. max 140.0 kg');
+    expect(squat).toHaveTextContent('est. max 140.0 kg');
     expect(squat).toHaveTextContent('+1.1%/wk');
     expect(within(squat).getByText('Rising')).toBeInTheDocument();
     expect(within(screen.getByTestId('lift-row-row')).getByText('Down')).toBeInTheDocument();
@@ -141,7 +141,7 @@ describe('LiftTrendsCard', () => {
     expect(early).toHaveTextContent(/best set on each lift/);
   });
 
-  it('labels a lift row as an estimated max from the set actually lifted', () => {
+  it('leads a lift row with the real best set, then the labelled estimate', () => {
     const withSet = lift({
       history: [
         { date: '2026-10-01', e1rmKg: 95, topSetWeightKg: 75, topSetReps: 8 },
@@ -149,7 +149,8 @@ describe('LiftTrendsCard', () => {
       ],
     });
     render(<LiftTrendsCard summary={{ ...summary, lifts: [withSet] }} units="kg" />);
-    expect(screen.getByTestId('lift-row-bench')).toHaveTextContent('Est. max 100.0 kg (from 80 kg × 7)');
+    expect(screen.getByTestId('lift-best-set')).toHaveTextContent('Latest best set 80 kg × 7');
+    expect(screen.getByTestId('lift-row-bench')).toHaveTextContent('est. max 100.0 kg');
   });
 
   it('never ellipsizes a long lift name or its weekly change at phone width', () => {

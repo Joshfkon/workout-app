@@ -237,6 +237,10 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       <p className="text-subhead text-ink tabular-nums" data-testid="weight-change">
         {chartData.length >= 2 ? (
           <>
+            {/* Named as the trend: its endpoints differ from the latest
+                weigh-in above (201.4 latest vs a 200.7 trend read as a
+                mismatch to the panel). */}
+            {trend ? 'Trend ' : ''}
             {changeStart.toFixed(1)} → {changeEnd.toFixed(1)} {preferredUnit}{' '}
             <span className="text-ink-2">
               ({sign}
@@ -249,7 +253,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       </p>
       {trend && (
         <p className="text-caption text-ink-2 mb-2" data-testid="weight-trend">
-          Trend line{' '}
+          That&apos;s{' '}
           <span
             className={
               trend.isNegative ? 'text-status-ok' : trend.isPositive ? 'text-status-warn' : 'text-ink-2'
@@ -258,7 +262,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
             {trend.perWeek > 0 ? '+' : trend.perWeek < 0 ? '−' : ''}
             {Math.abs(trend.perWeek).toFixed(1)} {preferredUnit}/wk
           </span>{' '}
-          · smooths out day-to-day water swings
+          · the trend smooths out day-to-day water swings, so it can differ from your latest weigh-in
         </p>
       )}
 

@@ -46,7 +46,7 @@ describe('WeightGraph', () => {
     render(<WeightGraph weightHistory={history} preferredUnit="lb" />);
     const text = screen.getByTestId('weight-change').textContent ?? '';
     // Trend endpoints (not raw first/last weigh-ins), named by the selected range.
-    expect(text).toMatch(/^\d+\.\d → \d+\.\d lb \(−\d\.\d\) in the last 30 days$/);
+    expect(text).toMatch(/^Trend \d+\.\d → \d+\.\d lb \(−\d\.\d\) in the last 30 days$/);
   });
 
   it('does not show ±0.0 for a zigzag whose trend clearly moves', () => {
@@ -59,7 +59,7 @@ describe('WeightGraph', () => {
     ];
     render(<WeightGraph weightHistory={zigzag} preferredUnit="lb" />);
     const text = screen.getByTestId('weight-change').textContent ?? '';
-    const [, start, end] = /^([\d.]+) → ([\d.]+)/.exec(text) ?? [];
+    const [, start, end] = /^(?:Trend )?([\d.]+) → ([\d.]+)/.exec(text) ?? [];
     expect(start).toBeDefined();
     // Start/end are the fitted line's values, not 175.0 → 175.0.
     expect(`${start}→${end}`).not.toBe('175.0→175.0');
@@ -67,7 +67,8 @@ describe('WeightGraph', () => {
 
   it('labels the trend-line rate with its unit, matching the drawn trend', () => {
     render(<WeightGraph weightHistory={history} preferredUnit="lb" />);
-    expect(screen.getByTestId('weight-trend')).toHaveTextContent(/Trend line −0\.\d lb\/wk/);
+    expect(screen.getByTestId('weight-trend')).toHaveTextContent(/That's −0\.\d lb\/wk/);
+    expect(screen.getByTestId('weight-trend')).toHaveTextContent(/can differ from your latest weigh-in/);
   });
 
   it('converts to the viewer unit', () => {
