@@ -1083,7 +1083,25 @@ describe('ExerciseCard', () => {
       );
     });
 
-    it('preserves the exact previous-set weight when seeding (no plate rounding)', () => {
+    it('preserves the exact previous-set weight the lifter typed when seeding (no plate rounding)', () => {
+      // 157 lb typed, stored as DECIMAL(6,2) kg (71.21) — round-trips to 157,
+      // even though 157 is off the 5 lb barbell grid.
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          isActive={true}
+          previousSets={[{ weightKg: 71.21, reps: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      expect(
+        screen.getByRole('button', { name: /Weight: 157 lbs/ })
+      ).toBeInTheDocument();
+    });
+
+    it('snaps a kg-native previous-set weight onto the lb grid instead of showing the conversion', () => {
       render(
         <ExerciseCard
           {...defaultProps}
@@ -1094,10 +1112,9 @@ describe('ExerciseCard', () => {
         />
       );
 
-      // 100 kg = 220.5 lb exact (convertWeightForDisplay), NOT 220 (plate-rounded)
-      expect(
-        screen.getByRole('button', { name: /Weight: 220\.5 lbs/ })
-      ).toBeInTheDocument();
+      // 100 kg = 220.46 lb — not a number anyone loaded; the barbell grid is 5 lb.
+      expect(screen.getByRole('button', { name: /Weight: 220 lbs/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Weight: 220\.5 lbs/ })).not.toBeInTheDocument();
     });
 
     it('keeps showing the AI suggestion in the banner after the user edits the weight input', async () => {
@@ -2296,6 +2313,64 @@ describe('rep_total progression path (ADD 2)', () => {
       />
     );
     expect(screen.getByText(/rep-total/)).toBeInTheDocument();
+  });
+});
+
+describe('lb lifter suggestions land on loadable weights (kg-native history)', () => {
+  // Synthetic-panel defect (2026-11-22): history stored in round kg (70 kg,
+  // 27.5 kg) prefilled "154.3 lbs" / "60.6 lbs", and the stepper walked
+  // 154.3 → 159.3 → 164.3. Display + prefill snap to the loadable grid.
+  const prevSets = [
+    { weightKg: 70, reps: 15, rpe: 9 },
+    { weightKg: 70, reps: 15, rpe: 9 },
+    { weightKg: 70, reps: 10, rpe: 9 },
+  ];
+  const props = {
+    sets: [],
+    unit: 'lb' as const,
+    exercise: createMockExercise({
+      id: 'row',
+      name: 'Barbell Row',
+      equipmentRequired: ['barbell'],
+      progressionModel: 'rep_total' as const,
+      minWeightIncrementKg: 2.27,
+    }),
+    block: createMockBlock({
+      exerciseId: 'row',
+      targetRepRange: [12, 20] as [number, number],
+      targetWeightKg: 70,
+    }),
+    previousSets: prevSets,
+    exerciseHistory: {
+      lastWorkoutDate: weeksAgo(1),
+      lastWorkoutSets: prevSets,
+      estimatedE1RM: 0,
+      personalRecord: null,
+      totalSessions: 5,
+    },
+    isActive: true,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+
+  it('prefills and suggests 155 lbs, not the 154.3 conversion artifact', () => {
+    render(<ExerciseCard {...props} />);
+    expect(screen.getByRole('button', { name: /Weight: 155 lbs/ })).toBeInTheDocument();
+    // Pending set lines repeat the suggestion; the logged-history line keeps
+    // the exact stored value (it is a record, not a suggestion).
+    expect(screen.getAllByText(/155 lbs × 12–20 target/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/154\.3 lbs × 12–20 target/)).not.toBeInTheDocument();
+  });
+
+  it('the + stepper moves onto the 5 lb grid', async () => {
+    const user = userEvent.setup();
+    render(<ExerciseCard {...props} />);
+    await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+    expect(screen.getByRole('button', { name: /Weight: 160 lbs/ })).toBeInTheDocument();
+  });
+
+  it('a kg lifter sees the same history on the kg grid', () => {
+    render(<ExerciseCard {...props} unit="kg" />);
+    expect(screen.getByRole('button', { name: /Weight: 70 kg/ })).toBeInTheDocument();
   });
 });
 

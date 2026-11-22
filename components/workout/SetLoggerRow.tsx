@@ -31,6 +31,7 @@ import type {
 } from '@/types/schema';
 import { convertWeightForDisplay } from '@/lib/utils';
 import { buildSetLogData, maxRepsFor, weightStepForDisplay } from '@/lib/workout/setLogData';
+import { stepLoad } from '@/lib/workout/loadableWeight';
 import { lightHaptic } from '@/lib/integrations/notifications';
 
 type WeightMode = 'bodyweight' | 'weighted' | 'assisted';
@@ -51,6 +52,12 @@ interface SetLoggerRowProps {
   unit?: WeightUnit;
   /** Smallest load increment for this exercise, in kg. Steppers move by this (converted for display units). */
   minIncrementKg?: number;
+  /**
+   * Loadable weight step in DISPLAY units (lib/workout/loadableWeight). When
+   * given it overrides the step derived from `minIncrementKg`, so the stepper
+   * and the suggestion rounding share one grid.
+   */
+  weightStep?: number;
   disabled?: boolean;
   /** Duration-based exercise (plank, hold): reps column is seconds. */
   isDurationBased?: boolean;
@@ -170,6 +177,7 @@ export function SetLoggerRow({
   targetRir,
   unit = 'kg',
   minIncrementKg,
+  weightStep: weightStepProp,
   disabled = false,
   isDurationBased = false,
   exerciseId,
@@ -294,7 +302,10 @@ export function SetLoggerRow({
   }, [setNumber, isDurationBased, resetHoldTimer]);
 
   // Weight step in DISPLAY units (shared with the Apple Watch logger).
-  const weightStep = useMemo(() => weightStepForDisplay(minIncrementKg, unit), [minIncrementKg, unit]);
+  const weightStep = useMemo(
+    () => (weightStepProp && weightStepProp > 0 ? weightStepProp : weightStepForDisplay(minIncrementKg, unit)),
+    [weightStepProp, minIncrementKg, unit]
+  );
 
   const isPlainBodyweight = isBodyweight && weightMode === 'bodyweight';
   const parsedWeight = parseFloat(weight);
@@ -313,9 +324,9 @@ export function SetLoggerRow({
   const hasSheetFeedback = form !== null || discomfort !== undefined || note.trim().length > 0;
 
   const stepWeight = (direction: 1 | -1) => {
-    const current = isNaN(weightNum) ? 0 : weightNum;
-    const next = Math.max(0, current + direction * weightStep);
-    onWeightChange(String(parseFloat(next.toFixed(2))));
+    // Off-grid values (a legacy or hand-typed number) step onto the grid:
+    // 154.3 + 5 → 155, not 159.3.
+    onWeightChange(String(stepLoad(isNaN(weightNum) ? 0 : weightNum, direction, weightStep)));
   };
 
   const stepReps = (direction: 1 | -1) => {

@@ -33,6 +33,9 @@ import {
 import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION, FATIGUE_E1RM_PER_SET, FATIGUE_E1RM_FLOOR } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
+import { deriveEquipmentClass } from '@/services/equipmentClass';
+import { loadStepForDisplay, suggestedLoadForDisplay } from '@/lib/workout/loadableWeight';
+import { readExplicitSmallestPlate } from '@/lib/workout/smallestPlate';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import {
   detectProgressionStall,
@@ -1241,6 +1244,30 @@ export const ExerciseCard = memo(function ExerciseCard({
   }, [unit]);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
 
+  // The smallest load change the lifter can make here, in their unit: the
+  // exercise's recorded increments, else their plate-calculator plate choice
+  // (plate-pair equipment), else the exercise increment / equipment default.
+  // Drives both suggestion rounding and the ± stepper so they agree.
+  const [explicitSmallestPlate] = useState(() => readExplicitSmallestPlate(unit));
+  const loadStep = useMemo(
+    () =>
+      loadStepForDisplay(unit, {
+        equipmentClass: deriveEquipmentClass(exercise),
+        availableIncrementsKg: exercise.availableIncrementsKg,
+        minIncrementKg: exercise.minWeightIncrementKg,
+        smallestPlate: explicitSmallestPlate,
+      }),
+    [unit, exercise, explicitSmallestPlate]
+  );
+  // A SUGGESTED load in the display unit, on a loadable number (display
+  // only — storage stays kg). `exactSourceKg`: the logged set the suggestion
+  // repeats verbatim; its typed number is kept unless it is a kg↔lb
+  // conversion artifact (27.5 kg → "60.6 lbs").
+  const suggestionWeight = useCallback(
+    (kg: number, exactSourceKg?: number) => suggestedLoadForDisplay(kg, unit, loadStep, exactSourceKg),
+    [unit, loadStep]
+  );
+
   // Weight label for a history set: bodyweight sets break out the composition
   // ("BW", "BW+25", "BW−30" in display units) instead of the blended effective
   // load, which reads as a mystery number ("222") on the card. Sets without a
@@ -1282,9 +1309,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   const seedWeightString = useCallback(
     (kg: number, exactSourceKg?: number) => {
       if (!(kg > 0)) return '';
-      return String(displayWeight(kg, exactSourceKg !== undefined && kg === exactSourceKg));
+      return String(suggestionWeight(kg, exactSourceKg));
     },
-    [displayWeight]
+    [suggestionWeight]
   );
 
   // Last session's total tonnage (weight × reps across all sets), in the
@@ -2416,7 +2443,8 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     // Weight delta label for trigger-based reason strings.
     const deltaLabel = (fromKg: number, toWeightStr: string) => {
-      const delta = parseFloat(toWeightStr) - convertWeightForDisplay(fromKg, unit);
+      // Compare like to like: the logged load as a verbatim repeat would show it.
+      const delta = parseFloat(toWeightStr) - suggestionWeight(fromKg, fromKg);
       return delta > 0 ? `${delta} ${weightLabel}` : '';
     };
 
@@ -2441,7 +2469,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       return framePositionalDelta(
         shown,
         positionalPrev && positionalPrev.weightKg > 0
-          ? convertWeightForDisplay(positionalPrev.weightKg, unit)
+          ? suggestionWeight(positionalPrev.weightKg, positionalPrev.weightKg)
           : undefined,
         completedSets.length + 1,
         weightLabel
@@ -3018,7 +3046,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           formBrokeDown: lastCompletedSet.feedback?.form === 'ugly',
           effort: latestMotion?.effort ?? null,
           higherEffortMinLoggedRir: MOTION_SET_CONFIG.recommendation.higherEffortMinLoggedRir,
-          formatWeight: (kg) => `${displayWeight(kg)} ${unit === 'lb' ? 'lb' : 'kg'}`,
+          formatWeight: (kg) => `${suggestionWeight(kg)} ${unit === 'lb' ? 'lb' : 'kg'}`,
         })
       : null;
   // The banner is the ONE home of the next-set call: "{verdict} → W × R".
@@ -3031,7 +3059,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const heldLoadKg = latestCall?.heldByVelocity && pendingSetsCount > 0 ? latestCall.weightKg : null;
   useEffect(() => {
     if (heldLoadKg === null || manualEditsRef.current.get(0)?.weight) return;
-    const shown = String(displayWeight(heldLoadKg));
+    const shown = String(suggestionWeight(heldLoadKg));
     setPendingInputs((prev) =>
       prev.length > 0 && prev[0].weight !== shown ? [{ ...prev[0], weight: shown }, ...prev.slice(1)] : prev
     );
@@ -4582,7 +4610,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <SuggestionBanner
                 weightLabel={
                   latestCall?.heldByVelocity
-                    ? `${displayWeight(latestCall.weightKg)} ${weightLabel}`
+                    ? `${suggestionWeight(latestCall.weightKg)} ${weightLabel}`
                     : bannerWeight
                 }
                 repsLabel={
@@ -4631,6 +4659,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 targetRir={loggerTargetRir}
                 unit={unit}
                 minIncrementKg={exercise.minWeightIncrementKg}
+                weightStep={loadStep}
                 effortCheck={effortCheck}
                 disabled={isCompletingSet}
                 isDurationBased={isDurationBased}
@@ -4695,7 +4724,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           const pendingWeight = isBodyweightExercise
             ? 'BW'
             : pendingInputs[i]?.weight ||
-              (suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '—');
+              (suggestedWeight > 0 ? String(suggestionWeight(suggestedWeight)) : '—');
 
           return (
             <div

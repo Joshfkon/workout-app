@@ -1039,7 +1039,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         <span
           class="truncate"
         >
-          132.5
+          130
            lbs
            ×
            
@@ -1066,7 +1066,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         <span
           class="truncate"
         >
-          132.5
+          130
            lbs
            ×
            
@@ -1093,7 +1093,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         <span
           class="truncate"
         >
-          132.5
+          130
            lbs
            ×
            
