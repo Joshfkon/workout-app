@@ -100,9 +100,78 @@ export async function observe(page) {
   } catch (e) {
     snapshot = `(snapshot failed: ${e.message})`;
   }
-  if (snapshot.length > SNAPSHOT_CHARS) snapshot = snapshot.slice(0, SNAPSHOT_CHARS) + '\n… (truncated)';
+  // Sheets and dialogs render at the end of the DOM, so a plain head-cut
+  // snapshot hides exactly the thing on top of the screen. Put an open
+  // dialog first; its refs resolve like the page's.
+  let dialog = '';
+  try {
+    const open = page.locator('[role="dialog"]:visible, [aria-modal="true"]:visible');
+    if (await open.count()) dialog = await open.last().ariaSnapshot({ mode: 'ai', timeout: 3000 });
+  } catch {
+    dialog = '';
+  }
+  if (dialog) {
+    const room = Math.max(0, SNAPSHOT_CHARS - dialog.length);
+    snapshot = `A sheet/dialog is open on top of the page; tap inside it (or close it) first:\n${dialog}\n\nPage behind it (covered while the sheet is open):\n${snapshot.length > room ? snapshot.slice(0, room) + '\n… (truncated)' : snapshot}`;
+  } else if (snapshot.length > SNAPSHOT_CHARS) {
+    snapshot = await windowAroundViewport(page, snapshot);
+  }
   const png = await page.screenshot({ type: 'jpeg', quality: 60 });
   return { url, snapshot, jpeg: png };
+}
+
+/**
+ * A long page's snapshot is cut around what's ON SCREEN, not from the top:
+ * otherwise scrolling never changes what the persona can tap, and anything
+ * below the cut (e.g. a workout's Log set button) is unreachable.
+ * Exported for tests; `boxOf(ref)` resolves a ref's bounding box.
+ */
+export function windowLines(lines, visible, limit) {
+  if (!visible.length) return null;
+  const sorted = [...visible].sort((a, b) => a - b);
+  // Centre on the median visible line: fixed headers and tab bars sit at the
+  // far ends of the DOM and would otherwise stretch the window to the whole page.
+  const centre = sorted[Math.floor(sorted.length / 2)];
+  let lo = centre;
+  let hi = centre;
+  let size = lines[centre].length;
+  for (let step = 0; lo > 0 || hi < lines.length - 1; step++) {
+    const down = step % 2 === 0 ? hi < lines.length - 1 : lo === 0;
+    const next = down ? hi + 1 : lo - 1;
+    if (size + lines[next].length + 1 > limit) break;
+    size += lines[next].length + 1;
+    if (down) hi = next;
+    else lo = next;
+  }
+  // On-screen lines outside the window (fixed bars) are kept on their own.
+  const extras = sorted.filter((i) => i < lo || i > hi);
+  return { lo, hi, extras };
+}
+
+async function windowAroundViewport(page, snapshot) {
+  const lines = snapshot.split('\n');
+  const vh = page.viewportSize()?.height ?? 844;
+  const refLines = lines.map((l, i) => [i, /\[ref=(e\d+)\]/.exec(l)?.[1]]).filter(([, r]) => r);
+  const boxes = await Promise.all(
+    refLines.map(([, r]) => page.locator(`aria-ref=${r}`).boundingBox({ timeout: 300 }).catch(() => null)),
+  );
+  // On screen, and not a container taller than the screen (those are "visible" everywhere).
+  const visible = refLines
+    .filter((_, k) => {
+      const b = boxes[k];
+      return b && b.height > 0 && b.height < vh && b.y + b.height > 0 && b.y < vh;
+    })
+    .map(([i]) => i);
+  const w = windowLines(lines, visible, SNAPSHOT_CHARS);
+  if (!w) return snapshot.slice(0, SNAPSHOT_CHARS) + '\n… (truncated)';
+  return [
+    w.lo > 0 ? `… (${w.lo} lines above, off screen: scroll up to reach them)` : '',
+    lines.slice(w.lo, w.hi + 1).join('\n'),
+    w.hi < lines.length - 1 ? `… (${lines.length - 1 - w.hi} lines below, off screen: scroll down to reach them)` : '',
+    w.extras.length ? `Also on screen (fixed bars):\n${w.extras.map((i) => lines[i].trim()).join('\n')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 async function settle(page) {
