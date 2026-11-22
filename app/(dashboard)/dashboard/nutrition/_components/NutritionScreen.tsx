@@ -2,6 +2,7 @@
 
 import { mealFromAddParam } from '@/lib/nutrition/addFoodLink';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useHydrated } from '@/hooks/useHydrated';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -249,13 +250,16 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // (the App Router keys the page segment by its search params — true for
   // history.replaceState sync and router.replace alike), and with these
   // starting null/false the first frames rendered the isColdStart branch
-  // even with a warm cache. Server-side they stay null/false, which is safe:
-  // this page suspends at prerender (useSearchParams), so its HTML is never
-  // server-rendered and there's nothing to mismatch on hydration.
+  // even with a warm cache.
+  // On a full page load the server DOES render this page, though, so the
+  // render gate must be false while hydrating (matching the server's loading
+  // HTML) and true on any later client mount: useHydrated. Gating the body on
+  // it also covers selectedDate, which is set on the client's first render
+  // but only rendered once hydrated.
   const [selectedDate, setSelectedDate] = useState<string | null>(() =>
     typeof window === 'undefined' ? null : getLocalDateString()
   );
-  const [isMounted, setIsMounted] = useState(() => typeof window !== 'undefined');
+  const isMounted = useHydrated();
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
@@ -367,11 +371,6 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   const heroCardRef = useRef<HTMLDivElement>(null);
 
   const supabase = createUntypedClient();
-
-  // Track when component is mounted on client
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   // Initialize date on client side only (after mount)
   useEffect(() => {
