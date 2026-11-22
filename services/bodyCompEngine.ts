@@ -364,7 +364,7 @@ export function generateCoachingRecommendations(
     recommendations.push({
       type: 'info',
       title: 'Get Started',
-      message: 'Add your first DEXA scan to start tracking your body composition and receive personalized recommendations.',
+      message: 'Add your first body scan (DEXA) to start tracking muscle and fat separately and get personalized recommendations.',
       priority: 1,
     });
     return recommendations;
