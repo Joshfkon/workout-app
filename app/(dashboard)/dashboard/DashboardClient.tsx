@@ -46,6 +46,7 @@ import {
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useBodyOrFoodLogged } from '@/hooks/useBodyOrFoodLogged';
 import { homeFocus } from '@/components/dashboard/home/homeFocus';
+import { statedTrackingFocus, type StatedTrackingFocus } from '@/lib/onboarding/trackingFocus';
 import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import { startMesocycleWorkoutSession } from '@/lib/training/startMesocycleSession';
@@ -288,6 +289,8 @@ interface DashboardInitialData {
   liftTrends?: LiftTrendsSummary | null;
   /** Body-comp glance tile (≥2 DEXA scans + height); null hides the tile. */
   bodyCompGlance?: BodyCompGlance | null;
+  /** Sign-up's "No, food tracking" answer (lib/onboarding/trackingFocus). */
+  statedFocus?: StatedTrackingFocus | null;
 }
 
 interface DashboardClientProps {
@@ -348,6 +351,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>(initialData?.weightHistory ?? []);
   const [userId, setUserId] = useState<string | null>(initialData?.userId ?? null);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance'>(initialData?.userGoal ?? 'maintain');
+  // What the user said at sign-up they're here for. Lives on the auth user,
+  // which both the server page and the client fetch already have in hand.
+  const [statedFocus, setStatedFocus] = useState<StatedTrackingFocus | null>(initialData?.statedFocus ?? null);
   // Eating window for intake pacing (07:00–21:00 until the user's row loads).
   const [eatingWindow, setEatingWindow] = useState<EatingWindow | undefined>(undefined);
 
@@ -950,6 +956,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        setStatedFocus(statedTrackingFocus(user.user_metadata));
 
         // Eating window for pacing verdicts (defaults inside the helper when
         // unset/unmigrated). Loaded here — before the initial-data fast path
@@ -1400,7 +1407,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const needsCheckIn = !!userId && checkInStatus === 'missing';
 
   // Food-only users (no workouts ever / in 12 weeks, but logging food or
-  // weight) get food and weight first and one compact workout entry lower
+  // weight — or brand new and said "food tracking" at sign-up) get food and weight first and one compact workout entry lower
   // down; lifters keep the workout hero. Every input is already in hand.
   const foodFocus =
     homeFocus({
@@ -1411,6 +1418,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       hasRecentWeighIn: weightHistory.length > 0 || !!todaysWeight,
       hasFoodToday: nutritionTotals.calories > 0,
       hasLoggedBodyOrFood,
+      statedFocus,
     }) === 'food';
   const heroVariant = todayHeroVariant({
     workout: heroWorkout,

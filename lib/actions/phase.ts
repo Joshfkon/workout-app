@@ -32,16 +32,12 @@ import {
   updateTrainingPhaseSpan,
 } from '@/lib/body/trainingPhases';
 import { planPhaseSwitch } from '@/services/phasePlanning';
+import { lbsToKg, type Goal as NutritionGoal } from '@/lib/nutrition/macroCalculator';
 import {
-  calculateMacros,
-  lbsToKg,
-  type Goal as NutritionGoal,
-  type ActivityLevel,
-  type Peptide,
-  type UserStats,
-  type ActivityConfig,
-  type GoalConfig,
-} from '@/lib/nutrition/macroCalculator';
+  phaseToNutritionGoal,
+  targetsFromMacroSettings,
+  type PhaseTargetSettings,
+} from '@/lib/nutrition/phaseTargets';
 
 /** Top-level phase; values match the users.goal DB enum. */
 export type TrainingPhase = 'bulk' | 'cut' | 'maintenance';
@@ -80,23 +76,6 @@ function getUserDay(): UserDay {
     // Outside a request scope (tests / scripts): runtime day.
   }
   return resolveUserDay(zone, clockNow());
-}
-
-const CUT_GOALS: NutritionGoal[] = ['aggressive_cut', 'moderate_cut', 'slow_cut'];
-const BULK_GOALS: NutritionGoal[] = ['slow_bulk', 'moderate_bulk', 'aggressive_bulk'];
-
-/**
- * Map a phase onto the macro calculator's 7-level goal, preserving the user's
- * chosen pace when the direction is unchanged (slow_cut stays slow_cut) and
- * defaulting to a sensible pace when switching direction.
- */
-function phaseToNutritionGoal(phase: TrainingPhase, current: NutritionGoal | null): NutritionGoal {
-  if (phase === 'maintenance') return 'maintain';
-  if (phase === 'cut') {
-    return current && CUT_GOALS.includes(current) ? current : 'moderate_cut';
-  }
-  // Lean-bulk default: minimizes fat gain, the right starting point for most lifters
-  return current && BULK_GOALS.includes(current) ? current : 'slow_bulk';
 }
 
 /**
@@ -337,30 +316,10 @@ export async function updateTrainingPhase(
       };
     }
 
-    const userStats: UserStats = {
-      weightKg,
-      heightCm: settings.height_cm,
-      age: settings.age,
-      sex: settings.sex as 'male' | 'female',
-    };
-    const activityConfig: ActivityConfig = {
-      activityLevel: settings.activity_level as ActivityLevel,
-      workoutsPerWeek: settings.workouts_per_week || 4,
-      avgWorkoutMinutes: settings.avg_workout_minutes || 60,
-      workoutIntensity: (settings.workout_intensity as 'light' | 'moderate' | 'intense') || 'moderate',
-    };
-    const goalConfig: GoalConfig = {
+    const newTargets = targetsFromMacroSettings(weightKg, {
+      ...(settings as PhaseTargetSettings),
       goal: nutritionGoal,
-      peptide: (settings.peptide as Peptide) || 'none',
-    };
-
-    const recommendation = calculateMacros(userStats, activityConfig, goalConfig);
-    const newTargets = {
-      calories: recommendation.calories,
-      protein: recommendation.protein,
-      carbs: recommendation.carbs,
-      fat: recommendation.fat,
-    };
+    });
 
     const { data: existingTargets } = await supabase
       .from('nutrition_targets')
