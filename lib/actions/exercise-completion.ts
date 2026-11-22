@@ -8,7 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
-import { hasAiDataSharingConsent } from '@/lib/ai/consent';
+import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 import type { BasicExerciseInput, CompletedExerciseData } from '@/lib/exercises/types';
 import type { Database } from '@/types/database';
 import {
@@ -330,6 +330,13 @@ export async function completeSingleExercise(
         updated: false,
         error: 'Not authenticated',
       };
+    }
+
+    // This action exists only to run the AI review. Without consent,
+    // completeExerciseWithAI would fall back to equipment defaults and this
+    // would write them as if reviewed — refuse instead (nothing is sent).
+    if (!(await hasAiDataSharingConsent(user.id))) {
+      return { success: false, updated: false, error: AI_CONSENT_REQUIRED_MESSAGE };
     }
 
     // Get the exercise

@@ -6,6 +6,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import type { Exercise } from '@/types/schema';
 import { resolveMuscleToStandard } from '@/types/schema';
 import { completeSingleExercise } from '@/lib/actions/exercise-completion';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { parseYouTubeVideoId } from '@/lib/youtube';
 import { shouldCollapseGuides } from '@/services/exerciseDetailAnalytics';
 import { YouTubeEmbed } from '../YouTubeEmbed';
@@ -142,12 +143,15 @@ function CompleteWithAIButton({ exerciseId }: { exerciseId: string }) {
   const [isCompleting, setIsCompleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const ensureAiConsent = useAiConsentGate();
 
   const handleClick = async () => {
     setIsCompleting(true);
     setError(null);
     setSuccess(false);
     try {
+      // First AI use asks for consent; declined → nothing is sent.
+      if (!(await ensureAiConsent())) return;
       const result = await completeSingleExercise(exerciseId);
       if (result.success && result.updated) {
         setSuccess(true);

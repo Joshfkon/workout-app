@@ -22,6 +22,7 @@ import {
   type NumericLabelField,
 } from '@/lib/nutrition/labelParser';
 import { scanLabelWithAi } from '@/lib/actions/label-ai';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 
 /** What the create-food form receives for review. */
 export interface LabelScanPrefill {
@@ -98,6 +99,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
   const workerRef = useRef<TesseractWorker | null>(null);
   const capturedBlobRef = useRef<Blob | null>(null);
   const isMountedRef = useRef(true);
+  const ensureAiConsent = useAiConsentGate();
 
   // Online state drives the AI-fallback button (disabled offline, with copy).
   useEffect(() => {
@@ -294,6 +296,9 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
   const runAiScan = async () => {
     const blob = capturedBlobRef.current;
     if (!blob) return;
+    // First AI use asks for consent; declined → the photo stays on device.
+    if (!(await ensureAiConsent())) return;
+    if (!isMountedRef.current) return;
     setError(null);
     setStage('ai');
 

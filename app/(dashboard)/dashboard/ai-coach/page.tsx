@@ -7,6 +7,7 @@ import type { CoachingMessage, CoachingContext } from '@/types/coaching';
 import { useSubscription } from '@/hooks/useSubscription';
 import { UpgradePrompt } from '@/components/subscription';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 
 export default function AICoachPage() {
   useDocumentTitle('AI Coach');
@@ -19,6 +20,7 @@ export default function AICoachPage() {
   const [context, setContext] = useState<CoachingContext | null>(null);
   const [showContext, setShowContext] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const ensureAiConsent = useAiConsentGate();
 
   // Check if user has access to AI coaching feature
   const hasAccess = canAccess('ai-coaching');
@@ -46,6 +48,15 @@ export default function AICoachPage() {
 
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
+
+    // First AI use asks for consent; on "Don't allow" nothing is sent and the
+    // typed message stays in the box.
+    setIsLoading(true);
+    const allowed = await ensureAiConsent();
+    if (!allowed) {
+      setIsLoading(false);
+      return;
+    }
 
     const userMessage: CoachingMessage = {
       role: 'user',

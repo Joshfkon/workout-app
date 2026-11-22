@@ -14,6 +14,7 @@ import {
   getAiDataSharingConsent,
   setAiDataSharingConsent,
 } from '@/lib/actions/ai-consent';
+import { publishAiConsent } from '@/components/ai/aiConsentBus';
 
 export function AiDataSharingCard() {
   const [enabled, setEnabled] = useState(false);
@@ -43,6 +44,8 @@ export function AiDataSharingCard() {
     const result = await setAiDataSharingConsent(value).catch(() => null);
     if (result?.ok) {
       setEnabled(value);
+      // Keep the first-use gate (AiConsentGate) in step with the new choice.
+      publishAiConsent(value);
     } else {
       setError(result && !result.ok ? result.error : 'Failed to save. Please try again.');
     }

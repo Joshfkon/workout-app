@@ -7,7 +7,7 @@
  *
  * Every AI server action in lib/actions calls hasAiDataSharingConsent() after
  * authenticating and refuses to call a provider unless it returns true. The
- * prompt (components/ai/AiConsentPrompt.tsx) and the Settings toggle
+ * ask-at-first-use sheet (components/ai/AiConsentGate.tsx) and the Settings toggle
  * (components/settings/AiDataSharingCard.tsx) only record the choice, via
  * lib/actions/ai-consent.ts.
  *

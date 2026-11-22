@@ -40,6 +40,7 @@ import {
   getIncompleteExercises,
 } from '@/lib/actions/exercise-completion';
 import { IncompleteExercisesPrompt } from '@/components/exercises/IncompleteExercisesPrompt';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { updateExerciseRow } from '@/lib/exercises/updateExerciseRow';
 import { Sheet } from '@/components/ui/Sheet';
 import { tierBadgeClasses, ratingFillClass } from '@/components/exercises/tierBadge';
@@ -299,8 +300,11 @@ export default function ExercisesPage() {
   // incomplete custom exercise, then refresh both the catalog and the
   // prompt's own list (key remount). completeSingleExercise fills only
   // missing fields, so a user's manual edits are never overwritten.
+  const ensureAiConsent = useAiConsentGate();
   const handleCompleteIncompleteOne = useCallback(
     async (exerciseId: string) => {
+      // First AI use asks for consent; declined → nothing is sent.
+      if (!(await ensureAiConsent())) return;
       setIsCompletingIncomplete(true);
       try {
         await completeSingleExercise(exerciseId);
@@ -310,10 +314,11 @@ export default function ExercisesPage() {
         setIncompletePromptKey((k) => k + 1);
       }
     },
-    [refetchCatalog]
+    [refetchCatalog, ensureAiConsent]
   );
 
   const handleCompleteIncompleteAll = useCallback(async () => {
+    if (!(await ensureAiConsent())) return;
     setIsCompletingIncomplete(true);
     try {
       const incomplete = await getIncompleteExercises();
@@ -328,7 +333,7 @@ export default function ExercisesPage() {
       setIsCompletingIncomplete(false);
       setIncompletePromptKey((k) => k + 1);
     }
-  }, [refetchCatalog]);
+  }, [refetchCatalog, ensureAiConsent]);
 
   const fetchExerciseHistory = async (exerciseId: string) => {
     if (exerciseHistories[exerciseId]) return; // Already loaded

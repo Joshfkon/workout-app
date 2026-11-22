@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IconTrash } from '@tabler/icons-react';
 import { parseMealDescription, type ParsedMealItem } from '@/lib/actions/nutrition-ai';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import type { MealType } from '@/types/nutrition';
 
 const MEAL_OPTIONS: { type: MealType; label: string }[] = [
@@ -38,6 +39,7 @@ export function DescribeMealModal({
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [description, setDescription] = useState('');
   const [isParsing, setIsParsing] = useState(false);
+  const ensureAiConsent = useAiConsentGate();
   const [parseError, setParseError] = useState('');
   const [items, setItems] = useState<ParsedMealItem[] | null>(null);
   const [isLogging, setIsLogging] = useState(false);
@@ -61,6 +63,8 @@ export function DescribeMealModal({
     setIsParsing(true);
     setParseError('');
     try {
+      // First AI use asks for consent; declined → nothing is sent.
+      if (!(await ensureAiConsent())) return;
       const result = await parseMealDescription(description);
       if (result.ok) {
         setItems(result.items);

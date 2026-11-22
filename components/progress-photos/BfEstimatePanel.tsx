@@ -15,6 +15,7 @@ import {
   type BfEstimateSuccess,
 } from '@/lib/actions/progress-photo-ai';
 import type { ProgressPhoto } from '@/types/schema';
+import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 
 /**
  * Vision doesn't need full resolution — keep the request payload small.
@@ -35,6 +36,7 @@ interface BfEstimatePanelProps {
 
 export function BfEstimatePanel({ photo, signedUrl, onEstimated }: BfEstimatePanelProps) {
   const [isEstimating, setIsEstimating] = useState(false);
+  const ensureAiConsent = useAiConsentGate();
   const [error, setError] = useState<string | null>(null);
   // Freshest result wins over the (possibly stale) photo prop.
   const [result, setResult] = useState<BfEstimateSuccess | null>(null);
@@ -44,10 +46,12 @@ export function BfEstimatePanel({ photo, signedUrl, onEstimated }: BfEstimatePan
   const hasEstimate = low != null && high != null;
 
   const handleEstimate = async () => {
-    if (!signedUrl) return;
+    if (!signedUrl || isEstimating) return;
     setIsEstimating(true);
     setError(null);
     try {
+      // First AI use asks for consent; declined → the photo is never sent.
+      if (!(await ensureAiConsent())) return;
       const response = await fetch(signedUrl);
       if (!response.ok) throw new Error('Could not load the photo');
       const blob = await response.blob();
