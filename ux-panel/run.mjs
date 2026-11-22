@@ -174,6 +174,12 @@ async function main() {
       const goalText = journey.goal(persona);
       const t0 = Date.now();
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, serviceWorkers: 'block', locale: 'en-US', timezoneId: 'America/New_York' });
+      // Hide the Next.js dev error badge: real users never see it, and it sits
+      // over the bottom-left tab, swallowing taps on Home.
+      await context.addInitScript(() => {
+        const hide = () => { const st = document.createElement('style'); st.textContent = 'nextjs-portal{display:none!important}'; document.head.appendChild(st); };
+        if (document.head) hide(); else document.addEventListener('DOMContentLoaded', hide);
+      });
       const page = await context.newPage();
       const envErrors = watchSchemaErrors(page);
       const creds = newCredentials(persona.id, runId, journey.id.replace(/[^a-z0-9]+/gi, '').slice(0, 12));
