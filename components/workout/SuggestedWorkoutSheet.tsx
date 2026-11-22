@@ -424,6 +424,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       exercises: substitutionExercises,
       unavailableEquipmentIds: selectedUnavailable ?? [],
       sessionMinutes: aiDuration,
+      avoidExerciseIds: injurySafety.avoid,
+      cautionExerciseIds: injurySafety.caution,
     });
 
     // Belt-and-braces: no pick may require equipment the selected location

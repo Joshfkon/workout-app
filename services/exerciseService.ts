@@ -515,7 +515,10 @@ export function deriveSafetyMetadata(args: {
   storedPositionStress?: PositionStress | null;
 }): { spinalLoading: SpinalLoading; positionStress: PositionStress } {
   const stored = args.storedPositionStress;
-  const hasStoredStress = !!stored && Object.values(stored).some(Boolean);
+  // Any stored key counts as data — including explicit false values a user
+  // saved for a custom exercise. Only a truly empty {} (the stock default)
+  // falls back to derivation.
+  const hasStoredStress = !!stored && Object.keys(stored).length > 0;
   return {
     spinalLoading: args.storedSpinalLoading || deriveSpinalLoading(args.pattern, args.equipment, args.mechanic),
     positionStress: hasStoredStress ? (stored as PositionStress) : derivePositionStress(args.pattern, args.equipment, args.name),
