@@ -61,4 +61,46 @@ describe('homeFocus', () => {
     expect(homeFocus({ ...lapsed, hasRecentWeighIn: false, hasFoodToday: false, hasLoggedBodyOrFood: true })).toBe('training');
     expect(homeFocus({ ...lapsed, hasRecentWeighIn: true, hasFoodToday: false, hasLoggedBodyOrFood: true })).toBe('food');
   });
+
+  it('leads with food for a brand-new user who said "food tracking" at sign-up', () => {
+    const fresh = {
+      completedWorkoutsCount: 0,
+      recentCompletedWorkouts: 0,
+      hasPlan: false,
+      hasTodaysWorkout: false,
+      hasRecentWeighIn: false,
+      hasFoodToday: false,
+      hasLoggedBodyOrFood: false,
+    };
+    expect(homeFocus({ ...fresh, statedFocus: 'food' })).toBe('food');
+    // Without the answer a fresh account stays on the training layout.
+    expect(homeFocus({ ...fresh, statedFocus: null })).toBe('training');
+  });
+
+  it('drops the sign-up answer once they lift or build a plan', () => {
+    expect(
+      homeFocus({
+        completedWorkoutsCount: 3,
+        recentCompletedWorkouts: 3,
+        hasPlan: false,
+        hasTodaysWorkout: false,
+        hasRecentWeighIn: false,
+        hasFoodToday: false,
+        statedFocus: 'food',
+      })
+    ).toBe('training');
+    expect(homeFocus({ ...foodOnly, hasPlan: true, statedFocus: 'food' })).toBe('training');
+    // Unknown history is still treated as a lifter.
+    expect(
+      homeFocus({
+        completedWorkoutsCount: undefined,
+        recentCompletedWorkouts: undefined,
+        hasPlan: false,
+        hasTodaysWorkout: false,
+        hasRecentWeighIn: false,
+        hasFoodToday: false,
+        statedFocus: 'food',
+      })
+    ).toBe('training');
+  });
 });

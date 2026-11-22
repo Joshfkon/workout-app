@@ -12,6 +12,8 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { updateOnboardingStep, confirmedOnboardingGoal, type TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import type { StandingInjuryArea } from '@/lib/training/standingInjuries';
 import { GoalStep } from './_components/GoalStep';
+import { starterTargets } from '@/lib/nutrition/phaseTargets';
+import { saveMacroSettings } from '@/lib/actions/nutrition';
 import type { WeightUnit } from '@/types/schema';
 
 // Unit conversion helpers
@@ -87,6 +89,8 @@ export default function OnboardingBodyCompPage() {
   const [heightFeet, setHeightFeet] = useState<string>('');
   const [heightInches, setHeightInches] = useState<string>('');
   const [weightDisplay, setWeightDisplay] = useState<string>('');
+  // Optional: only the calorie target needs it (restored from the profile).
+  const [ageDisplay, setAgeDisplay] = useState<string>('');
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
   // True when the user chose "Not sure" and we filled in a typical value.
   // A guessed body fat must not drive a muscle-mass verdict or a goal pick.
@@ -106,6 +110,11 @@ export default function OnboardingBodyCompPage() {
   // Re-entering onboarding: show the areas saved last time. If the user then
   // clears them all, that is saved as [] rather than ignored.
   const injuryAreasSeeded = useRef(false);
+  // Targets the user already has (re-entering onboarding, or set up in Eat).
+  // Starter targets are only created when there are none and no saved
+  // calculator settings, so nothing the user chose gets overwritten.
+  const [existingTargets, setExistingTargets] = useState<{ calories: number; protein: number } | null>(null);
+  const [hasMacroSettings, setHasMacroSettings] = useState(false);
   useEffect(() => {
     if (injuryAreasSeeded.current || preferences.injuryAreas.length === 0) return;
     injuryAreasSeeded.current = true;
@@ -187,9 +196,18 @@ export default function OnboardingBodyCompPage() {
       // Get user height if available
       const { data: userData } = await supabase
         .from('users')
-        .select('height_cm, sex, goal, onboarding_step, onboarding_completed')
+        .select('height_cm, sex, age, goal, onboarding_step, onboarding_completed')
         .eq('id', user.id)
         .single();
+
+      const [{ data: targetsRow }, { data: macroSettingsRow }] = await Promise.all([
+        supabase.from('nutrition_targets').select('calories, protein').eq('user_id', user.id).maybeSingle(),
+        supabase.from('macro_settings').select('user_id').eq('user_id', user.id).maybeSingle(),
+      ]);
+      if (targetsRow?.calories) {
+        setExistingTargets({ calories: targetsRow.calories, protein: targetsRow.protein ?? 0 });
+      }
+      if (macroSettingsRow) setHasMacroSettings(true);
       
       if (userData?.height_cm) {
         // Convert to display units
@@ -204,6 +222,9 @@ export default function OnboardingBodyCompPage() {
       }
       if (userData?.sex) {
         setSex(userData.sex as 'male' | 'female');
+      }
+      if (userData?.age) {
+        setAgeDisplay((current) => current || String(userData.age));
       }
       const savedGoal = confirmedOnboardingGoal(userData);
       if (savedGoal) {
@@ -248,6 +269,26 @@ export default function OnboardingBodyCompPage() {
     }
   };
   
+  const getAge = () => {
+    // Out-of-range ages are ignored rather than saved (users.age has a CHECK).
+    const age = parseInt(ageDisplay, 10);
+    return age >= 13 && age <= 100 ? age : null;
+  };
+
+  // Daily calorie + protein targets for the picked goal, from the same
+  // calculation a phase switch uses (lib/nutrition/phaseTargets), so what
+  // this step shows is exactly what Eat starts with.
+  const starter = goal
+    ? starterTargets({
+        phase: goal,
+        weightKg: useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg(),
+        heightCm: getHeightCm(),
+        age: getAge(),
+        sex,
+      })
+    : null;
+  const createStarterTargets = !existingTargets && !hasMacroSettings;
+
   // Synchronous double-tap guard (as on /register): two taps land before the
   // isLoading re-render disables the button, and each would insert a
   // coaching session. The ref flips in the same tick.
@@ -295,8 +336,24 @@ export default function OnboardingBodyCompPage() {
       // Update user profile with sex, height, and the confirmed training goal
       const { error: profileError } = await supabase
         .from('users')
-        .update({ sex, height_cm: height, weight_kg: weight, goal })
+        .update({ sex, height_cm: height, weight_kg: weight, goal, ...(getAge() ? { age: getAge() } : {}) })
         .eq('id', user.id);
+
+      // First nutrition targets for the chosen goal (best-effort: Eat can
+      // always calculate them later).
+      if (createStarterTargets && starter && !profileError) {
+        try {
+          const saved = await saveMacroSettings({ ...starter.settings, target_weight_change_per_week: null });
+          if (saved.success) {
+            const { error: targetsError } = await supabase
+              .from('nutrition_targets')
+              .insert({ user_id: user.id, ...starter.targets });
+            if (targetsError) console.error('Error saving starter targets:', targetsError);
+          }
+        } catch (err) {
+          console.error('Error saving starter targets:', err);
+        }
+      }
 
       // Optional injuries answer: merged into users.preferences (the hook
       // re-reads the JSON first), only when the question was answered.
@@ -484,6 +541,14 @@ export default function OnboardingBodyCompPage() {
         bodyFatPercent={bf}
         injuryAreas={injuryAreas}
         onInjuryAreasChange={setInjuryAreas}
+        dailyTargets={
+          existingTargets
+            ? { ...existingTargets, kind: 'existing' }
+            : createStarterTargets && starter
+              ? { calories: starter.targets.calories, protein: starter.targets.protein, kind: 'new' }
+              : null
+        }
+        targetsNeedAge={createStarterTargets && !getAge()}
         isLoading={isLoading}
         onBack={() => setStep('body-comp')}
         onContinue={handleContinue}
@@ -637,8 +702,24 @@ export default function OnboardingBodyCompPage() {
               max={units === 'lb' ? 660 : 300}
               disabled={useDexa}
             />
+
+            <Input
+              label="Age (optional)"
+              type="number"
+              inputMode="numeric"
+              value={ageDisplay}
+              onChange={(e) => setAgeDisplay(e.target.value)}
+              placeholder="30"
+              min={13}
+              max={100}
+              hint="Used to set your daily calorie target."
+            />
             
             <div>
+              <p className="text-caption text-ink-2 mb-2" data-testid="body-fat-why">
+                Why we ask for body fat: it splits your weight into muscle and fat, so we can suggest a
+                goal and track muscle, not just weight.
+              </p>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <Input
@@ -659,7 +740,7 @@ export default function OnboardingBodyCompPage() {
                       useDexa
                         ? 'Using DEXA scan data'
                         : bfEstimated
-                          ? 'A typical value for now. Update it any time.'
+                          ? `We put in ${bodyFatPercent}%, about average for ${sex === 'female' ? 'women' : 'men'}. It's only an estimate: change it here, or later in Settings.`
                           : "Don't know it? Use the visual guide, or tap Not sure."
                     }
                   />

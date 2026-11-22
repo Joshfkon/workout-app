@@ -37,6 +37,18 @@ describe('Onboarding benchmarks page', () => {
     expect(screen.getByRole('button', { name: /Pick lifts to test/ })).toBeDisabled();
   });
 
+  it('says what the tests are for and what skipping does, with skip first', () => {
+    render(<BenchmarksPage />);
+    expect(screen.getByTestId('benchmarks-purpose')).toHaveTextContent(
+      /starting weights we suggest.*Skip them and suggestions start from estimates that sharpen as you log/
+    );
+    const skip = screen.getByTestId('skip-benchmarks');
+    const start = screen.getByRole('button', { name: /Pick lifts to test/ });
+    // Skip comes before any lift choice in the page.
+    expect(skip.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(/Nothing here affects food tracking/)).toBeInTheDocument();
+  });
+
   it('shows the time estimate once a lift is chosen', async () => {
     const user = userEvent.setup();
     render(<BenchmarksPage />);

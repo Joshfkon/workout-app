@@ -5,11 +5,20 @@ import { Button } from '@/components/ui';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import { STANDING_INJURY_OPTIONS, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
+// Short gym labels, each with one plain line so a beginner (or someone easing
+// back after an injury) knows what they're picking.
 const GOAL_OPTIONS: { value: TrainingGoal; label: string; description: string }[] = [
-  { value: 'cut', label: 'Cut', description: 'Lose fat while holding on to muscle. Calorie deficit.' },
-  { value: 'maintenance', label: 'Maintain', description: 'Hold steady or recomp. Eat around maintenance.' },
-  { value: 'bulk', label: 'Bulk', description: 'Build muscle. Calorie surplus.' },
+  { value: 'cut', label: 'Cut', description: 'Lose fat while keeping your muscle.' },
+  { value: 'maintenance', label: 'Maintain', description: 'Stay at about your weight. Good for getting back into it.' },
+  { value: 'bulk', label: 'Bulk', description: 'Gain some weight to build muscle.' },
 ];
+
+/** Daily targets shown under the goal: new ones for this goal, or ones the user already has. */
+export interface GoalStepTargets {
+  calories: number;
+  protein: number;
+  kind: 'new' | 'existing';
+}
 
 export interface GoalStepProps {
   /** null = nothing picked yet; Continue stays disabled until one is. */
@@ -21,6 +30,10 @@ export interface GoalStepProps {
   /** null = question not answered (optional); [] = "None". */
   injuryAreas: StandingInjuryArea[] | null;
   onInjuryAreasChange: (areas: StandingInjuryArea[] | null) => void;
+  /** Calorie + protein targets for the picked goal; null when they can't be worked out. */
+  dailyTargets?: GoalStepTargets | null;
+  /** No targets yet and no age to calculate them from. */
+  targetsNeedAge?: boolean;
   isLoading: boolean;
   onBack: () => void;
   onContinue: () => void;
@@ -33,6 +46,8 @@ export function GoalStep({
   bodyFatPercent,
   injuryAreas,
   onInjuryAreasChange,
+  dailyTargets = null,
+  targetsNeedAge = false,
   isLoading,
   onBack,
   onContinue,
@@ -73,7 +88,7 @@ export function GoalStep({
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">What&apos;s your goal right now?</h1>
         <p className="text-ink-2">
-          This sets your training phase — it shapes your program&apos;s volume, rep ranges, and nutrition targets.
+          This sets your daily food targets and how your training is planned.
         </p>
       </div>
 
@@ -125,8 +140,29 @@ export function GoalStep({
         </p>
       )}
 
+      {dailyTargets ? (
+        <div className="rounded-card bg-card p-4 shadow-card" data-testid="goal-daily-targets">
+          <p className="text-subhead text-ink-2">
+            {dailyTargets.kind === 'new' ? 'Your daily targets' : 'Your current daily targets'}
+          </p>
+          <p className="text-title font-bold text-ink tabular-nums">
+            {dailyTargets.calories.toLocaleString()} kcal · {Math.round(dailyTargets.protein)} g protein
+          </p>
+          <p className="text-caption text-ink-3 mt-1">
+            {dailyTargets.kind === 'new'
+              ? 'Worked out from your goal, weight, height and age. Change them any time in Eat.'
+              : 'Kept as they are. Change them any time in Eat.'}
+          </p>
+        </div>
+      ) : targetsNeedAge ? (
+        <p className="text-subhead text-ink-2" data-testid="goal-targets-need-age">
+          Add your age on the last step (Back) to see your daily calorie and protein targets, or set
+          them later in Eat.
+        </p>
+      ) : null}
+
       <p className="text-caption text-ink-3 text-center">
-        You can change this anytime from the phase chip on your dashboard.
+        You can change your goal anytime from the phase chip on your dashboard.
       </p>
 
       {/* Optional: never blocks Continue. */}

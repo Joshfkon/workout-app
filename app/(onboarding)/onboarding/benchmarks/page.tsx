@@ -172,10 +172,9 @@ function BenchmarksContent() {
       
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">Test your strength? (optional)</h1>
-        <p className="text-ink-2">
-          You don&apos;t need this to start. Skip it and we&apos;ll estimate your starting weights,
-          then sharpen them from your first couple of workouts. Testing at the gym just gets
-          them right from day one.
+        <p className="text-ink-2" data-testid="benchmarks-purpose">
+          These tests only set the starting weights we suggest in workouts. Skip them and
+          suggestions start from estimates that sharpen as you log sets.
         </p>
       </div>
 
@@ -193,7 +192,8 @@ function BenchmarksContent() {
           Skip and start using the app
         </Button>
         <p className="text-caption text-ink-3 text-center">
-          You can test your strength any time later from Analytics.
+          Most people skip this. Not lifting? Nothing here affects food tracking. You can test any
+          time later from Analytics.
         </p>
       </div>
 
@@ -203,7 +203,7 @@ function BenchmarksContent() {
       <ContextCard
         cardKey="benchmarkSelection"
         className="mb-6"
-        defaultCollapsed={false}
+        defaultCollapsed={true}
         collapsible={true}
       />
 
@@ -211,7 +211,7 @@ function BenchmarksContent() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-headline font-semibold text-ink">Core lifts</h2>
-          <span className="text-body text-ink-3">Recommended for complete profile</span>
+          <span className="text-body text-ink-3">Most useful</span>
         </div>
         <div className="grid gap-3">
           {BENCHMARK_LIFTS.filter(b => recommendedIds.includes(b.id)).map(benchmark => (
@@ -230,7 +230,7 @@ function BenchmarksContent() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-headline font-semibold text-ink">Optional lifts</h2>
-          <span className="text-body text-ink-3">For more complete data</span>
+          <span className="text-body text-ink-3">Extra</span>
         </div>
         <div className="grid gap-3">
           {BENCHMARK_LIFTS.filter(b => optionalIds.includes(b.id)).map(benchmark => (
