@@ -57,6 +57,20 @@ export interface FrequentFood {
   avg_fat: number;
   times_logged: number;
   last_logged: string;
+  /** The most recent logged portion — what a one-tap add re-logs. */
+  latest?: FrequentFoodPortion;
+}
+
+/** One logged portion of a food, exactly as stored (no recomputed macros). */
+export interface FrequentFoodPortion {
+  serving_size: string;
+  servings: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  source: FoodSource | null;
+  food_id: string | null;
 }
 
 export interface SystemFood {

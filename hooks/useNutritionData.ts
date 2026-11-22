@@ -30,6 +30,7 @@ import type {
   WeightLogEntry,
   NutritionTargets,
   CustomFood,
+  FoodSource,
 } from '@/types/nutrition';
 
 const TODAY_STALE_TIME = 1000 * 60 * 5; // 5 min — today is still being logged
@@ -91,6 +92,8 @@ export interface NutritionGlobalBundle {
     carbs: number | null;
     fat: number | null;
     servings: number | null;
+    source?: FoodSource | null;
+    food_id?: string | null;
   }>;
   user: {
     height_cm: number | string | null;
@@ -165,7 +168,7 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
       .order('created_at', { ascending: false }),
     supabase
       .from('food_log')
-      .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
+      .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings, source, food_id')
       .eq('user_id', userId)
       .order('logged_at', { ascending: false })
       .limit(200),
