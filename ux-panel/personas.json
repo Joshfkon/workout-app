@@ -35,7 +35,7 @@
       "patience": 3,
       "techComfort": 5,
       "previousApps": "Hevy (daily), MyFitnessPal",
-      "account": { "goal": "maintenance", "experience": "intermediate", "units": "lb", "sex": "male", "weightKg": 79, "heightCm": 180, "birthYear": 1999, "history": "regular" }
+      "account": { "goal": "maintenance", "experience": "intermediate", "units": "lb", "sex": "male", "weightKg": 79, "heightCm": 180, "birthYear": 1999, "history": "regular", "split": "ppl" }
     },
     {
       "id": "food-only-priya",
