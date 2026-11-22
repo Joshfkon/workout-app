@@ -9,6 +9,7 @@
  * scores all come from aggregate.mjs, so the numbers in the report are never
  * the model's opinion.
  */
+import { envTaintedTasks } from './aggregate.mjs';
 import { toolUses } from './llm.mjs';
 
 const READOUT_TOOL = {
@@ -53,7 +54,7 @@ export async function writeReadout({ llm, run }) {
     `ISSUES (already ranked by how many participants hit them):\n${issues
       .map(
         (c, i) =>
-          `${i + 1}. [${c.severity}] ${c.personaCount} participant(s) on ${c.screen} during ${c.journeys.join(', ')}:\n${c.items
+          `${i + 1}. [${c.severity}] ${c.personaCount} participant(s) on ${c.screen} during ${c.journeys.join(', ')}${envTaintedTasks(c, run.results).length ? ' — CAUTION: the session(s) behind this also hit a test-environment database error, so it may be the test setup rather than the app. Say that it needs verifying; do not call it the top priority.' : ''}:\n${c.items
             .slice(0, 4)
             .map((it) => `   - "${it.text}"`)
             .join('\n')}`,

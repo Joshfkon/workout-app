@@ -42,3 +42,4 @@ export function aggregateScores(results: Array<{ journeyId: string; scores?: Rec
 export function clusterFrictions(frictions: FrictionInput[], opts?: { threshold?: number; sameScreenOnly?: boolean }): FrictionCluster[];
 export function completionRates(results: Array<{ journeyId: string; outcome?: string }>): Record<string, Completion>;
 export function compareRuns(a: ComparableRun, b: ComparableRun, opts?: { threshold?: number }): RunComparison;
+export function envTaintedTasks(cluster: { items: { taskId: string }[] }, results: { taskId: string; envErrors?: string[] }[]): string[];

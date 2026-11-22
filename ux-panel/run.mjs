@@ -9,7 +9,7 @@
  *   node ux-panel/run.mjs --journeys=stories           persona user stories (generated once, reused)
  *   node ux-panel/run.mjs --estimate                   print the cost estimate and exit
  */
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
@@ -57,6 +57,7 @@ const opts = {
   yes: !!flag('yes'),
   estimateOnly: !!flag('estimate'),
   readout: !flag('no-readout'),
+  reuse: flag('reuse', ''),
 };
 
 // ---------- env (.env.local, never printed) ----------
@@ -68,6 +69,21 @@ function loadEnvFile(file) {
   }
 }
 loadEnvFile(path.join(REPO, '.env.local'));
+
+const taskIdOf = (persona, journey) => `${persona.id}__${journey.id.replace(/[^a-z0-9-]+/gi, '_')}`;
+
+/**
+ * --reuse=<runDir>: keep a previous run's session when it finished cleanly
+ * (completed or gave up, no local-environment errors), so fixing the test
+ * environment only costs the sessions it broke.
+ */
+function reusableResult(reuseDir, taskId) {
+  if (!reuseDir) return null;
+  const file = path.join(reuseDir, 'tasks', taskId, 'result.json');
+  if (!existsSync(file)) return null;
+  const rec = JSON.parse(readFileSync(file, 'utf8'));
+  return ['completed', 'gave_up'].includes(rec.outcome) && !(rec.envErrors ?? []).length && rec.review ? rec : null;
+}
 
 const sha = (s) => createHash('sha1').update(s).digest('hex').slice(0, 10);
 
@@ -100,8 +116,16 @@ async function main() {
   for (const p of personas) for (const j of coreJourneys) if (!(p.skip ?? []).includes(j.id)) tasks.push({ persona: p, journey: j });
   const storyCount = wantStories ? personas.length * opts.storiesPerPersona : 0;
 
-  const estimate = estimateCost({ tasks: [...tasks.map((t) => t.journey), ...Array(storyCount).fill({ maxSteps: 25 })], personas, model: opts.model, storiesToGenerate: wantStories ? personas.length : 0 });
-  console.log(formatEstimate(estimate, { model: opts.model, sessions: tasks.length + storyCount }));
+  const reuseDir = opts.reuse ? path.resolve(opts.reuse) : '';
+  if (reuseDir) {
+    const prev = JSON.parse(await readFile(path.join(reuseDir, 'run.json'), 'utf8'));
+    if (prev.model !== opts.model) throw new Error(`--reuse run used ${prev.model}, this run uses ${opts.model}; mixing models would muddy the scores.`);
+  }
+  const fresh = tasks.filter((t) => !reusableResult(reuseDir, taskIdOf(t.persona, t.journey)));
+  if (reuseDir) console.log(`Reusing ${tasks.length - fresh.length} clean session(s) from ${path.relative(process.cwd(), reuseDir)}; running ${fresh.length}.`);
+
+  const estimate = estimateCost({ tasks: [...fresh.map((t) => t.journey), ...Array(storyCount).fill({ maxSteps: 25 })], personas, model: opts.model, storiesToGenerate: wantStories ? personas.length : 0 });
+  console.log(formatEstimate(estimate, { model: opts.model, sessions: fresh.length + storyCount }));
   if (opts.estimateOnly) return;
   if (!FAKE && !opts.yes) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -138,8 +162,15 @@ async function main() {
   async function worker() {
     while (next < tasks.length && !fatal) {
       const { persona, journey } = tasks[next++];
-      const taskId = `${persona.id}__${journey.id.replace(/[^a-z0-9-]+/gi, '_')}`;
+      const taskId = taskIdOf(persona, journey);
       const outDir = path.join(runDir, 'tasks', taskId);
+      const prior = reusableResult(reuseDir, taskId);
+      if (prior) {
+        await cp(path.join(reuseDir, 'tasks', taskId), outDir, { recursive: true });
+        results.push({ ...prior, reused: true });
+        console.log(`  reused    ${taskId} (${prior.outcome})`);
+        continue;
+      }
       const goalText = journey.goal(persona);
       const t0 = Date.now();
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, serviceWorkers: 'block', locale: 'en-US', timezoneId: 'America/New_York' });
@@ -207,6 +238,8 @@ async function main() {
     embed: embedder.id,
     anchorsHash: sha(await readFile(path.join(HERE, 'anchors.mjs'), 'utf8')),
     storiesHash,
+    reusedFrom: reuseDir ? path.basename(reuseDir) : null,
+    reusedSessions: results.filter((r) => r.reused).length,
     panel: { personas: personas.length, journeys: [...new Set(tasks.map((t) => t.journey.id))] },
     journeyLabels: Object.fromEntries(tasks.map((t) => [t.journey.id, t.journey.label])),
     personas: Object.fromEntries(personas.map((p) => [p.id, { name: p.name, age: p.age, tagline: p.summary.split('. ')[0] }])),

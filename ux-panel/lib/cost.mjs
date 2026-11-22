@@ -6,16 +6,23 @@
  * accessibility snapshot (capped at 14k chars ≈ 3.5k tokens) + a 390×844
  * screenshot (≈ 0.45k tokens). Output is one tool call plus low-effort
  * thinking. Sessions stop early when the goal is reached, so the expected
- * case uses ~55 % of the step budget and the high case all of it.
+ * case uses ~45 % of the step budget and the high case all of it.
+ *
+ * Calibrated on the first real run (Sonnet 5.5, 5 personas × core, 24
+ * sessions): 255 calls, ~5.4k input and ~195 output tokens per call, 43 % of
+ * the step budget used, $2.42 actual. Cache reads aren't modelled, which
+ * keeps the estimate a little high.
  */
 import { PRICES } from './llm.mjs';
 import { stepBudget } from './agent.mjs';
 
+const EXPECTED_FRACTION = 0.45;
+
 export const TOKENS = {
   stepIn: 5000,
-  stepOut: 350,
+  stepOut: 200,
   reviewIn: 2500,
-  reviewOut: 700,
+  reviewOut: 450,
   readoutIn: 12000,
   readoutOut: 2500,
   storiesIn: 900,
@@ -36,8 +43,8 @@ export function estimateCost({ tasks, personas, model, storiesToGenerate = 0, to
     storiesToGenerate * usd(model, tokens.storiesIn, tokens.storiesOut);
   const perStep = usd(model, tokens.stepIn, tokens.stepOut);
   return {
-    steps: { expected: Math.round(budgetSteps * 0.55), max: budgetSteps },
-    expected: fixed + budgetSteps * 0.55 * perStep,
+    steps: { expected: Math.round(budgetSteps * EXPECTED_FRACTION), max: budgetSteps },
+    expected: fixed + budgetSteps * EXPECTED_FRACTION * perStep,
     high: fixed + budgetSteps * perStep,
     perStep,
   };
