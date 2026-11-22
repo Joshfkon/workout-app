@@ -1196,7 +1196,7 @@ describe('ExerciseCard', () => {
       );
     });
 
-    it('with history, the source line points at the user’s own sets', () => {
+    it('with history, the banner points at the user’s own sets — once', () => {
       render(
         <ExerciseCard
           {...defaultProps}
@@ -1204,9 +1204,11 @@ describe('ExerciseCard', () => {
           previousSets={[{ weightKg: 100, reps: 10, rpe: 8 }]}
         />
       );
-      expect(screen.getByTestId('suggestion-source').textContent).toMatch(
-        /^From your (last session|recent sets on this lift)/
-      );
+      // The banner paragraph names the user's own sets, and never twice
+      // (reason + a repeated "From your last session" line).
+      const banner = screen.getByTestId('suggestion-rir-plain').closest('p')?.textContent ?? '';
+      expect(banner).toMatch(/last (session|set)|recent sets on this lift/);
+      expect((banner.match(/last session/g) ?? []).length).toBeLessThanOrEqual(1);
     });
 
     it('explains "RIR" accessibly where the banner shows the target', () => {

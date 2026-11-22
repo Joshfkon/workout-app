@@ -3065,7 +3065,11 @@ export const ExerciseCard = memo(function ExerciseCard({
       );
     }
 
-    return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role, source: sourceLine };
+    // The reason often already says where the number came from ("set 1 last
+    // session hit the rep ceiling (77 lbs × 10) — one increment up"); a
+    // "From your last session: …" line under it would repeat it.
+    const reasonNamesSource = /^From your last/.test(sourceLine) && /\blast (session|set)\b/i.test(reason);
+    return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role, source: reasonNamesSource ? '' : sourceLine };
   };
 
   // The MOST RECENT completed set's next-set call (services/
