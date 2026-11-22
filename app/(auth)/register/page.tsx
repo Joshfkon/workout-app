@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { IconEye, IconEyeOff } from '@tabler/icons-react';
@@ -25,9 +25,14 @@ export default function RegisterPage() {
   // owns).
   const [sentTo, setSentTo] = useState<string | null>(null);
   const router = useRouter();
+  // Synchronous guard: a double tap or Enter+click lands two submit events
+  // before the isLoading re-render disables the button, and each would call
+  // signUp. The ref flips in the same tick.
+  const submittingRef = useRef(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError('');
 
     // Validation (P2-6: no confirm-password field — the show-password
@@ -48,7 +53,11 @@ export default function RegisterPage() {
       return;
     }
 
+    submittingRef.current = true;
     setIsLoading(true);
+    // A successful direct sign-in navigates away; keep the button busy until
+    // the route changes instead of re-enabling it under the user's finger.
+    let navigating = false;
 
     try {
       const supabase = createClient();
@@ -113,12 +122,16 @@ export default function RegisterPage() {
       }
 
       // Direct login successful - redirect to onboarding for new users
+      navigating = true;
       router.push('/onboarding');
       router.refresh();
     } catch (err) {
       setError('An unexpected error occurred');
     } finally {
-      setIsLoading(false);
+      if (!navigating) {
+        submittingRef.current = false;
+        setIsLoading(false);
+      }
     }
   };
 
@@ -247,8 +260,8 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" isLoading={isLoading}>
-            Create account
+          <Button type="submit" className="w-full" isLoading={isLoading} aria-busy={isLoading}>
+            {isLoading ? 'Creating account…' : 'Create account'}
           </Button>
         </form>
 
