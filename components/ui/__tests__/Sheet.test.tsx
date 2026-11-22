@@ -157,4 +157,26 @@ describe('Sheet stacking (a sheet opened over another)', () => {
     );
     expect(document.body.style.overflow).toBe('');
   });
+
+  it('keeps its place in the stack when the lower sheet gets a new onClose', () => {
+    const upper = jest.fn();
+    const lowerA = jest.fn();
+    const lowerB = jest.fn();
+    const { rerender } = render(
+      <>
+        <Sheet isOpen onClose={lowerA} title="Lower"><p>x</p></Sheet>
+        <Sheet isOpen onClose={upper} title="Upper"><p>x</p></Sheet>
+      </>
+    );
+    rerender(
+      <>
+        <Sheet isOpen onClose={lowerB} title="Lower"><p>x</p></Sheet>
+        <Sheet isOpen onClose={upper} title="Upper"><p>x</p></Sheet>
+      </>
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(upper).toHaveBeenCalledTimes(1);
+    expect(lowerA).not.toHaveBeenCalled();
+    expect(lowerB).not.toHaveBeenCalled();
+  });
 });

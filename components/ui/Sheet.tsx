@@ -102,6 +102,11 @@ export function Sheet({
   // Keep the sheet mounted briefly after close so it can slide out.
   const [closing, setClosing] = useState(false);
   const wasOpen = useRef(isOpen);
+  // Latest close callback, read by the Escape handler. Stack membership must
+  // follow open/close only: re-running the effect on a new onClose identity
+  // would move this sheet to the top of the stack while another is above it.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     const was = wasOpen.current;
     wasOpen.current = isOpen;
@@ -127,7 +132,7 @@ export function Sheet({
     const isTopmost = () => openSheetStack[openSheetStack.length - 1] === token;
 
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isTopmost()) onClose();
+      if (e.key === 'Escape' && isTopmost()) onCloseRef.current();
     };
     const preventScroll = (e: globalThis.TouchEvent) => {
       if (!isTopmost()) return;
@@ -165,7 +170,7 @@ export function Sheet({
         document.body.style.paddingRight = '';
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   // Swipe down to dismiss.
   const dragStartY = useRef<number | null>(null);
