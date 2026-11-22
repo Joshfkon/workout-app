@@ -100,6 +100,8 @@ const config: Config = {
         'fade-out': 'fadeOut 0.2s ease-in forwards',
         // Pushed screen entering (see app/(dashboard)/dashboard/template.tsx).
         'push-in': 'pushIn 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+        // A just-added food row: slides in, then its tint fades out.
+        'row-added': 'rowAdded 2.2s ease-out',
       },
       keyframes: {
         fadeIn: {
@@ -140,6 +142,12 @@ const config: Config = {
         navProgress: {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(300%)' },
+        },
+        rowAdded: {
+          '0%': { backgroundColor: 'rgb(var(--ht-ok) / 0.22)', transform: 'translateY(-6px)', opacity: '0' },
+          '12%': { backgroundColor: 'rgb(var(--ht-ok) / 0.22)', transform: 'translateY(0)', opacity: '1' },
+          '60%': { backgroundColor: 'rgb(var(--ht-ok) / 0.14)' },
+          '100%': { backgroundColor: 'rgb(var(--ht-ok) / 0)' },
         },
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
