@@ -340,8 +340,10 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const { onClose, onCreateCustom } = props;
   const onProductFound = 'onProductFound' in props ? props.onProductFound : undefined;
   const onScan = 'onScan' in props ? props.onScan : undefined;
-  // Silence unused-var: kept for backward-compatible prop API
+  // Silence unused-var: kept for backward-compatible prop API (the sheet's
+  // own tabs/close replace the scanner's old inner close button).
   void onCreateCustom;
+  void onClose;
 
   const [isScanning, setIsScanning] = useState(false); // web (html5-qrcode) camera running
   const [isNativeScanning, setIsNativeScanning] = useState(false); // ML Kit fullscreen scan active
@@ -349,6 +351,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<'info' | 'error'>('info');
   const [manualBarcode, setManualBarcode] = useState('');
+  // Manual entry is a secondary path: collapsed behind "Type the number".
+  const [showManualEntry, setShowManualEntry] = useState(false);
   // Why the camera couldn't start, if it couldn't. Swaps the scanner card for
   // a manual-entry-first layout instead of a small error line under it.
   const [cameraIssue, setCameraIssue] = useState<CameraIssue | null>(null);
@@ -1085,20 +1089,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         />
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-sep">
-        <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-          </svg>
-          <span className="font-medium text-ink">Scan barcode</span>
-        </div>
-        <button onClick={onClose} className="p-1 text-ink-2 hover:text-ink">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+      {/* No inner header: the sheet's "Scan" tab already titles this view
+          and the sheet has its own close, so a second title + X was clutter. */}
 
       {/* Hidden still-photo capture input (fallback when live scan can't focus) */}
       <input
@@ -1145,36 +1137,19 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               )}
 
               {!isScanning && !cameraIssue && (
-                <div className="flex flex-col items-center justify-center py-8 px-4">
-                  <div className="w-16 h-16 rounded-full bg-action/20 flex items-center justify-center mb-4">
-                    <svg className="w-8 h-8 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <Button onClick={startScanner} variant="primary" size="lg">
-                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex flex-col items-center justify-center py-6 px-2" data-testid="barcode-idle">
+                  <div className="w-14 h-14 rounded-full bg-action/15 flex items-center justify-center mb-3" aria-hidden="true">
+                    <svg className="w-7 h-7 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                     </svg>
-                    Start camera scanner
-                  </Button>
-                  {!Capacitor.isNativePlatform() && (
-                    <Button
-                      onClick={() => photoInputRef.current?.click()}
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      Take photo instead
-                    </Button>
-                  )}
-                  <p className="text-caption text-ink-3 mt-2 text-center">
-                    Point your camera at a barcode to scan
+                  </div>
+                  <p className="text-headline font-semibold text-ink">Scan a barcode</p>
+                  <p className="text-caption text-ink-2 mt-1 mb-4 text-center">
+                    Hold it 15–25 cm (6–10 in) from the camera.
                   </p>
+                  <Button onClick={startScanner} variant="primary" size="lg" className="w-full">
+                    Start scanning
+                  </Button>
                 </div>
               )}
 
@@ -1203,47 +1178,69 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                     </button>
                   )}
 
-                  <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2">
-                    <Button onClick={stopWebScanner} variant="secondary" size="sm">
-                      Stop scanner
-                    </Button>
-                    <Button
-                      onClick={() => photoInputRef.current?.click()}
-                      variant="secondary"
-                      size="sm"
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      Take photo
-                    </Button>
-                  </div>
+                  {/* One quiet control on the camera: stop. Photo / typed
+                      entry live in the secondary row below. */}
+                  <button
+                    type="button"
+                    onClick={stopWebScanner}
+                    className="absolute bottom-2 left-2 h-10 px-3 rounded-full bg-black/50 text-white text-subhead"
+                  >
+                    Stop
+                  </button>
                 </>
               )}
             </div>
 
-            {/* Manual entry (the camera-unavailable panel has its own, as
-                the primary option) */}
+            {isScanning && (
+              <p className="text-caption text-ink-2 text-center -mt-2">
+                Hold it 15–25 cm (6–10 in) away. Blurry? Take a photo instead.
+              </p>
+            )}
+
+            {/* Secondary ways in: quiet text buttons, so the camera stays the
+                obvious main action. (The camera-unavailable panel has its own
+                manual entry, as the primary option.) */}
             {!cameraIssue && (
-            <div className="border-t border-sep pt-4">
-              <p className="text-subhead text-ink-2 mb-2">Or enter barcode manually:</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={manualBarcode}
-                  onChange={(e) => setManualBarcode(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleManualLookup()}
-                  placeholder="Enter barcode number"
-                  className="flex-1 px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action shadow-card"
-                />
-                <Button onClick={handleManualLookup} disabled={!manualBarcode.trim()}>
-                  Look up
-                </Button>
+              <div className="space-y-3" data-testid="barcode-secondary-actions">
+                <div className="flex items-center justify-center gap-5 text-subhead">
+                  {!Capacitor.isNativePlatform() && (
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      className="text-action hover:underline min-h-[44px]"
+                    >
+                      Take a photo
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowManualEntry((v) => !v)}
+                    aria-expanded={showManualEntry}
+                    className="text-action hover:underline min-h-[44px]"
+                  >
+                    Type the number
+                  </button>
+                </div>
+                {showManualEntry && (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoFocus
+                      aria-label="Barcode number"
+                      value={manualBarcode}
+                      onChange={(e) => setManualBarcode(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleManualLookup()}
+                      placeholder="Number under the bars"
+                      className="flex-1 min-w-0 px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action shadow-card"
+                    />
+                    <Button onClick={handleManualLookup} disabled={!manualBarcode.trim()}>
+                      Look up
+                    </Button>
+                  </div>
+                )}
               </div>
-            </div>
             )}
 
             {/* Error/Info message with Create Custom button */}
@@ -1258,17 +1255,6 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           </>
         )}
       </div>
-
-      {/* Tips (camera aiming — irrelevant while there's no camera) */}
-      {!cameraIssue && (
-        <div className="px-4 pb-2">
-          <div className="p-2 bg-card/50 rounded-lg">
-            <p className="text-caption text-ink-3">
-              Hold the barcode 6–10 inches (15–25 cm) from the camera — too close and it can&apos;t focus. If it stays blurry, use Take Photo instead.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Debug info: opt-in only (NEXT_PUBLIC_SCANNER_DEBUG=1). Plain dev builds
           are what testers and the synthetic panel see, and a raw DEBUG box

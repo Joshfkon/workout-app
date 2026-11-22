@@ -77,3 +77,18 @@ describe('BarcodeScanner without a camera', () => {
     expect(screen.queryByTestId('barcode-manual-first')).not.toBeInTheDocument();
   });
 });
+
+describe('BarcodeScanner with a camera', () => {
+  it('keeps typed entry secondary: collapsed until "Type the number"', async () => {
+    const user = userEvent.setup();
+    mockStart.mockReturnValue(new Promise(() => {}));
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    expect(screen.queryByLabelText('Barcode number')).not.toBeInTheDocument();
+    // No duplicate inner title / close button: the sheet's tab names this view.
+    expect(screen.queryByText('Scan barcode')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Type the number' }));
+    expect(screen.getByLabelText('Barcode number')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Type the number' })).toHaveAttribute('aria-expanded', 'true');
+  });
+});

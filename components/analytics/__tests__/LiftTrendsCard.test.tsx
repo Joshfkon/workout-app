@@ -124,5 +124,29 @@ describe('LiftTrendsCard', () => {
     expect(early).toHaveTextContent('2 of 3 workouts');
     expect(early).toHaveTextContent('6 reps');
     expect(screen.queryByText(/No lift has enough history/)).not.toBeInTheDocument();
+    // Says plainly what the user can see now and what unlocks a trend.
+    expect(screen.getByTestId('lift-trends-summary')).toHaveTextContent('No strength trends yet');
+    expect(early).toHaveTextContent(/best set on each lift/);
+    expect(early).toHaveTextContent(/Log a lift in 3 workouts and its strength trend line appears/);
+  });
+
+  it('never ellipsizes a long lift name or its weekly change at phone width', () => {
+    const long = lift({
+      exerciseId: 'bbs',
+      seriesKey: 'bbs',
+      name: 'Barbell Back Squat (High Bar, Paused)',
+      direction: 'rising',
+      weeklyChangePct: 3,
+    });
+    render(<LiftTrendsCard summary={{ ...summary, lifts: [long] }} units="lb" />);
+    const name = screen.getByTestId('lift-trend-name');
+    const change = screen.getByTestId('lift-trend-change');
+    expect(name).toHaveTextContent('Barbell Back Squat (High Bar, Paused)');
+    expect(change).toHaveTextContent('+3.0%/wk');
+    expect(name.className).not.toMatch(/\btruncate\b/);
+    expect(change.className).not.toMatch(/\btruncate\b/);
+    expect(change.parentElement?.className).not.toMatch(/\btruncate\b/);
+    // "est. max" is explained in plain words where it first appears.
+    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest single rep/);
   });
 });

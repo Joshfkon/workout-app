@@ -98,6 +98,30 @@ describe('MuscleProgressionCard', () => {
     expect(note).toHaveTextContent(/mistyped or the equipment changed/);
   });
 
+  it('keeps the muscle name and its weekly change whole at phone width (no truncate)', () => {
+    render(
+      <MuscleProgressionCard
+        groups={[
+          group('rear_delts', [insight(6, 'on_track')], {
+            pace: 'on_track',
+            avgWeeklyChangePct: 0,
+            analyzedCount: 1,
+          }),
+        ]}
+        goal="cut"
+      />
+    );
+    const name = screen.getByTestId('muscle-progression-name');
+    const rate = screen.getByTestId('muscle-progression-rate');
+    expect(rate).toHaveTextContent('+0%/wk');
+    expect(name.className).not.toMatch(/\btruncate\b/);
+    expect(rate.className).not.toMatch(/\btruncate\b/);
+    // Plain words, not "Progression by muscle group" / "on a cut".
+    expect(screen.getByText('Strength by muscle')).toBeInTheDocument();
+    expect(screen.getByText(/eating less to lose fat/)).toBeInTheDocument();
+    expect(screen.queryByText(/on a cut/)).not.toBeInTheDocument();
+  });
+
   it('pluralises the capped note for several muscles', () => {
     expect(cappedRateText(['Chest', 'Back'])).toMatch(/^Chest, Back rates were capped/);
   });

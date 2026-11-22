@@ -364,6 +364,28 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
 
   const { toasts, dismissToast, showSuccess, addToast } = useToasts();
 
+  // Rows a quick-add just created: briefly tinted + slid in inside their meal
+  // (alongside the Undo toast), so a one-tap add is unmistakable.
+  const [justAddedIds, setJustAddedIds] = useState<Set<string>>(() => new Set());
+  const justAddedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flagJustAdded = useCallback((rows: FoodLogEntry[]) => {
+    if (rows.length === 0) return;
+    setJustAddedIds(new Set(rows.map((r) => r.id)));
+    if (justAddedTimerRef.current) clearTimeout(justAddedTimerRef.current);
+    justAddedTimerRef.current = setTimeout(() => setJustAddedIds(new Set()), 2400);
+    // Bring the new row into view once it has rendered (no-op if visible).
+    requestAnimationFrame(() => {
+      const id = rows[0].id;
+      const el = Array.from(document.querySelectorAll<HTMLElement>('[data-food-entry-id]')).find(
+        (node) => node.dataset.foodEntryId === id
+      );
+      el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    });
+  }, []);
+  useEffect(() => () => {
+    if (justAddedTimerRef.current) clearTimeout(justAddedTimerRef.current);
+  }, []);
+
   // Lazy one-time load of the system food library (only needed once a food modal opens)
   const systemFoodsLoadedRef = useRef(false);
 
@@ -993,6 +1015,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     const inserted = await insertFoodEntry(food);
     applyInsertedEntries([inserted]);
     mutateRecentFoodsCache((prev) => [inserted, ...prev]);
+    flagJustAdded([inserted]);
     addToast('success', `Added ${toTitleCase(food.food_name)}`, 5000, {
       label: 'Undo',
       onClick: () => { void undoQuickAdd([inserted]); },
@@ -1005,6 +1028,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     const inserted = await insertFoodEntries(foods);
     applyInsertedEntries(inserted);
     mutateRecentFoodsCache((prev) => [...inserted, ...prev]);
+    flagJustAdded(inserted);
     addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'}`, 6000, {
       label: 'Undo',
       onClick: () => { void undoQuickAdd(inserted); },
@@ -1152,6 +1176,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     });
     applyInsertedEntries([inserted]);
     mutateRecentFoodsCache((prev) => [inserted, ...prev]);
+    flagJustAdded([inserted]);
     addToast('success', `Added ${toTitleCase(food.food_name)} to ${mealLabel}`, 5000, {
       label: 'Undo',
       onClick: () => { void undoQuickAdd([inserted]); },
@@ -2031,7 +2056,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                     {hasEntries
                       ? `${mealFat}g fat · ${mealCarbs}g carbs · ${mealProtein}g protein`
                       : perMealAvailable > 0
-                        ? `About ${perMealAvailable.toLocaleString()} kcal for this meal`
+                        ? // Today's calories left, split across the meals not logged yet
+                          // — say it's a budget, or an unlogged meal reads like a
+                          // placeholder total (panel, polish lens).
+                          `Nothing logged yet · room for ~${perMealAvailable.toLocaleString()} kcal`
                         : 'Nothing logged yet'}
                   </p>
                 </div>
@@ -2094,7 +2122,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                           e.stopPropagation();
                           openEditFood(entry);
                         }}
-                        className="w-full flex items-center justify-between gap-4 py-2 px-1 rounded-input active:bg-fill transition-colors text-left"
+                        data-food-entry-id={entry.id}
+                        data-just-added={justAddedIds.has(entry.id) ? 'true' : undefined}
+                        className={`w-full flex items-center justify-between gap-4 py-2 px-1 rounded-input active:bg-fill transition-colors text-left ${
+                          justAddedIds.has(entry.id) ? 'motion-safe:animate-row-added motion-reduce:bg-status-ok/15' : ''
+                        }`}
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <FoodEmojiAvatar name={entry.food_name} />

@@ -40,9 +40,15 @@ describe('SetLoggerRow effort line vs the target', () => {
     );
   });
 
-  it('says nothing extra when the set is close to the target', () => {
+  it('says "on target" when the entry lands on the target, and nothing more', () => {
     render(<SetLoggerRow {...baseProps} effortCheck={check({ predictedRir: 2 })} />);
     expect(screen.getByTestId('predicted-rir')).not.toHaveTextContent('would leave');
+    expect(screen.getByTestId('predicted-rir')).toHaveTextContent('about 2 more in the tank (good) · on target');
+  });
+
+  it('names the target when pointing at the reps that reach it', () => {
+    render(<SetLoggerRow {...baseProps} effortCheck={check({ repsForTarget: 8, targetRir: 2 })} />);
+    expect(screen.getByTestId('predicted-rir')).toHaveTextContent('~8 reps would leave 2, your target');
   });
 });
 

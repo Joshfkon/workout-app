@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect, memo } from 'react';
+import React, { useMemo, useState, memo } from 'react';
 import {
   LineChart,
   Line,
@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { formatDate, formatChartTickDate, dateTickStep, showDateTick, parseLocalDate } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
+import { now as clockNow } from '@/lib/clock';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 import type { PhaseType } from '@/types/schema';
 import { PHASE_STYLE, PHASE_BAND_OPACITY } from '@/components/body/phaseStyle';
@@ -32,6 +33,8 @@ const TIMEFRAME_DAYS: Record<Timeframe, number> = {
   '30d': 30,
   '90d': 90,
 };
+
+const DAY_MS = 1000 * 60 * 60 * 24;
 
 interface WeightEntry {
   date: string;
@@ -56,6 +59,67 @@ interface WeightGraphProps {
   phases?: PhaseBandSpan[];
 }
 
+/**
+ * Smallest y-axis span (in the display unit). Normal day-to-day bodyweight
+ * noise is ~1–2 lb, so a window narrower than this would blow water-weight
+ * wiggle up into a cliff. Wider than this and a real 1 lb/month trend reads
+ * as a flat line next to a "-0.8 lb/wk" label.
+ */
+export const MIN_WEIGHT_AXIS_SPAN: Record<'lb' | 'kg', number> = { lb: 4, kg: 2 };
+
+/**
+ * Y-axis domain for the weight line: the data range plus 15% headroom each
+ * side, never narrower than MIN_WEIGHT_AXIS_SPAN, centred on the data and
+ * snapped outward to whole units (lb) or half units (kg) so ticks are clean.
+ */
+export function weightAxisDomain(weights: number[], unit: 'lb' | 'kg'): [number, number] {
+  if (weights.length === 0) return [0, 100];
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min;
+  const span = Math.max(range * 1.3, MIN_WEIGHT_AXIS_SPAN[unit]);
+  const mid = (min + max) / 2;
+  const step = unit === 'kg' ? 0.5 : 1;
+  return [Math.floor((mid - span / 2) / step) * step, Math.ceil((mid + span / 2) / step) * step];
+}
+
+/** Least-squares slope (per day) and intercept over day offsets from the first point. */
+function fitLine(data: WeightChartDataPoint[]): { slopePerDay: number; intercept: number; lastX: number } | null {
+  if (data.length < 2) return null;
+  const t0 = parseLocalDate(data[0].date).getTime();
+  const points = data.map((d) => ({ x: (parseLocalDate(d.date).getTime() - t0) / DAY_MS, y: d.weight }));
+  const n = points.length;
+  const meanX = points.reduce((sum, p) => sum + p.x, 0) / n;
+  const meanY = points.reduce((sum, p) => sum + p.y, 0) / n;
+  const denom = points.reduce((sum, p) => sum + (p.x - meanX) ** 2, 0);
+  if (denom === 0) return null;
+  const slopePerDay = points.reduce((sum, p) => sum + (p.x - meanX) * (p.y - meanY), 0) / denom;
+  return { slopePerDay, intercept: meanY - slopePerDay * meanX, lastX: points[n - 1].x };
+}
+
+/**
+ * Headline facts for the visible window: the newest weigh-in, and the
+ * first → newest change with the real number of days it covers.
+ */
+export function weightWindowSummary(data: WeightChartDataPoint[]): {
+  current: number;
+  currentDate: string;
+  start: number;
+  days: number;
+} | null {
+  if (data.length === 0) return null;
+  const first = data[0];
+  const last = data[data.length - 1];
+  return {
+    current: last.weight,
+    currentDate: last.date,
+    start: first.weight,
+    days: Math.round((parseLocalDate(last.date).getTime() - parseLocalDate(first.date).getTime()) / DAY_MS),
+  };
+}
+
+const formatAxisWeight = (v: number) => (Number.isInteger(v) ? v.toString() : v.toFixed(1));
+
 const WeightTooltip = memo(function WeightTooltip({
   active,
   payload,
@@ -77,17 +141,14 @@ const WeightTooltip = memo(function WeightTooltip({
 
 export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredUnit, className, phases }: WeightGraphProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   // Simple, straightforward conversion - no guessing
   const chartData = useMemo(() => {
-    const now = new Date();
-    const cutoffDate = new Date();
-    cutoffDate.setDate(now.getDate() - TIMEFRAME_DAYS[timeframe]);
+    const cutoffDate = clockNow();
+    cutoffDate.setDate(cutoffDate.getDate() - TIMEFRAME_DAYS[timeframe]);
+    // Compare whole local days: a weigh-in exactly N days ago is in an N-day
+    // window regardless of the time of day the page is opened.
+    cutoffDate.setHours(0, 0, 0, 0);
 
     const filtered = weightHistory
       .filter((entry) => parseLocalDate(entry.date) >= cutoffDate)
@@ -141,106 +202,112 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
 
   // Weekly rolling trend: least-squares slope of weight over the visible
   // window, expressed per week. Robust to noisy endpoints, unlike last - first.
+  // The same fit is drawn as a dashed line so the number and the picture agree.
   const trend = useMemo(() => {
-    if (chartData.length < 2) return null;
-
-    const t0 = parseLocalDate(chartData[0].date).getTime();
-    const points = chartData.map((d) => ({
-      x: (parseLocalDate(d.date).getTime() - t0) / (1000 * 60 * 60 * 24),
-      y: d.weight,
-    }));
-
-    const n = points.length;
-    const meanX = points.reduce((sum, p) => sum + p.x, 0) / n;
-    const meanY = points.reduce((sum, p) => sum + p.y, 0) / n;
-    const denom = points.reduce((sum, p) => sum + (p.x - meanX) ** 2, 0);
-    if (denom === 0) return null;
-
-    const slopePerDay =
-      points.reduce((sum, p) => sum + (p.x - meanX) * (p.y - meanY), 0) / denom;
-    const perWeek = slopePerDay * 7;
-
+    const fit = fitLine(chartData);
+    if (!fit) return null;
+    const perWeek = fit.slopePerDay * 7;
     return {
       perWeek,
       isPositive: perWeek > 0.05,
       isNegative: perWeek < -0.05,
+      fitStart: fit.intercept,
+      fitEnd: fit.intercept + fit.slopePerDay * fit.lastX,
     };
   }, [chartData]);
 
-  // Calculate stats for reference line
-  const stats = useMemo(() => {
-    if (chartData.length === 0) return null;
+  const summary = useMemo(() => weightWindowSummary(chartData), [chartData]);
 
-    const weights = chartData.map((d) => d.weight);
-    const avg = weights.reduce((a, b) => a + b, 0) / weights.length;
+  const yDomain = useMemo(
+    () => weightAxisDomain(chartData.map((d) => d.weight), preferredUnit),
+    [chartData, preferredUnit]
+  );
 
-    return { avg };
-  }, [chartData]);
+  const timeframeSelector = (
+    <div className="flex gap-1 bg-fill rounded-lg p-0.5" role="group" aria-label="Weight chart range">
+      {(['7d', '14d', '30d', '90d'] as Timeframe[]).map((tf) => (
+        <button
+          key={tf}
+          type="button"
+          onClick={() => setTimeframe(tf)}
+          aria-pressed={timeframe === tf}
+          className={`px-2 py-1 text-caption rounded-md transition-colors ${
+            timeframe === tf ? 'bg-action text-on-action' : 'text-ink-2 hover:text-ink'
+          }`}
+        >
+          {tf}
+        </button>
+      ))}
+    </div>
+  );
 
-  // Calculate Y-axis domain with padding
-  const yDomain = useMemo(() => {
-    if (chartData.length === 0) return [0, 100];
-
-    const weights = chartData.map((d) => d.weight);
-    const min = Math.min(...weights);
-    const max = Math.max(...weights);
-    const padding = Math.max(2, (max - min) * 0.1);
-
-    return [Math.floor(min - padding), Math.ceil(max + padding)];
-  }, [chartData]);
-
-  if (chartData.length === 0) {
+  if (chartData.length === 0 || !summary) {
+    // Keep the range control: the user needs a way out to a wider window.
     return (
       <div className={className}>
+        <div className="flex justify-end mb-3">{timeframeSelector}</div>
         <div className="text-center py-4">
-          <p className="text-ink-2 text-subhead">No weight data for this period</p>
+          <p className="text-ink-2 text-subhead">
+            No weigh-ins in the last {TIMEFRAME_DAYS[timeframe]} days. Pick a longer range to see older ones.
+          </p>
         </div>
       </div>
     );
   }
 
+  // The change line reads off the same fitted trend the chart draws, so a
+  // zigzag of water swings can't show "±0.0" next to a line that clearly
+  // moves (or the reverse). Raw endpoints only when there's no fit.
+  const changeStart = trend ? trend.fitStart : summary.start;
+  const changeEnd = trend ? trend.fitEnd : summary.current;
+  const change = changeEnd - changeStart;
+  const sign = change > 0 ? '+' : change < 0 ? '−' : '±';
+
   return (
-    <div className={className}>
-      {/* Timeframe selector */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-caption text-ink-3">
-          <span>Trend</span>
-          {trend && (
-            <span
-              className={
-                trend.isNegative
-                  ? 'text-status-ok'
-                  : trend.isPositive
-                  ? 'text-status-warn'
-                  : 'text-ink-2'
-              }
-            >
-              {trend.perWeek > 0 ? '+' : ''}
-              {trend.perWeek.toFixed(1)} {preferredUnit}/wk
-            </span>
-          )}
+    <div className={className} data-testid="weight-graph">
+      {/* Headline: current weight + its unit, then the window's change. */}
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <div className="min-w-0">
+          <p className="text-[28px] font-bold leading-9 tracking-tight text-ink tabular-nums" data-testid="weight-current">
+            {summary.current.toFixed(1)}
+            <span className="ml-1 text-subhead font-normal text-ink-2">{preferredUnit}</span>
+          </p>
+          <p className="text-caption text-ink-2">Latest · {formatDate(summary.currentDate, { year: undefined })}</p>
         </div>
-        <div className="flex gap-1 bg-fill rounded-lg p-0.5">
-          {(['7d', '14d', '30d', '90d'] as Timeframe[]).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => setTimeframe(tf)}
-              className={`px-2 py-1 text-caption rounded-md transition-colors ${
-                timeframe === tf
-                  ? 'bg-action text-on-action'
-                  : 'text-ink-2 hover:text-ink'
-              }`}
-            >
-              {tf}
-            </button>
-          ))}
-        </div>
+        {timeframeSelector}
       </div>
+      <p className="text-subhead text-ink tabular-nums" data-testid="weight-change">
+        {chartData.length >= 2 ? (
+          <>
+            {changeStart.toFixed(1)} → {changeEnd.toFixed(1)} {preferredUnit}{' '}
+            <span className="text-ink-2">
+              ({sign}
+              {Math.abs(change).toFixed(1)}) in the last {TIMEFRAME_DAYS[timeframe]} days
+            </span>
+          </>
+        ) : (
+          <span className="text-ink-2">One weigh-in in this range — log another to see a change.</span>
+        )}
+      </p>
+      {trend && (
+        <p className="text-caption text-ink-2 mb-2" data-testid="weight-trend">
+          Trend line{' '}
+          <span
+            className={
+              trend.isNegative ? 'text-status-ok' : trend.isPositive ? 'text-status-warn' : 'text-ink-2'
+            }
+          >
+            {trend.perWeek > 0 ? '+' : trend.perWeek < 0 ? '−' : ''}
+            {Math.abs(trend.perWeek).toFixed(1)} {preferredUnit}/wk
+          </span>{' '}
+          · smooths out day-to-day water swings
+        </p>
+      )}
 
       {/* Chart */}
-      <div className="h-32">
+      <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+          <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
             <XAxis
               dataKey="displayDate"
@@ -266,8 +333,10 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
               tickLine={false}
               axisLine={false}
               domain={yDomain}
-              tickFormatter={(v) => Math.round(v).toString()}
-              width={40}
+              allowDecimals={preferredUnit === 'kg'}
+              tickCount={5}
+              tickFormatter={(v: number) => `${formatAxisWeight(v)} ${preferredUnit}`}
+              width={52}
             />
             <Tooltip content={<WeightTooltip preferredUnit={preferredUnit} />} />
             {phaseBands.map((band) => (
@@ -280,12 +349,16 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
                 stroke="none"
               />
             ))}
-            {stats && (
+            {trend && chartData.length >= 2 && (
               <ReferenceLine
-                y={stats.avg}
-                stroke="#71717a"
-                strokeDasharray="3 3"
-                strokeOpacity={0.5}
+                segment={[
+                  { x: chartData[0].displayDate, y: trend.fitStart },
+                  { x: chartData[chartData.length - 1].displayDate, y: trend.fitEnd },
+                ]}
+                stroke="#a1a1aa"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                ifOverflow="extendDomain"
               />
             )}
             <Line
@@ -295,10 +368,12 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
               strokeWidth={2}
               dot={{ fill: '#0ea5e9', strokeWidth: 0, r: 3 }}
               activeDot={{ r: 5, fill: '#0ea5e9', stroke: '#fff', strokeWidth: 2 }}
+              isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
+      <p className="mt-1 text-caption text-ink-3">Tap the line to see each weigh-in · dashed = trend line</p>
     </div>
   );
 });

@@ -63,7 +63,7 @@ import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
 import { SegmentedControl } from './SegmentedControl';
-import { SetLoggerRow } from './SetLoggerRow';
+import { SetLoggerRow, clampToChip } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
@@ -3019,12 +3019,19 @@ export const ExerciseCard = memo(function ExerciseCard({
         : `Target: a controlled ${block.targetRepRange[0]}–${block.targetRepRange[1]} ${isDurationBased ? 'seconds' : 'reps'} — ramp sets have no effort target.`
     );
 
+    // Why today's effort target differs from the program's. Rides the
+    // visible source line too (the reason itself lives in the ⓘ sheet when a
+    // source line shows), so an "@ 3 RIR" on a 2-RIR program is never
+    // unexplained on the strip.
+    const targetNotes: string[] = [];
     if (showRir && adjustedRir?.hasAdjustment && adjustedRir.adjustmentReason) {
       reason += ' · calibration-adjusted';
+      targetNotes.push('target calibrated to how you rate effort');
       explanation.push(`Calibration: ${adjustedRir.adjustmentReason}.`);
     }
     if (showRir && readinessModulation?.banner) {
       reason += ' · eased for readiness';
+      targetNotes.push('eased for readiness');
       explanation.push(`Readiness: ${readinessModulation.banner}.`);
     }
     if (isAmrap) {
@@ -3069,7 +3076,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     // session hit the rep ceiling (77 lbs × 10) — one increment up"); a
     // "From your last session: …" line under it would repeat it.
     const reasonNamesSource = /^From your last/.test(sourceLine) && /\blast (session|set)\b/i.test(reason);
-    return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role, source: reasonNamesSource ? '' : sourceLine };
+    const source = reasonNamesSource ? '' : sourceLine;
+    return {
+      weight,
+      reps: String(reps),
+      repsLabel,
+      reason,
+      explanation,
+      showRir,
+      role,
+      source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
+    };
   };
 
   // The MOST RECENT completed set's next-set call (services/
@@ -3292,8 +3309,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   // pill exists — most exercises keep a single-line header.
   // rep_total exercises show no e1RM-derived chrome: the pace pill and the
   // plateau badge are both e1RM-trend readings.
+  // A stall pill ("Stalled: 4 sessions at same load") next to "▲ Trend:
+  // ahead" reads as two verdicts arguing; the stall is the actionable one, so
+  // it wins the way the plateau badge already does.
   const showPacePill = !repTotalMode &&
     !plateau &&
+    !progressionStall &&
     !!progressionInsight &&
     (progressionInsight.pace === 'ahead' ||
       progressionInsight.pace === 'on_track' ||
@@ -3516,35 +3537,24 @@ export const ExerciseCard = memo(function ExerciseCard({
 
         {/* Session tonnage — logged volume so far, plus the projection if all
             remaining programmed sets are finished at their suggested/typed
-            numbers. Shown once there's something concrete: a logged set, or
-            the active card's live plan. */}
-        {sessionVolume && sessionVolume.projected > 0 && (isActive || completedSets.length > 0) && (
+            numbers. Shown once a set is logged: before that a "planned total"
+            tonnage is one more number above the first set that a lifter
+            can't act on. */}
+        {sessionVolume && sessionVolume.projected > 0 && completedSets.length > 0 && (
           <p className="mt-1 text-caption text-ink-2" data-testid="session-volume-line">
             {/* "Volume" is tonnage here — say so in plain words (weight ×
                 reps, added up) the first time it shows; the term stays. */}
-            {completedSets.length > 0 ? (
+            Lifted so far{' '}
+            <span className="text-ink">
+              {sessionVolume.current.toLocaleString('en-US')} {weightLabel}
+            </span>
+            {pendingSetsCount > 0 && sessionVolume.projected > sessionVolume.current && (
               <>
-                Lifted so far{' '}
-                <span className="text-ink">
-                  {sessionVolume.current.toLocaleString('en-US')} {weightLabel}
-                </span>
-                {pendingSetsCount > 0 && sessionVolume.projected > sessionVolume.current && (
-                  <>
-                    <span className="text-ink-3"> · </span>
-                    {sessionVolume.projected.toLocaleString('en-US')} {weightLabel} if you finish
-                  </>
-                )}
-                <span className="text-ink-3"> (volume: weight × reps, all sets)</span>
-              </>
-            ) : (
-              <>
-                Planned total{' '}
-                <span className="text-ink">
-                  {sessionVolume.projected.toLocaleString('en-US')} {weightLabel}
-                </span>
-                <span className="text-ink-3"> (volume: weight × reps, all sets)</span>
+                <span className="text-ink-3"> · </span>
+                {sessionVolume.projected.toLocaleString('en-US')} {weightLabel} if you finish
               </>
             )}
+            <span className="text-ink-3"> (volume: weight × reps, all sets)</span>
           </p>
         )}
 
@@ -4076,12 +4086,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         {/* Muscle readiness status — shows all involved muscles (primary + secondaries)
             that have recent training and aren't fully recovered. */}
         {muscleReadiness && muscleReadiness.length > 0 && (
-          <div className="px-3 py-2 text-subhead text-ink border-l-2 border-sep bg-card/50">
+          <div className="px-3 py-1.5 text-caption text-ink-2 border-l-2 border-sep bg-card/50" data-testid="muscle-readiness-line">
             <span className="font-medium">Recovery:</span>{' '}
             {muscleReadiness.map((mr, i) => (
               <span key={mr.muscle}>
                 {i > 0 && ' · '}
-                {mr.displayName}: <span className={mr.status === 'fatigued' ? 'text-status-warn' : 'text-status-ok'}>{mr.status}</span>
+                {mr.displayName}: <span className={mr.status === 'fatigued' ? 'text-status-warn' : 'text-ink-2'}>{mr.status}</span>
               </span>
             ))}
           </div>
@@ -4708,7 +4718,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             return {
               predictedRir,
               ...(predictedRir >= loggerTargetRir + 2 && repsForTarget > enteredReps
-                ? { repsForTarget, targetRir: loggerTargetRir }
+                ? { repsForTarget, targetRir: clampToChip(loggerTargetRir) }
                 : {}),
               weightLabel: entered.label,
               reps: enteredReps,
@@ -4756,7 +4766,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : `${bannerRepsLabel || '—'}${isDurationBased ? 's' : ''}`
                 }
                 verdict={bannerVerdict}
-                rir={Math.max(0, Math.min(3, loggerTargetRir))}
+                // Same value the logger presets its chip to (0–4), so the
+                // strip's "@ N RIR" and the preset chip always agree.
+                rir={clampToChip(loggerTargetRir)}
                 showRir={suggestion.showRir}
                 roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
                 reason={suggestion.reason}
@@ -4785,8 +4797,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {weightEditNote && (
                   <>
                     {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
-                    {isDurationBased ? 'seconds' : 'reps'} @ {weightEditNote.rir} RIR (from your est.
-                    1-rep max, e1RM {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel})
+                    {isDurationBased ? 'seconds' : 'reps'} @ {clampToChip(weightEditNote.rir)} RIR (from your
+                    est. max {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel})
                   </>
                 )}
               </p>

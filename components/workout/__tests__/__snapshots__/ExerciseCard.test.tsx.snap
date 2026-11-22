@@ -36,25 +36,6 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           </span>
         </p>
       </button>
-      <p
-        class="mt-1 text-caption text-ink-2"
-        data-testid="session-volume-line"
-      >
-        Planned total
-         
-        <span
-          class="text-ink"
-        >
-          1,800
-           
-          kg
-        </span>
-        <span
-          class="text-ink-3"
-        >
-           (volume: weight × reps, all sets)
-        </span>
-      </p>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -116,10 +97,6 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 >
                    (stop 2 reps short of failure)
                 </span>
-              </span>
-              <span>
-                 — 
-                starting point estimated from your training profile
               </span>
               <span
                 class="block mt-0.5 text-caption leading-snug text-ink-2"
@@ -320,7 +297,9 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               data-testid="rir-preset-note"
             >
                
-              Preset to your target — tap the one that matches.
+              Preset to your target (
+              2
+              ) — tap to change.
             </span>
           </p>
           <div

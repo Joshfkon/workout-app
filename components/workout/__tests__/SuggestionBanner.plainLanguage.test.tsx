@@ -46,6 +46,14 @@ describe('SuggestionBanner plain language', () => {
     expect(screen.getByText('RIR')).toBeInTheDocument();
   });
 
+  it('shows the reason inline only when there is no plain source line', () => {
+    const { rerender } = render(<SuggestionBanner {...base} />);
+    expect(screen.getByText(/— starting point/)).toBeInTheDocument();
+    rerender(<SuggestionBanner {...base} source="Starting guess — pick a weight you could lift ~12 times" />);
+    expect(screen.queryByText(/— starting point/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('suggestion-source')).toHaveTextContent('Starting guess');
+  });
+
   it('warns in plain words instead of "predicted max"', () => {
     render(<SuggestionBanner {...base} effortCheck={effort(0)} />);
     act(() => {

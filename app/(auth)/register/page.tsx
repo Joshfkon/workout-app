@@ -4,9 +4,23 @@ import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { IconEye, IconEyeOff } from '@tabler/icons-react';
-import { Button, Input, Card, Select } from '@/components/ui';
+import { Button, Input, Card } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
 import type { Goal, Experience } from '@/types/schema';
+
+/** Plain-language answers to "How long have you been lifting?". */
+const EXPERIENCE_OPTIONS: { value: Experience; label: string }[] = [
+  { value: 'novice', label: 'New / < 1 yr' },
+  { value: 'intermediate', label: '1–3 years' },
+  { value: 'advanced', label: '3+ years' },
+];
+
+/**
+ * What a skipped experience question signs up as: the same default sign-up
+ * always used (intermediate), so making the question optional doesn't quietly
+ * change anyone's starting training volume. Editable in Settings.
+ */
+const SKIPPED_EXPERIENCE: Experience = 'intermediate';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -15,7 +29,8 @@ export default function RegisterPage() {
   // Goal is chosen in onboarding (with an explanation); sign-up sends the
   // neutral default so the profile row is complete either way.
   const goal: Goal = 'maintenance';
-  const [experience, setExperience] = useState<Experience>('intermediate');
+  // Optional: null = skipped, which signs up as SKIPPED_EXPERIENCE.
+  const [experience, setExperience] = useState<Experience | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   // Address a confirmation email was sent to. Renders the post-signup screen
@@ -72,7 +87,7 @@ export default function RegisterPage() {
           emailRedirectTo: redirectUrl,
           data: {
             goal,
-            experience,
+            experience: experience ?? SKIPPED_EXPERIENCE,
           },
         },
       });
@@ -190,7 +205,7 @@ export default function RegisterPage() {
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
           <h1 className="text-title font-bold text-ink">Create your account</h1>
-          <p className="text-ink-2 mt-1">Start your hypertrophy journey</p>
+          <p className="text-ink-2 mt-1">Track your workouts and your food in one place.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -209,7 +224,6 @@ export default function RegisterPage() {
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
             required
             hint="8+ characters with lowercase, uppercase letters, and digits"
             autoComplete="new-password"
@@ -225,17 +239,37 @@ export default function RegisterPage() {
             }
           />
 
-          <Select
-            label="Experience level"
-            value={experience}
-            onChange={(e) => setExperience(e.target.value as Experience)}
-            options={[
-              { value: 'novice', label: 'Novice (< 1 year)' },
-              { value: 'intermediate', label: 'Intermediate (1-3 years)' },
-              { value: 'advanced', label: 'Advanced (3+ years)' },
-            ]}
-            hint="Sets how much training we suggest to start"
-          />
+          {/* Optional, plain-language, nothing preselected: food-only users
+              can skip it, and a skip starts training suggestions light. */}
+          <div role="radiogroup" aria-labelledby="lifting-question" aria-describedby="lifting-hint">
+            <p id="lifting-question" className="block text-body font-medium text-ink mb-2">
+              How long have you been lifting? <span className="text-ink-3 font-normal">(optional)</span>
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {EXPERIENCE_OPTIONS.map((option) => {
+                const checked = experience === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    data-testid={`experience-option-${option.value}`}
+                    // Tapping the picked option again clears it (back to "skip").
+                    onClick={() => setExperience(checked ? null : option.value)}
+                    className={`min-h-[44px] px-2 rounded-input border-2 text-subhead font-medium transition-colors ${
+                      checked ? 'border-action bg-action/10 text-ink' : 'border-sep bg-fill/50 text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p id="lifting-hint" className="text-caption text-ink-3 mt-1">
+              Not sure, or just here for food tracking? Skip it — you can change it any time in Settings.
+            </p>
+          </div>
 
           {error && (
             <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">

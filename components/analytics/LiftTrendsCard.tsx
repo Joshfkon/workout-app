@@ -19,16 +19,26 @@ interface LiftTrendsCardProps {
   onSeeIdeas?: () => void;
 }
 
-function subtitleOf(lift: LiftTrend, units: 'lb' | 'kg'): string {
+/**
+ * A row's two facts, kept as separate pieces so each can wrap onto its own
+ * line at phone width instead of being ellipsized ("+3.0…").
+ */
+function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { max: string; change: string } {
+  const max = `${formatWeight(lift.currentE1RMKg, units)} est. max`;
   // A calibrating lift shows NO rate — a fitted slope over a program boundary
   // or an equipment change is noise with a decimal point.
   if (lift.lowConfidence) {
-    return `${formatWeight(lift.currentE1RMKg, units)} est. max · ${
-      lift.calibrationReason === 'equipment_change' ? 'equipment changed — rebuilding' : 'new program — rebuilding'
-    }`;
+    return {
+      max,
+      change: lift.calibrationReason === 'equipment_change' ? 'equipment changed — rebuilding' : 'new program — rebuilding',
+    };
   }
-  return `${formatWeight(lift.currentE1RMKg, units)} est. max · ${signedPct(lift.weeklyChangePct)}`;
+  return { max, change: signedPct(lift.weeklyChangePct) };
 }
+
+/** Plain explanation of "est. max", shown once where the term first appears. */
+export const EST_MAX_EXPLAINER =
+  'Est. max = the heaviest single rep your recent sets suggest you could lift.';
 
 /**
  * Strength tab front door (design system "Progress · Strength"): a summary
@@ -56,8 +66,15 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
       <div className="rounded-card bg-card p-4 shadow-card" data-testid="lift-trends-summary">
         <p className="text-caption text-ink-2">Last {weeks} weeks</p>
         <p className="mt-0.5 text-headline text-ink">
-          {confident > 0 ? `${summary.rising} of ${confident} lifts rising` : 'Learning your lifts'}
+          {confident > 0 ? `${summary.rising} of ${confident} lifts rising` : rebuilding > 0
+              ? 'Your lift trends are rebuilding'
+              : 'No strength trends yet'}
         </p>
+        {summary.lifts.length > 0 && (
+          <p className="mt-0.5 text-caption text-ink-2" data-testid="est-max-explainer">
+            {EST_MAX_EXPLAINER}
+          </p>
+        )}
         {confident + rebuilding > 0 && (
           <div className="mt-2.5 flex gap-[3px]" aria-hidden="true">
             {summary.rising > 0 && <div className="h-2 rounded-full bg-status-ok" style={{ flex: summary.rising }} />}
@@ -84,13 +101,16 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
       {summary.lifts.length === 0 && (summary.earlyLifts?.length ?? 0) > 0 ? (
         <div className="space-y-2" data-testid="lift-early-bests">
           <p className="px-1 text-subhead text-ink-2">
-            Your best recent sets. A trend line appears once a lift has {MIN_SESSIONS_FOR_TREND} workouts.
+            For now you can see your best set on each lift. Log a lift in {MIN_SESSIONS_FOR_TREND} workouts and
+            its strength trend line appears here.
           </p>
           <ListGroup>
             {(summary.earlyLifts ?? []).map((l) => (
-              <div key={l.name} className="flex min-h-[52px] items-center gap-3 px-4">
-                <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">{l.name}</span>
-                <span className="text-body text-ink tabular-nums">
+              <div key={l.name} className="flex min-h-[52px] items-center gap-3 px-4 py-2">
+                <span className="min-w-0 flex-1 break-words text-body font-semibold text-ink" data-testid="early-lift-name">
+                  {l.name}
+                </span>
+                <span className="flex-shrink-0 text-body text-ink tabular-nums">
                   {l.bestWeightKg > 0 ? `${formatWeight(l.bestWeightKg, units)} × ${l.bestReps}` : `${l.bestReps} reps`}
                 </span>
                 <span className="w-[76px] flex-shrink-0 text-right text-caption text-ink-2">
@@ -119,7 +139,8 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
                 data-testid={`lift-row-${lift.seriesKey ?? lift.exerciseId}`}
               >
                 <span className="min-w-0 flex-1 py-2.5">
-                  <span className="block truncate text-body font-semibold text-ink">
+                  {/* Names wrap (up to 2 lines) rather than ellipsize. */}
+                  <span className="line-clamp-2 break-words text-body font-semibold text-ink" data-testid="lift-trend-name">
                     {lift.name}
                     {lift.locationLabel && (
                       <span className="font-normal text-ink-2" data-testid="lift-trend-gym">
@@ -127,7 +148,14 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
                       </span>
                     )}
                   </span>
-                  <span className="block truncate text-subhead text-ink-2 tabular-nums">{subtitleOf(lift, units)}</span>
+                  {/* Max and weekly change are separate pieces that wrap
+                      onto their own lines when the row is narrow. */}
+                  <span className="flex flex-wrap gap-x-1.5 text-subhead text-ink-2 tabular-nums">
+                    <span className="whitespace-nowrap">{subtitleParts(lift, units).max}</span>
+                    <span className="whitespace-nowrap" data-testid="lift-trend-change">
+                      {subtitleParts(lift, units).change}
+                    </span>
+                  </span>
                 </span>
                 <Sparkline values={lift.history.map((h) => h.e1rmKg)} colorClassName={status.stroke} />
                 <span className={`w-[76px] flex-shrink-0 rounded-full py-1 text-center text-caption font-semibold ${status.pill}`}>

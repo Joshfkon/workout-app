@@ -39,6 +39,12 @@ function hideStaticSplash() {
   }
 }
 
+/** Auth form pages (app/(auth)): the form should be the first thing seen. */
+const AUTH_FORM_ROUTES = ['/register', '/login', '/forgot-password', '/reset-password', '/verify-code'];
+export function isAuthFormRoute(pathname: string): boolean {
+  return AUTH_FORM_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
 function hasSeenSplashBefore(): boolean {
   try {
     return Boolean(localStorage.getItem(SPLASH_SEEN_KEY));
@@ -120,7 +126,10 @@ export function SplashProvider({ children }: SplashProviderProps) {
     const native = isNativeCapacitor();
     setIsNative(native);
 
-    if (native || hasSeenSplashBefore()) {
+    // Sign-up / sign-in forms never get the branded splash: a first-ever
+    // visit usually lands right on /register, and the splash's fade-out
+    // (logo, wordmark, tagline) read as a watermark over the form fields.
+    if (native || hasSeenSplashBefore() || isAuthFormRoute(window.location.pathname)) {
       // No web splash: reveal the app (native splash still covers it in the
       // native case until home-paint below).
       setShowSplash(false);

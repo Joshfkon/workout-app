@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconBulb, IconChevronLeft, IconInfoCircle } from '@tabler/icons-react';
-import { ListGroup, PageSkeleton, Sparkline } from '@/components/ui';
+import { InfoTooltip, ListGroup, PageSkeleton, Sparkline } from '@/components/ui';
 import { formatWeight } from '@/lib/utils';
 import { formatLoad } from '@/lib/mcp/summaries';
 import { useLiftTrends } from '@/hooks/useLiftTrends';
@@ -146,7 +146,17 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
       <div className="rounded-card bg-card p-4 shadow-card">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-caption text-ink-2">Estimated max</p>
+            <p className="flex items-center gap-1 text-caption text-ink-2">
+              Estimated max
+              <InfoTooltip
+                content={{
+                  term: 'Estimated max',
+                  shortExplanation:
+                    'The heaviest single rep your recent sets suggest you could lift. Worked out from weight × reps, so you never have to test it.',
+                  learnMoreSlug: 'data-explained',
+                }}
+              />
+            </p>
             <p className="text-[34px] font-bold leading-10 tracking-tight text-ink tabular-nums">
               {formatWeight(lift.currentE1RMKg, units)}
             </p>

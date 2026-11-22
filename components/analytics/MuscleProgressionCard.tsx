@@ -131,15 +131,15 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
   const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
   const subtitle =
     normalizedGoal === 'cut'
-      ? 'Estimated max over time · on a cut, holding strength counts as on track'
+      ? "How fast each muscle's lifts are getting stronger. You're eating less to lose fat, so holding strength counts as on track."
       : normalizedGoal === 'maintenance'
-        ? 'Estimated max over time · at maintenance, holding strength counts as on track'
-        : `Estimated max over time vs the ~${expectedPct}%/week expected for your level`;
+        ? "How fast each muscle's lifts are getting stronger. You're eating to hold your weight, so holding strength counts as on track."
+        : `How fast each muscle's lifts are getting stronger, vs the ~${expectedPct}% a week expected at your level.`;
 
   return (
     <Card id="muscle-progression" padding="none" className="scroll-mt-4">
       <div className="p-4 border-b border-sep">
-        <h3 className="font-medium text-ink">Progression by muscle group</h3>
+        <h3 className="font-medium text-ink">Strength by muscle</h3>
         <p className="text-caption text-ink-2 mt-0.5">{subtitle}</p>
       </div>
       <ul className="divide-y divide-sep">
@@ -153,27 +153,34 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-fill/50 transition-colors"
                 aria-expanded={isOpen}
               >
-                <span className="flex-1 min-w-0 text-subhead font-medium text-ink truncate">
-                  {muscleDisplayName(group.muscleGroup)}
+                {/* Name on its own line, rate + plateau count beneath —
+                    nothing is ellipsized at phone width. */}
+                <span className="flex-1 min-w-0">
+                  <span className="block break-words text-subhead font-medium text-ink" data-testid="muscle-progression-name">
+                    {muscleDisplayName(group.muscleGroup)}
+                  </span>
+                  <span className="flex flex-wrap gap-x-2">
+                    {paceHasRate(group.pace) && (
+                      <span
+                        className={`whitespace-nowrap text-caption font-mono ${group.rateImplausible ? 'text-status-warn' : 'text-ink-2'}`}
+                        data-testid="muscle-progression-rate"
+                        title={
+                          group.rateImplausible
+                            ? 'Rate exceeded the plausibility ceiling and was capped — usually a data issue (equipment change or mislogged load), not real progress'
+                            : undefined
+                        }
+                      >
+                        {group.rateImplausible && '⚠ '}
+                        {formatWeeklyPct(group.avgWeeklyChangePct)}
+                      </span>
+                    )}
+                    {group.plateauedCount > 0 && (
+                      <span className="whitespace-nowrap text-caption text-status-warn">
+                        {group.plateauedCount} plateaued
+                      </span>
+                    )}
+                  </span>
                 </span>
-                {paceHasRate(group.pace) && (
-                  <span
-                    className={`text-caption font-mono ${group.rateImplausible ? 'text-status-warn' : 'text-ink-2'}`}
-                    title={
-                      group.rateImplausible
-                        ? 'Rate exceeded the plausibility ceiling and was capped — usually a data issue (equipment change or mislogged load), not real progress'
-                        : undefined
-                    }
-                  >
-                    {group.rateImplausible && '⚠ '}
-                    {formatWeeklyPct(group.avgWeeklyChangePct)}
-                  </span>
-                )}
-                {group.plateauedCount > 0 && (
-                  <span className="text-caption text-status-warn">
-                    {group.plateauedCount} plateaued
-                  </span>
-                )}
                 <span
                   className={`rounded-full px-2.5 py-1 text-caption font-medium leading-none flex-shrink-0 ${paceBadgeClasses(group.pace)}`}
                 >
@@ -197,11 +204,11 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                         key={insight.exerciseId}
                         className="flex items-center gap-3 pl-8 pr-4 py-1.5"
                       >
-                        <span className="flex-1 min-w-0 text-subhead text-ink-2 truncate">
+                        <span className="flex-1 min-w-0 break-words text-subhead text-ink-2">
                           {exerciseNames?.get(insight.exerciseId) ?? 'Exercise'}
                         </span>
                         {paceHasRate(insight.pace) && (
-                          <span className="text-caption font-mono text-ink-2">
+                          <span className="flex-shrink-0 whitespace-nowrap text-caption font-mono text-ink-2">
                             {formatWeeklyPct(insight.weeklyChangePct)}
                           </span>
                         )}

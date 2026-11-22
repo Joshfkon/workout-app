@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import type { FoodSearchResult, FoodSearchResultWithServings } from '@/services/usdaService';
 import { searchFoodsAction, getFoodDetailsAction } from '@/lib/actions/food-search';
+import { friendlyUsdaError } from '@/lib/nutrition/usdaErrorMessage';
 import { lookupBarcode as lookupBarcodeOFF } from '@/services/openFoodFactsService';
 import { lookupBarcodeUsdaAction } from '@/lib/actions/nutrition';
 import dynamic from 'next/dynamic';
@@ -369,6 +370,8 @@ export function AddFoodModal({
   const [usdaResults, setUsdaResults] = useState<FoodSearchResult[]>([]);
   const [isSearchingUsda, setIsSearchingUsda] = useState(false);
   const [usdaError, setUsdaError] = useState('');
+  // Bumped by the USDA section's Retry button to re-run the same search.
+  const [usdaRetryNonce, setUsdaRetryNonce] = useState(0);
   const [selectedFood, setSelectedFood] = useState<FoodSearchResult | FoodSearchResultWithServings | null>(null);
   const [selectedCustomFood, setSelectedCustomFood] = useState<CustomFood | null>(null);
   const [selectedSystemFood, setSelectedSystemFood] = useState<SystemFood | null>(null);
@@ -454,7 +457,7 @@ export function AddFoodModal({
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery, activeTab]);
+  }, [debouncedQuery, activeTab, usdaRetryNonce]);
 
   const matchesQuery = useMemo(() => {
     const query = debouncedQuery.toLowerCase();
@@ -1273,7 +1276,20 @@ export function AddFoodModal({
                   ) : isSearchingUsda ? (
                     <p className="text-subhead text-ink-2 py-1">Searching USDA...</p>
                   ) : usdaError ? (
-                    <p className="text-subhead text-ink-2 py-1">{usdaError}</p>
+                    <div
+                      className="flex items-center justify-between gap-3 py-1"
+                      role="status"
+                      data-testid="usda-search-error"
+                    >
+                      <p className="text-subhead text-ink-2 min-w-0">{friendlyUsdaError(usdaError)}</p>
+                      <button
+                        type="button"
+                        onClick={() => setUsdaRetryNonce((n) => n + 1)}
+                        className="flex-shrink-0 min-h-[36px] px-3 rounded-full bg-fill text-subhead font-medium text-ink hover:bg-fill/70 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </div>
                   ) : usdaResults.length === 0 ? (
                     <p className="text-subhead text-ink-2 py-1">No USDA results</p>
                   ) : (

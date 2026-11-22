@@ -111,7 +111,14 @@ function renderSettings() {
 
 async function openPreferences(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('radio', { name: 'Preferences' }));
-  return screen.getByLabelText('Weight units') as HTMLSelectElement;
+  return screen.getByRole('radiogroup', { name: 'Units' });
+}
+
+/** The selected unit ('kg' | 'lb'), read from the Units radio group. */
+function selectedUnit(): 'kg' | 'lb' | null {
+  if (screen.getByRole('radio', { name: 'kg & cm' }).getAttribute('aria-checked') === 'true') return 'kg';
+  if (screen.getByRole('radio', { name: 'lb & inches' }).getAttribute('aria-checked') === 'true') return 'lb';
+  return null;
 }
 
 describe('Settings → Preferences auto-save', () => {
@@ -124,12 +131,12 @@ describe('Settings → Preferences auto-save', () => {
   it('saves units the moment they change, with no Save button', async () => {
     const user = userEvent.setup();
     const { queryClient } = renderSettings();
-    const select = await openPreferences(user);
+    await openPreferences(user);
 
     expect(screen.queryByRole('button', { name: /save preferences/i })).not.toBeInTheDocument();
-    expect(select.value).toBe('kg');
+    expect(selectedUnit()).toBe('kg');
 
-    await user.selectOptions(select, 'lb');
+    await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     // Only the preferences JSONB is written, merged over what is stored —
@@ -148,20 +155,49 @@ describe('Settings → Preferences auto-save', () => {
     ]);
     expect(cached?.userRow.preferences.units).toBe('lb');
     // …and the form was not reset by its own cache write.
-    expect((screen.getByLabelText('Weight units') as HTMLSelectElement).value).toBe('lb');
+    expect(selectedUnit()).toBe('lb');
+  });
+
+  it('puts Units first and confirms a save next to it, announced via aria-live', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+    await openPreferences(user);
+
+    // Units is the first card on the tab, under a plain "Units" heading.
+    const headings = screen.getAllByText(/^(Units|App preferences)$/);
+    expect(headings[0]).toHaveTextContent('Units');
+
+    await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
+
+    const live = screen.getByTestId('preferences-save-status');
+    expect(live).toHaveAttribute('role', 'status');
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    await waitFor(() => expect(live).toHaveTextContent('Units saved'));
+
+    // The visible pill sits in the Units card, not a distant header.
+    const pill = screen.getByTestId('save-status-units');
+    expect(pill).toHaveTextContent('Saved');
+    expect(pill).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByTestId('save-status-showFormCues')).not.toBeInTheDocument();
+
+    // A switch moves the confirmation to its own row.
+    await user.click(screen.getAllByRole('switch')[0]);
+    await waitFor(() => expect(live).toHaveTextContent('Show form cues saved'));
+    expect(screen.getByTestId('save-status-showFormCues')).toHaveTextContent('Saved');
+    expect(screen.queryByTestId('save-status-units')).not.toBeInTheDocument();
   });
 
   it('puts units back and says so when the save fails', async () => {
     const user = userEvent.setup();
     jest.spyOn(console, 'error').mockImplementation(() => {});
     renderSettings();
-    const select = await openPreferences(user);
+    await openPreferences(user);
 
     failNextUpdate = true;
-    await user.selectOptions(select, 'lb');
+    await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't save: network down/i);
-    expect((screen.getByLabelText('Weight units') as HTMLSelectElement).value).toBe('kg');
+    expect(selectedUnit()).toBe('kg');
     expect(mockApplyPreferenceLocally).not.toHaveBeenCalled();
     expect(mockRefreshUserStore).not.toHaveBeenCalled();
   });

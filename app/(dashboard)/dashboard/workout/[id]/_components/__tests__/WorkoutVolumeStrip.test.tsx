@@ -153,6 +153,20 @@ describe('WorkoutVolumeStrip', () => {
     expect(screen.getByTestId('workout-volume-chip-chest')).toBeInTheDocument();
   });
 
+  it('keeps the unit legend behind the (i) instead of above every workout', async () => {
+    const user = userEvent.setup();
+    render(<WorkoutVolumeStrip rows={[row('chest')]} isLoading={false} onOpenDetail={noop} />);
+    expect(screen.queryByTestId('workout-volume-strip-legend')).not.toBeInTheDocument();
+
+    const info = screen.getByRole('button', { name: 'What these numbers mean' });
+    await user.click(info);
+    expect(info).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('workout-volume-strip-legend')).toHaveTextContent(/eff = sets that count/);
+
+    await user.click(info);
+    expect(screen.queryByTestId('workout-volume-strip-legend')).not.toBeInTheDocument();
+  });
+
   it('shows session muscles by default, the rest behind "Show all (+N)"', async () => {
     const user = userEvent.setup();
     render(

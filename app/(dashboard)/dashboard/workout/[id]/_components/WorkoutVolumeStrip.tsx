@@ -34,7 +34,7 @@
  */
 
 import { useState } from 'react';
-import { IconChevronDown } from '@tabler/icons-react';
+import { IconChevronDown, IconInfoCircle } from '@tabler/icons-react';
 import {
   groupZoneBandLabel,
   rowBarClass,
@@ -170,6 +170,8 @@ export function WorkoutVolumeStrip({
   // Whether the projection digest is expanded into the per-muscle list
   // (per-mount UI state, not persisted).
   const [projectionOpen, setProjectionOpen] = useState(false);
+  // Unit legend ("eff", "unrated", the band) — on demand via the (i).
+  const [legendOpen, setLegendOpen] = useState(false);
 
   if (rows.length === 0) return null;
 
@@ -223,23 +225,46 @@ export function WorkoutVolumeStrip({
             aria-hidden
           />
         </button>
-        <button
-          onClick={onOpenDetail}
-          className="text-caption font-medium text-action"
-          data-testid="workout-volume-strip-details"
-        >
-          Details
-        </button>
+        <span className="flex items-center gap-1">
+          {!collapsed && (
+            // The legend is reference material, not something a lifter needs
+            // on every set — it opens on demand instead of taking three lines
+            // above the first exercise.
+            <button
+              onClick={() => setLegendOpen((prev) => !prev)}
+              className="min-h-[32px] min-w-[32px] -my-2 flex items-center justify-center text-ink-3 hover:text-ink-2"
+              data-testid="workout-volume-strip-legend-toggle"
+              aria-expanded={legendOpen}
+              aria-controls="workout-volume-strip-legend"
+              aria-label="What these numbers mean"
+            >
+              <IconInfoCircle size={14} aria-hidden />
+            </button>
+          )}
+          <button
+            onClick={onOpenDetail}
+            className="text-caption font-medium text-action"
+            data-testid="workout-volume-strip-details"
+          >
+            Details
+          </button>
+        </span>
       </div>
 
       {!collapsed && (
         <>
-        {/* The cards are terse to fit; spell the two units out once. */}
-        <p className="px-0.5 mb-1.5 text-caption text-ink-3" data-testid="workout-volume-strip-legend">
-          eff = sets that count, weighted by how hard they were · unrated = no effort logged ·
-          low–high = useful weekly sets, from the minimum that grows muscle (MEV) to the most you
-          recover from (MRV)
-        </p>
+        {/* The cards are terse to fit; the (i) spells the units out. */}
+        {legendOpen && (
+          <p
+            id="workout-volume-strip-legend"
+            className="px-0.5 mb-1.5 text-caption text-ink-3"
+            data-testid="workout-volume-strip-legend"
+          >
+            eff = sets that count, weighted by how hard they were · unrated = no effort logged ·
+            low–high = useful weekly sets, from the minimum that grows muscle (MEV) to the most you
+            recover from (MRV)
+          </p>
+        )}
         <div
           id="workout-volume-strip-cards"
           className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x"
