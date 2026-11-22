@@ -1,5 +1,6 @@
 import { inputWeightToKg, lbsToKg } from '@/lib/utils';
 import {
+  loadGridForDisplay,
   loadStepForDisplay,
   snapSuggestedLoad,
   stepLoad,
@@ -157,5 +158,41 @@ describe('stepLoad', () => {
   it('never goes below zero and starts an empty field at one step', () => {
     expect(stepLoad(0, -1, 5)).toBe(0);
     expect(stepLoad(NaN, 1, 5)).toBe(5);
+  });
+});
+
+describe('barbell grid is anchored at the bar (Codex review)', () => {
+  // 45 lb bar + 5 lb smallest plates → 10 lb step: loadable loads are
+  // 145 / 155 / 165, never 150.
+  const grid = loadGridForDisplay('lb', { equipmentClass: 'barbell', minIncrementKg: 2.27, smallestPlate: 5 });
+
+  it('offsets a 10 lb barbell step by the 45 lb bar', () => {
+    expect(grid).toEqual({ step: 10, offset: 5 });
+  });
+
+  it('steps 145 → 155 and 155 → 145', () => {
+    expect(stepLoad(145, 1, grid)).toBe(155);
+    expect(stepLoad(155, -1, grid)).toBe(145);
+    expect(stepLoad(150, 1, grid)).toBe(155); // off-grid → next loadable
+    expect(stepLoad(150, -1, grid)).toBe(145);
+  });
+
+  it('snaps suggestions onto bar + plate pairs', () => {
+    expect(snapSuggestedLoad(lbsToKg(150), 'lb', grid)).toBe(155); // tie rounds up
+    expect(snapSuggestedLoad(lbsToKg(148), 'lb', grid)).toBe(145);
+    expect(snapSuggestedLoad(lbsToKg(28), 'lb', grid)).toBe(25);
+  });
+
+  it('needs no offset when the bar is on the step grid, or for non-barbells', () => {
+    expect(loadGridForDisplay('lb', { equipmentClass: 'barbell', minIncrementKg: 2.27 })).toEqual({ step: 5, offset: 0 });
+    expect(loadGridForDisplay('kg', { equipmentClass: 'barbell', minIncrementKg: 2.27 })).toEqual({ step: 2.5, offset: 0 });
+    expect(loadGridForDisplay('lb', { equipmentClass: 'dumbbell', minIncrementKg: 4.54 })).toEqual({ step: 10, offset: 0 });
+  });
+
+  it('every snapped barbell load is bar + whole plate pairs', () => {
+    for (let kg = 25; kg <= 250; kg += 0.37) {
+      const lb = snapSuggestedLoad(kg, 'lb', grid);
+      expect(Number.isInteger((lb - 45) / 10)).toBe(true);
+    }
   });
 });

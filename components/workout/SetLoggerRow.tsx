@@ -31,7 +31,7 @@ import type {
 } from '@/types/schema';
 import { convertWeightForDisplay } from '@/lib/utils';
 import { buildSetLogData, maxRepsFor, weightStepForDisplay } from '@/lib/workout/setLogData';
-import { stepLoad } from '@/lib/workout/loadableWeight';
+import { stepLoad, type LoadGrid } from '@/lib/workout/loadableWeight';
 import { lightHaptic } from '@/lib/integrations/notifications';
 
 type WeightMode = 'bodyweight' | 'weighted' | 'assisted';
@@ -53,11 +53,11 @@ interface SetLoggerRowProps {
   /** Smallest load increment for this exercise, in kg. Steppers move by this (converted for display units). */
   minIncrementKg?: number;
   /**
-   * Loadable weight step in DISPLAY units (lib/workout/loadableWeight). When
+   * Loadable weight grid in DISPLAY units (lib/workout/loadableWeight). When
    * given it overrides the step derived from `minIncrementKg`, so the stepper
-   * and the suggestion rounding share one grid.
+   * and the suggestion rounding share one grid (bar-anchored for barbells).
    */
-  weightStep?: number;
+  weightGrid?: LoadGrid;
   disabled?: boolean;
   /** Duration-based exercise (plank, hold): reps column is seconds. */
   isDurationBased?: boolean;
@@ -177,7 +177,7 @@ export function SetLoggerRow({
   targetRir,
   unit = 'kg',
   minIncrementKg,
-  weightStep: weightStepProp,
+  weightGrid: weightGridProp,
   disabled = false,
   isDurationBased = false,
   exerciseId,
@@ -302,9 +302,12 @@ export function SetLoggerRow({
   }, [setNumber, isDurationBased, resetHoldTimer]);
 
   // Weight step in DISPLAY units (shared with the Apple Watch logger).
-  const weightStep = useMemo(
-    () => (weightStepProp && weightStepProp > 0 ? weightStepProp : weightStepForDisplay(minIncrementKg, unit)),
-    [weightStepProp, minIncrementKg, unit]
+  const weightGrid = useMemo<LoadGrid>(
+    () =>
+      weightGridProp && weightGridProp.step > 0
+        ? weightGridProp
+        : { step: weightStepForDisplay(minIncrementKg, unit), offset: 0 },
+    [weightGridProp, minIncrementKg, unit]
   );
 
   const isPlainBodyweight = isBodyweight && weightMode === 'bodyweight';
@@ -326,7 +329,7 @@ export function SetLoggerRow({
   const stepWeight = (direction: 1 | -1) => {
     // Off-grid values (a legacy or hand-typed number) step onto the grid:
     // 154.3 + 5 → 155, not 159.3.
-    onWeightChange(String(stepLoad(isNaN(weightNum) ? 0 : weightNum, direction, weightStep)));
+    onWeightChange(String(stepLoad(isNaN(weightNum) ? 0 : weightNum, direction, weightGrid)));
   };
 
   const stepReps = (direction: 1 | -1) => {

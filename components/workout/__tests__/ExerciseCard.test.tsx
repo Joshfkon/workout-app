@@ -9,6 +9,7 @@
 import React from 'react';
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { storeSmallestPlate } from '@/lib/workout/smallestPlate';
 import { ExerciseCard } from '../ExerciseCard';
 import { useWorkoutStore, WARMUP_COMPLETION_TTL_MS } from '@/stores/workoutStore';
 import type {
@@ -83,6 +84,8 @@ jest.mock('@/services/injuryAwareSwapper', () => ({
 // Mock utils - include cn function used by UI components. Conversion mocks
 // are faithful so unit-handling assertions stay meaningful.
 jest.mock('@/lib/utils', () => ({
+  SMALLEST_PLATE_OPTIONS: { kg: [0.5, 1.25, 2.5], lb: [1.25, 2.5, 5] },
+  DEFAULT_SMALLEST_PLATE: { kg: 1.25, lb: 2.5 },
   cn: (...classes: any[]) => classes.filter(Boolean).join(' '),
   convertWeight: jest.fn((w, from, to) => {
     if (from === to) return w;
@@ -2366,6 +2369,17 @@ describe('lb lifter suggestions land on loadable weights (kg-native history)', (
     render(<ExerciseCard {...props} />);
     await user.click(screen.getByRole('button', { name: 'Increase weight' }));
     expect(screen.getByRole('button', { name: /Weight: 160 lbs/ })).toBeInTheDocument();
+  });
+
+  it('re-grids a mounted card when the plate calculator changes the smallest plate', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    render(<ExerciseCard {...props} />);
+    // 5 lb plates on a 45 lb bar: loadable loads are 145 / 155 / 165.
+    act(() => storeSmallestPlate('lb', 5));
+    await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+    expect(screen.getByRole('button', { name: /Weight: 165 lbs/ })).toBeInTheDocument();
+    window.localStorage.clear();
   });
 
   it('a kg lifter sees the same history on the kg grid', () => {

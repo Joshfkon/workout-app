@@ -118,15 +118,51 @@ function tidy(n: number): number {
 }
 
 /**
- * A suggested load in the display unit, on the loadable grid. lb snaps to
- * `step` (never to 0 for a positive load); kg keeps `formatWeightValue`.
+ * The loadable values in the display unit: `offset + k × step`. The offset is
+ * non-zero only for a barbell whose bar is not itself on the step grid — a
+ * 45 lb bar with 5 lb plates (10 lb step) loads 145 / 155 / 165, never 150.
  */
-export function snapSuggestedLoad(weightKg: number, unit: WeightUnit, step: number): number {
+export interface LoadGrid {
+  step: number;
+  offset: number;
+}
+
+/**
+ * {@link loadStepForDisplay} plus the grid's anchor. A barbell is anchored at
+ * the standard bar (45 lb / 20 kg) — the plate calculator's default bar; other
+ * equipment (dumbbell racks, stacks, plate-loaded machines with unknown base)
+ * is anchored at zero.
+ */
+export function loadGridForDisplay(unit: WeightUnit, opts: LoadStepOptions = {}): LoadGrid {
+  const step = loadStepForDisplay(unit, opts);
+  if (opts.equipmentClass !== 'barbell') return { step, offset: 0 };
+  const bar = OLYMPIC_BAR[unit];
+  const offset = tidy(bar - Math.floor(bar / step + 1e-9) * step);
+  return { step, offset: Math.abs(offset - step) < 1e-6 ? 0 : offset };
+}
+
+/** Standard Olympic bar — the plate calculator's default (`BARBELL_WEIGHTS.olympic`). */
+const OLYMPIC_BAR: Record<WeightUnit, number> = { lb: 45, kg: 20 };
+
+function toGrid(grid: LoadGrid | number): LoadGrid {
+  if (typeof grid === 'number') return { step: validPositive(grid) ? grid : 2.5, offset: 0 };
+  return {
+    step: validPositive(grid.step) ? grid.step : 2.5,
+    offset: Number.isFinite(grid.offset) && grid.offset > 0 ? grid.offset : 0,
+  };
+}
+
+/**
+ * A suggested load in the display unit, on the loadable grid. lb snaps to the
+ * grid (never to 0 for a positive load); kg keeps `formatWeightValue`.
+ */
+export function snapSuggestedLoad(weightKg: number, unit: WeightUnit, grid: LoadGrid | number): number {
   if (!(weightKg > 0)) return 0;
   if (unit === 'kg') return formatWeightValue(weightKg, 'kg');
+  const { step, offset } = toGrid(grid);
   const lbs = convertWeight(weightKg, 'kg', 'lb');
-  const s = validPositive(step) ? step : 2.5;
-  return tidy(Math.max(s, roundToIncrement(lbs, s)));
+  const snapped = offset + roundToIncrement(lbs - offset, step);
+  return tidy(Math.max(offset > 0 ? offset : step, snapped));
 }
 
 /**
@@ -154,14 +190,14 @@ export function typedLoadInUnit(weightKg: number, unit: WeightUnit): number | nu
 export function suggestedLoadForDisplay(
   weightKg: number,
   unit: WeightUnit,
-  step: number,
+  grid: LoadGrid | number,
   exactSourceKg?: number
 ): number {
   if (exactSourceKg !== undefined && weightKg === exactSourceKg) {
     const typed = typedLoadInUnit(weightKg, unit);
     if (typed !== null) return typed;
   }
-  return snapSuggestedLoad(weightKg, unit, step);
+  return snapSuggestedLoad(weightKg, unit, grid);
 }
 
 /**
@@ -169,12 +205,13 @@ export function suggestedLoadForDisplay(
  * full step; from an off-grid value (a hand-typed or legacy number) it moves
  * to the next grid point in that direction, so 154.3 + 5 → 155, not 159.3.
  */
-export function stepLoad(current: number, direction: 1 | -1, step: number): number {
-  const s = validPositive(step) ? step : 2.5;
+export function stepLoad(current: number, direction: 1 | -1, grid: LoadGrid | number): number {
+  const { step, offset } = toGrid(grid);
   const value = Number.isFinite(current) && current > 0 ? current : 0;
-  const onGrid = Math.abs(value / s - Math.round(value / s)) < 1e-6;
+  const k = (value - offset) / step;
+  const onGrid = Math.abs(k - Math.round(k)) < 1e-6;
   const next = onGrid
-    ? value + direction * s
-    : (direction === 1 ? Math.ceil(value / s) : Math.floor(value / s)) * s;
+    ? value + direction * step
+    : offset + (direction === 1 ? Math.ceil(k) : Math.floor(k)) * step;
   return tidy(Math.max(0, next));
 }

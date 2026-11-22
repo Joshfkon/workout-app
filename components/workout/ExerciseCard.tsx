@@ -34,8 +34,8 @@ import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION, FATIGUE_E1RM_PER_SET
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 import { deriveEquipmentClass } from '@/services/equipmentClass';
-import { loadStepForDisplay, suggestedLoadForDisplay } from '@/lib/workout/loadableWeight';
-import { readExplicitSmallestPlate } from '@/lib/workout/smallestPlate';
+import { loadGridForDisplay, suggestedLoadForDisplay } from '@/lib/workout/loadableWeight';
+import { useExplicitSmallestPlate } from '@/hooks/useSmallestPlate';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import {
   detectProgressionStall,
@@ -1248,10 +1248,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   // exercise's recorded increments, else their plate-calculator plate choice
   // (plate-pair equipment), else the exercise increment / equipment default.
   // Drives both suggestion rounding and the ± stepper so they agree.
-  const [explicitSmallestPlate] = useState(() => readExplicitSmallestPlate(unit));
-  const loadStep = useMemo(
+  // Live: changing the plate in the plate calculator mid-workout re-grids
+  // the mounted cards without a reload.
+  const explicitSmallestPlate = useExplicitSmallestPlate(unit);
+  const loadGrid = useMemo(
     () =>
-      loadStepForDisplay(unit, {
+      loadGridForDisplay(unit, {
         equipmentClass: deriveEquipmentClass(exercise),
         availableIncrementsKg: exercise.availableIncrementsKg,
         minIncrementKg: exercise.minWeightIncrementKg,
@@ -1264,8 +1266,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // repeats verbatim; its typed number is kept unless it is a kg↔lb
   // conversion artifact (27.5 kg → "60.6 lbs").
   const suggestionWeight = useCallback(
-    (kg: number, exactSourceKg?: number) => suggestedLoadForDisplay(kg, unit, loadStep, exactSourceKg),
-    [unit, loadStep]
+    (kg: number, exactSourceKg?: number) => suggestedLoadForDisplay(kg, unit, loadGrid, exactSourceKg),
+    [unit, loadGrid]
   );
 
   // Weight label for a history set: bodyweight sets break out the composition
@@ -4659,7 +4661,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 targetRir={loggerTargetRir}
                 unit={unit}
                 minIncrementKg={exercise.minWeightIncrementKg}
-                weightStep={loadStep}
+                weightGrid={loadGrid}
                 effortCheck={effortCheck}
                 disabled={isCompletingSet}
                 isDurationBased={isDurationBased}
