@@ -7,6 +7,8 @@ import {
   getResumeRoute,
   getStepProgressPercentage,
   isStepSkippable,
+  confirmedOnboardingGoal,
+  hasCompletedOnboardingStep,
   ONBOARDING_STEPS,
   STEP_ROUTES,
   STEP_LABELS,
@@ -146,6 +148,34 @@ describe('onboardingProgress', () => {
         expect(typeof STEP_LABELS[step]).toBe('string');
         expect(STEP_LABELS[step].length).toBeGreaterThan(0);
       });
+    });
+  });
+
+  describe('confirmedOnboardingGoal (chosen vs registration placeholder)', () => {
+    it('ignores the registration placeholder before the goal step is saved', () => {
+      expect(confirmedOnboardingGoal({ goal: 'maintenance', onboarding_step: null, onboarding_completed: false })).toBeNull();
+      expect(confirmedOnboardingGoal({ goal: 'maintenance', onboarding_step: 'units' })).toBeNull();
+      expect(confirmedOnboardingGoal({ goal: 'maintenance', onboarding_step: 'body_comp' })).toBeNull();
+    });
+
+    it('returns a goal saved by the goal step or any later step', () => {
+      expect(confirmedOnboardingGoal({ goal: 'cut', onboarding_step: 'goal' })).toBe('cut');
+      expect(confirmedOnboardingGoal({ goal: 'maintenance', onboarding_step: 'calibrate' })).toBe('maintenance');
+    });
+
+    it('returns the goal once onboarding is complete (step cleared to null)', () => {
+      expect(confirmedOnboardingGoal({ goal: 'bulk', onboarding_step: null, onboarding_completed: true })).toBe('bulk');
+    });
+
+    it('rejects unknown goals, unknown steps and missing rows', () => {
+      expect(confirmedOnboardingGoal({ goal: 'recomp', onboarding_completed: true })).toBeNull();
+      expect(confirmedOnboardingGoal({ goal: 'cut', onboarding_step: 'bogus' })).toBeNull();
+      expect(confirmedOnboardingGoal(null)).toBeNull();
+    });
+
+    it('hasCompletedOnboardingStep orders steps', () => {
+      expect(hasCompletedOnboardingStep({ onboarding_step: 'goal' }, 'body_comp')).toBe(true);
+      expect(hasCompletedOnboardingStep({ onboarding_step: 'body_comp' }, 'goal')).toBe(false);
     });
   });
 });

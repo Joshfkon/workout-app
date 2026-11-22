@@ -9,7 +9,9 @@ import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
+import { updateOnboardingStep, confirmedOnboardingGoal, type TrainingGoal } from '@/lib/onboarding/onboardingProgress';
+import { injuryAreasFromHistory, mergeInjuryHistory, type OnboardingInjuryArea } from '@/lib/onboarding/injuryAreas';
+import { GoalStep } from './_components/GoalStep';
 import type { WeightUnit } from '@/types/schema';
 
 // Unit conversion helpers
@@ -76,9 +78,15 @@ export default function OnboardingBodyCompPage() {
   const [bfEstimated, setBfEstimated] = useState(false);
   const [useDexa, setUseDexa] = useState(false);
   const [showBodyFatGuide, setShowBodyFatGuide] = useState(false);
-  // Training goal (users.goal). Seeded from the signup selection; confirmed or
-  // changed on the goal sub-step with body-fat-aware guidance.
-  const [goal, setGoal] = useState<'bulk' | 'cut' | 'maintenance'>('maintenance');
+  // Training goal (users.goal). Nothing is preselected for a fresh user:
+  // registration stores 'maintenance' as a placeholder, which must not read as
+  // a choice. A goal saved by this step earlier (re-entering onboarding) is
+  // restored; see confirmedOnboardingGoal.
+  const [goal, setGoal] = useState<TrainingGoal | null>(null);
+  // Optional "areas to go easy on" (users.injury_history). null = unanswered,
+  // which leaves the stored history untouched.
+  const [injuryAreas, setInjuryAreas] = useState<OnboardingInjuryArea[] | null>(null);
+  const [existingInjuryHistory, setExistingInjuryHistory] = useState<string[]>([]);
   
   // Save unit preference and proceed
   const handleUnitsConfirm = async () => {
@@ -146,7 +154,7 @@ export default function OnboardingBodyCompPage() {
       // Get user height if available
       const { data: userData } = await supabase
         .from('users')
-        .select('height_cm, sex, goal')
+        .select('height_cm, sex, goal, onboarding_step, onboarding_completed, injury_history')
         .eq('id', user.id)
         .single();
       
@@ -164,8 +172,16 @@ export default function OnboardingBodyCompPage() {
       if (userData?.sex) {
         setSex(userData.sex as 'male' | 'female');
       }
-      if (userData?.goal === 'bulk' || userData?.goal === 'cut' || userData?.goal === 'maintenance') {
-        setGoal(userData.goal);
+      const savedGoal = confirmedOnboardingGoal(userData);
+      if (savedGoal) {
+        // Don't overwrite a pick the user made while this was loading.
+        setGoal((current) => current ?? savedGoal);
+      }
+      if (Array.isArray(userData?.injury_history)) {
+        const history = userData.injury_history as string[];
+        setExistingInjuryHistory(history);
+        const areas = injuryAreasFromHistory(history);
+        if (areas.length > 0) setInjuryAreas((current) => current ?? areas);
       }
     }
     
@@ -206,6 +222,7 @@ export default function OnboardingBodyCompPage() {
   };
   
   const handleContinue = async () => {
+    if (!goal) return;
     setIsLoading(true);
     
     try {
@@ -240,13 +257,28 @@ export default function OnboardingBodyCompPage() {
       if (sessionError) throw sessionError;
       
       // Update user profile with sex, height, and the confirmed training goal
-      await supabase
+      // (and, only if the optional injury question was answered, injury_history)
+      const { error: profileError } = await supabase
         .from('users')
-        .update({ sex, height_cm: height, weight_kg: weight, goal })
+        .update({
+          sex,
+          height_cm: height,
+          weight_kg: weight,
+          goal,
+          ...(injuryAreas !== null
+            ? { injury_history: mergeInjuryHistory(existingInjuryHistory, injuryAreas) }
+            : {}),
+        })
         .eq('id', user.id);
       
-      // Track progress - user completed goal selection
-      await updateOnboardingStep(supabase, user.id, 'goal');
+      // Track progress - user completed goal selection. The 'goal' marker is
+      // what tells a chosen goal apart from registration's placeholder, so it
+      // is only written once the goal itself was saved.
+      if (profileError) {
+        console.error('Error saving profile:', profileError);
+      } else {
+        await updateOnboardingStep(supabase, user.id, 'goal');
+      }
       
       // Navigate to benchmark selection with session ID
       router.push(`/onboarding/benchmarks?session=${session.id}`);
@@ -390,100 +422,18 @@ export default function OnboardingBodyCompPage() {
           ? 'bulk'
           : null;
 
-    const GOAL_OPTIONS: { value: 'cut' | 'maintenance' | 'bulk'; label: string; description: string }[] = [
-      { value: 'cut', label: 'Cut', description: 'Lose fat while holding on to muscle. Calorie deficit.' },
-      { value: 'maintenance', label: 'Maintain', description: 'Hold steady or recomp. Eat around maintenance.' },
-      { value: 'bulk', label: 'Bulk', description: 'Build muscle. Calorie surplus.' },
-    ];
-
     return (
-      <div className="max-w-md mx-auto space-y-6 animate-fade-in">
-        {/* Progress indicator */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
-                s <= 2
-                  ? 'bg-action text-on-action'
-                  : 'bg-fill text-ink-3'
-              }`}>
-                {s}
-              </div>
-              {s < 4 && (
-                <div className={`w-12 h-0.5 ${s < 2 ? 'bg-action' : 'bg-fill'}`} />
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="text-center mb-6">
-          <h1 className="text-large-title font-bold text-ink mb-2">What&apos;s your goal right now?</h1>
-          <p className="text-ink-2">
-            This sets your training phase — it shapes your program&apos;s volume, rep ranges, and nutrition targets.
-          </p>
-        </div>
-
-        {recommended && (
-          <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
-            <p className="text-body text-action">
-              Going by body fat alone (~{bf.toFixed(0)}%), {recommended === 'cut'
-                ? 'a cut would be a good starting point.'
-                : 'you’re lean enough that a bulk would put most extra calories toward muscle.'}{' '}
-              Already have a plan, like cutting for a show? Pick that. Your choice wins.
-            </p>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {GOAL_OPTIONS.map((option) => {
-            const isSelected = goal === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setGoal(option.value)}
-                aria-pressed={isSelected}
-                className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                  isSelected
-                    ? 'bg-action/10 border-action'
-                    : 'bg-card border-sep hover:border-sep'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-ink">{option.label}</span>
-                  {recommended === option.value && (
-                    <span className="text-caption font-medium px-2 py-0.5 rounded-full bg-status-ok/10 text-status-ok">
-                      Fits your body fat
-                    </span>
-                  )}
-                </div>
-                <p className="text-body text-ink-2 mt-1">{option.description}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        <p className="text-caption text-ink-3 text-center">
-          You can change this anytime from the phase chip on your dashboard.
-        </p>
-
-        <div className="flex items-center justify-between pt-2">
-          <Button variant="ghost" onClick={() => setStep('body-comp')} disabled={isLoading}>
-            Back
-          </Button>
-          <Button
-            size="lg"
-            onClick={handleContinue}
-            disabled={isLoading}
-            isLoading={isLoading}
-          >
-            Continue
-            <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Button>
-        </div>
-      </div>
+      <GoalStep
+        goal={goal}
+        onGoalChange={setGoal}
+        recommended={recommended}
+        bodyFatPercent={bf}
+        injuryAreas={injuryAreas}
+        onInjuryAreasChange={setInjuryAreas}
+        isLoading={isLoading}
+        onBack={() => setStep('body-comp')}
+        onContinue={handleContinue}
+      />
     );
   }
 

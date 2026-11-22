@@ -244,3 +244,47 @@ export function getStepProgressPercentage(step: OnboardingStep | null): number {
   // Add 1 to include the current step as completed
   return Math.round(((stepIndex + 1) / ONBOARDING_STEPS.length) * 100);
 }
+
+/**
+ * True when the onboarding flow has gotten past `step`, i.e. the user saved
+ * that step's answer. A finished onboarding counts as past every step (it
+ * clears `onboarding_step` to null).
+ */
+export function hasCompletedOnboardingStep(
+  progress: { onboarding_completed?: boolean | null; onboarding_step?: string | null },
+  step: OnboardingStep
+): boolean {
+  if (progress.onboarding_completed) return true;
+  const current = progress.onboarding_step as OnboardingStep | null | undefined;
+  if (!current) return false;
+  const index = ONBOARDING_STEPS.indexOf(current);
+  return index !== -1 && index >= ONBOARDING_STEPS.indexOf(step);
+}
+
+export type TrainingGoal = 'bulk' | 'cut' | 'maintenance';
+
+/**
+ * The goal to preselect on the onboarding goal step, or null for "nothing
+ * picked yet".
+ *
+ * Registration writes goal = 'maintenance' as a placeholder for every new
+ * account, so a stored goal only counts as the user's choice once the
+ * onboarding goal step was saved (that save writes the goal and the 'goal'
+ * step marker together) or onboarding finished (every completion path runs
+ * after the goal step).
+ */
+export function confirmedOnboardingGoal(
+  row:
+    | {
+        goal?: string | null;
+        onboarding_completed?: boolean | null;
+        onboarding_step?: string | null;
+      }
+    | null
+    | undefined
+): TrainingGoal | null {
+  if (!row) return null;
+  const goal = row.goal;
+  if (goal !== 'bulk' && goal !== 'cut' && goal !== 'maintenance') return null;
+  return hasCompletedOnboardingStep(row, 'goal') ? goal : null;
+}
