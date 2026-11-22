@@ -2454,6 +2454,13 @@ export const ExerciseCard = memo(function ExerciseCard({
     // RIR-2 "good" chip stores RPE 7.5) — show one decimal, not a rounded lie.
     const fmtRir = (r: number) => (Number.isInteger(r) ? String(r) : r.toFixed(1));
 
+    // Reps, or seconds for a timed exercise (the reps column holds seconds
+    // there), for the source line under the suggestion.
+    const amountLabel = (set: { reps: number }): string => {
+      const reps = getSetReps(set, exercise);
+      return reps != null ? String(reps) : `${getSetDuration(set, exercise) ?? 0}s`;
+    };
+
     // Weight delta label for trigger-based reason strings.
     const deltaLabel = (fromKg: number, toWeightStr: string) => {
       // Compare like to like: the logged load as a verbatim repeat would show it.
@@ -2729,7 +2736,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         }
       }
       if (!rec.positionMatch) {
-        const lastDesc = `${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps}`;
+        const lastDesc = `${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${amountLabel(lastCompleted)}`;
         const action = rec.noMeaningfulChange
           ? 'same weight'
           : rec.rangeFloorLoadDrop
@@ -2948,7 +2955,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             : seed.trigger === 'below_rep_min' || seed.trigger === 'rir_deficit'
               ? 'load down'
               : 'same again';
-        sourceLine = `From your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps} → ${seedAction}`;
+        sourceLine = `From your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${amountLabel(prevSet)} → ${seedAction}`;
         if (seed.trigger === 'rep_overshoot') {
           reason = `${prevSet.reps} reps over ${rangeLabel} target last session — ${seedUp}`;
         } else if (seed.trigger === 'top_range_reserve') {
