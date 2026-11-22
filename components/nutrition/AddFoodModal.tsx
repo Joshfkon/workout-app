@@ -47,6 +47,7 @@ import {
   type RecentFood,
   type PriorMeal,
 } from '@/lib/nutrition/recentFoods';
+import { formatPortion, frequentFoodPortion } from '@/lib/nutrition/frequentFoods';
 
 // P1-2 (perf): html5-qrcode is ~90KB gz and only needed when the Barcode tab
 // is actually opened — load it on demand instead of in nutrition's first-load.
@@ -158,6 +159,16 @@ export interface QuickAddFood {
   food_id?: string;
 }
 
+/**
+ * A food as it was logged once (a recent row or a frequent food's last
+ * portion). Re-logging it, or opening it in the editor, starts from exactly
+ * this portion.
+ */
+type LoggedPortion = Pick<
+  FoodLogEntry,
+  'food_name' | 'serving_size' | 'servings' | 'calories' | 'protein' | 'carbs' | 'fat' | 'source' | 'food_id'
+>;
+
 /** Sub-view of the Search tab shown before the user types a query. */
 type SearchView = 'recent' | 'meals';
 
@@ -182,6 +193,16 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <p className="text-caption font-medium text-ink-2 mb-1.5">
       {children}
     </p>
+  );
+}
+
+/** Section label with a right-aligned note saying where + adds to. */
+function QuickAddSectionLabel({ children, mealLabel }: { children: React.ReactNode; mealLabel: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+      <p className="text-caption font-medium text-ink-2">{children}</p>
+      <p className="text-caption text-ink-3" data-testid="quick-add-target">+ adds to {mealLabel}</p>
+    </div>
   );
 }
 
@@ -225,17 +246,17 @@ function RecentFoodRow({
   onQuickAdd,
   adding,
   disabled,
+  mealLabel,
 }: {
   recent: RecentFood;
   onSelect: () => void;
   onQuickAdd: () => void;
   adding: boolean;
   disabled: boolean;
+  mealLabel: string;
 }) {
-  const subtitle = [
-    `${Math.round(recent.calories)} cal`,
-    recent.serving_size || '1 serving',
-  ].join(' · ');
+  const portion = formatPortion(recent.serving_size);
+  const subtitle = [portion, `${Math.round(recent.calories)} cal`].join(' · ');
   return (
     <div className="flex items-center gap-2 bg-fill/50 rounded-lg pr-2" data-testid="recent-food-row">
       <button
@@ -260,7 +281,7 @@ function RecentFoodRow({
         onClick={onQuickAdd}
         disabled={disabled}
         loading={adding}
-        label={`Quick-add ${recent.food_name}`}
+        label={`Quick-add ${recent.food_name}, ${portion}, to ${mealLabel}`}
       />
     </div>
   );
@@ -313,6 +334,43 @@ function buildSystemModel(food: SystemFood): FoodAmountModel {
       fat: food.fat_per_100g,
     }),
     householdServingForSystemFood(food.name)
+  );
+}
+
+/**
+ * What a system food's numbers on a search row refer to: its household
+ * serving when it has one ("1 large egg"), else honestly "100 g". Macros come
+ * from the same model + computeServing the editor uses.
+ */
+function systemRowPortion(food: SystemFood): { label: string; calories: number; protein: number } {
+  const model = buildSystemModel(food);
+  const unit = model.units.find((u) => u.id === model.defaultUnitId) ?? model.units[0];
+  const { macros } = computeServing(model, model.defaultAmount, model.defaultUnitId);
+  const label = unit.kind === 'weight' ? `${model.defaultAmount} ${unit.noun}` : `1 ${unit.noun}`;
+  return { label, calories: macros.calories, protein: macros.protein };
+}
+
+/** A tappable Common foods row showing the portion its numbers are for. */
+function SystemFoodRow({ food, onSelect }: { food: SystemFood; onSelect: () => void }) {
+  const portion = systemRowPortion(food);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="w-full p-2 bg-fill/50 hover:bg-fill rounded-lg text-left transition-colors flex justify-between items-center gap-2"
+      data-testid="system-food-row"
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        <FoodEmojiAvatar name={food.name} size="sm" />
+        <span className="min-w-0">
+          <span className="block text-subhead text-ink truncate">{food.name}</span>
+          <span className="block text-caption text-ink-2">per {portion.label}</span>
+        </span>
+      </span>
+      <span className="text-caption text-ink-2 flex-shrink-0">
+        {portion.calories} cal | {portion.protein}g P
+      </span>
+    </button>
   );
 }
 
@@ -375,7 +433,7 @@ export function AddFoodModal({
   const [selectedFood, setSelectedFood] = useState<FoodSearchResult | FoodSearchResultWithServings | null>(null);
   const [selectedCustomFood, setSelectedCustomFood] = useState<CustomFood | null>(null);
   const [selectedSystemFood, setSelectedSystemFood] = useState<SystemFood | null>(null);
-  const [selectedRecent, setSelectedRecent] = useState<FoodLogEntry | null>(null);
+  const [selectedRecent, setSelectedRecent] = useState<LoggedPortion | null>(null);
 
   // Meals browser expand state + client-side "load more" window.
   const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
@@ -565,7 +623,7 @@ export function AddFoodModal({
         model: buildSystemModel(selectedSystemFood),
         foodKey: foodKeyFor({ id: selectedSystemFood.id, name: selectedSystemFood.name }),
         name: selectedSystemFood.name,
-        subtitle: `${selectedSystemFood.calories_per_100g} cal per 100g`,
+        subtitle: `${selectedSystemFood.calories_per_100g} cal per 100 g`,
         source: 'manual' as const,
       };
     }
@@ -661,7 +719,7 @@ export function AddFoodModal({
 
   // Tap a recent's row body → open the shared detail panel primed with the
   // last-logged serving, so it can be adjusted before adding.
-  const handleSelectRecent = (entry: FoodLogEntry) => {
+  const handleSelectRecent = (entry: LoggedPortion) => {
     setSelectedRecent(entry);
     setSelectedFood(null);
     setSelectedCustomFood(null);
@@ -678,7 +736,7 @@ export function AddFoodModal({
 
   // Re-log a logged snapshot as-is into the currently selected meal, keeping the
   // same serving/quantity. Used by every quick-add (+) in Recent and Meals.
-  const snapshotOf = (entry: FoodLogEntry): QuickAddFood => ({
+  const snapshotOf = (entry: LoggedPortion): QuickAddFood => ({
     food_name: entry.food_name,
     serving_size: entry.serving_size || '1 serving',
     servings: entry.servings || 1,
@@ -692,7 +750,7 @@ export function AddFoodModal({
   });
 
   // Instant quick-add — does NOT close the sheet, so several can be grabbed.
-  const handleQuickAdd = async (entry: FoodLogEntry, rowKey: string) => {
+  const handleQuickAdd = async (entry: LoggedPortion, rowKey: string) => {
     if (!onQuickAdd) return;
     setQuickAddingKey(rowKey);
     try {
@@ -806,23 +864,35 @@ export function AddFoodModal({
     }
   };
 
-  const handleAddFrequentFood = async (food: FrequentFood) => {
+  // A frequent food's last logged portion — what its + logs, and what the
+  // editor opens on when the row body is tapped.
+  const frequentAsLogged = (food: FrequentFood): LoggedPortion => {
+    const portion = frequentFoodPortion(food);
+    return {
+      food_name: food.food_name,
+      serving_size: portion.serving_size,
+      servings: portion.servings,
+      calories: portion.calories,
+      protein: portion.protein,
+      carbs: portion.carbs,
+      fat: portion.fat,
+      source: portion.source,
+      food_id: portion.food_id,
+    };
+  };
+
+  // + on a frequent food: one tap, the portion shown on the row. Stays open
+  // (like Recent) when the parent supports quick-add; otherwise adds + closes.
+  const handleAddFrequentFood = async (food: FrequentFood, rowKey: string) => {
+    const logged = frequentAsLogged(food);
+    if (onQuickAdd) {
+      await handleQuickAdd(logged, rowKey);
+      return;
+    }
     setIsSubmitting(true);
     setError('');
-
     try {
-      await onAdd({
-        food_name: food.food_name,
-        serving_size: food.serving_size || '1 serving',
-        servings: 1,
-        calories: Math.round(food.avg_calories),
-        protein: Math.round(food.avg_protein * 10) / 10,
-        carbs: Math.round(food.avg_carbs * 10) / 10,
-        fat: Math.round(food.avg_fat * 10) / 10,
-        meal_type: mealType,
-        source: 'manual',
-      });
-
+      await onAdd(snapshotOf(logged));
       resetAndClose();
     } catch {
       setError('Failed to add food. Please try again.');
@@ -870,6 +940,12 @@ export function AddFoodModal({
   };
 
   const hasSelection = !!(selectedFood || selectedCustomFood || selectedSystemFood || selectedRecent);
+  const mealLabel = mealNames?.[mealType]?.trim() || MEAL_LABELS[mealType];
+  // No household serving to default to (only grams, or a bare "100 g"
+  // option): say so, so a 100 g default never reads like a real portion.
+  const noStandardServing =
+    !!activeSelection &&
+    !activeSelection.model.units.some((u) => u.kind === 'serving' && isHouseholdNoun(u.noun));
   const showUsdaSection = debouncedQuery.length >= 3;
 
   return (
@@ -985,13 +1061,19 @@ export function AddFoodModal({
                       testIdPrefix="add-food"
                     />
 
+                    {noStandardServing && (
+                      <p className="text-caption text-ink-2" data-testid="add-food-no-serving">
+                        No standard serving for this food. Set how much you ate.
+                      </p>
+                    )}
+
                     <Button
                       onClick={handleAddSelection}
                       variant="primary"
                       disabled={isSubmitting}
                       className="w-full"
                     >
-                      {isSubmitting ? 'Adding...' : 'Add to log'}
+                      {isSubmitting ? 'Adding...' : `Add to ${mealLabel}`}
                     </Button>
                   </>
                 )}
@@ -1025,6 +1107,9 @@ export function AddFoodModal({
             {/* Default view: MEALS (browse & pick from prior logged meals) */}
             {!hasSelection && !debouncedQuery && searchView === 'meals' && (
               <div className="space-y-2 max-h-96 overflow-y-auto" data-testid="prior-meals-list">
+                {visibleMeals.length > 0 && (
+                  <QuickAddSectionLabel mealLabel={mealLabel}>Earlier meals</QuickAddSectionLabel>
+                )}
                 {recentsLoading && priorMeals.length === 0 ? (
                   <>
                     {[0, 1, 2].map((i) => (
@@ -1076,6 +1161,7 @@ export function AddFoodModal({
                               disabled={isSubmitting || quickAddingKey !== null}
                               className="flex-shrink-0 text-caption font-semibold text-action px-2 py-1 rounded-md hover:bg-action/15 transition-colors disabled:opacity-40"
                               data-testid="prior-meal-add-all"
+                              aria-label={`Add all ${meal.itemCount} to ${mealLabel}`}
                             >
                               {quickAddingKey === `all:${meal.key}` ? 'Adding…' : 'Add all'}
                             </button>
@@ -1093,7 +1179,7 @@ export function AddFoodModal({
                                     <div className="min-w-0">
                                       <p className="text-subhead text-ink truncate">{entry.food_name}</p>
                                       <p className="text-caption text-ink-2 truncate">
-                                        {Math.round(entry.calories || 0)} cal · {entry.serving_size || '1 serving'}
+                                        {formatPortion(entry.serving_size)} · {Math.round(entry.calories || 0)} cal
                                       </p>
                                     </div>
                                   </div>
@@ -1101,7 +1187,7 @@ export function AddFoodModal({
                                     onClick={() => handleQuickAdd(entry, `meal-item:${entry.id}`)}
                                     disabled={isSubmitting || quickAddingKey !== null}
                                     loading={quickAddingKey === `meal-item:${entry.id}`}
-                                    label={`Add ${entry.food_name}`}
+                                    label={`Add ${entry.food_name}, ${formatPortion(entry.serving_size)}, to ${mealLabel}`}
                                   />
                                 </div>
                               ))}
@@ -1135,7 +1221,7 @@ export function AddFoodModal({
                 {/* Recent — deduped recently-logged foods (full when no query,
                     filtered above the DB results while searching). */}
                 <section data-testid="recent-foods-list">
-                  <SectionLabel>Recent</SectionLabel>
+                  <QuickAddSectionLabel mealLabel={mealLabel}>Recent</QuickAddSectionLabel>
                   {recentsLoading && recentFoods.length === 0 ? (
                     <div className="space-y-1">
                       {[0, 1, 2, 3].map((i) => (
@@ -1158,6 +1244,7 @@ export function AddFoodModal({
                           onQuickAdd={() => handleQuickAdd(recent.entry, recent.key)}
                           adding={quickAddingKey === recent.key}
                           disabled={isSubmitting || quickAddingKey !== null}
+                          mealLabel={mealLabel}
                         />
                       ))}
                     </div>
@@ -1165,32 +1252,49 @@ export function AddFoodModal({
                 </section>
                 {/* Your foods: frequent for this meal + custom foods */}
                 <section>
-                  <SectionLabel>Your foods</SectionLabel>
+                  {frequentFoodsForMeal.length > 0 ? (
+                    <QuickAddSectionLabel mealLabel={mealLabel}>Your foods</QuickAddSectionLabel>
+                  ) : (
+                    <SectionLabel>Your foods</SectionLabel>
+                  )}
                   {frequentFoodsForMeal.length === 0 && filteredCustomFoods.length === 0 ? (
                     <p className="text-subhead text-ink-2 py-1">
                       {debouncedQuery ? 'No matches in your foods' : `No ${MEAL_LABELS[mealType].toLowerCase()} favorites or custom foods yet`}
                     </p>
                   ) : (
                     <div className="space-y-1">
-                      {frequentFoodsForMeal.map((food, idx) => (
-                        <button
-                          key={`freq-${idx}`}
-                          onClick={() => handleAddFrequentFood(food)}
-                          disabled={isSubmitting}
-                          className="w-full p-2 bg-fill/50 hover:bg-fill rounded-lg text-left transition-colors flex justify-between items-center disabled:opacity-50"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <FoodEmojiAvatar name={food.food_name} size="sm" />
-                            <div className="min-w-0">
-                              <p className="text-subhead font-medium text-ink truncate">{food.food_name}</p>
-                              <p className="text-caption text-ink-2">
-                                {Math.round(food.avg_calories)} cal · logged {food.times_logged}x
-                              </p>
-                            </div>
+                      {frequentFoodsForMeal.map((food) => {
+                        const rowKey = `freq:${food.meal_type}:${food.food_name}`;
+                        const portion = frequentFoodPortion(food);
+                        const portionText = formatPortion(portion.serving_size);
+                        return (
+                          <div
+                            key={rowKey}
+                            className="flex items-center gap-2 bg-fill/50 rounded-lg pr-2"
+                            data-testid="frequent-food-row"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleSelectRecent(frequentAsLogged(food))}
+                              className="flex-1 min-w-0 p-2 text-left rounded-lg hover:bg-fill transition-colors flex items-center gap-2"
+                            >
+                              <FoodEmojiAvatar name={food.food_name} size="sm" />
+                              <span className="min-w-0">
+                                <span className="block text-subhead font-medium text-ink truncate">{food.food_name}</span>
+                                <span className="block text-caption text-ink-2 truncate">
+                                  {portionText} · {Math.round(portion.calories)} cal · logged {food.times_logged}x
+                                </span>
+                              </span>
+                            </button>
+                            <QuickAddButton
+                              onClick={() => handleAddFrequentFood(food, rowKey)}
+                              disabled={isSubmitting || quickAddingKey !== null}
+                              loading={quickAddingKey === rowKey}
+                              label={`Quick-add ${food.food_name}, ${portionText}, to ${mealLabel}`}
+                            />
                           </div>
-                          <span className="text-action text-subhead flex-shrink-0">+ Add</span>
-                        </button>
-                      ))}
+                        );
+                      })}
                       {filteredCustomFoods.map((food) => (
                         <button
                           key={food.id}
@@ -1223,19 +1327,7 @@ export function AddFoodModal({
                   ) : debouncedQuery ? (
                     <div className="space-y-1">
                       {filteredSystemFoods.map((food) => (
-                        <button
-                          key={food.id}
-                          onClick={() => handleSelectSystemFood(food)}
-                          className="w-full p-2 bg-fill/50 hover:bg-fill rounded-lg text-left transition-colors flex justify-between items-center"
-                        >
-                          <span className="flex items-center gap-2 min-w-0">
-                            <FoodEmojiAvatar name={food.name} size="sm" />
-                            <span className="text-subhead text-ink truncate">{food.name}</span>
-                          </span>
-                          <span className="text-caption text-ink-2 flex-shrink-0">
-                            {food.calories_per_100g} cal | {food.protein_per_100g}g P
-                          </span>
-                        </button>
+                        <SystemFoodRow key={food.id} food={food} onSelect={() => handleSelectSystemFood(food)} />
                       ))}
                     </div>
                   ) : (
@@ -1246,19 +1338,7 @@ export function AddFoodModal({
                         </p>
                         <div className="space-y-1">
                           {foods.slice(0, 6).map((food) => (
-                            <button
-                              key={food.id}
-                              onClick={() => handleSelectSystemFood(food)}
-                              className="w-full p-2 bg-fill/50 hover:bg-fill rounded-lg text-left transition-colors flex justify-between items-center"
-                            >
-                              <span className="flex items-center gap-2 min-w-0">
-                                <FoodEmojiAvatar name={food.name} size="sm" />
-                                <span className="text-subhead text-ink truncate">{food.name}</span>
-                              </span>
-                              <span className="text-caption text-ink-2 flex-shrink-0">
-                                {food.calories_per_100g} cal | {food.protein_per_100g}g P
-                              </span>
-                            </button>
+                            <SystemFoodRow key={food.id} food={food} onSelect={() => handleSelectSystemFood(food)} />
                           ))}
                         </div>
                       </div>
@@ -1410,7 +1490,7 @@ export function AddFoodModal({
                     disabled={isSubmitting}
                     className="flex-1"
                   >
-                    {isSubmitting ? 'Adding...' : 'Add food'}
+                    {isSubmitting ? 'Adding...' : `Add to ${mealLabel}`}
                   </Button>
                 </div>
               </div>
@@ -1537,7 +1617,7 @@ export function AddFoodModal({
               disabled={isSubmitting}
               className="w-full"
             >
-              {isSubmitting ? 'Adding...' : 'Add to log'}
+              {isSubmitting ? 'Adding...' : `Add to ${mealLabel}`}
             </Button>
           </div>
         )}

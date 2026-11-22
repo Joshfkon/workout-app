@@ -64,6 +64,7 @@ import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
 import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
 import { setMacroAutoUpdateEnabled } from '@/lib/actions/nutrition';
 import { customFoodFieldsFromScan } from '@/lib/nutrition/scannedCustomFood';
+import { addLoggedRowsToFrequentFoods, buildFrequentFoods, frequentFoodPortion, formatPortion, quickAddMessage } from '@/lib/nutrition/frequentFoods';
 import { addLocalDays } from '@/lib/date/localDay';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -606,41 +607,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       setWeightUnit(bundle.prefs.weight_unit as 'lb' | 'kg');
     }
 
-    // Process frequent foods
+    // Process frequent foods (each keeps its last logged portion for one-tap adds)
     const frequentData = bundle.frequentRaw;
     if (frequentData && frequentData.length > 0) {
-      const frequencyMap = new Map<string, FrequentFood>();
-
-      for (const entry of frequentData) {
-        if (!entry.food_name) continue;
-        const key = `${entry.meal_type}:${entry.food_name}`;
-        const existing = frequencyMap.get(key);
-        const servingsNum = entry.servings || 1;
-
-        if (existing) {
-          const totalLogs = existing.times_logged + 1;
-          existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
-          existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
-          existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
-          existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
-          existing.times_logged = totalLogs;
-        } else {
-          frequencyMap.set(key, {
-            user_id: bundle.userId,
-            meal_type: entry.meal_type as MealType,
-            food_name: entry.food_name,
-            serving_size: entry.serving_size,
-            avg_calories: (entry.calories || 0) / servingsNum,
-            avg_protein: (entry.protein || 0) / servingsNum,
-            avg_carbs: (entry.carbs || 0) / servingsNum,
-            avg_fat: (entry.fat || 0) / servingsNum,
-            times_logged: 1,
-            last_logged: new Date().toISOString(),
-          });
-        }
-      }
-
-      setFrequentFoods(Array.from(frequencyMap.values()));
+      setFrequentFoods(buildFrequentFoods(frequentData, bundle.userId, new Date().toISOString()));
     }
 
     // Build user profile data
@@ -863,38 +833,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   function applyInsertedEntries(rows: FoodLogEntry[]) {
     if (rows.length === 0) return;
     mutateFoodEntries((prev) => [...prev, ...rows]);
-    setFrequentFoods((prev) => {
-      const map = new Map(prev.map((f) => [`${f.meal_type}:${f.food_name}`, { ...f }]));
-      for (const row of rows) {
-        if (!row.food_name) continue;
-        const key = `${row.meal_type}:${row.food_name}`;
-        const servingsNum = row.servings || 1;
-        const existing = map.get(key);
-        if (existing) {
-          const totalLogs = existing.times_logged + 1;
-          existing.avg_calories = (existing.avg_calories * existing.times_logged + (row.calories || 0) / servingsNum) / totalLogs;
-          existing.avg_protein = (existing.avg_protein * existing.times_logged + (row.protein || 0) / servingsNum) / totalLogs;
-          existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (row.carbs || 0) / servingsNum) / totalLogs;
-          existing.avg_fat = (existing.avg_fat * existing.times_logged + (row.fat || 0) / servingsNum) / totalLogs;
-          existing.times_logged = totalLogs;
-          existing.last_logged = new Date().toISOString();
-        } else {
-          map.set(key, {
-            user_id: row.user_id,
-            meal_type: row.meal_type as MealType,
-            food_name: row.food_name,
-            serving_size: row.serving_size,
-            avg_calories: (row.calories || 0) / servingsNum,
-            avg_protein: (row.protein || 0) / servingsNum,
-            avg_carbs: (row.carbs || 0) / servingsNum,
-            avg_fat: (row.fat || 0) / servingsNum,
-            times_logged: 1,
-            last_logged: new Date().toISOString(),
-          });
-        }
-      }
-      return Array.from(map.values());
-    });
+    setFrequentFoods((prev) => addLoggedRowsToFrequentFoods(prev, rows, new Date().toISOString()));
   }
 
   /**
@@ -1016,7 +955,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     applyInsertedEntries([inserted]);
     mutateRecentFoodsCache((prev) => [inserted, ...prev]);
     flagJustAdded([inserted]);
-    addToast('success', `Added ${toTitleCase(food.food_name)}`, 5000, {
+    addToast('success', quickAddMessage(toTitleCase(food.food_name), food.serving_size, mealLabelFor(food.meal_type)), 5000, {
       label: 'Undo',
       onClick: () => { void undoQuickAdd([inserted]); },
     });
@@ -1029,10 +968,15 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     applyInsertedEntries(inserted);
     mutateRecentFoodsCache((prev) => [...inserted, ...prev]);
     flagJustAdded(inserted);
-    addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'}`, 6000, {
+    addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'} to ${mealLabelFor(foods[0].meal_type)}`, 6000, {
       label: 'Undo',
       onClick: () => { void undoQuickAdd(inserted); },
     });
+  }
+
+  /** The user's name for a meal slot ("Lunch", or their custom name). */
+  function mealLabelFor(mealType: MealType): string {
+    return getMealConfig(nutritionTargets?.meal_names).find((m) => m.type === mealType)?.label ?? mealType;
   }
 
   /** Undo a quick-add: delete the inserted rows and roll back both caches. */
@@ -1163,21 +1107,25 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
    * toast naming that meal so it's never a silent guess.
    */
   async function handleQuickLogFrequent(food: FrequentFood, mealType: MealType, mealLabel: string) {
+    // Re-log the last portion exactly as logged, so the chip's label
+    // ("Oatmeal · 1 cup") is what lands in the log.
+    const portion = frequentFoodPortion(food);
     const inserted = await insertFoodEntry({
       food_name: food.food_name,
-      serving_size: food.serving_size || '1 serving',
-      servings: 1,
-      calories: Math.round(food.avg_calories),
-      protein: Math.round(food.avg_protein * 10) / 10,
-      carbs: Math.round(food.avg_carbs * 10) / 10,
-      fat: Math.round(food.avg_fat * 10) / 10,
+      serving_size: portion.serving_size,
+      servings: portion.servings,
+      calories: portion.calories,
+      protein: portion.protein,
+      carbs: portion.carbs,
+      fat: portion.fat,
       meal_type: mealType,
-      source: 'manual',
+      source: portion.source ?? 'manual',
+      food_id: portion.food_id ?? undefined,
     });
     applyInsertedEntries([inserted]);
     mutateRecentFoodsCache((prev) => [inserted, ...prev]);
     flagJustAdded([inserted]);
-    addToast('success', `Added ${toTitleCase(food.food_name)} to ${mealLabel}`, 5000, {
+    addToast('success', quickAddMessage(toTitleCase(food.food_name), portion.serving_size, mealLabel), 5000, {
       label: 'Undo',
       onClick: () => { void undoQuickAdd([inserted]); },
     });
@@ -2005,18 +1953,23 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           </select>
         </div>
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-          {frequentChips.map((food) => (
-            <Chip
-              key={food.food_name}
-              onClick={() => handleQuickLogFrequent(food, chipMealType, chipMealLabel)}
-              title={toTitleCase(food.food_name)}
-              aria-label={`Log ${toTitleCase(food.food_name)} to ${chipMealLabel}`}
-              icon={<IconPlus size={16} />}
-              className="max-w-[14rem]"
-            >
-              <span className="truncate">{toTitleCase(food.food_name)}</span>
-            </Chip>
-          ))}
+          {frequentChips.map((food) => {
+            const portion = formatPortion(frequentFoodPortion(food).serving_size);
+            return (
+              <Chip
+                key={food.food_name}
+                onClick={() => handleQuickLogFrequent(food, chipMealType, chipMealLabel)}
+                title={`${toTitleCase(food.food_name)} · ${portion}`}
+                aria-label={`Log ${toTitleCase(food.food_name)}, ${portion}, to ${chipMealLabel}`}
+                icon={<IconPlus size={16} />}
+                className="max-w-[16rem]"
+                data-testid="quick-add-chip"
+              >
+                <span className="truncate">{toTitleCase(food.food_name)}</span>
+                <span className="flex-shrink-0 text-subhead text-ink-2" data-testid="quick-add-chip-portion">· {portion}</span>
+              </Chip>
+            );
+          })}
         </div>
         </div>
       )}
