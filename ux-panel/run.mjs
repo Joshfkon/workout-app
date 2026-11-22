@@ -124,6 +124,9 @@ async function main() {
   if (reuseDir) {
     const prev = JSON.parse(await readFile(path.join(reuseDir, 'run.json'), 'utf8'));
     if (prev.model !== opts.model) throw new Error(`--reuse run used ${prev.model}, this run uses ${opts.model}; mixing models would muddy the scores.`);
+    if ((prev.lens ?? null) !== (opts.lens ?? null)) {
+      throw new Error(`--reuse run used lens "${prev.lens ?? 'none'}", this run uses "${opts.lens ?? 'none'}"; reused sessions would carry the other lens's prompts.`);
+    }
   }
   const fresh = tasks.filter((t) => !reusableResult(reuseDir, taskIdOf(t.persona, t.journey)));
   if (reuseDir) console.log(`Reusing ${tasks.length - fresh.length} clean session(s) from ${path.relative(process.cwd(), reuseDir)}; running ${fresh.length}.`);
