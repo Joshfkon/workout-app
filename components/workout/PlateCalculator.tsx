@@ -14,25 +14,7 @@ import {
 } from '@/lib/utils';
 import type { WeightUnit } from '@/types/schema';
 import { BarbellVisualization, PlateChip } from './PlateVisualization';
-
-/**
- * The smallest-plate choice is a per-unit device setting (plate inventory is
- * a property of the gym, not the account), persisted in localStorage like the
- * rest timer and theme.
- */
-const smallestPlateStorageKey = (unit: WeightUnit) => `plate_calculator_smallest_plate_${unit}`;
-
-function readStoredSmallestPlate(unit: WeightUnit): number {
-  if (typeof window === 'undefined') return DEFAULT_SMALLEST_PLATE[unit];
-  try {
-    const stored = parseFloat(window.localStorage.getItem(smallestPlateStorageKey(unit)) ?? '');
-    const options: readonly number[] = SMALLEST_PLATE_OPTIONS[unit];
-    if (options.includes(stored)) return stored;
-  } catch {
-    // Storage unavailable (e.g. private browsing) — fall through to default.
-  }
-  return DEFAULT_SMALLEST_PLATE[unit];
-}
+import { readStoredSmallestPlate, storeSmallestPlate } from '@/lib/workout/smallestPlate';
 
 interface PlateCalculatorProps {
   /** Initial target weight in kg (will be converted based on unit) */
@@ -102,11 +84,7 @@ export const PlateCalculator = memo(function PlateCalculator({
 
   const handleSmallestPlateChange = (plate: number) => {
     setStoredSmallestPlate(plate);
-    try {
-      window.localStorage.setItem(smallestPlateStorageKey(unit), String(plate));
-    } catch {
-      // Storage unavailable — the choice still applies for this session.
-    }
+    storeSmallestPlate(unit, plate);
   };
 
   const barbellWeights = BARBELL_WEIGHTS[unit];
