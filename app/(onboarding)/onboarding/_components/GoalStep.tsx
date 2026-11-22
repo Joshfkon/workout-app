@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
-import { ONBOARDING_INJURY_OPTIONS, type OnboardingInjuryArea } from '@/lib/onboarding/injuryAreas';
+import { STANDING_INJURY_OPTIONS, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
 const GOAL_OPTIONS: { value: TrainingGoal; label: string; description: string }[] = [
   { value: 'cut', label: 'Cut', description: 'Lose fat while holding on to muscle. Calorie deficit.' },
@@ -18,8 +18,8 @@ export interface GoalStepProps {
   recommended: 'bulk' | 'cut' | null;
   bodyFatPercent: number;
   /** null = question not answered (optional); [] = "None". */
-  injuryAreas: OnboardingInjuryArea[] | null;
-  onInjuryAreasChange: (areas: OnboardingInjuryArea[] | null) => void;
+  injuryAreas: StandingInjuryArea[] | null;
+  onInjuryAreasChange: (areas: StandingInjuryArea[] | null) => void;
   isLoading: boolean;
   onBack: () => void;
   onContinue: () => void;
@@ -36,7 +36,7 @@ export function GoalStep({
   onBack,
   onContinue,
 }: GoalStepProps) {
-  const toggleArea = (area: OnboardingInjuryArea) => {
+  const toggleArea = (area: StandingInjuryArea) => {
     const current = injuryAreas ?? [];
     const next = current.includes(area) ? current.filter((a) => a !== area) : [...current, area];
     // Un-tapping the last chip returns to "not answered" rather than "None".
@@ -128,11 +128,11 @@ export function GoalStep({
             Any injuries or areas to go easy on?
           </h2>
           <p className="text-caption text-ink-3">
-            Optional. We&apos;ll keep those areas out of your generated workouts. Change it anytime in Settings.
+            Optional. Your pre-workout check-in will start with these marked as mild, so exercises that load them get swapped or flagged. You can remove them there any day.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {ONBOARDING_INJURY_OPTIONS.map((option) => {
+          {STANDING_INJURY_OPTIONS.map((option) => {
             const selected = injuryAreas?.includes(option.id) ?? false;
             return (
               <button

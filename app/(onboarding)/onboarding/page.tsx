@@ -1,7 +1,7 @@
 'use client';
 
 import { IconApple, IconBarbell, IconChartLine, IconRuler2, IconSparkles, IconWorld } from '@tabler/icons-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select, ExplainedTerm } from '@/components/ui';
@@ -10,7 +10,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { updateOnboardingStep, confirmedOnboardingGoal, type TrainingGoal } from '@/lib/onboarding/onboardingProgress';
-import { injuryAreasFromHistory, mergeInjuryHistory, type OnboardingInjuryArea } from '@/lib/onboarding/injuryAreas';
+import type { StandingInjuryArea } from '@/lib/training/standingInjuries';
 import { GoalStep } from './_components/GoalStep';
 import type { WeightUnit } from '@/types/schema';
 
@@ -83,10 +83,18 @@ export default function OnboardingBodyCompPage() {
   // a choice. A goal saved by this step earlier (re-entering onboarding) is
   // restored; see confirmedOnboardingGoal.
   const [goal, setGoal] = useState<TrainingGoal | null>(null);
-  // Optional "areas to go easy on" (users.injury_history). null = unanswered,
-  // which leaves the stored history untouched.
-  const [injuryAreas, setInjuryAreas] = useState<OnboardingInjuryArea[] | null>(null);
-  const [existingInjuryHistory, setExistingInjuryHistory] = useState<string[]>([]);
+  // Optional "areas to go easy on", saved as body areas in
+  // users.preferences.injuryAreas (lib/training/standingInjuries), never
+  // injury_history. null = unanswered, which leaves the stored value alone.
+  const [injuryAreas, setInjuryAreas] = useState<StandingInjuryArea[] | null>(null);
+  // Re-entering onboarding: show the areas saved last time. If the user then
+  // clears them all, that is saved as [] rather than ignored.
+  const injuryAreasSeeded = useRef(false);
+  useEffect(() => {
+    if (injuryAreasSeeded.current || preferences.injuryAreas.length === 0) return;
+    injuryAreasSeeded.current = true;
+    setInjuryAreas((current) => current ?? preferences.injuryAreas);
+  }, [preferences.injuryAreas]);
   
   // Save unit preference and proceed
   const handleUnitsConfirm = async () => {
@@ -154,7 +162,7 @@ export default function OnboardingBodyCompPage() {
       // Get user height if available
       const { data: userData } = await supabase
         .from('users')
-        .select('height_cm, sex, goal, onboarding_step, onboarding_completed, injury_history')
+        .select('height_cm, sex, goal, onboarding_step, onboarding_completed')
         .eq('id', user.id)
         .single();
       
@@ -176,12 +184,6 @@ export default function OnboardingBodyCompPage() {
       if (savedGoal) {
         // Don't overwrite a pick the user made while this was loading.
         setGoal((current) => current ?? savedGoal);
-      }
-      if (Array.isArray(userData?.injury_history)) {
-        const history = userData.injury_history as string[];
-        setExistingInjuryHistory(history);
-        const areas = injuryAreasFromHistory(history);
-        if (areas.length > 0) setInjuryAreas((current) => current ?? areas);
       }
     }
     
@@ -257,19 +259,17 @@ export default function OnboardingBodyCompPage() {
       if (sessionError) throw sessionError;
       
       // Update user profile with sex, height, and the confirmed training goal
-      // (and, only if the optional injury question was answered, injury_history)
       const { error: profileError } = await supabase
         .from('users')
-        .update({
-          sex,
-          height_cm: height,
-          weight_kg: weight,
-          goal,
-          ...(injuryAreas !== null
-            ? { injury_history: mergeInjuryHistory(existingInjuryHistory, injuryAreas) }
-            : {}),
-        })
+        .update({ sex, height_cm: height, weight_kg: weight, goal })
         .eq('id', user.id);
+
+      // Optional injuries answer: merged into users.preferences (the hook
+      // re-reads the JSON first), only when the question was answered.
+      const injuryAnswer = injuryAreas ?? (injuryAreasSeeded.current ? [] : null);
+      if (injuryAnswer !== null) {
+        await updatePreference('injuryAreas', injuryAnswer);
+      }
       
       // Track progress - user completed goal selection. The 'goal' marker is
       // what tells a chosen goal apart from registration's placeholder, so it

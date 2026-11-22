@@ -44,8 +44,13 @@ jest.mock('@/lib/supabase/client', () => ({
 
 const mockPush = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
+const mockUpdatePreference = jest.fn();
+let mockStoredInjuryAreas: string[] = [];
 jest.mock('@/hooks/useUserPreferences', () => ({
-  useUserPreferences: () => ({ preferences: { units: 'kg' }, updatePreference: jest.fn() }),
+  useUserPreferences: () => ({
+    preferences: { units: 'kg', injuryAreas: mockStoredInjuryAreas },
+    updatePreference: (...args: unknown[]) => mockUpdatePreference(...args),
+  }),
 }));
 
 async function reachGoalStep() {
@@ -65,11 +70,14 @@ describe('Onboarding goal step', () => {
     jest.clearAllMocks();
     userUpdates.length = 0;
     stepWrites.length = 0;
+    mockStoredInjuryAreas = [];
   });
+
+  const injuryWrites = () => mockUpdatePreference.mock.calls.filter(([key]) => key === 'injuryAreas');
 
   it('preselects nothing for a fresh user (registration placeholder) and blocks Continue until a pick', async () => {
     // Registration writes goal='maintenance'; no onboarding step saved yet.
-    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false, injury_history: [] };
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep();
 
     for (const g of ['cut', 'maintenance', 'bulk']) {
@@ -84,7 +92,7 @@ describe('Onboarding goal step', () => {
   });
 
   it('preselects a goal the user already saved in onboarding', async () => {
-    usersRow = { goal: 'cut', onboarding_step: 'benchmarks', onboarding_completed: false, injury_history: [] };
+    usersRow = { goal: 'cut', onboarding_step: 'benchmarks', onboarding_completed: false };
     await reachGoalStep();
 
     await waitFor(() =>
@@ -94,15 +102,15 @@ describe('Onboarding goal step', () => {
   });
 
   it('treats a finished onboarding as a real choice, even for maintenance', async () => {
-    usersRow = { goal: 'maintenance', onboarding_step: null, onboarding_completed: true, injury_history: [] };
+    usersRow = { goal: 'maintenance', onboarding_step: null, onboarding_completed: true };
     await reachGoalStep();
     await waitFor(() =>
       expect(screen.getByTestId('goal-option-maintenance')).toHaveAttribute('aria-pressed', 'true')
     );
   });
 
-  it('saves the optional injury answer in injury_history format, and never requires it', async () => {
-    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false, injury_history: ['chest'] };
+  it('saves the optional injury answer as body areas in preferences, never injury_history', async () => {
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep();
 
     await user.click(screen.getByTestId('goal-option-bulk'));
@@ -111,21 +119,46 @@ describe('Onboarding goal step', () => {
     await user.click(screen.getByTestId('goal-continue'));
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
-    const profile = userUpdates.find((u) => 'goal' in u);
-    expect(profile).toMatchObject({ goal: 'bulk', injury_history: ['chest', 'shoulders', 'erectors'] });
+    expect(injuryWrites()).toEqual([['injuryAreas', ['shoulder', 'lower_back']]]);
+    for (const u of userUpdates) expect(u).not.toHaveProperty('injury_history');
+    expect(userUpdates.find((u) => 'goal' in u)).toMatchObject({ goal: 'bulk' });
     expect(stepWrites).toContain('goal');
   });
 
-  it('leaves injury_history untouched when the question is skipped', async () => {
-    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false, injury_history: ['chest'] };
+  it('writes nothing for injuries when the question is skipped, and never blocks Continue', async () => {
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep();
 
     await user.click(screen.getByTestId('goal-option-cut'));
+    expect(screen.getByTestId('goal-continue')).toBeEnabled();
     await user.click(screen.getByTestId('goal-continue'));
 
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
-    const profile = userUpdates.find((u) => 'goal' in u);
-    expect(profile).toMatchObject({ goal: 'cut' });
-    expect(profile).not.toHaveProperty('injury_history');
+    expect(injuryWrites()).toEqual([]);
+  });
+
+  it('"None" saves an empty list', async () => {
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
+    const user = await reachGoalStep();
+
+    await user.click(screen.getByTestId('goal-option-cut'));
+    await user.click(screen.getByTestId('injury-chip-none'));
+    await user.click(screen.getByTestId('goal-continue'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(injuryWrites()).toEqual([['injuryAreas', []]]);
+  });
+
+  it('restores saved areas on re-entry, and clearing them saves []', async () => {
+    mockStoredInjuryAreas = ['knee'];
+    usersRow = { goal: 'cut', onboarding_step: 'goal', onboarding_completed: false };
+    const user = await reachGoalStep();
+
+    expect(screen.getByTestId('injury-chip-knee')).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByTestId('injury-chip-knee'));
+    await user.click(screen.getByTestId('goal-continue'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(injuryWrites()).toEqual([['injuryAreas', []]]);
   });
 });
