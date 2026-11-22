@@ -4791,6 +4791,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 weightMode={weightMode}
                 userBodyweightKg={userBodyweightKg}
                 onLog={completeLoggedSet}
+                stickyLabel={exercise.name}
                 sensorRirPrefill={
                   motionRepPrefill?.rir != null
                     ? { nonce: motionRepPrefill.nonce, rir: motionRepPrefill.rir }

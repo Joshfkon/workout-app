@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   IconBarbell,
   IconMinus,
@@ -105,7 +106,22 @@ interface SetLoggerRowProps {
    * rirSource 'sensor'; any chip tap makes the RIR the lifter's own.
    */
   sensorRirPrefill?: { nonce: number; rir: RepsInTank } | null;
+  /**
+   * Context line on the pinned "Log set" bar (usually the exercise name), so
+   * a lifter who can't see the card still knows what the tap logs.
+   */
+  stickyLabel?: string;
 }
+
+/**
+ * DOM id of the workout page's bottom-chrome slot. When it exists the pinned
+ * "Log set" bar portals into it, so it stacks with the rest timer instead of
+ * colliding with it; otherwise the bar pins itself above the safe area.
+ */
+export const STICKY_LOG_SLOT_ID = 'workout-sticky-action-slot';
+
+/** Share of the in-card button that must be on screen to count as reachable. */
+const LOG_BUTTON_VISIBLE_RATIO = 0.6;
 
 /** Clamp a prescribed RIR to the 0-4 chip range. */
 function clampToChip(rir: number): RepsInTank {
@@ -188,6 +204,7 @@ export function SetLoggerRow({
   onLog,
   onPlateCalculatorOpen,
   sensorRirPrefill = null,
+  stickyLabel,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [rirTouched, setRirTouched] = useState(false);
@@ -204,6 +221,32 @@ export function SetLoggerRow({
   const [discomfort, setDiscomfort] = useState<SetDiscomfort | undefined>(undefined);
   const [note, setNote] = useState('');
   const noteInputId = useId();
+
+  // Pinned "Log set" (UX panel: the in-card button sat below the fold at
+  // phone width, so lifters scrolled for it on every set). Shown only while
+  // the card's own button is below the visible area; scrolling down to it
+  // hides the bar again, so the bar never sits over the button it stands in
+  // for. Both buttons call the same handleLog.
+  const logButtonRef = useRef<HTMLButtonElement>(null);
+  const [logButtonBelowFold, setLogButtonBelowFold] = useState(false);
+  useEffect(() => {
+    const el = logButtonRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[entries.length - 1];
+        if (!entry) return;
+        const reachable = entry.isIntersecting && entry.intersectionRatio >= LOG_BUTTON_VISIBLE_RATIO;
+        // Below the fold only: a button scrolled off the TOP means the lifter
+        // moved on down the page, and a bar for a card they left would confuse.
+        const rootTop = entry.rootBounds?.top ?? 0;
+        setLogButtonBelowFold(!reachable && entry.boundingClientRect.top > rootTop);
+      },
+      { threshold: [0, LOG_BUTTON_VISIBLE_RATIO, 1] }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Re-sync the default chip when the set advances or the prescription
   // changes — but a prescription change mid-set doesn't overwrite a sensor
@@ -370,6 +413,52 @@ export function SetLoggerRow({
     setShowFeedbackSheet(false);
     setShowSheetDiscomfortPicker(false);
   };
+
+  // The pinned bar steps aside whenever something else owns the bottom of
+  // the screen: a sheet from this row, or a field being typed into (the
+  // keyboard is up and the bar must not sit over the input).
+  const showStickyLog =
+    logButtonBelowFold &&
+    editingField === null &&
+    !showFeedbackSheet &&
+    !showSetTypeSheet &&
+    !showPredictionInfo;
+  // Looked up at render: showStickyLog only turns true from the observer
+  // callback, so this never runs during server rendering.
+  const stickyTarget =
+    showStickyLog && typeof document !== 'undefined'
+      ? document.getElementById(STICKY_LOG_SLOT_ID)
+      : null;
+  const stickyWeightText = isPlainBodyweight
+    ? 'BW'
+    : `${isBodyweight && weightMode === 'assisted' ? 'BW −' : isBodyweight && weightMode === 'weighted' ? 'BW +' : ''}${weight || '0'} ${unitLabel}`;
+  const stickySummary = `${stickyWeightText} × ${reps || '0'}${isDurationBased ? 's' : ' reps'} · ${
+    RIR_CHIP_TEXT[selectedRir]
+  } left`;
+  const stickyBar = (
+    <div
+      data-testid="sticky-log-set"
+      className="flex items-center gap-3 rounded-card border border-sep bg-card p-2 shadow-lg"
+    >
+      <div className="min-w-0 flex-1 pl-1 leading-tight">
+        <span className="block truncate text-caption text-ink-2">
+          {stickyLabel ? `${stickyLabel} · Set ${setNumber}` : `Set ${setNumber}`}
+        </span>
+        <span className="block truncate text-subhead font-semibold tabular-nums text-ink">
+          {stickySummary}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={handleLog}
+        disabled={!canLog}
+        aria-label={`Log set ${setNumber}: ${stickySummary}`}
+        className="flex-shrink-0 rounded-button bg-action px-6 min-h-[52px] text-headline text-on-action transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-40"
+      >
+        Log set
+      </button>
+    </div>
+  );
 
   // Gym-proof tap targets (P0-4): every interactive control in this row is
   // ≥44px in both axes, with the primary input row at 52px tall.
@@ -793,6 +882,7 @@ export function SetLoggerRow({
 
       {/* Row 3: one-tap log */}
       <button
+        ref={logButtonRef}
         type="button"
         onClick={handleLog}
         disabled={!canLog}
@@ -800,6 +890,24 @@ export function SetLoggerRow({
       >
         Log set
       </button>
+
+      {/* Pinned copy of the button while the one above is below the fold.
+          Into the page's bottom-chrome slot when there is one (it stacks with
+          the rest timer and hides with the keyboard), else pinned above the
+          iOS safe area on its own. */}
+      {showStickyLog &&
+        typeof document !== 'undefined' &&
+        (stickyTarget
+          ? createPortal(stickyBar, stickyTarget)
+          : createPortal(
+              <div
+                className="fixed inset-x-3 z-40 mx-auto max-w-2xl"
+                style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+              >
+                {stickyBar}
+              </div>,
+              document.body
+            ))}
 
       {/* Optional feedback sheet (absorbs the old SetFeedbackCard content) */}
       <BottomSheet
