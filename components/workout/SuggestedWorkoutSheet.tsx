@@ -5,8 +5,9 @@
  * the /dashboard/log startup page so the suggestion flow exists in more than
  * one place (the app must never be unable to start a workout).
  *
- * Flow: "How much time do you have?" (+ a where-are-you-training chip row) →
- * deterministic plan preview (services/suggestedWorkout — recovery + weekly
+ * Flow: opens straight onto a plan sized for the last-used duration at the
+ * last-used location (both changeable in place; "Change" reopens "How much
+ * time do you have?") → deterministic plan preview (services/suggestedWorkout — recovery + weekly
  * volume in, MRV-capped / injury-aware / joint-stress-floored picks out) →
  * a location substitution pass (services/locationSubstitution) swaps picks
  * the selected training location can't support for same-muscle alternatives
@@ -128,6 +129,38 @@ interface SuggestedWorkoutSheetProps {
 
 /** Duration choices for the AI suggested workout ("How much time do you have?"). */
 const AI_DURATION_CHOICES = [20, 30, 45, 60, 75, 90];
+const DEFAULT_AI_DURATION = 45;
+
+/**
+ * Last duration this viewer started a suggested workout with. A per-device
+ * convenience only (never relied on): the sheet opens straight onto a plan
+ * sized for it, with "Change" one tap away.
+ */
+export const AI_DURATION_STORAGE_KEY = 'hypertrack:suggested-workout-duration';
+
+function readLastDuration(): number {
+  try {
+    const raw = window.localStorage.getItem(AI_DURATION_STORAGE_KEY);
+    const n = raw == null ? NaN : Number(raw);
+    return AI_DURATION_CHOICES.includes(n) ? n : DEFAULT_AI_DURATION;
+  } catch {
+    return DEFAULT_AI_DURATION;
+  }
+}
+
+function rememberDuration(mins: number) {
+  try {
+    window.localStorage.setItem(AI_DURATION_STORAGE_KEY, String(mins));
+  } catch {
+    // Private mode / blocked storage: next time just defaults again.
+  }
+}
+
+/** "2 reps left (RIR)" — the target effort in plain words, term kept. */
+function rirTargetLabel(rir: number): string {
+  if (rir <= 0) return 'to failure (0 RIR)';
+  return `${rir} rep${rir === 1 ? '' : 's'} left (RIR)`;
+}
 
 export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheetProps) {
   const router = useRouter();
@@ -153,8 +186,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const [locationChosen, setLocationChosen] = useState(false);
   const [unavailableByLocation, setUnavailableByLocation] = useState<Record<string, string[]>>({});
 
-  const [aiRequested, setAiRequested] = useState(false);
-  const [aiDuration, setAiDuration] = useState(45);
+  // Opens straight onto a plan: the build starts on mount with the last-used
+  // duration (and the last-used location, preselected below), so the common
+  // case is one tap on Start. The duration picker is behind "Change".
+  const [aiRequested, setAiRequested] = useState(true);
+  const [aiDuration, setAiDuration] = useState(() =>
+    typeof window === 'undefined' ? DEFAULT_AI_DURATION : readLastDuration()
+  );
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [aiPlan, setAiPlan] = useState<SubstitutedWorkoutPlan | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -388,6 +427,11 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   ]);
 
   const exerciseById = useMemo(() => new Map(exercises.map((ex) => [ex.id, ex])), [exercises]);
+
+  const openDurationPicker = () => {
+    setShowDurationPicker(true);
+    setAiPlan(null);
+  };
 
   const handleRemovePick = (exerciseId: string) => {
     setAiPlan((plan) =>
@@ -649,6 +693,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       }
 
       if (blocks.length === 0) throw new Error('No exercises to start');
+      rememberDuration(aiDuration);
 
       const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
       if (blocksError) throw blocksError;
@@ -808,7 +853,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       title={
         isAddingLocation
           ? 'Add training location'
-          : aiPlan
+          : aiPlan || !showDurationPicker
             ? 'Suggested workout'
             : 'How much time do you have?'
       }
@@ -823,7 +868,20 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         </div>
       )}
 
-      {!aiPlan && (
+      {!aiPlan && !showDurationPicker && (
+        <div className="space-y-3">
+          {locationChipRow}
+          <p
+            className="flex items-center gap-2 text-subhead text-ink-2"
+            data-testid="suggested-workout-building"
+          >
+            <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
+            Building a ~{aiDuration}-minute workout...
+          </p>
+        </div>
+      )}
+
+      {!aiPlan && showDurationPicker && (
         <div className="space-y-3">
           {locationChipRow}
           <p className="text-subhead text-ink-2">
@@ -836,6 +894,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                 key={mins}
                 onClick={() => {
                   setAiDuration(mins);
+                  rememberDuration(mins);
                   setAiRequested(true);
                 }}
                 disabled={aiRequested}
@@ -876,7 +935,16 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                     substitutionCount === 1 ? 'exercise' : 'exercises'
                   } swapped for ${selectedLocation.name} equipment`
                 : ''}
-              .
+              .{' '}
+              <button
+                type="button"
+                onClick={openDurationPicker}
+                disabled={isStarting}
+                className="font-medium text-action disabled:opacity-60"
+                data-testid="suggested-workout-change-duration"
+              >
+                Change
+              </button>
             </p>
           )}
 
@@ -904,7 +972,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                           exerciseType: exercise.exercise_type,
                         })}
                         {exercise.exercise_type === 'duration_based' ? '' : ' reps'} ·{' '}
-                        {pick.targetRir} RIR
+                        {rirTargetLabel(pick.targetRir)}
                       </span>
                       <span className="block text-caption text-ink-3">{pick.reason}</span>
                       {sub && (
@@ -990,7 +1058,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                   })`}
             </button>
             <button
-              onClick={() => setAiPlan(null)}
+              onClick={openDurationPicker}
               disabled={isStarting}
               className="w-full py-2 rounded-lg text-subhead text-ink-2 hover:text-ink transition-colors disabled:opacity-60"
             >
