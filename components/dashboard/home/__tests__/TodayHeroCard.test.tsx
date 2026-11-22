@@ -1,6 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { TodayHeroCard, TodaysWorkout, MealHeroSuggestion } from '../TodayHeroCard';
+import {
+  TodayHeroCard,
+  TodaysWorkout,
+  MealHeroSuggestion,
+  heroOffersWorkoutStart,
+  todayHeroVariant,
+} from '../TodayHeroCard';
 
 const mockStart = jest.fn();
 jest.mock('@/hooks/useStartEmptyWorkout', () => ({
@@ -352,5 +358,38 @@ describe('TodayHeroCard — no plan: one tap into a workout', () => {
     await user.click(screen.getByRole('button', { name: 'Start workout' }));
     expect(mockStart).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('link', { name: /quick workout/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('todayHeroVariant / heroOffersWorkoutStart', () => {
+  const scheduled = { dayName: 'Push', muscles: ['chest'] };
+
+  it('a pending or in-progress workout offers a start', () => {
+    for (const state of ['planned', 'in_progress'] as const) {
+      const v = todayHeroVariant({ workout: { ...baseWorkout, state }, hasPlan: true, meal });
+      expect(v).toBe('workout');
+      expect(heroOffersWorkoutStart(v)).toBe(true);
+    }
+  });
+
+  it('a scheduled day without a session offers a start', () => {
+    const v = todayHeroVariant({ workout: null, scheduled, hasPlan: true, meal });
+    expect(v).toBe('scheduled');
+    expect(heroOffersWorkoutStart(v)).toBe(true);
+  });
+
+  it('meal, done and rest-day heroes do not offer a start', () => {
+    const done = { ...baseWorkout, state: 'completed' as const };
+    expect(todayHeroVariant({ workout: done, hasPlan: true, meal })).toBe('meal');
+    expect(todayHeroVariant({ workout: done, hasPlan: true, meal: null })).toBe('done');
+    expect(todayHeroVariant({ workout: null, hasPlan: true, meal: null })).toBe('none');
+    for (const v of ['meal', 'done', 'none'] as const) expect(heroOffersWorkoutStart(v)).toBe(false);
+  });
+
+  it('freestyle and no-plan heroes offer a start', () => {
+    expect(todayHeroVariant({ workout: null, hasPlan: false, freestyle: true, meal: null })).toBe('freestyle');
+    expect(todayHeroVariant({ workout: null, hasPlan: false, meal })).toBe('no-plan');
+    expect(heroOffersWorkoutStart('freestyle')).toBe(true);
+    expect(heroOffersWorkoutStart('no-plan')).toBe(true);
   });
 });

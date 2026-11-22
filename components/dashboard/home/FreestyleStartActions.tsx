@@ -57,6 +57,16 @@ async function fetchLastRepeatableWorkout(userId: string): Promise<LastRepeatabl
   return { id: row.id, label: repeatLabel(deriveWorkoutTitle(blocks)), exercises };
 }
 
+/** The most recent completed workout that can be repeated (null if none). */
+export function useLastRepeatableWorkout(userId: string | null) {
+  return useQuery({
+    queryKey: ['history', 'last-repeatable', userId],
+    queryFn: () => fetchLastRepeatableWorkout(userId as string),
+    enabled: !!userId,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 const SECONDARY =
   'flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-button bg-action-tint px-3 text-action text-body font-semibold transition-[filter] hover:brightness-110 disabled:opacity-60';
 
@@ -73,12 +83,7 @@ export function FreestyleStartActions({ userId }: { userId: string | null }) {
   const [isRepeating, setIsRepeating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: last } = useQuery({
-    queryKey: ['history', 'last-repeatable', userId],
-    queryFn: () => fetchLastRepeatableWorkout(userId as string),
-    enabled: !!userId,
-    staleTime: 1000 * 60 * 5,
-  });
+  const { data: last } = useLastRepeatableWorkout(userId);
 
   const handleRepeat = async () => {
     if (!last || !userId || isRepeating) return;
