@@ -192,8 +192,14 @@ describe('computeLiftTrends', () => {
 
     expect(summary.lifts).toEqual([]);
     expect(summary.earlyLifts).toEqual([
-      { name: 'Bench Press', sessions: 2, bestWeightKg: 85, bestReps: 6 },
-      { name: 'Squat', sessions: 1, bestWeightKg: 100, bestReps: 5 },
+      {
+        name: 'Bench Press', sessions: 2, bestWeightKg: 85, bestReps: 6,
+        firstWeightKg: 80, firstReps: 8, latestWeightKg: 85, latestReps: 6,
+      },
+      {
+        name: 'Squat', sessions: 1, bestWeightKg: 100, bestReps: 5,
+        firstWeightKg: 100, firstReps: 5, latestWeightKg: 100, latestReps: 5,
+      },
     ]);
   });
 

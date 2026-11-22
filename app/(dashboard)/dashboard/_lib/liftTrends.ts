@@ -97,6 +97,24 @@ export interface LiftTrend {
   plateau: PlateauDetectionResult | null;
 }
 
+/** A lift trained in the window without enough sessions for a trend yet. */
+export interface EarlyLift {
+  name: string;
+  sessions: number;
+  /** Heaviest top set in the window (load in kg, reps as logged). */
+  bestWeightKg: number;
+  bestReps: number;
+  /**
+   * The first and the most recent session's top set (the set with the highest
+   * estimated max that session), so the card can show "first → latest"
+   * before a trend exists. Optional: older persisted summaries lack them.
+   */
+  firstWeightKg?: number;
+  firstReps?: number;
+  latestWeightKg?: number;
+  latestReps?: number;
+}
+
 export interface LiftTrendsSummary {
   /** Tracked lifts, ordered rising → flat → down (for the dot strip). */
   lifts: LiftTrend[];
@@ -122,7 +140,7 @@ export interface LiftTrendsSummary {
    * tab can show real numbers before a trend exists (heaviest top set in the
    * window; most-trained first, capped at MAX_TRACKED_LIFTS).
    */
-  earlyLifts?: { name: string; sessions: number; bestWeightKg: number; bestReps: number }[];
+  earlyLifts?: EarlyLift[];
   /** Longest-running plateaued lift, e.g. Bench stalled 3 wks. */
   stalled: { name: string; weeks: number } | null;
   /** Days of history the summary was computed over. */
@@ -366,12 +384,20 @@ export function computeLiftTrends(
         b.topSetWeightKg > a.topSetWeightKg || (b.topSetWeightKg === a.topSetWeightKg && b.topSetReps > a.topSetReps) ? b : a
       );
       const base = nameByExercise.get(meta.exerciseId) ?? 'Exercise';
-      return {
+      const byDate = [...snapshots].sort((a, b) => a.sessionDate.localeCompare(b.sessionDate));
+      const first = byDate[0];
+      const latest = byDate[byDate.length - 1];
+      const early: EarlyLift = {
         name: meta.locationLabel ? `${base} (${meta.locationLabel})` : base,
         sessions: snapshots.length,
         bestWeightKg: best.topSetWeightKg,
         bestReps: best.topSetReps,
+        firstWeightKg: first.topSetWeightKg,
+        firstReps: first.topSetReps,
+        latestWeightKg: latest.topSetWeightKg,
+        latestReps: latest.topSetReps,
       };
+      return early;
     })
     .sort((a, b) => b.sessions - a.sessions || b.bestWeightKg - a.bestWeightKg)
     .slice(0, MAX_TRACKED_LIFTS);

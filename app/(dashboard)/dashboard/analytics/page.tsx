@@ -76,11 +76,14 @@ import { useLiftTrends } from '@/hooks/useLiftTrends';
 import { useBodyOrFoodLogged } from '@/hooks/useBodyOrFoodLogged';
 import {
   hasRecentLifting,
+  orderProgressTabs,
   parseProgressTabParam,
   resolveActiveProgressTab,
   resolveDefaultProgressTab,
   type ProgressTab,
 } from './progressTabs';
+import { buildProgressSummary } from './progressSummary';
+import { now as clockNow } from '@/lib/clock';
 import { listOutbox } from '@/lib/offline/setOutbox';
 import {
   rangeStartLocalDay,
@@ -1510,11 +1513,29 @@ function AnalyticsPageContent() {
     />
   );
 
-  const tabs = [
-    { id: 'strength' as TabType, label: 'Strength' },
-    { id: 'body-composition' as TabType, label: 'Body' },
-    { id: 'wellness' as TabType, label: 'Wellness' },
-  ];
+  const TAB_LABELS: Record<TabType, string> = {
+    strength: 'Strength',
+    'body-composition': 'Body',
+    wellness: 'Wellness',
+  };
+  // A non-lifter (food / weigh-in only) gets Body first, Strength last.
+  const tabs = orderProgressTabs(hasRecentLifting(liftTrendsQuery.data)).map((id) => ({
+    id: id as TabType,
+    label: TAB_LABELS[id],
+  }));
+
+  // "Am I progressing?" in one or two plain sentences, above the tabs, so
+  // weight and strength are answered together. Only restates the weight
+  // chart's 30-day change and the Strength tab's trend counts; waits for
+  // the weigh-ins so it doesn't appear half-written.
+  const progressSummary = isBodyTrendLoading
+    ? null
+    : buildProgressSummary({
+        weighIns: bodyWeightHistory,
+        liftTrends: liftTrendsSummary,
+        units: units === 'kg' ? 'kg' : 'lb',
+        now: clockNow(),
+      });
 
   // The global time-range selector genuinely scopes only the Wellness data
   // (hydration/cardio/check-in series). On Body and Strength it was a dead
@@ -1553,6 +1574,18 @@ function AnalyticsPageContent() {
         title="Progress"
         actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
       />
+
+      {progressSummary && (
+        <div className="rounded-card bg-card p-4 shadow-card" data-testid="progress-summary">
+          <p className="text-caption text-ink-2">Are you progressing?</p>
+          {progressSummary.weight && (
+            <p className="mt-0.5 text-body text-ink" data-testid="progress-summary-weight">{progressSummary.weight}</p>
+          )}
+          {progressSummary.strength && (
+            <p className="mt-0.5 text-body text-ink" data-testid="progress-summary-strength">{progressSummary.strength}</p>
+          )}
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="flex rounded-[10px] bg-fill p-0.5" role="tablist" aria-label="Progress sections">
@@ -1623,7 +1656,10 @@ function AnalyticsPageContent() {
           {/* Recommendations. Correctly signed, unit-aware, evidence-cited
               (deload-advisor style), and suppressed inside the phase-boundary
               water window. */}
-          {recommendations.length > 0 && (
+          {/* With no body scan the only tip is "add your first DEXA scan",
+              which the "Add more data" list below already offers — don't
+              push it at someone who has never had one. */}
+          {scans.length > 0 && recommendations.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Tips for you</CardTitle>
@@ -1863,7 +1899,7 @@ function AnalyticsPageContent() {
                           <div>
                             <h4 className="font-medium text-ink">{lift.lift}</h4>
                             <p className="text-subhead text-ink-2">
-                              E1RM: {displayWeight(lift.estimated1RM)} {weightUnit}
+                              Est. max: {displayWeight(lift.estimated1RM)} {weightUnit}
                             </p>
                           </div>
                           <Badge variant={getStrengthLevelBadgeVariant(lift.strengthLevel)}>
