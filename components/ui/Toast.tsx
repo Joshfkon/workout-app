@@ -178,6 +178,15 @@ export interface ToastItem {
 export interface ToastContainerProps {
   toasts: ToastItem[];
   onDismiss: (id: string) => void;
+  /**
+   * 'viewport' (default): a fixed layer portaled to <body>, placed by
+   * toastPlacementClasses. 'inline': rendered in normal flow so a parent can
+   * put it inside its own fixed bottom stack (the active-workout screen's
+   * rest timer / Log set stack), where it stacks instead of covering them.
+   * While a sheet is open an inline container still falls back to the
+   * viewport layer: the parent's stack sits under the sheet.
+   */
+  anchor?: 'viewport' | 'inline';
 }
 
 /**
@@ -202,6 +211,7 @@ export function toastPlacementClasses(overlayOpen: boolean): string {
 export const ToastContainer = memo(function ToastContainer({
   toasts,
   onDismiss,
+  anchor = 'viewport',
 }: ToastContainerProps) {
   const [mounted, setMounted] = useState(false);
   const overlayOpen = useIsOverlayOpen();
@@ -212,11 +222,16 @@ export const ToastContainer = memo(function ToastContainer({
 
   if (!mounted || toasts.length === 0) return null;
 
+  const inline = anchor === 'inline' && !overlayOpen;
   const content = (
     <div
-      className={cn('fixed z-[100] flex flex-col gap-2', toastPlacementClasses(overlayOpen))}
+      className={
+        inline
+          ? 'flex flex-col items-center gap-2 pointer-events-none [&>*]:pointer-events-auto'
+          : cn('fixed z-[100] flex flex-col gap-2', toastPlacementClasses(overlayOpen))
+      }
       data-testid="toast-container"
-      data-placement={overlayOpen ? 'top' : 'bottom'}
+      data-placement={inline ? 'inline' : overlayOpen ? 'top' : 'bottom'}
     >
       {toasts.map((toast) => (
         <Toast
@@ -232,22 +247,44 @@ export const ToastContainer = memo(function ToastContainer({
     </div>
   );
 
-  return createPortal(content, document.body);
+  return inline ? content : createPortal(content, document.body);
 });
 
 ToastContainer.displayName = 'ToastContainer';
 
+export interface UseToastsOptions {
+  /**
+   * 'single': at most one toast on screen — a new toast replaces the
+   * current one, except that an error is never replaced by a non-error
+   * (the newer non-error toast is dropped while the error shows). Used by
+   * the active-workout screen, where stacked toasts covered the set logger.
+   * Default 'stack' keeps the app-wide behaviour.
+   */
+  mode?: 'stack' | 'single';
+}
+
+/**
+ * Pure reducer behind addToast — exported for tests.
+ */
+export function nextToasts(prev: ToastItem[], item: ToastItem, mode: 'stack' | 'single'): ToastItem[] {
+  if (mode === 'stack') return [...prev, item];
+  const current = prev[prev.length - 1];
+  if (current && current.type === 'error' && item.type !== 'error') return prev;
+  return [item];
+}
+
 /**
  * Simple hook for managing toasts
  */
-export function useToasts() {
+export function useToasts(options: UseToastsOptions = {}) {
+  const mode = options.mode ?? 'stack';
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const addToast = useCallback((type: ToastType, message: string, duration?: number, action?: ToastAction) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    setToasts((prev) => [...prev, { id, type, message, duration, action }]);
+    setToasts((prev) => nextToasts(prev, { id, type, message, duration, action }, mode));
     return id;
-  }, []);
+  }, [mode]);
 
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
