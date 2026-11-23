@@ -11,6 +11,8 @@ import {
   estimateIntervalTDEE,
   computeTrendWeights,
   detectPhaseBoundaries,
+  intervalNextStep,
+  type IntervalDetail,
   type WeighIn,
   type IntakeDay,
 } from '../interval-tdee';
@@ -137,10 +139,10 @@ describe('estimateIntervalTDEE — daily intake, sparse weigh-ins, real surplus'
 });
 
 describe('estimateIntervalTDEE — incomplete intake', () => {
-  it('40% of intake days missing → intervals excluded, low confidence, names food logging', () => {
-    // Same weigh-ins as the good case, but drop 40% of intake days.
+  it('half of intake days missing → intervals excluded, low confidence, names food logging', () => {
+    // Same weigh-ins as the good case, but drop every other intake day.
     const full = dailyIntake(NOW, -21, 0, 3000);
-    const intakeDays = full.filter((_, i) => i % 5 >= 2); // keep ~60%
+    const intakeDays = full.filter((_, i) => i % 2 === 0); // keep ~50%
 
     const weighIns: WeighIn[] = [];
     const offsets = [-21, -18, -14, -11, -7, -4, 0];
@@ -161,6 +163,36 @@ describe('estimateIntervalTDEE — incomplete intake', () => {
     expect(result.priorWeight).toBe(1);
     expect(result.confidenceScore).toBeLessThan(40);
     expect(result.warnings.some((w) => w.kind === 'missing_calories')).toBe(true);
+  });
+});
+
+describe('estimateIntervalTDEE — ordinary logging', () => {
+  it('one missed food day a week still personalizes the estimate', () => {
+    const full = dailyIntake(NOW, -21, 0, 3000);
+    const intakeDays = full.filter((_, i) => i % 7 !== 3); // skip 1 day in 7
+    const weighIns: WeighIn[] = [-21, -14, -7, 0].map((off) => ({ date: dateAt(NOW, off), weightLb: 180 }));
+    const result = estimateIntervalTDEE({ now: NOW, weighIns, intakeDays, formulaTDEE: 2500, formulaWeightLb: 180 });
+    expect(result.intervalsUsed).toBeGreaterThan(0);
+    expect(result.source).toBe('blended');
+    // Maintenance at 3000 kcal: the blend moves off the 2500 formula toward it.
+    expect(result.estimatedTDEE).toBeGreaterThan(2600);
+    expect(intervalNextStep(result)).toBeNull();
+  });
+});
+
+describe('intervalNextStep', () => {
+  const base = { source: 'formula' as const, weighInCount: 0, intervals: [] as IntervalDetail[] };
+  const interval = (over: Partial<IntervalDetail>): IntervalDetail => ({
+    startDate: '2026-11-01', endDate: '2026-11-08', intervalDays: 7, meanIntake: 2500, trendWeightChangeLb: 0,
+    intervalTDEE: 2500, intakeCompleteness: 1, weight: 0, ...over,
+  });
+  it('says what it is waiting for, in order', () => {
+    expect(intervalNextStep(base)).toMatch(/^Weigh in to start/);
+    expect(intervalNextStep({ ...base, weighInCount: 1 })).toMatch(/^Weigh in again in 5\+ days/);
+    expect(intervalNextStep({ ...base, weighInCount: 3, intervals: [interval({ intakeCompleteness: 3 / 7, excludedReason: 'incomplete_intake' })] }))
+      .toBe('Food was logged on 3 of 7 days between your last weigh-ins — it needs about 2 of every 3. Log the days you eat and it starts using your data.');
+    expect(intervalNextStep({ ...base, weighInCount: 2, intervals: [interval({ intervalDays: 3, excludedReason: 'short' })] })).toMatch(/under 5 days apart/);
+    expect(intervalNextStep({ ...base, source: 'blended', weighInCount: 4 })).toBeNull();
   });
 });
 

@@ -37,8 +37,14 @@ const CALORIES_PER_LB = 3500;
  *  dominated by water noise relative to real tissue change. */
 const MIN_INTERVAL_DAYS = 5;
 
-/** Fraction of days within an interval that must have logged intake. */
-const INTAKE_COMPLETENESS_MIN = 0.85;
+/**
+ * Fraction of days within an interval that must have logged intake. The
+ * interval's intake is the mean over LOGGED days, so a missed day doesn't
+ * bias it low; at 0.85 one missed day in a week threw the whole interval out,
+ * and ordinary loggers never got a personal estimate. Two of every three days
+ * is enough; patchier intervals also count for less (see the interval weight).
+ */
+const INTAKE_COMPLETENESS_MIN = 0.65;
 
 /** Time constant (days) for the exponentially-weighted trend weight. Larger =
  *  smoother / slower to react. ~10 days ≈ a typical "trend weight" feel. */
@@ -395,10 +401,12 @@ export function estimateIntervalTDEE(input: IntervalTDEEInput): IntervalTDEEResu
     }
 
     if (!detail.excludedReason) {
-      // Combined weight: length (more days = less water-noise) × recency.
+      // Combined weight: length (more days = less water-noise) × recency ×
+      // intake completeness (a fully logged interval counts more than one
+      // with gaps, whose mean intake is less certain).
       const ageDays = daysBetween(seg.end.date, nowStr);
       const recency = Math.exp(-Math.max(0, ageDays) / RECENCY_TAU_DAYS);
-      detail.weight = intervalDays * recency;
+      detail.weight = intervalDays * recency * intakeCompleteness;
       usable.push(detail);
     }
     details.push(detail);
@@ -723,4 +731,30 @@ function addDays(date: Date, days: number): Date {
   const r = new Date(date);
   r.setDate(r.getDate() + days);
   return r;
+}
+
+
+/**
+ * One plain sentence on what the estimate needs next to use the user's own
+ * data, or null once it does. The card used to sit on "Personalizing as you
+ * log" with a formula number and never said why — users concluded the
+ * metabolism tracker didn't work.
+ */
+export function intervalNextStep(result: Pick<IntervalTDEEResult, 'source' | 'weighInCount' | 'intervals'>): string | null {
+  if (result.source === 'blended') return null;
+  if (result.weighInCount === 0) {
+    return 'Weigh in to start: it needs two weigh-ins at least 5 days apart, with food logged on most days between them.';
+  }
+  if (result.weighInCount === 1) {
+    return 'Weigh in again in 5+ days. Log food on most days until then and your own estimate starts.';
+  }
+  const latestIncomplete = [...result.intervals].reverse().find((d) => d.excludedReason === 'incomplete_intake');
+  if (latestIncomplete) {
+    const logged = Math.round(latestIncomplete.intakeCompleteness * latestIncomplete.intervalDays);
+    return `Food was logged on ${logged} of ${latestIncomplete.intervalDays} days between your last weigh-ins — it needs about 2 of every 3. Log the days you eat and it starts using your data.`;
+  }
+  if (result.intervals.length > 0 && result.intervals.every((d) => d.excludedReason === 'short')) {
+    return 'Your weigh-ins are under 5 days apart so far. Keep weighing in — once they span 5+ days it starts using your data.';
+  }
+  return 'Keep weighing in every few days and logging food — it switches to your own data as soon as a full stretch is in.';
 }
