@@ -23,7 +23,7 @@ import type {
   RegressionAnalysis,
 } from '@/lib/nutrition/adaptive-tdee';
 import type { EnhancedTDEEEstimate } from '@/types/wearable';
-import type { IntervalTDEEResult } from '@/lib/nutrition/interval-tdee';
+import { intervalNextStep, type IntervalTDEEResult } from '@/lib/nutrition/interval-tdee';
 import { TDEERegressionGraph } from './TDEERegressionGraph';
 import { calculateFFMI } from '@/services/bodyCompEngine';
 import {
@@ -250,7 +250,7 @@ export function TDEEDashboard({
             </p>
           </div>
           <div className="flex items-center justify-center gap-2 text-subhead text-ink-3">
-            <span>0/{dataQuality.daysWithData || 14} days logged</span>
+            <span>{Math.min(dataQuality.daysWithData ?? 0, 14)}/14 days logged</span>
           </div>
         </div>
       </Card>
@@ -329,6 +329,12 @@ export function TDEEDashboard({
               </p>
             )}
           </div>
+          {/* Still on the formula: say exactly what it's waiting for. */}
+          {intervalEstimate && intervalNextStep(intervalEstimate) && (
+            <p className="mt-2 text-subhead text-ink" data-testid="tdee-next-step">
+              <span className="font-semibold">Not using your data yet.</span> {intervalNextStep(intervalEstimate)}
+            </p>
+          )}
         </div>
 
         {/* Formula Comparison — shown once the blend is informed by real data */}
