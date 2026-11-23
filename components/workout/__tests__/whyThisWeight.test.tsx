@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { whyThisWeightSummary } from '../whyThisWeight';
+import { whyThisWeightLine, whyThisWeightSummary } from '../whyThisWeight';
 import { SuggestionBanner } from '../SuggestionBanner';
 import { restIntroText } from '../RestTimer';
 
@@ -53,6 +53,39 @@ describe('whyThisWeightSummary', () => {
   });
 });
 
+describe('whyThisWeightLine (the strip, no tap)', () => {
+  it('progressions name the set they came from, its effort and the step', () => {
+    expect(whyThisWeightLine({ ref: 'last_session', refSet: '65 lbs × 13', refRir: 2, rule: 'add_rep' })).toBe(
+      'Last time 65 lbs × 13, 2 reps left → +1 rep'
+    );
+    expect(whyThisWeightLine({ ref: 'last_session', refSet: '60 kg × 12', refRir: 3, rule: 'add_load' })).toBe(
+      'Last time 60 kg × 12, 3 reps left → one weight step up'
+    );
+    expect(
+      whyThisWeightLine({ ref: 'last_set', refSet: '60 kg × 12', refRir: 4, rule: 'load_up', because: 'easier' })
+    ).toBe('Last set 60 kg × 12, 4+ reps left → weight up');
+    expect(whyThisWeightLine({ ref: 'last_session', refSet: '60 kg × 8', refRir: null, rule: 'hold' })).toBe(
+      'Last time 60 kg × 8 → same weight'
+    );
+  });
+
+  it('first-time lifts name the guess’s basis', () => {
+    expect(whyThisWeightLine({ ref: null, rule: 'start_guess', basis: 'your Bench Press' })).toBe(
+      'First time on this lift: starting guess from your Bench Press'
+    );
+    expect(whyThisWeightLine({ ref: null, rule: 'start_guess', basis: null })).toBe(
+      'First time on this lift: starting guess'
+    );
+  });
+
+  it('leaves rules with their own strip line alone', () => {
+    for (const rule of ['from_recent', 'held_until_top', 'warmup', 'deload', 'pain'] as const) {
+      expect(whyThisWeightLine({ ref: null, rule })).toBeNull();
+    }
+    expect(whyThisWeightLine(null)).toBeNull();
+  });
+});
+
 describe('SuggestionBanner "Why this weight?"', () => {
   const props = {
     weightLabel: '65 lbs',
@@ -82,6 +115,21 @@ describe('SuggestionBanner "Why this weight?"', () => {
     );
     // The engine reasoning is still below it.
     expect(sheet).toHaveTextContent('Set-position matching');
+  });
+
+  it('the link rides the end of the visible reason line', () => {
+    render(
+      <SuggestionBanner
+        {...props}
+        source="Last time 65 lbs × 13, 2 reps left → +1 rep"
+        why={{ ref: 'last_session', refSet: '65 lbs × 13', refRir: 2, rule: 'add_rep' }}
+      />
+    );
+    const line = screen.getByTestId('suggestion-source');
+    expect(line).toHaveTextContent('Last time 65 lbs × 13, 2 reps left → +1 rep');
+    expect(line.parentElement).toContainElement(screen.getByTestId('why-this-weight'));
+    // The engine's terser reason moved to the sheet: one "why" on the strip.
+    expect(screen.queryByText(/go one more rep/)).not.toBeInTheDocument();
   });
 
   it('has no link when the card passed no inputs', () => {

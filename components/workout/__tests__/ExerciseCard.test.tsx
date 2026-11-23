@@ -1319,7 +1319,7 @@ describe('ExerciseCard', () => {
       // The banner paragraph names the user's own sets, and never twice
       // (reason + a repeated "From your last session" line).
       const banner = screen.getByTestId('suggestion-rir-plain').closest('p')?.textContent ?? '';
-      expect(banner).toMatch(/last (session|set)|recent sets on this lift/);
+      expect(banner).toMatch(/last (session|set)|Last (time|set) |recent sets on this lift/);
       expect((banner.match(/last session/g) ?? []).length).toBeLessThanOrEqual(1);
     });
 
@@ -3424,5 +3424,50 @@ describe('ExerciseCard round 10: AMRAP note, why-this-weight, beginner wording',
     const summary = screen.getByTestId('why-this-weight-summary');
     expect(summary).toHaveTextContent(/^Your last set: 100 kg × 10, 2 reps left → /);
     expect(summary.textContent).not.toMatch(JARGON);
+  });
+});
+
+describe('ExerciseCard round 11: the reason is on the strip, no tap', () => {
+  afterEach(() => useUserStore.setState({ user: null }));
+
+  it('a progression off last session shows "Last time … → step" on the strip', () => {
+    render(
+      <ExerciseCard
+        exercise={createMockExercise()}
+        block={createMockBlock()}
+        sets={[]}
+        unit="kg"
+        isActive={true}
+        previousSets={[{ weightKg: 100, reps: 10, rpe: 8 }]}
+      />
+    );
+    expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+      /^Last time 100 kg × 10, 2 reps left → (\+1 rep|one weight step up|same weight|weight up|weight down)/
+    );
+    // The link stays for the full sheet.
+    expect(screen.getByTestId('why-this-weight')).toBeInTheDocument();
+  });
+
+  it('within a session the strip names the last set; beginner mode too, without jargon', () => {
+    useUserStore.setState({
+      user: {
+        id: 'u1',
+        experience: 'novice',
+        preferences: { units: 'kg', beginnerMode: true },
+        volumeLandmarks: {},
+      } as unknown as import('@/types/schema').User,
+    });
+    render(
+      <ExerciseCard
+        exercise={createMockExercise()}
+        block={createMockBlock()}
+        sets={[createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 })]}
+        unit="kg"
+        isActive={true}
+      />
+    );
+    const line = screen.getByTestId('suggestion-source');
+    expect(line).toHaveTextContent(/^Last (set|time) 100 kg × 10, 2 reps left → /);
+    expect(line.textContent).not.toMatch(/\bRIR\b|e1RM|AMRAP/);
   });
 });

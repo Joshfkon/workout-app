@@ -116,6 +116,44 @@ export function whyThisWeightSummary(why: WhyThisWeight | null | undefined, toda
   return `${label}: ${why.refSet}${effort} → ${because}${rule}: ${today}.`;
 }
 
+/** The rule in a few words, for the one-line strip reason. */
+const RULE_SHORT: Partial<Record<WhyRule, string>> = {
+  add_rep: '+1 rep',
+  add_load: 'one weight step up',
+  load_lever: 'one weight step up',
+  hold: 'same weight',
+  rounded_up: 'rounded up to the nearest plate, same reps',
+  load_up: 'weight up',
+  load_down: 'weight down',
+  lighter_for_range: 'lighter to stay in range',
+  capped: 'capped at today’s best',
+  reps_to_beat: 'reps set to beat it',
+};
+
+/**
+ * The one-line reason shown ON the suggestion strip (no tap), for first-time
+ * lifts and for progressions off a logged set:
+ *
+ *   "Last time 65 lbs × 13, 2 reps left → +1 rep"
+ *   "First time on this lift: starting guess from your Bench Press"
+ *
+ * Same inputs as the sheet summary, shorter. Null for rules whose existing
+ * strip line already says it (warm-up, deload, pain, recent-sets).
+ */
+export function whyThisWeightLine(why: WhyThisWeight | null | undefined): string | null {
+  if (!why) return null;
+  if (why.rule === 'start_guess') {
+    return why.basis
+      ? `First time on this lift: starting guess from ${why.basis}`
+      : 'First time on this lift: starting guess';
+  }
+  const short = RULE_SHORT[why.rule];
+  if (!short || !why.ref || !why.refSet) return null;
+  const label = why.ref === 'last_session' ? 'Last time' : 'Last set';
+  const effort = why.refRir != null ? `, ${repsLeft(why.refRir)}` : '';
+  return `${label} ${why.refSet}${effort} → ${short}`;
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
