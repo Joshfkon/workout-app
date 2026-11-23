@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import OnboardingBodyCompPage from '../page';
 import { starterTargets } from '@/lib/nutrition/phaseTargets';
@@ -542,5 +542,126 @@ describe('Onboarding body composition: sex', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Female' }));
     expect(screen.queryByTestId('body-comp-missing')).not.toBeInTheDocument();
+  });
+});
+
+describe('Onboarding: food-only users skip the strength benchmarks', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userUpdates.length = 0;
+    stepWrites.length = 0;
+    coachingInserts = 0;
+    targetsRow = null;
+    mockStoredUnits = 'kg';
+    mockStoredInjuryAreas = [];
+    mockSaveMacroSettings.mockResolvedValue({ success: true });
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
+  });
+  afterEach(() => {
+    mockUserMetadata = {};
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('finishes onboarding and goes to the dashboard, with no coaching session', async () => {
+    mockUserMetadata = { tracking_focus: 'food' };
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-continue'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
+    expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding/benchmarks'));
+    expect(coachingInserts).toBe(0);
+    // The goal is saved as usual, then onboarding is marked complete.
+    expect(userUpdates.find((u) => 'goal' in u)).toMatchObject({ goal: 'maintenance' });
+    expect(stepWrites.slice(-2)).toEqual(['goal', null]);
+  });
+
+  it('still reaches the benchmarks when a food tracker asked to calibrate', async () => {
+    mockUserMetadata = { tracking_focus: 'food' };
+    window.history.replaceState({}, '', '/onboarding?benchmarks=1');
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
+    expect(coachingInserts).toBe(1);
+  });
+
+  it('leaves lifters on the benchmarks path', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
+    expect(stepWrites[stepWrites.length - 1]).toBe('goal');
+  });
+});
+
+describe('Onboarding: beginner mode on the goal step', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userUpdates.length = 0;
+    stepWrites.length = 0;
+    targetsRow = null;
+    mockStoredUnits = 'kg';
+    mockStoredInjuryAreas = [];
+    mockSaveMacroSettings.mockResolvedValue({ success: true });
+  });
+  afterEach(() => {
+    mockUserMetadata = {};
+  });
+
+  const savedBeginner = () =>
+    userUpdates
+      .map((u) => u.preferences as Record<string, unknown> | undefined)
+      .find((p) => p && 'beginnerMode' in p)?.beginnerMode;
+
+  it('is on for a novice and saved on Continue', async () => {
+    usersRow = { goal: 'maintenance', experience: 'novice', onboarding_step: 'body_comp', onboarding_completed: false };
+    const user = await reachGoalStep('15', '30');
+    const toggle = within(screen.getByTestId('onboarding-beginner-mode')).getByRole('switch');
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(savedBeginner()).toBe(true);
+  });
+
+  it('is off for an experienced lifter, and saves what they switch it to', async () => {
+    usersRow = { goal: 'maintenance', experience: 'advanced', onboarding_step: 'body_comp', onboarding_completed: false };
+    const user = await reachGoalStep('15', '30');
+    const toggle = within(screen.getByTestId('onboarding-beginner-mode')).getByRole('switch');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await user.click(toggle);
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(savedBeginner()).toBe(true);
+  });
+
+  it('is not offered to a food-only user', async () => {
+    mockUserMetadata = { tracking_focus: 'food' };
+    usersRow = { goal: 'maintenance', experience: 'novice', onboarding_step: 'body_comp', onboarding_completed: false };
+    const user = await reachGoalStep('15', '30');
+    expect(screen.queryByTestId('onboarding-beginner-mode')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(savedBeginner()).toBeUndefined();
+  });
+});
+
+describe('Onboarding units step: text size', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockStoredUnits = 'kg';
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-text-size');
+  });
+
+  it('offers Default / Large / Larger with a live preview, starting on Default', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    const card = screen.getByTestId('onboarding-text-size');
+    expect(within(card).getByTestId('text-size-preview')).toBeInTheDocument();
+    const group = within(card).getByRole('radiogroup', { name: 'Text size' });
+    expect(within(group).getByRole('radio', { name: 'Default' })).toHaveAttribute('aria-checked', 'true');
+
+    await user.click(within(group).getByRole('radio', { name: 'Larger' }));
+    expect(within(group).getByRole('radio', { name: 'Larger' })).toHaveAttribute('aria-checked', 'true');
+    expect(document.documentElement.getAttribute('data-text-size')).toBe('larger');
+    expect(localStorage.getItem('textSize')).toBe('larger');
   });
 });

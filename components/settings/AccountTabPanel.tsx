@@ -8,6 +8,7 @@ import { SubscriptionCard } from '@/components/settings/SubscriptionCard';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { DeleteAccountCard } from '@/components/settings/DeleteAccountCard';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
+import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
 
 export function AccountTabPanel() {
   // Promo code state
@@ -77,7 +78,7 @@ export function AccountTabPanel() {
               <p className="text-body font-medium text-ink">Strength calibration</p>
               <p className="text-caption text-ink-3">Update your benchmark lifts for better weight recommendations</p>
             </div>
-            <Link href="/onboarding/calibrate">
+            <Link href={ONBOARDING_BENCHMARKS_ENTRY}>
               <Button variant="outline" size="sm">
                 Calibrate
               </Button>

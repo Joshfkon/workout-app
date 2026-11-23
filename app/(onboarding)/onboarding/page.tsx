@@ -9,11 +9,14 @@ import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { updateOnboardingStep, confirmedOnboardingGoal, type TrainingGoal } from '@/lib/onboarding/onboardingProgress';
+import { updateOnboardingStep, completeOnboarding, confirmedOnboardingGoal, type TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import type { StandingInjuryArea } from '@/lib/training/standingInjuries';
 import { GoalStep } from './_components/GoalStep';
+import { TextSizeControl } from '@/components/settings/TextSizeControl';
 import { starterTargets } from '@/lib/nutrition/phaseTargets';
-import { statedTrackingFocus } from '@/lib/onboarding/trackingFocus';
+import { askedForBenchmarks, skipsBenchmarks, statedTrackingFocus } from '@/lib/onboarding/trackingFocus';
+import { resolveBeginnerMode } from '@/lib/beginnerMode';
+import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
 import { saveMacroSettings } from '@/lib/actions/nutrition';
 import type { WeightUnit } from '@/types/schema';
 
@@ -121,8 +124,14 @@ export default function OnboardingBodyCompPage() {
   // calculator settings, so nothing the user chose gets overwritten.
   const [existingTargets, setExistingTargets] = useState<{ calories: number; protein: number } | null>(null);
   const [hasMacroSettings, setHasMacroSettings] = useState(false);
-  // Said "No, food tracking" at sign-up: starter targets count no workouts.
+  // Said "No, food tracking" at sign-up: starter targets count no workouts,
+  // and onboarding ends at the goal step (no strength benchmarks) unless the
+  // user came here to calibrate (?benchmarks=1).
   const [foodFocus, setFoodFocus] = useState(false);
+  // Beginner mode, offered on the goal step: the saved choice, else on for
+  // novices (lib/beginnerMode). Saved on Continue for lifters.
+  const [beginnerMode, setBeginnerMode] = useState(false);
+  const beginnerTouched = useRef(false);
   useEffect(() => {
     if (injuryAreasSeeded.current || preferences.injuryAreas.length === 0) return;
     injuryAreasSeeded.current = true;
@@ -205,7 +214,7 @@ export default function OnboardingBodyCompPage() {
       // Get user height if available
       const { data: userData } = await supabase
         .from('users')
-        .select('height_cm, sex, age, goal, onboarding_step, onboarding_completed')
+        .select('height_cm, sex, age, goal, experience, preferences, onboarding_step, onboarding_completed')
         .eq('id', user.id)
         .single();
 
@@ -234,6 +243,10 @@ export default function OnboardingBodyCompPage() {
       }
       if (userData?.age) {
         setAgeDisplay((current) => current || String(userData.age));
+      }
+      if (!beginnerTouched.current) {
+        const prefs = (userData?.preferences as Record<string, unknown> | null) ?? {};
+        setBeginnerMode(resolveBeginnerMode(prefs.beginnerMode, userData?.experience));
       }
       const savedGoal = confirmedOnboardingGoal(userData);
       if (savedGoal) {
@@ -321,27 +334,38 @@ export default function OnboardingBodyCompPage() {
       const height = getHeightCm();
       const weight = useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg();
       const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
-      
-      // Create coaching session
-      const { data: session, error: sessionError } = await supabase
-        .from('coaching_sessions')
-        .insert({
-          user_id: user.id,
-          status: 'in_progress',
-          body_composition: {
-            heightCm: height,
-            totalWeightKg: weight,
-            bodyFatPercentage: bf,
-            bodyFatEstimated: bfEstimated,
-            leanMassKg: bodyComp?.leanMassKg,
-            ffmi: bodyComp?.ffmi
-          },
-          selected_benchmarks: []
-        })
-        .select()
-        .single();
-      
-      if (sessionError) throw sessionError;
+
+      // Food-only users finish here: no strength benchmarks, so no coaching
+      // session to carry them (lib/onboarding/trackingFocus).
+      const finishHere = skipsBenchmarks(
+        statedTrackingFocus(user.user_metadata),
+        askedForBenchmarks(window.location.search)
+      );
+
+      // Create coaching session (benchmarks → calibration carry its id)
+      let sessionId: string | null = null;
+      if (!finishHere) {
+        const { data: session, error: sessionError } = await supabase
+          .from('coaching_sessions')
+          .insert({
+            user_id: user.id,
+            status: 'in_progress',
+            body_composition: {
+              heightCm: height,
+              totalWeightKg: weight,
+              bodyFatPercentage: bf,
+              bodyFatEstimated: bfEstimated,
+              leanMassKg: bodyComp?.leanMassKg,
+              ffmi: bodyComp?.ffmi
+            },
+            selected_benchmarks: []
+          })
+          .select()
+          .single();
+
+        if (sessionError) throw sessionError;
+        sessionId = session.id;
+      }
       
       // Update user profile with sex, height, and the confirmed training goal
       const { error: profileError } = await supabase
@@ -371,6 +395,16 @@ export default function OnboardingBodyCompPage() {
       if (injuryAnswer !== null) {
         await updatePreference('injuryAreas', injuryAnswer);
       }
+
+      // Beginner mode (lifters; food-only users aren't asked). Best-effort:
+      // Settings → Preferences can always change it.
+      if (!foodFocus) {
+        try {
+          await savePreferencesPatch(supabase, user.id, { beginnerMode });
+        } catch (err) {
+          console.error('Error saving beginner mode:', err);
+        }
+      }
       
       // Track progress - user completed goal selection. The 'goal' marker is
       // what tells a chosen goal apart from registration's placeholder, so it
@@ -381,8 +415,17 @@ export default function OnboardingBodyCompPage() {
         await updateOnboardingStep(supabase, user.id, 'goal');
       }
       
+      if (finishHere) {
+        // Food-only: setup is done. Strength calibration stays reachable
+        // later (Progress / Settings link to ONBOARDING_BENCHMARKS_ENTRY).
+        if (!profileError) await completeOnboarding(supabase, user.id);
+        router.push('/dashboard');
+        navigating = true;
+        return;
+      }
+
       // Navigate to benchmark selection with session ID
-      router.push(`/onboarding/benchmarks?session=${session.id}`);
+      router.push(`/onboarding/benchmarks?session=${sessionId}`);
       navigating = true;
     } catch (err) {
       console.error('Error creating coaching session:', err);
@@ -509,6 +552,19 @@ export default function OnboardingBodyCompPage() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Text size: asked up front so everything after it is readable.
+            Applies on tap (the preview and this whole page grow with it)
+            and saves itself; Default unless the user picks otherwise. */}
+        <Card data-testid="onboarding-text-size">
+          <CardContent className="p-6 space-y-3">
+            <div>
+              <p className="text-headline text-ink">Text size</p>
+              <p className="text-subhead text-ink-2 mt-0.5">Pick what&apos;s easiest to read.</p>
+            </div>
+            <TextSizeControl preview />
+          </CardContent>
+        </Card>
         
         <Button
           onClick={handleUnitsConfirm}
@@ -562,6 +618,15 @@ export default function OnboardingBodyCompPage() {
         ageDisplay={ageDisplay}
         onAgeChange={setAgeDisplay}
         foodFocus={foodFocus}
+        {...(foodFocus
+          ? {}
+          : {
+              beginnerMode,
+              onBeginnerModeChange: (value: boolean) => {
+                beginnerTouched.current = true;
+                setBeginnerMode(value);
+              },
+            })}
         isLoading={isLoading}
         onBack={() => setStep('body-comp')}
         onContinue={handleContinue}
