@@ -36,9 +36,26 @@ describe('mergeSleepLogIntoWellness', () => {
     expect(out).toEqual([day('2026-11-22', { sleepHours: 8, sleepQuality: 3, moodRating: 5 })]);
   });
 
-  it('ignores empty or zero-hour rows and leaves days untouched without sleep_log', () => {
+  it('keeps a 0-hour night (an all-nighter), including over a check-in copy', () => {
+    const out = mergeSleepLogIntoWellness([day('2026-11-22', { sleepHours: 7, sleepQuality: 4 })], [
+      { local_day: '2026-11-22', hours: 0, quality: 'poor' },
+      { local_day: '2026-11-21', hours: '0', quality: 'poor' },
+    ]);
+    expect(out.map((d) => [d.date, d.sleepHours, d.sleepQuality])).toEqual([
+      ['2026-11-21', 0, 2],
+      ['2026-11-22', 0, 2],
+    ]);
+  });
+
+  it('skips missing, non-numeric or negative hours and leaves days untouched without sleep_log', () => {
     const days = [day('2026-11-22', { sleepHours: 7, sleepQuality: 4 })];
-    expect(mergeSleepLogIntoWellness(days, [{ local_day: '2026-11-21', hours: 0, quality: 'ok' }])).toEqual(days);
+    expect(
+      mergeSleepLogIntoWellness(days, [
+        { local_day: '2026-11-21', hours: null, quality: 'ok' },
+        { local_day: '2026-11-20', hours: 'abc', quality: 'ok' },
+        { local_day: '2026-11-19', hours: -1, quality: 'ok' },
+      ])
+    ).toEqual(days);
     expect(mergeSleepLogIntoWellness(days, [])).toEqual(days);
   });
 });

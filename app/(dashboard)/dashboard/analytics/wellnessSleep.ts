@@ -45,8 +45,11 @@ const EMPTY_DAY: Omit<WellnessDay, 'date'> = {
 export function mergeSleepLogIntoWellness(days: WellnessDay[], sleep: SleepLogRow[]): WellnessDay[] {
   const byDate = new Map(days.map((d) => [d.date, { ...d }]));
   for (const row of sleep) {
+    // 0 is a real night (an all-nighter — the quick log allows it); only a
+    // missing, non-numeric or negative value is skipped.
+    if (!row.local_day || row.hours === null || row.hours === '') continue;
     const hours = Number(row.hours);
-    if (!row.local_day || !Number.isFinite(hours) || hours <= 0) continue;
+    if (!Number.isFinite(hours) || hours < 0) continue;
     const day = byDate.get(row.local_day) ?? { date: row.local_day, ...EMPTY_DAY };
     day.sleepHours = hours;
     if (row.quality && (SLEEP_QUALITIES as readonly string[]).includes(row.quality)) {
