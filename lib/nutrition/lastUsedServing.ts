@@ -105,13 +105,18 @@ export function foodKeysFor(food: Parameters<typeof foodKeyFor>[0]): string[] {
   return byName && byName !== primary ? [primary, byName] : [primary];
 }
 
-/** The first remembered serving across `keys`, in order. */
+/**
+ * The NEWEST remembered serving across `keys`. Search records under id and
+ * name, but Recent (no id) updates only the name key, so taking the first key
+ * that exists returned a stale search-time portion after a newer Recent log.
+ */
 export function getLastUsedServingForKeys(keys: string[]): LastUsedServing | null {
+  let newest: LastUsedServing | null = null;
   for (const key of keys) {
     const hit = getLastUsedServing(key);
-    if (hit) return hit;
+    if (hit && (!newest || hit.ts > newest.ts)) newest = hit;
   }
-  return null;
+  return newest;
 }
 
 /** Record a logged amount+unit under every key for the food. */
