@@ -73,6 +73,9 @@ export interface TrackingFocus {
   setLiftingOn: (on: boolean) => Promise<void>;
 }
 
+/** After a failed automatic "lifting on" save, wait this long before trying again. */
+export const AUTO_ON_RETRY_MS = 60_000;
+
 export function useTrackingFocus(): TrackingFocus {
   const userId = useUserStore((s) => s.user?.id ?? null);
   const alsoLifts = useUserStore((s) => s.user?.preferences.alsoLifts);
@@ -125,7 +128,12 @@ export function useTrackingFocus(): TrackingFocus {
     if (autoOnFor === userId) return;
     autoOnFor = userId;
     setLiftingOn(true).catch(() => {
-      autoOnFor = null; // try again on the next render that sees it
+      // Keep the guard: the rollback re-renders with alsoLifts back to false,
+      // and clearing it here retried at once — an unbounded save loop on a
+      // persistent failure. Allow one more attempt a minute later instead.
+      setTimeout(() => {
+        if (autoOnFor === userId) autoOnFor = null;
+      }, AUTO_ON_RETRY_MS);
     });
   }, [userId, alsoLifts, data, setLiftingOn]);
 

@@ -77,6 +77,18 @@ describe('useTrackingFocus', () => {
     expect(useUserStore.getState().user?.preferences.alsoLifts).toBe(true);
   });
 
+  it('a failing automatic save is tried once, not in a loop', async () => {
+    mockMetadata = { tracking_focus: 'food' };
+    mockCompleted = [{ id: 's1' }];
+    mockSavePatch.mockRejectedValue(new Error('offline'));
+    renderHook(() => useTrackingFocus(), { wrapper });
+    await waitFor(() => expect(mockSavePatch).toHaveBeenCalledTimes(1));
+    // The rollback re-render must not fire another save straight away.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(mockSavePatch).toHaveBeenCalledTimes(1);
+    expect(useUserStore.getState().user?.preferences.alsoLifts).not.toBe(true);
+  });
+
   it('"I also lift weights" switches it on and off', async () => {
     mockMetadata = { tracking_focus: 'food' };
     const { result } = renderHook(() => useTrackingFocus(), { wrapper });

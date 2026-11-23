@@ -1413,7 +1413,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Food-only users (no workouts ever / in 12 weeks, but logging food or
   // weight — or brand new and said "food tracking" at sign-up) get food and weight first and one compact workout entry lower
   // down; lifters keep the workout hero. Every input is already in hand.
+  // Food-only mode (useTrackingFocus) wins: Settings switched lifting off,
+  // so the hero mustn't lead with a plan or schedule either.
   const foodFocus =
+    foodOnly ||
     homeFocus({
       completedWorkoutsCount: initialData?.completedWorkoutsCount,
       recentCompletedWorkouts: liftTrends?.sessionsInWindow,
@@ -1424,11 +1427,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       hasLoggedBodyOrFood,
       statedFocus,
     }) === 'food';
+  // Food-only: an unfinished workout still shows (never strand one); a
+  // plan, schedule or freestyle prompt doesn't. The same inputs feed the
+  // card, so its own variant choice agrees with this one.
+  const heroInputs = {
+    workout: foodOnly && heroWorkout?.state === 'completed' ? null : heroWorkout,
+    scheduled: foodOnly ? null : heroScheduled,
+    hasPlan: foodOnly ? false : !!planMesocycle,
+    freestyle: foodOnly ? false : isFreestyle,
+  };
   const heroVariant = todayHeroVariant({
-    workout: heroWorkout,
-    scheduled: heroScheduled,
-    hasPlan: !!planMesocycle,
-    freestyle: isFreestyle,
+    ...heroInputs,
     meal: mealHero,
     foodFocus,
   });
@@ -1601,10 +1610,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
       {/* 1. "Next up" hero — pending workout first, otherwise the next meal */}
       <TodayHeroCard
-        workout={heroWorkout}
-        scheduled={heroScheduled}
-        hasPlan={!!planMesocycle}
-        freestyle={isFreestyle}
+        workout={heroInputs.workout}
+        scheduled={heroInputs.scheduled}
+        hasPlan={heroInputs.hasPlan}
+        freestyle={heroInputs.freestyle}
         mesocycleName={planMesocycle?.name ?? null}
         eyebrowContext={heroEyebrowContext}
         workoutMeta={workoutHeroMeta}
