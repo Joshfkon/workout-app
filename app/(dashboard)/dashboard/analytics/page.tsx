@@ -1626,6 +1626,20 @@ function AnalyticsPageContent() {
               "Add more data" list further down, never above the chart. */}
           {bodyTrendModule}
 
+          {/* Progress photos right under the weight chart: the mirror check is
+              the other thing people open Body for, so it doesn't sit below
+              the measurement and proportions cards. */}
+          <ProgressPhotosHero
+            photos={progressPhotos}
+            photoUrls={photoUrls}
+            units={units}
+            weightUnit={weightUnit}
+            displayWeight={displayWeightString}
+            onCompare={() => setIsCompareOpen(true)}
+            onTimelapse={() => setIsTimelapseOpen(true)}
+            onAddPhoto={() => setIsAddPhotoOpen(true)}
+          />
+
           {/* Phase verdict + banner only once a phase exists — with none,
               the set-one prompt is a row in "Add more data". Tapping either
               opens the phase editor. */}
@@ -1704,18 +1718,6 @@ function AnalyticsPageContent() {
             displayUnit={units === 'kg' ? 'cm' : 'in'}
             weightUnit={units === 'kg' ? 'kg' : 'lb'}
             weightHistory={weightHistory}
-          />
-
-          {/* Progress Photos Hero */}
-          <ProgressPhotosHero
-            photos={progressPhotos}
-            photoUrls={photoUrls}
-            units={units}
-            weightUnit={weightUnit}
-            displayWeight={displayWeightString}
-            onCompare={() => setIsCompareOpen(true)}
-            onTimelapse={() => setIsTimelapseOpen(true)}
-            onAddPhoto={() => setIsAddPhotoOpen(true)}
           />
 
           <BodyAddMoreData
