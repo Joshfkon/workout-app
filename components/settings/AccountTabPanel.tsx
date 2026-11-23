@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input } from '@/components/ui';
-import { InstallAppCard } from '@/components/settings/InstallAppCard';
 import { SubscriptionCard } from '@/components/settings/SubscriptionCard';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { DeleteAccountCard } from '@/components/settings/DeleteAccountCard';
@@ -45,9 +44,6 @@ export function AccountTabPanel() {
     <div className="space-y-6">
       {/* BILLING & SUBSCRIPTION (surfaced to top) */}
       <SubscriptionCard />
-
-      {/* Install App */}
-      <InstallAppCard />
 
       {/* DATA MANAGEMENT */}
       <ImportExportSettings />
