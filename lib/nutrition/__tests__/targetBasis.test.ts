@@ -111,6 +111,8 @@ describe('describeTargetBasis', () => {
       expect(basis?.source).toBe('manual');
       const lines = targetBasisLines(basis!);
       expect(lines[0]).toBe('You entered these targets yourself.');
+      // …and where a weekly rate of gain/loss can be set instead.
+      expect(lines[1]).toMatch(/weekly rate of gain or loss/);
       expect(lines.some((l) => l.includes('burn'))).toBe(false);
     }
   });
