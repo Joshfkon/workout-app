@@ -66,7 +66,7 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow, clampToChip } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
-import type { WhyThisWeight } from './whyThisWeight';
+import { whyThisWeightLine, type WhyThisWeight } from './whyThisWeight';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { plainWorkoutText } from '@/lib/beginnerMode';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
@@ -3241,6 +3241,15 @@ export const ExerciseCard = memo(function ExerciseCard({
         `You stopped a set for ${partLabel} pain, so the load is backed off ~10% instead of progressing. If it still hurts, swap to a variation (⋯ menu → Swap).`
       );
     }
+
+    // Progressions off a logged set get their reason ON the strip, no tap
+    // ("Last time 65 lbs × 13, 2 reps left → +1 rep" — whyThisWeightLine),
+    // replacing the "From your last …" line that said the same thing less
+    // plainly. It always shows, so the engine's reason moves to the ⓘ sheet.
+    // First-time lifts keep their line above, which already names the basis
+    // and adds how to pick the weight.
+    const whyLine = why?.rule === 'start_guess' ? null : whyThisWeightLine(why);
+    if (whyLine) sourceLine = whyLine;
 
     // The reason often already says where the number came from ("set 1 last
     // session hit the rep ceiling (77 lbs × 10) — one increment up"); a

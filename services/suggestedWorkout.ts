@@ -140,6 +140,34 @@ export interface SuggestedWorkoutPlan {
   isLightSession: boolean;
   /** Set when the plan follows the user's push/pull/legs rotation. */
   splitDay?: SplitDay;
+  /**
+   * Which rule put the picks in this order (copy metadata for
+   * suggestedOrderLine; the order itself is decided below):
+   *  - 'compounds_first': orderCompoundsFirst over picks made in muscle-rank
+   *    order (ready before recovering, then furthest behind this week's target);
+   *  - 'full_body_rotation': the no-data fallback, one pick per body part in
+   *    turn (FULL_BODY_GROUPS order).
+   */
+  order?: SuggestedOrderRule;
+}
+
+export type SuggestedOrderRule = 'compounds_first' | 'full_body_rotation';
+
+/**
+ * One plain line saying why the exercises are in this order, phrased from the
+ * plan's own `order` rule — never a reason the builder didn't use. Null when
+ * there is nothing to order (fewer than two picks) or no rule was recorded.
+ */
+export function suggestedOrderLine(
+  plan: Pick<SuggestedWorkoutPlan, 'order'> & { exercises: readonly unknown[] },
+  opts: { beginner?: boolean } = {}
+): string | null {
+  if (plan.exercises.length < 2 || !plan.order) return null;
+  if (plan.order === 'full_body_rotation') {
+    return 'Order: one lift per body part, taking turns around the body.';
+  }
+  const big = opts.beginner ? 'big lifts that work several muscles' : 'big compound lifts';
+  return `Order: ${big} first, then smaller ones. Within each, rested muscles furthest behind this week go first.`;
 }
 
 // ============================================================
@@ -479,6 +507,7 @@ function buildLightSession(
 
   return {
     exercises: orderCompoundsFirst(picks, exerciseById),
+    order: 'compounds_first',
     focus:
       picks.length > 0
         ? 'Light technique session — every under-target muscle is close to its weekly recoverable maximum (MRV), so today stays easy on purpose.'
@@ -559,6 +588,7 @@ function buildFullBodyFallback(
 
   return {
     exercises: picks,
+    order: 'full_body_rotation',
     focus:
       picks.length > 0
         ? 'Focus: full body — no recent training data yet, starting with a balanced session.'
@@ -708,6 +738,7 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
       ? `${SPLIT_LABEL[splitDay]} day, next in your push/pull/legs rotation. ${focus}`
       : focus,
     isLightSession: false,
+    order: 'compounds_first',
     ...(followSplit && splitDay ? { splitDay } : {}),
   };
 }

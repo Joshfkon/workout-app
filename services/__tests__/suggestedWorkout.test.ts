@@ -1,5 +1,6 @@
 import {
   buildSuggestedWorkout,
+  suggestedOrderLine,
   type BuildSuggestedWorkoutInput,
   type SuggestedExerciseInput,
   type SuggestedMuscleInput,
@@ -736,5 +737,42 @@ describe('standing-injury safety', () => {
   it('never picks an avoid lift', () => {
     const plan = build({ muscles, exercises, avoidExerciseIds: new Set(['upright']) });
     expect(plan.exercises.map((p) => p.exerciseId)).not.toContain('upright');
+  });
+});
+
+describe('order line (why this exercise first)', () => {
+  it('a ranked plan is ordered compounds first, and the line says so', () => {
+    const exercises = [
+      makeExercise({ id: 'fly', name: 'Cable Fly', primaryMuscle: 'chest_upper', mechanic: 'isolation', tier: 'S' }),
+      makeExercise({ id: 'curl', name: 'Curl', primaryMuscle: 'biceps', mechanic: 'isolation' }),
+      makeExercise({ id: 'row', name: 'Row', primaryMuscle: 'lats', mechanic: 'compound' }),
+    ];
+    const plan = build({
+      muscles: [makeMuscle('chest_upper'), makeMuscle('biceps'), makeMuscle('lats', { weeklySets: 5 })],
+      exercises,
+    });
+    expect(plan.order).toBe('compounds_first');
+    // The rule the line describes is the rule the builder applied: the
+    // least-behind muscle's compound still leads.
+    const mechanics = plan.exercises.map((p) => exercises.find((e) => e.id === p.exerciseId)?.mechanic);
+    expect(plan.exercises[0].exerciseId).toBe('row');
+    expect(mechanics.lastIndexOf('compound')).toBeLessThan(mechanics.indexOf('isolation'));
+    expect(suggestedOrderLine(plan)).toBe(
+      'Order: big compound lifts first, then smaller ones. Within each, rested muscles furthest behind this week go first.'
+    );
+    expect(suggestedOrderLine(plan, { beginner: true })).toBe(
+      'Order: big lifts that work several muscles first, then smaller ones. Within each, rested muscles furthest behind this week go first.'
+    );
+  });
+
+  it('the no-data fallback takes turns around the body', () => {
+    const plan = build({ muscles: [], exercises: fullBodyLibrary() });
+    expect(plan.order).toBe('full_body_rotation');
+    expect(suggestedOrderLine(plan)).toBe('Order: one lift per body part, taking turns around the body.');
+  });
+
+  it('says nothing with fewer than two picks or no recorded rule', () => {
+    expect(suggestedOrderLine({ order: 'compounds_first', exercises: [{}] })).toBeNull();
+    expect(suggestedOrderLine({ order: undefined, exercises: [{}, {}] })).toBeNull();
   });
 });
