@@ -68,6 +68,7 @@ import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector
 import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
+import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCard';
 import { heroOffersWorkoutStart, todayHeroVariant } from '@/components/dashboard/home/TodayHeroCard';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
@@ -1583,6 +1584,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           phaseChip={<PhaseSelector phase={currentPhase} onPhaseChanged={handlePhaseChanged} offerPlanRebuild={!isFreestyle} />}
         />
       )}
+
+      {/* One-time "Text too small?" for accounts that never saw onboarding's
+          text size step. Renders nothing once a size is picked or closed. */}
+      <TextSizePromptCard />
 
       {/* Error starting workout */}
       {startWorkoutError && (

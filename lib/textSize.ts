@@ -56,8 +56,42 @@ export const TEXT_SIZE_CSS = (['large', 'larger'] as const)
   .join('');
 
 /**
- * Runs inline in <head> before first paint: read the saved size and stamp
- * the attribute. Kept tiny and dependency-free; mirrors
- * applyTextSizeToDocument.
+ * The OS text-size signal, used only while the user has never picked a size.
+ *
+ * On iOS / iPadOS (Safari and the app's WKWebView) the `-apple-system-body`
+ * font keyword resolves to the Dynamic Type body size the user set in
+ * Settings → Display & Text Size: 17px at the default, 19px one step up,
+ * 21px+ beyond. A web view does NOT scale rem text with Dynamic Type on its
+ * own, so this is the one reliable "the OS already asks for bigger text"
+ * signal we have. Browsers without the keyword reject it (the inline style
+ * stays empty) and get Default. A browser's own default font size needs no
+ * handling: every size here is a % of it already.
  */
-export const TEXT_SIZE_BOOT_SCRIPT = `(function(){try{var s=localStorage.getItem('${TEXT_SIZE_STORAGE_KEY}');if(s==='large'||s==='larger'){document.documentElement.setAttribute('${TEXT_SIZE_ATTRIBUTE}',s);}}catch(e){}})();`;
+export const SYSTEM_BODY_DEFAULT_PX = 17;
+
+export function textSizeForSystemBodyPx(px: number): TextSize {
+  if (!Number.isFinite(px) || px <= SYSTEM_BODY_DEFAULT_PX + 0.5) return 'default';
+  return px >= 21 ? 'larger' : 'large';
+}
+
+/** The size the OS asks for (see {@link textSizeForSystemBodyPx}); Default when unknown. */
+export function systemPreferredTextSize(doc: Document = document): TextSize {
+  try {
+    const probe = doc.createElement('span');
+    probe.style.font = '-apple-system-body';
+    if (!probe.style.font) return 'default'; // keyword not supported: no signal
+    doc.documentElement.appendChild(probe);
+    const px = parseFloat(doc.defaultView?.getComputedStyle(probe).fontSize ?? '');
+    probe.remove();
+    return textSizeForSystemBodyPx(px);
+  } catch {
+    return 'default';
+  }
+}
+
+/**
+ * Runs inline in <head> before first paint: read the saved size and stamp
+ * the attribute; with no saved choice, follow the OS text size. Kept tiny and
+ * dependency-free; mirrors applyTextSizeToDocument + systemPreferredTextSize.
+ */
+export const TEXT_SIZE_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=null;try{s=localStorage.getItem('${TEXT_SIZE_STORAGE_KEY}');}catch(e){}if(s==='large'||s==='larger'){d.setAttribute('${TEXT_SIZE_ATTRIBUTE}',s);return;}if(s==='default')return;var p=document.createElement('span');p.style.font='-apple-system-body';if(!p.style.font)return;d.appendChild(p);var px=parseFloat(getComputedStyle(p).fontSize);d.removeChild(p);if(px>=21)d.setAttribute('${TEXT_SIZE_ATTRIBUTE}','larger');else if(px>${SYSTEM_BODY_DEFAULT_PX + 0.5})d.setAttribute('${TEXT_SIZE_ATTRIBUTE}','large');}catch(e){}})();`;
