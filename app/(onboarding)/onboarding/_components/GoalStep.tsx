@@ -66,6 +66,14 @@ export interface GoalStepProps {
    */
   beginnerMode?: boolean;
   onBeginnerModeChange?: (value: boolean) => void;
+  /**
+   * The lifting experience given at sign-up, shown back as a summary so it
+   * isn't asked twice (lib/onboarding/experienceOptions experienceSummary).
+   * null = nothing to show; the Beginner mode switch is then shown open.
+   */
+  experience?: { label: string; fromSignUp: boolean } | null;
+  /** Label for Continue (lifters go on to the training step). Default "Continue". */
+  continueLabel?: string;
   isLoading: boolean;
   onBack: () => void;
   onContinue: () => void;
@@ -85,6 +93,8 @@ export function GoalStep({
   foodFocus = false,
   beginnerMode,
   onBeginnerModeChange,
+  experience = null,
+  continueLabel = 'Continue',
   isLoading,
   onBack,
   onContinue,
@@ -237,16 +247,11 @@ export function GoalStep({
       />
 
       {beginnerMode !== undefined && onBeginnerModeChange && (
-        <div
-          className="flex items-center justify-between gap-3 rounded-card bg-card p-4"
-          data-testid="onboarding-beginner-mode"
-        >
-          <div className="min-w-0">
-            <p className="text-body font-medium text-ink">{BEGINNER_MODE_TITLE}</p>
-            <p className="text-caption text-ink-2">{BEGINNER_MODE_DESCRIPTION}</p>
-          </div>
-          <Toggle checked={beginnerMode} onChange={onBeginnerModeChange} label={BEGINNER_MODE_TITLE} />
-        </div>
+        <ExperienceSummary
+          experience={experience}
+          beginnerMode={beginnerMode}
+          onBeginnerModeChange={onBeginnerModeChange}
+        />
       )}
 
       <div className="flex flex-col gap-2 pt-2">
@@ -266,7 +271,7 @@ export function GoalStep({
               'Saving…'
             ) : (
               <>
-                Continue
+                {continueLabel}
                 <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
@@ -363,5 +368,67 @@ function InjuryQuestion({
       </div>
       )}
     </>
+  );
+}
+
+/**
+ * Sign-up already asked how long they've lifted. Show that answer back with
+ * what it set (Beginner mode on or off) instead of a second experience-ish
+ * question; the switch is one tap away under Change. With no answer to show,
+ * the switch is shown open as before.
+ */
+function ExperienceSummary({
+  experience,
+  beginnerMode,
+  onBeginnerModeChange,
+}: {
+  experience: { label: string; fromSignUp: boolean } | null;
+  beginnerMode: boolean;
+  onBeginnerModeChange: (value: boolean) => void;
+}) {
+  const [open, setOpen] = useState(experience === null);
+  const toggleRow = (
+    <div className="flex items-center justify-between gap-3" data-testid="onboarding-beginner-mode">
+      <div className="min-w-0">
+        <p className="text-body font-medium text-ink">{BEGINNER_MODE_TITLE}</p>
+        <p className="text-caption text-ink-2">{BEGINNER_MODE_DESCRIPTION}</p>
+      </div>
+      <Toggle checked={beginnerMode} onChange={onBeginnerModeChange} label={BEGINNER_MODE_TITLE} />
+    </div>
+  );
+  if (!experience) {
+    return <div className="rounded-card bg-card p-4">{toggleRow}</div>;
+  }
+  return (
+    <div className="rounded-card bg-card p-4 space-y-3" data-testid="onboarding-experience-summary">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-body font-medium text-ink">
+            Lifting experience: {experience.label}
+            {experience.fromSignUp && <span className="font-normal text-ink-2"> (from sign-up)</span>}
+          </p>
+          <p className="text-subhead text-ink-2" data-testid="experience-summary-beginner">
+            {BEGINNER_MODE_TITLE}: {beginnerMode ? 'on' : 'off'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          data-testid="experience-summary-change"
+          className="min-h-[44px] px-2 -my-2 text-body font-medium text-action"
+        >
+          {open ? 'Done' : 'Change'}
+        </button>
+      </div>
+      {open && (
+        <div className="space-y-2 border-t border-sep pt-3">
+          {toggleRow}
+          <p className="text-caption text-ink-3">
+            Your experience level itself is in Settings → Profile.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

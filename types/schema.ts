@@ -260,6 +260,16 @@ export interface UserPreferences {
    * inferred from how recent workouts were started.
    */
   trainingStyle?: 'plan' | 'freestyle';
+
+  /**
+   * What the lifter said in onboarding's optional "How do you train now?"
+   * step (lib/onboarding/trainingSetup): sessions a week (2–7) and their
+   * current split. Unset = not answered. Stated, not measured: the
+   * mesocycle builder's history-based defaults stay the source of truth
+   * once there is history.
+   */
+  trainingDaysPerWeek?: number;
+  currentSplit?: 'full_body' | 'upper_lower' | 'ppl' | 'body_part' | 'other';
   
   /** Default rest timer duration in seconds */
   restTimerDefault: number;
