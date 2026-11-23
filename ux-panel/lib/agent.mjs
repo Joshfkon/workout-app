@@ -14,7 +14,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { toolUses } from './llm.mjs';
-import { TASK_QUESTIONS, WEEK_QUESTIONS } from '../anchors.mjs';
+import { TASK_QUESTIONS, WEEK_QUESTIONS, FREE_FEATURES, PRO_FEATURES, PRO_MONTHLY_PRICE } from '../anchors.mjs';
 
 const thought = {
   type: 'string',
@@ -417,6 +417,7 @@ export async function writeWeekReview({ llm, persona, sessions, lens = null }) {
         content: [
           `It's the end of your first week with HyperTrack. Over the week you used it for these things:\n${lines.join('\n')}`,
           `What you use now: ${persona.previousApps || 'nothing in particular'}. What you want: ${persona.goals}`,
+          `HyperTrack's pricing: Free covers ${FREE_FEATURES.join(', ').toLowerCase()}. Pro (${PRO_MONTHLY_PRICE}/month) adds ${PRO_FEATURES.join(', ').toLowerCase()}. Some of what you used this week may have been Pro features.`,
           "Now decide, as yourself, whether HyperTrack earns a place over what you already do. Judge it against your current way, not against perfection. If it's clearly better or clearly worse for you, say so plainly; only say you're unsure if you truly are.",
           'Answer with submit_week_review, briefly and honestly; do not give numeric ratings.',
         ].join('\n\n'),

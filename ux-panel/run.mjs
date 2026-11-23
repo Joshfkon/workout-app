@@ -290,7 +290,9 @@ async function main() {
     model: FAKE ? 'fake' : opts.model,
     embed: embedder.id,
     anchorsHash: sha(await readFile(path.join(HERE, 'anchors.mjs'), 'utf8')),
-    anchorHashes: Object.fromEntries(QUESTIONS.map((q) => [q.id, sha(JSON.stringify(q.anchorSets))])),
+    // A question's version (wording/context change) is part of its hash, so
+    // a changed question never compares with older runs.
+    anchorHashes: Object.fromEntries(QUESTIONS.map((q) => [q.id, sha(JSON.stringify(q.version ? { v: q.version, a: q.anchorSets } : q.anchorSets))])),
     sharpTemperature: SHARP_TEMPERATURE,
     storiesHash,
     reusedFrom: reuseDir ? path.basename(reuseDir) : null,

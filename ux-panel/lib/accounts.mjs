@@ -130,6 +130,16 @@ const HISTORY = {
  */
 export async function seedReturningUser(admin, userId, persona) {
   const a = persona.account;
+  // What the persona would have answered at sign-up ("Do you lift weights?"
+  // → "No, food tracking"). Seeded accounts skip the form, so without this
+  // Home treated a food-only persona as a lifter.
+  if (a.history === 'food-only') {
+    const { data } = await admin.auth.admin.getUserById(userId);
+    await must(
+      admin.auth.admin.updateUserById(userId, { user_metadata: { ...(data?.user?.user_metadata ?? {}), tracking_focus: 'food' } }),
+      'tracking_focus',
+    );
+  }
   const h = HISTORY[a.history] ?? HISTORY.light;
   await must(
     admin
@@ -187,6 +197,9 @@ export async function seedReturningUser(admin, userId, persona) {
   // 88 lb Romanian deadlifts and read as the app prescribing far too heavy.
   // A true beginner's first weeks sit around the empty bar / light dumbbells.
   const STRENGTH = { none: 0.35, novice: 0.7, intermediate: 1.0, advanced: 1.3 };
+  // A beginner adds reps almost every session; a flat 10/9/8 history made
+  // Progress honestly say "0 of your 3 lifts beat their first workout".
+  const beginner = ['none', 'novice'].includes(persona.experience);
   const strength = STRENGTH[persona.experience] ?? STRENGTH[a.experience] ?? 0.8;
   for (let w = 0; w < h.workouts; w++) {
     const offset = -Math.round(h.spanDays - (w * h.spanDays) / h.workouts);
@@ -217,7 +230,8 @@ export async function seedReturningUser(admin, userId, persona) {
       // +2.5 kg per session read as an implausible +10%/week on light lifts.
       const timesTrained = Math.floor(w / (a.split === 'ppl' ? 3 : 2));
       const load = Math.max(5, Math.round((a.weightKg * lift.base * strength * (1 + 0.015 * timesTrained)) / 2.5) * 2.5);
-      const sets = [10, 9, 8].map((reps, i) => ({
+      const repsBase = beginner ? [10, 9, 8].map((r) => Math.min(12, r + timesTrained)) : [10, 9, 8];
+      const sets = repsBase.map((reps, i) => ({
         exercise_block_id: block.id,
         set_number: i + 1,
         weight_kg: load,
