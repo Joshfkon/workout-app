@@ -24,6 +24,8 @@ export interface RawSetLog {
   id: string;
   weight_kg: number;
   reps: number;
+  /** Present on server rows when selected; queued rows carry theirs. */
+  rpe?: number | null;
   is_warmup: boolean;
   logged_at?: string | null;
 }
@@ -111,6 +113,7 @@ export function pendingSetsFromOutbox(entries: OutboxEntry[]): Map<string, RawSe
       id: String(row.id ?? entry.id),
       weight_kg: row.weight_kg,
       reps: row.reps,
+      ...(typeof row.rpe === 'number' ? { rpe: row.rpe } : {}),
       is_warmup: row.is_warmup === true,
       logged_at: typeof row.logged_at === 'string' ? row.logged_at : null,
     };

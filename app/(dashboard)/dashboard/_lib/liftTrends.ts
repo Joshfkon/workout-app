@@ -204,7 +204,7 @@ export function muscleProgressionInputFromRollup(rollup: LiftRollupInput): {
  * client refresh and the Progress tab compute over identical data.
  */
 export const LIFT_TREND_SESSION_SELECT = `id, completed_at, location_id, gym_locations (name),
-  exercise_blocks (equipment_changed, location_id, gym_locations (name),
+  exercise_blocks (id, equipment_changed, location_id, gym_locations (name),
     exercises (id, name, primary_muscle, exercise_type, equipment_required, is_bodyweight, progression_scope_override),
     set_logs (weight_kg, reps, rpe, is_warmup))`;
 
@@ -216,6 +216,8 @@ export interface LiftTrendSessionRow {
   location_id?: string | null;
   gym_locations?: { name: string | null } | null;
   exercise_blocks: {
+    /** Block id — lets sets still queued in the offline outbox join their block. */
+    id?: string;
     exercises: {
       id: string;
       name: string;
