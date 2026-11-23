@@ -1,5 +1,6 @@
 export function windowLines(lines: string[], visible: number[], limit: number): { lo: number; hi: number; extras: number[] } | null;
 export function personaSystemPrompt(p: Record<string, any>, lens?: string | null): string;
+export function pricingContext(persona: Record<string, any>): string;
 export const LENSES: Record<string, { persona: string[]; review: string }>;
 
 interface ToolDef { name: string; description: string; strict: boolean; input_schema: { type: 'object'; properties: Record<string, unknown>; required: string[] } }

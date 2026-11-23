@@ -10,6 +10,13 @@
  *                          on Home.
  *   maxSteps: hard cap on agent actions; patience lowers it further (see
  *             stepBudget in lib/agent.mjs).
+ *   optIn:    run only for personas that list this journey in their own
+ *             `journeys` array (personas.json). For journeys only some users
+ *             would attempt (programming a training block is what an
+ *             advanced lifter does, not a beginner) without adding them to
+ *             every other persona's `skip` list. Opt-in journeys are part of
+ *             `--journeys=core`, so the personas who opt in run them in every
+ *             standard run.
  */
 export const JOURNEYS = [
   {
@@ -60,7 +67,34 @@ export const JOURNEYS = [
     goal: (p) =>
       `Change the app's weight units to ${p.account?.units === 'kg' ? 'pounds (lb)' : 'kilograms (kg)'}. Stop once it's changed.`,
   },
+  {
+    // Power-user journey: the programming side of the app (mesocycle builder,
+    // weekly sets per muscle vs MEV/MRV, deload planning), which no other
+    // journey reaches. Advanced personas only (optIn).
+    id: 'plan-training',
+    label: 'Plan a training block',
+    account: 'returning',
+    startPath: '/dashboard',
+    optIn: true,
+    // Three parts (build a block, check volume, find the deload), each further
+    // from Home than any single core task: the same budget as first-run.
+    maxSteps: 40,
+    goal: () =>
+      "Set up your next training block the way you'd program it yourself: build a mesocycle that fits your split and goal, then check how your weekly sets per muscle compare with MEV/MRV, and see what the app plans for a deload. Stop when you've judged all three (or decided the app can't do one of them).",
+  },
 ];
+
+/**
+ * Whether a persona attempts a journey: not in its `skip` list and, for an
+ * opt-in journey, named in its `journeys` list. Applies to every --journeys
+ * selection (core or an explicit id list), so asking for plan-training never
+ * sends a beginner into the program builder.
+ */
+export function personaRunsJourney(persona, journey) {
+  if ((persona.skip ?? []).includes(journey.id)) return false;
+  if (journey.optIn) return (persona.journeys ?? []).includes(journey.id);
+  return true;
+}
 
 export function journeyById(id) {
   const j = JOURNEYS.find((x) => x.id === id);

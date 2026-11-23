@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic panel personas. Behavioural fields (patience, techComfort: 1-5) shape how the agent acts; 'account' seeds the synthetic account for journeys that start from a returning user. 'skip' lists journeys this persona would never attempt. Add or edit freely; --personas=N takes the first N.",
+  "_comment": "Synthetic panel personas. Behavioural fields (patience, techComfort: 1-5) shape how the agent acts; 'account' seeds the synthetic account for journeys that start from a returning user. 'skip' lists journeys this persona would never attempt; 'journeys' opts into journeys only some personas run (optIn in journeys.mjs, e.g. plan-training for advanced lifters). account.tier 'pro' seeds an active Pro subscription for a persona who'd plausibly pay, and their week review says they were on a Pro trial. Add or edit freely; --personas=N takes the first N.",
   "personas": [
     {
       "id": "beginner-maya",
@@ -23,7 +23,8 @@
       "patience": 2,
       "techComfort": 4,
       "previousApps": "Strong, MacroFactor, spreadsheets",
-      "account": { "goal": "cut", "experience": "advanced", "units": "lb", "sex": "male", "weightKg": 84, "heightCm": 178, "birthYear": 1995, "history": "regular" }
+      "account": { "goal": "cut", "experience": "advanced", "units": "lb", "sex": "male", "weightKg": 84, "heightCm": 178, "birthYear": 1995, "history": "regular", "tier": "pro" },
+      "journeys": ["plan-training"]
     },
     {
       "id": "hevy-switcher-sam",
@@ -72,7 +73,8 @@
       "patience": 3,
       "techComfort": 5,
       "previousApps": "A paid hypertrophy-programming app, Google Sheets, MacroFactor",
-      "account": { "goal": "bulk", "experience": "advanced", "units": "lb", "sex": "male", "weightKg": 95, "heightCm": 180, "birthYear": 1997, "history": "high", "split": "bodypart" }
+      "account": { "goal": "bulk", "experience": "advanced", "units": "lb", "sex": "male", "weightKg": 95, "heightCm": 180, "birthYear": 1997, "history": "high", "split": "bodypart", "tier": "pro" },
+      "journeys": ["plan-training"]
     },
     {
       "id": "busy-parent-lena",
