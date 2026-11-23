@@ -14,4 +14,5 @@ export { WaistPaceCheckCard } from './WaistPaceCheckCard';
 export { intakePaceLabel } from './intakePace';
 export { TodayCard, type TodayCardProps } from './TodayCard';
 export { TodaySheet } from './TodaySheet';
+export { WeeklySetsCard } from './WeeklySetsCard';
 export { NudgeCard, pickHomeNudge, type HomeNudgeKind, type NudgeTone } from './NudgeCard';
