@@ -23,7 +23,7 @@
  */
 
 /** The real Pro price (lib/stripe.ts), so "would you pay" has a number to judge. */
-export const PRO_MONTHLY_PRICE = '$9.99';
+export const PRO_MONTHLY_PRICE = '$4.99';
 
 /**
  * What Free and Pro include, as the app's own pricing lists them

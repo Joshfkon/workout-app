@@ -5,6 +5,7 @@ import { Button, Card, CardContent } from '@/components/ui';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
 import { Feature } from '@/lib/subscription';
+import { TIER_FEATURES } from '@/lib/stripe';
 
 interface UpgradePromptProps {
   feature: Feature;
@@ -153,7 +154,7 @@ export function UpgradePrompt({
         </Link>
         
         <p className="text-caption text-ink-3 mt-3">
-          Starting at ${displayTier === 'pro' ? '9.99' : '19.99'}/month
+          Starting at ${(displayTier === 'pro' ? TIER_FEATURES.pro : TIER_FEATURES.elite).monthlyPrice}/month
         </p>
       </CardContent>
     </Card>

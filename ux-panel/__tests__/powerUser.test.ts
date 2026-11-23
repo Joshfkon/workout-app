@@ -54,12 +54,12 @@ describe('week review pricing context', () => {
   it('tells a Pro-seeded persona they were on a Pro trial', () => {
     const text = pricingContext({ account: { tier: 'pro' } });
     expect(text).toMatch(/Pro trial this week/);
-    expect(text).toMatch(/keep paying \$9\.99\/month/);
+    expect(text).toMatch(/keep paying \$4\.99\/month/);
   });
 
   it('is unchanged for everyone else', () => {
     expect(pricingContext({ account: {} })).toBe(
-      "HyperTrack's pricing: Free covers unlimited workout logging, exercise history, basic progress tracking. Pro ($9.99/month) adds ai mesocycle builder, smart weight suggestions, advanced analytics, unlimited workouts, priority support. Some of what you used this week may have been Pro features.",
+      "HyperTrack's pricing: Free covers unlimited workout logging, exercise history, basic progress tracking. Pro ($4.99/month) adds ai mesocycle builder, smart weight suggestions, advanced analytics, unlimited workouts, priority support. Some of what you used this week may have been Pro features.",
     );
   });
 });
