@@ -93,6 +93,12 @@ export interface PlanWeekPreview {
   /** 1.0 = as planned; >1 harder / more volume. */
   intensityModifier: number;
   volumeModifier: number;
+  /**
+   * Reps in reserve the week prescribes: the range of its exercises' target
+   * RIR, else the stored week's RPE target read as RIR (10 − RPE). Null when
+   * neither is stored.
+   */
+  rir: { min: number; max: number } | null;
   status: PlanWeekStatus;
   sessions: PlanSessionPreview[];
   /** Planned working sets across the whole week. */
@@ -273,6 +279,7 @@ export function buildPlanPreview(input: PlanPreviewInput): PlanWeekPreview[] {
         (deloadWeek ? weekNumber === deloadWeek : weekNumber === totalWeeks),
       intensityModifier: modifiers.intensityModifier,
       volumeModifier: modifiers.volumeModifier,
+      rir: weekRirFrom(sessions.map((s) => s.session), programData, weekNumber),
       status:
         weekNumber < effectiveWeek
           ? 'done'
@@ -288,6 +295,23 @@ export function buildPlanPreview(input: PlanPreviewInput): PlanWeekPreview[] {
   }
 
   return weeks;
+}
+
+/** The week's RIR: its exercises' target RIR range, else the stored week's
+ *  RPE target as RIR. */
+function weekRirFrom(
+  sessions: ExtractedSession[],
+  programData: FullProgramRecommendation | null | undefined,
+  weekNumber: number
+): { min: number; max: number } | null {
+  const rirs = sessions.flatMap((s) =>
+    s.exercises.map((e) => e.targetRir).filter((r): r is number => typeof r === 'number' && Number.isFinite(r))
+  );
+  if (rirs.length > 0) return { min: Math.min(...rirs), max: Math.max(...rirs) };
+  const weeks = programData?.mesocycleWeeks ?? [];
+  const rpe = weeks.length > 0 ? weeks[Math.min(weekNumber - 1, weeks.length - 1)]?.rpeTarget : undefined;
+  if (!rpe) return null;
+  return { min: Math.max(0, 10 - rpe.max), max: Math.max(0, 10 - rpe.min) };
 }
 
 /**

@@ -18,6 +18,7 @@ import { saveWaistFromCheckin } from '@/lib/body/bodyLog';
 import { SleepFields, clampSleepHours } from '@/components/dashboard/SleepQuickLog';
 import { SLEEP_LOG_QUERY_KEY_PREFIX } from '@/hooks/useSleepLog';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { resolveLengthUnit } from '@/lib/units/lengthUnits';
 
 /** One-time protocol hint flag (per device). */
 const WAIST_HINT_SEEN_KEY = 'hypertrack_waist_hint_seen';
@@ -51,7 +52,8 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   // nothing. `waistInput` is in the user's DISPLAY unit; conversion to cm
   // happens only at save.
   const { preferences } = useUserPreferences();
-  const measurementUnit: 'in' | 'cm' = preferences.units === 'kg' ? 'cm' : 'in';
+  // The length setting (follows the weight unit until the user sets it).
+  const measurementUnit = resolveLengthUnit(preferences);
   const trackWaist = preferences.trackWaistInCheckin;
   const [waistInput, setWaistInput] = useState('');
   const [savedWaistCm, setSavedWaistCm] = useState<number | null>(null);

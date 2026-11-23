@@ -846,7 +846,7 @@ describe('ExerciseCard', () => {
       });
       // The suggestion copy stays mounted (it reserves the banner's height so
       // the flip can't shift the steppers below) but is hidden from AT.
-      expect(screen.getByText(/^100 kg × 9$/).closest('p')).toHaveAttribute(
+      expect(screen.getByText(/^100 kg × 9$/).closest('[data-testid="suggestion-strip"]')).toHaveAttribute(
         'aria-hidden',
         'true'
       );
@@ -856,7 +856,7 @@ describe('ExerciseCard', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
       });
-      expect(screen.getByText(/^100 kg × 9$/).closest('p')).toHaveAttribute(
+      expect(screen.getByText(/^100 kg × 9$/).closest('[data-testid="suggestion-strip"]')).toHaveAttribute(
         'aria-hidden',
         'false'
       );
@@ -1227,7 +1227,7 @@ describe('ExerciseCard', () => {
       // entered-weight copy exists only as the banner's invisible height
       // sizer (layout stability), hidden from AT, with no warning exposed.
       expect(weightInput).toHaveValue(999);
-      expect(screen.getByText(/^100 kg × 9$/).closest('p')).toHaveAttribute(
+      expect(screen.getByText(/^100 kg × 9$/).closest('[data-testid="suggestion-strip"]')).toHaveAttribute(
         'aria-hidden',
         'false'
       );
@@ -1261,7 +1261,7 @@ describe('ExerciseCard', () => {
         />
       );
       // Program 3 + readiness 1 = 4: the strip used to clamp to "@ 3".
-      expect(screen.getByTestId('suggestion-source').closest('p')).toHaveTextContent(/@ 4 RIR/);
+      expect(screen.getByTestId('suggestion-source').closest('[data-testid="suggestion-strip"]')).toHaveTextContent(/@ 4 RIR/);
       expect(screen.getByRole('button', { name: '4+ reps in reserve (cruise)' })).toHaveAttribute(
         'aria-pressed',
         'true'
@@ -1311,7 +1311,7 @@ describe('ExerciseCard', () => {
         'First time on this lift — starting guess from your Barbell Back Squat; pick a weight you could lift ~12 times, then adjust'
       );
       // The prescribed number is unchanged by the explanation.
-      expect(screen.getByTestId('suggestion-source').closest('p')).toHaveTextContent(
+      expect(screen.getByTestId('suggestion-source').closest('[data-testid="suggestion-strip"]')).toHaveTextContent(
         /^60 kg × 8–12 @ 2 RIR/
       );
     });
@@ -1326,7 +1326,7 @@ describe('ExerciseCard', () => {
       );
       // The banner paragraph names the user's own sets, and never twice
       // (reason + a repeated "From your last session" line).
-      const banner = screen.getByTestId('suggestion-rir-plain').closest('p')?.textContent ?? '';
+      const banner = screen.getByTestId('suggestion-rir-plain').closest('[data-testid="suggestion-strip"]')?.textContent ?? '';
       expect(banner).toMatch(/last (session|set)|Last (time|set) |recent sets on this lift/);
       expect((banner.match(/last session/g) ?? []).length).toBeLessThanOrEqual(1);
     });
@@ -1347,7 +1347,7 @@ describe('ExerciseCard', () => {
           isActive={true}
         />
       );
-      const banner = screen.getByTestId('suggestion-source').closest('p')!;
+      const banner = screen.getByTestId('suggestion-source').closest('[data-testid="suggestion-strip"]')!;
       // Weight unchanged: one step up from 135.
       expect(banner).toHaveTextContent(/^140 lbs × 9 @ 2 RIR/);
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent('135 lbs × 10');
@@ -3306,9 +3306,13 @@ describe('ExerciseCard — motion capture integration', () => {
   it('near-failure velocity at logged 4 RIR holds an engine "add" in the banner and the prefill', async () => {
     const easySet = [createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 6 })];
     const { rerender } = render(<ExerciseCard {...base} sets={easySet} />);
-    const engineWeight = screen.getByTestId('suggestion-verdict').textContent ?? '';
+    // The load moved, so the strip's reason is the set-change line (it
+    // carries the effort read; no separate logged-effort verdict).
+    const engineWeight = screen.getByTestId('suggestion-source').textContent ?? '';
+    expect(engineWeight).toMatch(/^Set 1 was 100 kg × 10 at 4\+ left \(easier than target\) → up to /);
+    expect(screen.queryByTestId('suggestion-verdict')).not.toBeInTheDocument();
     // The engine adds load off a 4-RIR set.
-    expect(Number(engineWeight.match(/→ ([\d.]+) kg/)?.[1])).toBeGreaterThan(100);
+    expect(Number(engineWeight.match(/up to ([\d.]+) kg/)?.[1])).toBeGreaterThan(100);
     rerender(
       <ExerciseCard
         {...base}
@@ -3538,5 +3542,111 @@ describe('ExerciseCard round 11: the reason is on the strip, no tap', () => {
     const line = screen.getByTestId('suggestion-source');
     expect(line).toHaveTextContent(/^Last (set|time) 100 kg × 10, 2 reps left → /);
     expect(line.textContent).not.toMatch(/\bRIR\b|e1RM|AMRAP/);
+  });
+});
+
+describe('ExerciseCard round 18: every set says why, predict then score, form guide', () => {
+  const LB = 2.20462;
+  const defaultProps = { exercise: createMockExercise(), block: createMockBlock(), sets: [], unit: 'kg' as const, isActive: false };
+  const prev = [0, 1, 2].map(() => ({ weightKg: 135 / LB, reps: 10, rpe: 8 }));
+  const benchProps = {
+    unit: 'lb' as const,
+    exercise: createMockExercise({ name: 'Barbell Bench Press', minWeightIncrementKg: 5 / LB }),
+    block: createMockBlock({ targetRepRange: [6, 10] as [number, number], targetWeightKg: 135 / LB }),
+    previousSets: prev,
+    exerciseHistory: { lastWorkoutDate: weeksAgo(1), lastWorkoutSets: prev, estimatedE1RM: 0, personalRecord: null, totalSessions: 4 },
+    isActive: true,
+  };
+
+  afterEach(() => useUserStore.setState({ user: null }));
+
+  it('set 2 after a harder-than-target set 1 names that set and the move', () => {
+    render(
+      <ExerciseCard
+        {...defaultProps}
+        {...benchProps}
+        sets={[createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 140 / LB, reps: 9, rpe: 10 })]}
+      />
+    );
+    const line = screen.getByTestId('suggestion-source').textContent ?? '';
+    // Sam: "I couldn't see why 140 then 135 was suggested".
+    // 140 was one step up from last time's 135; set 1 went to failure, so
+    // the engine goes back to 135 — and now says so.
+    expect(line).toBe('Set 1 was 140 lbs × 9 to failure (harder than target) → back to 135 lbs');
+    // The headline numbers carry the same load the line names.
+    expect(screen.getByTestId('suggestion-numbers')).toHaveTextContent(/^135 lbs × /);
+    // The line already says how set 1 went; no separate logged-effort verdict.
+    expect(screen.queryByTestId('suggestion-verdict')).not.toBeInTheDocument();
+  });
+
+  it('predicts the reps at the suggested load and stores the prediction on the logged set', async () => {
+    const user = userEvent.setup();
+    const onSetComplete = jest.fn().mockResolvedValue('id');
+    render(<ExerciseCard {...defaultProps} {...benchProps} onSetComplete={onSetComplete} />);
+    expect(screen.getByTestId('set-prediction-expect')).toHaveTextContent('Expect about 9 reps at 140 lbs');
+    await user.click(screen.getByRole('button', { name: 'Log set' }));
+    expect(onSetComplete).toHaveBeenCalledTimes(1);
+    const prediction = onSetComplete.mock.calls[0][0].feedback.prediction;
+    expect(prediction.repCount).toBe(9);
+    expect(prediction.weightKg).toBeCloseTo(140 / LB, 1);
+  });
+
+  it('scores the logged set against its prediction, with a running tally', () => {
+    render(
+      <ExerciseCard
+        {...defaultProps}
+        {...benchProps}
+        sets={[
+          createMockSetLog({
+            id: 'set-1',
+            setNumber: 1,
+            weightKg: 140 / LB,
+            reps: 9,
+            rpe: 8,
+            feedback: { repsInTank: 2, form: 'clean', prediction: { repCount: 9, weightKg: 140 / LB } },
+          }),
+        ]}
+      />
+    );
+    expect(screen.getByTestId('set-prediction-score')).toHaveTextContent(
+      'Set 1: You did 9 ✓ · Predictions within 1 rep today: 1 of 1 set'
+    );
+  });
+
+  it('previews what reaching the top of the range earns, from the engine’s own answer', () => {
+    render(<ExerciseCard {...defaultProps} {...benchProps} />);
+    expect(screen.getByTestId('set-next-time')).toHaveTextContent(/^Hit 140 lbs × 10 next time → 145 lbs$/);
+  });
+
+  it('a beginner’s empty-bar start says why, and the form guide is one tap away', async () => {
+    useUserStore.setState({
+      user: {
+        id: 'u1',
+        experience: 'novice',
+        preferences: { units: 'lb', beginnerMode: true },
+        volumeLandmarks: {},
+      } as unknown as import('@/types/schema').User,
+    });
+    const user = userEvent.setup();
+    const onHowToClick = jest.fn();
+    render(
+      <ExerciseCard
+        {...defaultProps}
+        unit="lb"
+        exercise={createMockExercise({ name: 'Barbell Bench Press', equipmentClass: 'barbell' })}
+        block={createMockBlock({ targetRepRange: [8, 12] as [number, number], targetWeightKg: 0 })}
+        isActive={true}
+        onHowToClick={onHowToClick}
+        coldStartSuggestion={{ weightKg: 45 / LB, reason: 'starting point', explanation: 'Profile.' }}
+      />
+    );
+    expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+      'Empty bar — a safe start; add weight if 10 reps feel easy'
+    );
+    await user.click(screen.getByTestId('exercise-how-to'));
+    expect(onHowToClick).toHaveBeenCalledTimes(1);
+    // The prefilled numbers show they can be typed over.
+    expect(screen.getByTestId('logger-weight-edit-hint')).toBeInTheDocument();
+    expect(screen.getByTestId('logger-reps-edit-hint')).toBeInTheDocument();
   });
 });

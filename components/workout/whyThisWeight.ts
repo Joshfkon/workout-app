@@ -157,3 +157,85 @@ export function whyThisWeightLine(why: WhyThisWeight | null | undefined): string
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/**
+ * What the just-logged set showed, as the card's branch named it — the
+ * trigger the engine reacted to, or (no trigger) its effort read vs target.
+ */
+export type SetChangeCause =
+  | 'harder'
+  | 'easier'
+  | 'on_target'
+  | 'reps_under'
+  | 'reps_over'
+  | 'fatigue';
+
+const SET_CHANGE_CAUSE: Record<SetChangeCause, string> = {
+  harder: 'harder than target',
+  easier: 'easier than target',
+  on_target: 'on target',
+  reps_under: 'fewer reps than your range',
+  reps_over: 'more reps than your range',
+  fatigue: 'you’re tiring — staying in your rep range',
+};
+
+export interface SetChangeLineInput {
+  /** The just-logged set's number in this exercise (1-based). */
+  setNo: number;
+  /** That set as logged, display-formatted ("140 lbs × 9"). */
+  lastSet: string;
+  /** Reps left logged on it; null when no effort was logged. */
+  lastRir: number | null;
+  cause: SetChangeCause | null;
+  /** Direction of the load change the engine made for the next set. */
+  direction: 'up' | 'down';
+  /** The next load equals one already used (earlier today or last session). */
+  back: boolean;
+  /** The next set's load, display-formatted ("135 lbs"). */
+  next: string;
+}
+
+function leftShort(rir: number): string {
+  const r = Math.max(0, rir);
+  if (r === 0) return ' to failure';
+  if (r >= 4) return ' at 4+ left';
+  return ` at ${Number.isInteger(r) ? String(r) : r.toFixed(1)} left`;
+}
+
+/**
+ * The one-line reason for a WITHIN-SESSION load change (set N → set N+1),
+ * shown on the strip so a weight that moves between sets is never silent:
+ *
+ *   "Set 1 was 140 lbs × 9 at 1 left (harder than target) → back to 135 lbs"
+ *
+ * Phrases what the engine already decided (the caller passes the direction
+ * of ITS change); no math happens here.
+ */
+export function setChangeLine(input: SetChangeLineInput): string {
+  const effort = input.lastRir != null ? leftShort(input.lastRir) : '';
+  const cause = input.cause ? ` (${SET_CHANGE_CAUSE[input.cause]})` : '';
+  const move =
+    input.direction === 'down'
+      ? input.back
+        ? 'back to'
+        : 'down to'
+      : input.back
+        ? 'back up to'
+        : 'up to';
+  return `Set ${input.setNo} was ${input.lastSet}${effort}${cause} → ${move} ${input.next}`;
+}
+
+/**
+ * First-time line for a barbell lift whose starting guess is the empty bar
+ * (a beginner's usual prefill, "45 lbs"): say why that is the right start
+ * and what to do if it's too light.
+ */
+export function emptyBarStartLine(reps: number): string {
+  return `Empty bar — a safe start; add weight if ${reps} reps feel easy`;
+}
+
+/** The empty Olympic bar: 20 kg, or 45 lb (20.4 kg). */
+export function isEmptyBarLoad(loadKg: number, equipment: string | null | undefined): boolean {
+  if ((equipment ?? '').toLowerCase() !== 'barbell') return false;
+  return loadKg >= 19.9 && loadKg <= 20.5;
+}

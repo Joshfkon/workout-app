@@ -3,6 +3,9 @@
  */
 import {
   foodKeyFor,
+  foodKeysFor,
+  getLastUsedServingForKeys,
+  recordLastUsedServingForKeys,
   getLastUsedServing,
   getRecentAmounts,
   recordLastUsedServing,
@@ -55,5 +58,30 @@ describe('last-used amount + unit', () => {
     recordLastUsedServing(key, 0, 'g');
     recordLastUsedServing(key, NaN, 'g');
     expect(getLastUsedServing(key)).toBeNull();
+  });
+});
+
+describe('remembering a food under every key it is known by', () => {
+  it('lists the id key and the name key', () => {
+    expect(foodKeysFor({ id: 'sys-1', name: 'Peas' })).toEqual(['id:sys-1', 'name:peas']);
+    expect(foodKeysFor({ name: 'Peas' })).toEqual(['name:peas']);
+  });
+
+  it('a portion picked from search comes back when the food is reopened from Recent', () => {
+    recordLastUsedServingForKeys(foodKeysFor({ id: 'sys-1', name: 'Peas' }), 200, 'g');
+    // A logged row has no system id, only the name.
+    expect(getLastUsedServingForKeys(foodKeysFor({ name: 'Peas' }))).toMatchObject({ amount: 200, unitId: 'g' });
+    expect(getLastUsedServingForKeys(foodKeysFor({ id: 'sys-1', name: 'Peas' }))).toMatchObject({ amount: 200 });
+    expect(getLastUsedServingForKeys(foodKeysFor({ name: 'Carrots' }))).toBeNull();
+  });
+
+  it('a newer portion logged from Recent wins when the food is reopened from search', () => {
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000);
+    recordLastUsedServingForKeys(foodKeysFor({ id: 'sys-2', name: 'Rice' }), 200, 'g'); // search: id + name
+    now.mockReturnValue(2_000);
+    recordLastUsedServingForKeys(foodKeysFor({ name: 'Rice' }), 150, 'g'); // Recent: name only
+    expect(getLastUsedServingForKeys(foodKeysFor({ id: 'sys-2', name: 'Rice' }))).toMatchObject({ amount: 150 });
+    now.mockRestore();
   });
 });

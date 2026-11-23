@@ -19,6 +19,7 @@ import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
 import { useLastRepeatableWorkout } from './FreestyleStartActions';
 import { ProTag } from '@/components/subscription/ProTag';
 import { RepeatWorkoutSheet, useRecentRepeatChoices } from '@/components/workout/RepeatWorkoutSheet';
+import { StartTodaysWorkoutButton } from './StartTodaysWorkoutButton';
 
 const SuggestedWorkoutSheet = dynamic(
   () => import('@/components/workout/SuggestedWorkoutSheet').then((m) => m.SuggestedWorkoutSheet),
@@ -110,15 +111,20 @@ export function HomeStartWorkout({
       </button>
     </div>
   ) : (
-    <button
-      type="button"
-      onClick={() => setShowOptions(true)}
-      className={BUTTON}
-      data-testid="home-start-workout"
-    >
-      <IconBarbell size={20} aria-hidden="true" />
-      Start workout
-    </button>
+    // One tap starts today's recommended workout; every other way to start
+    // (empty, repeat, preview the suggestion) stays one tap behind it.
+    <div className="space-y-1.5">
+      <StartTodaysWorkoutButton />
+      <button
+        type="button"
+        onClick={() => setShowOptions(true)}
+        className="flex w-full min-h-[44px] items-center justify-center gap-1.5 rounded-button text-action text-subhead font-semibold transition-colors active:bg-fill"
+        data-testid="home-start-workout"
+      >
+        <IconBarbell size={16} aria-hidden="true" />
+        Other ways to start a workout
+      </button>
+    </div>
   );
 
   return (

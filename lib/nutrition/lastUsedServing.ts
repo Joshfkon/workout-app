@@ -92,3 +92,34 @@ export function recordLastUsedServing(key: string, amount: number, unitId: strin
   store[key] = next;
   writeStore(store);
 }
+
+/**
+ * Every key a food can be remembered under. A food picked from search is
+ * keyed by its id (system / custom foods) but comes back later as a logged
+ * row with no id, keyed by name. Remembering under both means the last
+ * portion follows the food from search into Recent and back.
+ */
+export function foodKeysFor(food: Parameters<typeof foodKeyFor>[0]): string[] {
+  const primary = foodKeyFor(food);
+  const byName = food.name ? foodKeyFor({ name: food.name }) : null;
+  return byName && byName !== primary ? [primary, byName] : [primary];
+}
+
+/**
+ * The NEWEST remembered serving across `keys`. Search records under id and
+ * name, but Recent (no id) updates only the name key, so taking the first key
+ * that exists returned a stale search-time portion after a newer Recent log.
+ */
+export function getLastUsedServingForKeys(keys: string[]): LastUsedServing | null {
+  let newest: LastUsedServing | null = null;
+  for (const key of keys) {
+    const hit = getLastUsedServing(key);
+    if (hit && (!newest || hit.ts > newest.ts)) newest = hit;
+  }
+  return newest;
+}
+
+/** Record a logged amount+unit under every key for the food. */
+export function recordLastUsedServingForKeys(keys: string[], amount: number, unitId: string): void {
+  for (const key of keys) recordLastUsedServing(key, amount, unitId);
+}

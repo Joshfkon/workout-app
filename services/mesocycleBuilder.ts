@@ -196,28 +196,38 @@ function getExerciseDatabase(): ExerciseEntry[] {
  */
 export function calculateRecoveryFactors(profile: ExtendedUserProfile): RecoveryFactors {
   const warnings: string[] = [];
-  
+  // One line per factor that moved the volume multiplier, so the builder can
+  // say why the plan runs at e.g. 85% instead of showing a bare number.
+  const volumeReasons: string[] = [];
+  const noteVolume = (label: string, factor: number) => {
+    if (factor !== 1) volumeReasons.push(`${label} ×${factor.toFixed(2)}`);
+  };
+
   let volumeMultiplier = 1.0;
   let frequencyMultiplier = 1.0;
   let baseDeloadWeeks = 5;
-  
+
   // Age adjustments
   if (profile.age < 25) {
     volumeMultiplier *= 1.05;
+    noteVolume(`age ${profile.age}`, 1.05);
     frequencyMultiplier *= 1.05;
     baseDeloadWeeks = 6;
   } else if (profile.age >= 25 && profile.age < 35) {
     // Prime recovery years - no adjustment
   } else if (profile.age >= 35 && profile.age < 45) {
     volumeMultiplier *= 0.95;
+    noteVolume(`age ${profile.age}`, 0.95);
     baseDeloadWeeks = 5;
   } else if (profile.age >= 45 && profile.age < 55) {
     volumeMultiplier *= 0.85;
+    noteVolume(`age ${profile.age}`, 0.85);
     frequencyMultiplier *= 0.95;
     baseDeloadWeeks = 4;
     warnings.push('Consider extra warm-up sets and joint-friendly exercise variations.');
   } else if (profile.age >= 55) {
     volumeMultiplier *= 0.75;
+    noteVolume(`age ${profile.age}`, 0.75);
     frequencyMultiplier *= 0.90;
     baseDeloadWeeks = 3;
     warnings.push('Prioritize recovery. Consider 2-on-1-off training schedules.');
@@ -233,7 +243,8 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   };
   
   volumeMultiplier *= sleepMultiplier[profile.sleepQuality];
-  
+  noteVolume(`sleep ${profile.sleepQuality}/5`, sleepMultiplier[profile.sleepQuality]);
+
   if (profile.sleepQuality <= 2) {
     warnings.push('Sleep quality is limiting recovery. Fix this before adding volume.');
     baseDeloadWeeks = Math.max(3, baseDeloadWeeks - 1);
@@ -249,7 +260,8 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   };
   
   volumeMultiplier *= stressMultiplier[profile.stressLevel];
-  
+  noteVolume(`stress ${profile.stressLevel}/5`, stressMultiplier[profile.stressLevel]);
+
   if (profile.stressLevel >= 4) {
     warnings.push('High life stress impairs recovery. Training should be a release, not another stressor.');
     baseDeloadWeeks = Math.max(3, baseDeloadWeeks - 1);
@@ -258,6 +270,7 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   // Training age adjustments
   if (profile.trainingAge < 1) {
     volumeMultiplier *= 0.85;  // New lifters need slightly less volume to avoid overtraining
+    noteVolume('under a year of training', 0.85);
     baseDeloadWeeks = 4;       // Novices need frequent deloads due to CNS inefficiency
   } else if (profile.trainingAge >= 5) {
     baseDeloadWeeks = Math.max(3, baseDeloadWeeks - 1);  // Experienced lifters need more frequent deloads
@@ -277,6 +290,7 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   const volumeCeiling = 1.3;
 
   if (volumeMultiplier < volumeFloor) {
+    volumeReasons.push(`floored at ${Math.round(volumeFloor * 100)}% to prevent detraining`);
     warnings.push(
       `Recovery factors are significantly limiting volume (${Math.round(volumeMultiplier * 100)}% recommended). ` +
       `Using minimum ${Math.round(volumeFloor * 100)}% to prevent detraining. ` +
@@ -291,7 +305,8 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
     volumeMultiplier,
     frequencyMultiplier,
     deloadFrequencyWeeks: Math.round(baseDeloadWeeks),
-    warnings
+    warnings,
+    volumeReasons,
   };
 }
 
@@ -980,6 +995,13 @@ export interface VolumeAdjustmentInput {
   muscleGroup: MuscleGroup;
   volumeMultiplier: number;
   reason: 'lagging' | 'imbalance' | 'user_priority' | 'dominant';
+  /**
+   * A single head the adjustment is really for (side delts, upper chest…).
+   * `muscleGroup` is then its coarse parent, whose weekly target carries the
+   * multiplier; the session builder steers that group's exercise choice
+   * toward the head (up) or away from it (down).
+   */
+  head?: StandardMuscleGroup;
 }
 
 export function calculateVolumeDistribution(

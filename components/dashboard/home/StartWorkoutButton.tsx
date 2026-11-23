@@ -2,8 +2,19 @@
 
 import { useStartEmptyWorkout } from '@/hooks/useStartEmptyWorkout';
 
-/** Primary "Start workout" for the no-plan hero: opens an empty workout directly. */
-export function StartWorkoutButton({ className }: { className?: string }) {
+/**
+ * "Start workout": opens an empty workout directly. `secondary` is the tinted
+ * style for when a recommended start leads the card (the no-plan hero).
+ */
+export function StartWorkoutButton({
+  className,
+  label = 'Start workout',
+  secondary = false,
+}: {
+  className?: string;
+  label?: string;
+  secondary?: boolean;
+}) {
   const { start, isStarting, error } = useStartEmptyWorkout();
   return (
     <div className={className}>
@@ -11,9 +22,11 @@ export function StartWorkoutButton({ className }: { className?: string }) {
         type="button"
         onClick={() => void start()}
         disabled={isStarting}
-        className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-70"
+        className={`flex w-full min-h-[50px] items-center justify-center rounded-button text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-70 ${
+          secondary ? 'bg-action-tint text-action' : 'bg-action text-on-action'
+        }`}
       >
-        {isStarting ? 'Starting…' : 'Start workout'}
+        {isStarting ? 'Starting…' : label}
       </button>
       {error && <p className="mt-1.5 text-caption text-status-bad">{error}</p>}
     </div>

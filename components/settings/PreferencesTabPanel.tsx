@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { IconCheck } from '@tabler/icons-react';
-import type { WeightUnit } from '@/types/schema';
+import type { LengthUnit, WeightUnit } from '@/types/schema';
 import { Card, CardHeader, CardTitle, CardContent, SegmentedControl, Slider, Toggle } from '@/components/ui';
 import { EatingWindowSettings } from '@/components/settings/EatingWindowSettings';
 import { BloodPressureSettings } from '@/components/settings/BloodPressureSettings';
@@ -137,6 +137,9 @@ interface PreferencesTabPanelProps {
   // Units
   units: WeightUnit;
   handleUnitsChange: (units: WeightUnit) => void;
+  /** Height and body measurements; chosen separately from the weight unit. */
+  lengthUnits: LengthUnit;
+  handleLengthUnitsChange: (lengthUnits: LengthUnit) => void;
 
   // Preferences
   restTimer: number;
@@ -163,6 +166,8 @@ interface PreferencesTabPanelProps {
 export function PreferencesTabPanel({
   units,
   handleUnitsChange,
+  lengthUnits,
+  handleLengthUnitsChange,
   restTimer,
   setRestTimer,
   showFormCues,
@@ -183,30 +188,54 @@ export function PreferencesTabPanel({
 }: PreferencesTabPanelProps) {
   return (
     <div className="space-y-6">
-      {/* Units first: the setting people come to Preferences for most. One
-          choice covers weight and length (they are stored together). */}
+      {/* Units first: the setting people come to Preferences for most.
+          Weight and length are separate choices, both shown up front. */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle>Units</CardTitle>
-            <FieldSavePill field="units" status={saveStatus} />
-          </div>
+          <CardTitle>Units</CardTitle>
           <p className="text-body text-ink-2 mt-1">
-            For weights and body measurements across the app.
+            Pick each one on its own, for example kg for the bar and inches for the tape.
           </p>
         </CardHeader>
-        <CardContent>
-          <SegmentedControl<WeightUnit>
-            label="Units"
-            value={units}
-            onChange={handleUnitsChange}
-            options={[
-              { value: 'kg', label: 'kg & cm' },
-              { value: 'lb', label: 'lb & inches' },
-            ]}
-            className="w-full"
-          />
-          <FieldSaveError field="units" status={saveStatus} />
+        <CardContent className="space-y-4">
+          <div data-testid="units-weight-row">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <p className="text-body font-medium text-ink">
+                Weight <span className="text-caption text-ink-3 font-normal">(lifts, body weight)</span>
+              </p>
+              <FieldSavePill field="units" status={saveStatus} />
+            </div>
+            <SegmentedControl<WeightUnit>
+              label="Weight units"
+              value={units}
+              onChange={handleUnitsChange}
+              options={[
+                { value: 'kg', label: 'kg' },
+                { value: 'lb', label: 'lb' },
+              ]}
+              className="w-full"
+            />
+            <FieldSaveError field="units" status={saveStatus} />
+          </div>
+          <div data-testid="units-length-row">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <p className="text-body font-medium text-ink">
+                Length <span className="text-caption text-ink-3 font-normal">(height, body measurements)</span>
+              </p>
+              <FieldSavePill field="lengthUnits" status={saveStatus} />
+            </div>
+            <SegmentedControl<LengthUnit>
+              label="Length units"
+              value={lengthUnits}
+              onChange={handleLengthUnitsChange}
+              options={[
+                { value: 'cm', label: 'cm' },
+                { value: 'in', label: 'inches' },
+              ]}
+              className="w-full"
+            />
+            <FieldSaveError field="lengthUnits" status={saveStatus} />
+          </div>
         </CardContent>
       </Card>
 

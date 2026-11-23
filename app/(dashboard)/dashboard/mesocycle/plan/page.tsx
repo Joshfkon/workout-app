@@ -214,10 +214,23 @@ function WeekDetail({
             .filter(Boolean)
             .join(' · ')}
         </p>
-        {hasModifiers && (
-          <p className="text-caption text-ink-3 mt-1">
-            Volume {Math.round(week.volumeModifier * 100)}% · intensity{' '}
-            {Math.round(week.intensityModifier * 100)}% of baseline
+        {(hasModifiers || week.rir) && (
+          <p className="text-caption text-ink-3 mt-1" data-testid="plan-week-modifiers">
+            {[
+              hasModifiers ? `Volume ${Math.round(week.volumeModifier * 100)}%` : null,
+              hasModifiers ? `loads ${Math.round(week.intensityModifier * 100)}% of baseline` : null,
+              week.rir
+                ? `${week.rir.min === week.rir.max ? week.rir.min : `${week.rir.min}–${week.rir.max}`} RIR`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        )}
+        {week.isDeload && (
+          <p className="text-caption text-ink-2 mt-1" data-testid="plan-deload-details">
+            Deload: {Math.round(week.volumeModifier * 100)}% of the sets at {Math.round(week.intensityModifier * 100)}% loads
+            {week.rir ? `, stopping at least ${week.rir.min} reps short of failure` : ''}, so fatigue clears before the next block.
           </p>
         )}
 

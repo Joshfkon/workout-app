@@ -68,7 +68,7 @@ import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
 import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
 import { setMacroAutoUpdateEnabled } from '@/lib/actions/nutrition';
 import { customFoodFieldsFromScan } from '@/lib/nutrition/scannedCustomFood';
-import { addLoggedRowsToFrequentFoods, buildFrequentFoods, frequentFoodPortion, quickAddMessage } from '@/lib/nutrition/frequentFoods';
+import { addLoggedRowsToFrequentFoods, buildFrequentFoods, frequentFoodPortion, quickAddMessage, addedToMealMessage } from '@/lib/nutrition/frequentFoods';
 import { addLocalDays } from '@/lib/date/localDay';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -916,6 +916,24 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
 
     const inserted = await insertFoodEntry(food);
     applyInsertedEntries([inserted]);
+    mutateRecentFoodsCache((prev) => [inserted, ...prev]);
+    flagJustAdded([inserted]);
+    // Same confirmation as the one-tap adds, plus where the day now stands:
+    // "Added to Dinner · 1,640 / 2,400 kcal · 120 / 180 g protein".
+    // dailyTotals is this render's (pre-insert) day, so add the new row.
+    addToast(
+      'success',
+      addedToMealMessage(
+        mealLabelFor(food.meal_type),
+        {
+          calories: dailyTotals.calories + (inserted.calories || 0),
+          protein: dailyTotals.protein + (inserted.protein || 0),
+        },
+        { calories: effectiveTargets?.calories ?? null, protein: effectiveTargets?.protein ?? null }
+      ),
+      5000,
+      { label: 'Undo', onClick: () => { void undoQuickAdd([inserted]); } }
+    );
 
     // Save scanned barcode products to custom_foods for future search
     if (food.barcode) {

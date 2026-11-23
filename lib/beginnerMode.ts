@@ -45,6 +45,18 @@ export function effortTargetPhrase(rir: number): string {
   return `stop ${reps(n)} short of failure`;
 }
 
+/**
+ * A target effort for a first-week lifter, without "failure" or "reps in
+ * reserve": "stop when you could still do 2 more". Used where a plan is
+ * previewed (the suggested-workout sheet); same numbers, plainer words.
+ */
+export function beginnerEffortTarget(rir: number): string {
+  const n = Math.round(rir);
+  if (n <= 0) return 'go until you can’t do another rep';
+  if (n >= 4) return 'keep it easy: 4 or more left in you';
+  return `stop when you could still do ${n} more`;
+}
+
 /** How much is left, in words: "about 1 more rep in you". */
 export function effortLeftPhrase(rir: number): string {
   const n = Math.round(rir);
@@ -136,7 +148,7 @@ function plainMuscleNamesIn(text: string): string {
  */
 export function beginnerSuggestedFocus(focus: string): string {
   return plainMuscleNamesIn(focus)
-    .replace(/furthest behind on this week[’']s sets/g, 'behind this week')
+    .replace(/furthest behind on this week[’']s sets/g, 'they’ve had the least work this week')
     .replace(
       /^Light technique session — .*$/,
       'Light session: you’ve already trained a lot this week, so today stays easy on purpose.'
@@ -155,8 +167,8 @@ export function beginnerPickReason(reason: string, muscle: StandardMuscleGroup |
   const name = beginnerMuscleName(muscle);
   if (/weekly sets? done/.test(reason)) {
     return /almost recovered/.test(reason)
-      ? `${name}: behind this week, almost recovered`
-      : `${name}: behind this week`;
+      ? `${name}: needs more work this week, almost rested`
+      : `${name}: needs more work this week`;
   }
   if (/near weekly max/.test(reason)) return `${name}: light technique work only`;
   return plainMuscleNamesIn(reason);

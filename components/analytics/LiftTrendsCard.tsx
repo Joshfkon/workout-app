@@ -7,9 +7,12 @@ import {
   type LiftTrend,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import { EstMaxMethod } from './EstMaxMethod';
 import {
   earlyLiftChange,
+  estMaxExample,
   estMaxLabel,
+  exampleSetPoint,
   liftHref,
   moreWorkouts,
   nextTrendHint,
@@ -18,6 +21,9 @@ import {
   statusOf,
   workoutsUntilTrend,
 } from './liftTrendFormat';
+
+/** Where "Log a workout" goes: an empty workout, ready for the first set. */
+export const LOG_WORKOUT_HREF = '/dashboard/workout/new';
 
 interface LiftTrendsCardProps {
   summary: LiftTrendsSummary;
@@ -54,9 +60,7 @@ function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { best: string | nu
   return { best, max, change: signedPct(lift.weeklyChangePct) };
 }
 
-/** Plain explanation of "est. max", shown once where the term first appears. */
-export const EST_MAX_EXPLAINER =
-  'Est. max = the heaviest single rep your recent sets suggest you could lift. It counts the reps you had left, so it reads higher than a plain reps-to-max calculator.';
+export { EST_MAX_EXPLAINER } from './EstMaxMethod';
 
 /**
  * How "%/wk" is worked out — an advanced lifter saw every lift "+2%/wk" and
@@ -64,7 +68,7 @@ export const EST_MAX_EXPLAINER =
  * didn't trust any of it (UX panel).
  */
 export function rateExplainer(weeks: number): string {
-  return `%/wk = a straight line through the est. max of your best set in each workout over the last ${weeks} weeks, as a share of today's est. max.`;
+  return `%/wk = a straight line through each workout's best-set est. max over the last ${weeks} weeks, as a share of today's.`;
 }
 
 /**
@@ -107,14 +111,11 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
           </p>
         )}
         {summary.lifts.length > 0 && (
-          <p className="mt-0.5 text-caption text-ink-2" data-testid="est-max-explainer">
-            {EST_MAX_EXPLAINER}
-          </p>
-        )}
-        {summary.lifts.length > 0 && (
-          <p className="mt-0.5 text-caption text-ink-2" data-testid="rate-explainer">
-            {rateExplainer(weeks)}
-          </p>
+          <EstMaxMethod
+            className="mt-1"
+            example={estMaxExample(exampleSetPoint(summary.lifts), units)}
+            rate={rateExplainer(weeks)}
+          />
         )}
         {confident + rebuilding > 0 && (
           <div className="mt-2.5 flex gap-[3px]" aria-hidden="true">
@@ -142,8 +143,7 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
       {summary.lifts.length === 0 && earlyLifts.length > 0 ? (
         <div className="space-y-2" data-testid="lift-early-bests">
           <p className="px-1 text-subhead text-ink-2">
-            Until then, here is what you have lifted so far: your best set on each lift, and your first vs latest
-            workout where you have two.
+            Your best set on each lift so far, and first vs latest where you have two.
           </p>
           <ListGroup>
             {earlyLifts.map((l) => {
@@ -173,16 +173,25 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
           </ListGroup>
         </div>
       ) : summary.lifts.length === 0 ? (
-        <div className="rounded-card bg-card p-6 text-center shadow-card">
+        <div className="rounded-card bg-card p-6 text-center shadow-card" data-testid="lift-trends-empty">
           <p className="text-body text-ink">
             {summary.insufficientData > 0
-              ? 'No lift has enough workouts for a trend yet.'
+              ? `Log the same lift in ${MIN_SESSIONS_FOR_TREND} workouts to see its trend line.`
               : `No lifts logged in the last ${weeks} weeks.`}
           </p>
           <p className="mt-1 text-subhead text-ink-2">
-            Finish a workout with weights and your best sets show up here. Log the same lift in{' '}
-            {MIN_SESSIONS_FOR_TREND} workouts to see whether it is going up.
+            {summary.insufficientData > 0
+              ? 'Your best sets show up here as you go.'
+              : `Log a workout with weights and your best sets show up here. Do the same lift ${MIN_SESSIONS_FOR_TREND} times to see whether it is going up.`}
           </p>
+          {/* The empty state's one next step: straight into an empty workout. */}
+          <Link
+            href={LOG_WORKOUT_HREF}
+            className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-button bg-action px-5 text-body font-semibold text-on-action"
+            data-testid="lift-trends-log-workout"
+          >
+            Log a workout
+          </Link>
         </div>
       ) : (
         <ListGroup>
@@ -235,8 +244,8 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
 
       {summary.insufficientData > 0 && summary.lifts.length > 0 && (
         <p className="px-1 text-subhead text-ink-2">
-          {summary.insufficientData} more lift{summary.insufficientData === 1 ? '' : 's'} trained recently with fewer than{' '}
-          {MIN_SESSIONS_FOR_TREND} sessions — trends appear once there&apos;s enough history.
+          {summary.insufficientData} more lift{summary.insufficientData === 1 ? ' has' : 's have'} no trend line yet: each
+          needs {MIN_SESSIONS_FOR_TREND} workouts.
         </p>
       )}
 

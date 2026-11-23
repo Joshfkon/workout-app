@@ -279,9 +279,40 @@ export function classifyCameraError(err: unknown): CameraIssue {
 
 const CAMERA_ISSUE_COPY: Record<CameraIssue, string> = {
   denied: 'Camera access is off — type the barcode number instead',
-  missing: 'No camera here — type the barcode number instead',
+  missing: 'No camera available here — type the barcode number instead',
   failed: "The camera didn't start — type the barcode number instead",
 };
+
+/**
+ * Second line under the headline: what would happen with a camera, so a
+ * desktop or no-permission visit doesn't read as "Scan has no camera".
+ */
+const CAMERA_ISSUE_DETAIL: Record<CameraIssue, string> = {
+  denied: 'To scan, allow camera access for this app in your settings, then try again.',
+  missing: 'On a phone, Scan opens the camera. Here, use the number printed under the bars.',
+  failed: "It's the number printed under the bars.",
+};
+
+/**
+ * Before asking for the camera on the web: if the browser can list devices
+ * and lists no video input, there is no camera to ask for (a desktop without
+ * a webcam). Returns 'missing' then, else null ("try it"). Never throws, and
+ * an empty or failed listing is NOT taken as proof of no camera, except the
+ * explicit "devices listed, none of them video" case.
+ */
+export async function precheckWebCamera(
+  nav: { mediaDevices?: { enumerateDevices?: () => Promise<Array<{ kind: string }>> } } | undefined
+): Promise<CameraIssue | null> {
+  const enumerate = nav?.mediaDevices?.enumerateDevices;
+  if (typeof enumerate !== 'function') return null;
+  try {
+    const devices = await enumerate.call(nav!.mediaDevices);
+    if (devices.length > 0 && !devices.some((d) => d.kind === 'videoinput')) return 'missing';
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Shown when the camera can't start: manual entry is the primary action,
@@ -305,8 +336,10 @@ function CameraUnavailablePanel({
 }) {
   return (
     <div className="p-4 space-y-3" data-testid="barcode-manual-first">
-      <p className="text-body font-semibold text-ink">{CAMERA_ISSUE_COPY[issue]}</p>
-      <p className="text-caption text-ink-2">It&apos;s the number printed under the bars.</p>
+      <p className="text-body font-semibold text-ink" role="status">{CAMERA_ISSUE_COPY[issue]}</p>
+      <p className="text-caption text-ink-2" data-testid="barcode-camera-issue-detail">
+        {CAMERA_ISSUE_DETAIL[issue]}
+      </p>
       <input
         type="text"
         inputMode="numeric"
@@ -759,6 +792,17 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
     setIsScanning(true);
     setDebugInfo('Starting camera...');
+
+    // No webcam at all (desktop): say so straight away rather than waiting on
+    // a camera request that can only fail. Phones skip this (they list one).
+    const precheck = await precheckWebCamera(typeof navigator !== 'undefined' ? navigator : undefined);
+    if (!isMountedRef.current) return;
+    if (precheck) {
+      setIsScanning(false);
+      setDebugInfo('No camera found');
+      setCameraIssue(precheck);
+      return;
+    }
 
     try {
       const html5QrCode = new Html5Qrcode('barcode-reader', {

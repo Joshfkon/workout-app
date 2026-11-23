@@ -142,6 +142,22 @@ describe('buildPlanPreview', () => {
     expect(weeks[2].intensityModifier).toBeCloseTo(0.9);
   });
 
+  it('carries each week’s RIR from its prescribed sets, else from the stored RPE target', () => {
+    const weeks = buildPlanPreview(baseInput);
+    expect(weeks.map((w) => w.rir)).toEqual([
+      { min: 2, max: 2 },
+      { min: 2, max: 2 },
+      { min: 2, max: 2 },
+    ]);
+    // Exercises without a usable RIR → the week's RPE window (5–6 RPE = 4–5 RIR).
+    const program = makeProgram();
+    for (const s of program.mesocycleWeeks![2].sessions) {
+      for (const e of s.exercises) (e.reps as { targetRIR?: number }).targetRIR = undefined;
+    }
+    const deload = buildPlanPreview({ ...baseInput, programData: program })[2];
+    expect(deload.rir).toEqual({ min: 4, max: 5 });
+  });
+
   it('labels sessions with the mesocycle training weekdays', () => {
     const weeks = buildPlanPreview({
       ...baseInput,

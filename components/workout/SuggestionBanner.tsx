@@ -86,6 +86,12 @@ interface SuggestionBannerProps {
    * opens with a plain summary built from them.
    */
   why?: WhyThisWeight | null;
+  /** "Expect about 9 reps at 140 lbs" (setPrediction.expectLine). */
+  expect?: string | null;
+  /** The last set against its prediction, plus the running tally. */
+  score?: string | null;
+  /** "Hit 140 lbs × 10 next time → 145 lbs" (setPrediction.nextTimeLine). */
+  nextTime?: string | null;
 }
 
 const RIR_EXPANSION = 'reps in reserve: how many more you could have done';
@@ -141,6 +147,9 @@ export function SuggestionBanner({
   setKey,
   verdict = null,
   why = null,
+  expect = null,
+  score = null,
+  nextTime = null,
 }: SuggestionBannerProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [warningActive, setWarningActive] = useState(false);
@@ -194,6 +203,7 @@ export function SuggestionBanner({
   // Beginner mode keeps the strip to the numbers and the plain source line:
   // the engine's reason is jargon-dense, so it always moves to the sheet.
   const reasonInSheet = !!verdict || !!source || beginner;
+  const reasonLine = source;
 
   // The entered load × reps, as the caller formatted them for display.
   const enteredLabel = effortCheck ? `${effortCheck.weightLabel} × ${effortCheck.reps}` : '';
@@ -227,63 +237,84 @@ export function SuggestionBanner({
           buttons below mid-tap and repeated presses miss them. Only the
           visible layer is exposed to assistive tech. */}
       <div className="flex-1 min-w-0 grid">
-        <p
-          className={`col-start-1 row-start-1 text-caption leading-snug text-action ${
-            showWarning ? 'invisible' : ''
-          }`}
+        <div
+          className={`col-start-1 row-start-1 ${showWarning ? 'invisible' : ''}`}
+          data-testid="suggestion-strip"
           aria-hidden={showWarning}
           aria-live="polite"
         >
-          {verdict ? (
-            <span data-testid="suggestion-verdict">
-              {plain(verdict)} → <span className="font-medium">{weightLabel} × {repsLabel}</span>
-            </span>
-          ) : beginner ? (
-            <span className="font-medium">
-              {weightLabel} × {repsLabel}
-              {showRir ? (
-                <span className="font-normal" data-testid="suggestion-rir-plain">
-                  {` · ${effortTargetPhrase(rir)}`}
-                </span>
-              ) : null}
-            </span>
-          ) : (
-            <span className="font-medium">
-              {weightLabel} × {repsLabel}
-              {showRir ? (
-                <>
-                  {` @ ${rir} `}
-                  <RirTerm />
-                  <span className="font-normal" data-testid="suggestion-rir-plain">
-                    {` (${rirPlainLabel(rir)})`}
+          {/* Line 1: the numbers, high contrast. */}
+          <p className="text-subhead leading-snug text-ink" data-testid="suggestion-numbers">
+            {verdict ? (
+              <span data-testid="suggestion-verdict">
+                <span className="text-action">{plain(verdict)} →</span>{' '}
+                <span className="font-semibold">{weightLabel} × {repsLabel}</span>
+              </span>
+            ) : beginner ? (
+              <span className="font-semibold">
+                {weightLabel} × {repsLabel}
+                {showRir ? (
+                  <span className="font-normal text-ink-2" data-testid="suggestion-rir-plain">
+                    {` · ${effortTargetPhrase(rir)}`}
                   </span>
-                </>
-              ) : null}
-            </span>
-          )}
-          {roleTag ? (
-            <span className="ml-1.5 rounded bg-action/20 px-1.5 py-0.5 text-caption text-action">
-              {roleTag}
-            </span>
-          ) : null}
-          {reason && !reasonInSheet ? <span> — {reason}</span> : null}
-          {/* The one-line reason sits on the strip (no tap needed); the
-              "Why this weight?" link rides the end of that line, so a short
-              reason and its link share one row at phone width. */}
-          {source ? (
-            <span className="block mt-0.5 text-caption leading-snug text-ink-2">
-              <span data-testid="suggestion-source">{plain(source)}</span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="font-semibold">
+                {weightLabel} × {repsLabel}
+                {showRir ? (
+                  <>
+                    {` @ ${rir} `}
+                    <RirTerm />
+                    <span className="font-normal text-caption text-ink-2" data-testid="suggestion-rir-plain">
+                      {` (${rirPlainLabel(rir)})`}
+                    </span>
+                  </>
+                ) : null}
+              </span>
+            )}
+            {roleTag ? (
+              <span className="ml-1.5 rounded bg-action/20 px-1.5 py-0.5 text-caption text-action">
+                {roleTag}
+              </span>
+            ) : null}
+            {reason && !reasonInSheet ? <span className="text-caption text-ink-2"> — {reason}</span> : null}
+          </p>
+          {/* Line 2: WHY, directly under the numbers — the panel's Hevy
+              switcher never registered a grey caption tucked after the
+              target string. Ink on the tint, a "Why:" lead so it scans as
+              the reason, and the "Why this weight?" link riding its end. */}
+          {reasonLine ? (
+            <p className="mt-1 text-caption leading-snug text-ink">
+              <span className="font-semibold text-action">Why: </span>
+              <span data-testid="suggestion-source" className="font-medium">
+                {plain(reasonLine)}
+              </span>
               {whySummary ? (
                 <>
                   {' '}
                   {whyLink}
                 </>
               ) : null}
-            </span>
+            </p>
           ) : whySummary ? (
-            <span className="block mt-0.5">{whyLink}</span>
+            <p className="mt-1">{whyLink}</p>
           ) : null}
-        </p>
+          {/* Predict, then score — and what reaching the top earns. Quiet
+              caption lines; each renders only when the card has it. */}
+          {expect || score ? (
+            <p className="mt-1 text-caption leading-snug text-ink-2" data-testid="set-prediction">
+              {expect ? <span data-testid="set-prediction-expect">{expect}</span> : null}
+              {expect && score ? ' · ' : null}
+              {score ? <span data-testid="set-prediction-score">{score}</span> : null}
+            </p>
+          ) : null}
+          {nextTime ? (
+            <p className="mt-0.5 text-caption leading-snug text-ink-2" data-testid="set-next-time">
+              {nextTime}
+            </p>
+          ) : null}
+        </div>
         {effortCheck != null && (
           <p
             data-testid={showWarning ? 'effort-warning' : undefined}

@@ -42,6 +42,18 @@ import {
   builderDefaultsFromHistory,
   priorityVolumeAdjustments,
   plannedVolumeWithBands,
+  deliveredSetsAtPeak,
+  isUnderDelivered,
+  isAtOrBelowMev,
+  weekByWeekPlan,
+  rampLine,
+  rirLine,
+  deloadSummary,
+  formatRir,
+  rampExplanation,
+  recoveryVolumeExplanation,
+  priorityLabel,
+  headSetsAtPeak,
   type BuilderHistoryDefaults,
   type MusclePriorityRow,
 } from '@/lib/training/builderDefaults';
@@ -467,6 +479,17 @@ export default function NewMesocyclePage() {
   }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
       userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks, priorityAdjustments, splitType]);
 
+  // The generated plan read week by week: credited sets per muscle, volume
+  // and load shares, RIR (lib/training/builderDefaults weekByWeekPlan).
+  const planWeeks = useMemo(() => weekByWeekPlan(fullProgram), [fullProgram]);
+  const deload = useMemo(() => deloadSummary(planWeeks), [planWeeks]);
+  const deloadLine = deload
+    ? `Week ${deload.weekNumber} is a deload: ${deload.volumePercent}% of the sets` +
+      (deload.loadPercent !== null ? `, loads at ${deload.loadPercent}% intensity` : '') +
+      (deload.rir ? `, ${formatRir(deload.rir)}` : '') +
+      '.'
+    : null;
+
   // Generate default name
   useEffect(() => {
     const goalNames: Record<string, string> = {
@@ -700,6 +723,11 @@ export default function NewMesocyclePage() {
                 <p className="font-medium text-ink">{recoveryFactors.deloadFrequencyWeeks} weeks</p>
               </div>
             </div>
+            {recoveryVolumeExplanation(recoveryFactors) && (
+              <p className="text-caption text-ink-2 mt-3" data-testid="builder-volume-modifier-why">
+                {recoveryVolumeExplanation(recoveryFactors)}
+              </p>
+            )}
             {recoveryFactors.warnings.length > 0 && (
               <div className="mt-3 space-y-1">
                 {recoveryFactors.warnings.map((warning, i) => (
@@ -971,7 +999,16 @@ export default function NewMesocyclePage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant="info">{fullProgram.split}</Badge>
-                  <span className="text-subhead text-ink-2">{recommendation?.splitReason}</span>
+                  <span className="text-subhead text-ink-2">
+                    {/* The reason must describe the split on the badge; the
+                        older recommendation's text described its own pick
+                        (a Bro Split badge with an Arnold-split blurb). */}
+                    {fullProgram.split === recommendation?.splitType
+                      ? recommendation?.splitReason
+                      : historySplit === fullProgram.split
+                        ? 'Matches your recent training.'
+                        : 'Your choice of split.'}
+                  </span>
                 </div>
                 {fullProgram.programNotes.length > 0 && (
                   <div className="pt-2 border-t border-sep space-y-1">
@@ -1040,11 +1077,12 @@ export default function NewMesocyclePage() {
                 return up.length > 0 ? (
                   <p className="text-ink">
                     <span className="font-semibold">Priority muscles:</span>{' '}
-                    {up.map((a) => muscleDisplayName(a.muscleGroup)).join(', ')} get extra weekly sets (+10–20%).
+                    {up.map((a) => priorityLabel(a)).join(', ')} get extra weekly sets (+10–20%; a single head
+                    leads its group&apos;s exercise choice).
                   </p>
                 ) : (
                   <p className="text-ink-2">
-                    Bringing up a lagging muscle? Mark it high priority in{' '}
+                    Bringing up a lagging muscle, or one head like side delts? Mark it high priority in{' '}
                     <a href="/dashboard/settings" className="font-semibold text-action">Settings → Training → Muscle priorities</a>{' '}
                     and this plan gives it extra weekly sets.
                   </p>
@@ -1108,8 +1146,12 @@ export default function NewMesocyclePage() {
             />
 
             <div className="p-4 bg-fill/50 rounded-lg">
-              <p className="text-subhead text-ink-2">
-                <span className="text-ink-2 font-medium">Week {totalWeeks}</span> will automatically be a deload week with 50% reduced volume.
+              <p className="text-subhead text-ink-2" data-testid="builder-deload-line">
+                {deloadLine ?? (
+                  <>
+                    <span className="text-ink-2 font-medium">Week {totalWeeks}</span> will automatically be a deload week with 50% reduced volume.
+                  </>
+                )}
               </p>
             </div>
 
@@ -1220,8 +1262,12 @@ export default function NewMesocyclePage() {
                 <div className="space-y-2">
                   {Array.from({ length: totalWeeks }, (_, i) => {
                     const weekNum = i + 1;
-                    const isDeload = weekNum === totalWeeks;
-                    const volumePercent = isDeload ? 50 : Math.min(100, 80 + (weekNum - 1) * 5);
+                    // The generated week's own numbers. (This used to draw a
+                    // made-up 80% → 100% ramp no plan actually followed.)
+                    const planned = planWeeks[i];
+                    const isDeload = planned ? planned.isDeload : weekNum === totalWeeks;
+                    const volumePercent = planned ? Math.round(planned.volumeModifier * 100) : isDeload ? 50 : 100;
+                    const peakPercent = Math.max(100, ...planWeeks.map((w) => Math.round(w.volumeModifier * 100)));
 
                     return (
                       <div
@@ -1240,14 +1286,16 @@ export default function NewMesocyclePage() {
                             <span className={`text-subhead ${isDeload ? 'text-status-warn' : 'text-ink-2'}`}>
                               {isDeload ? 'Deload week' : `Week ${weekNum}`}
                             </span>
-                            <span className="text-caption text-ink-3">{volumePercent}% volume</span>
+                            <span className="text-caption text-ink-3">
+                              {volumePercent}% volume{planned?.rir ? ` · ${formatRir(planned.rir)}` : ''}
+                            </span>
                           </div>
                           <div className="h-1.5 bg-sep rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all ${
                                 isDeload ? 'bg-status-warn' : 'bg-action'
                               }`}
-                              style={{ width: `${volumePercent}%` }}
+                              style={{ width: `${Math.round((volumePercent / peakPercent) * 100)}%` }}
                             />
                           </div>
                         </div>
@@ -1259,7 +1307,9 @@ export default function NewMesocyclePage() {
                   })}
                 </div>
                 <p className="text-caption text-ink-3 mt-3">
-                  Volume gradually increases each week, then drops during deload for recovery and growth.
+                  {fullProgram && planWeeks.length > 0
+                    ? rampExplanation(fullProgram.periodization.model, planWeeks)
+                    : 'Volume gradually increases each week, then drops during deload for recovery and growth.'}
                 </p>
               </div>
             )}
@@ -1449,7 +1499,10 @@ export default function NewMesocyclePage() {
                       <span className="text-ink-2 font-medium">Week 1-{totalWeeks - 1}:</span> Progressive overload (+sets or +weight each week)
                     </p>
                     <p className="text-ink-2 mt-1">
-                      <span className="text-status-warn font-medium">Week {totalWeeks} (Deload):</span> 50% volume, same intensity to dissipate fatigue
+                      <span className="text-status-warn font-medium">Week {totalWeeks} (Deload):</span>{' '}
+                      {deload
+                        ? `${deload.volumePercent}% volume${deload.loadPercent !== null ? `, loads at ${deload.loadPercent}%` : ''}${deload.rir ? `, ${formatRir(deload.rir)}` : ''} to dissipate fatigue`
+                        : '50% volume to dissipate fatigue'}
                     </p>
                   </div>
                 </div>
@@ -1498,18 +1551,158 @@ export default function NewMesocyclePage() {
             {/* Weekly Volume Preview */}
             {recommendation && (
               <div className="p-4 bg-fill/50 rounded-lg">
-                <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle</p>
-                <p className="text-caption text-ink-3 mb-3">Planned sets at peak week vs each muscle&apos;s MEV–MRV range.</p>
-                <ul className="grid grid-cols-1 gap-1.5 text-subhead sm:grid-cols-2" data-testid="builder-volume-bands">
-                  {plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' }).map(({ muscle, sets, mev, mrv }) => (
-                    <li key={muscle} className="flex items-baseline justify-between rounded bg-card/50 px-2 py-1.5">
-                      <span className="text-ink">{muscleDisplayName(muscle)}</span>
-                      <span className="tabular-nums text-ink-2">
-                        <span className={`font-semibold ${sets < mev ? 'text-status-warn' : sets > mrv ? 'text-status-bad' : 'text-ink'}`}>{sets}</span> · MEV {mev} · MRV {mrv}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                {(() => {
+                  const rows = plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
+                  const deliveredOrNull = deliveredSetsAtPeak(fullProgram);
+                  const hasDelivered = deliveredOrNull !== null;
+                  const delivered = deliveredOrNull ?? {};
+                  // Targets the sessions cannot hold are capped at what they
+                  // do hold (the generator's volumeCaps); say what was wanted.
+                  const caps = fullProgram?.volumeCaps ?? {};
+                  const targetOf = (muscle: string, sets: number) => caps[muscle as keyof typeof caps]?.fits ?? sets;
+                  const cappedRows = rows.filter((r) => caps[r.muscle as keyof typeof caps]);
+                  const short = hasDelivered
+                    ? rows.filter((r) => !caps[r.muscle as keyof typeof caps] && isUnderDelivered(r.sets, delivered[r.muscle]))
+                    : [];
+                  const lowRows = hasDelivered ? rows.filter((r) => isAtOrBelowMev(delivered[r.muscle], r.mev)) : [];
+                  // Heads the lifter prioritized, and what the peak week gives them.
+                  const heads = priorityAdjustments.filter((a) => a.head).map((a) => a.head!);
+                  const headSets = headSetsAtPeak(fullProgram, heads);
+                  return (
+                    <>
+                      <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle (peak week)</p>
+                      <p className="text-caption text-ink-3 mb-3">
+                        {hasDelivered
+                          ? 'Sets your sessions contain at peak week (direct sets plus half credit for indirect work), against the plan’s target and each muscle’s MEV–MRV range.'
+                          : 'Planned sets at peak week vs each muscle’s MEV–MRV range.'}
+                      </p>
+                      {cappedRows.length > 0 && (
+                        <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-capped">
+                          {sessionDurationMinutes}-minute sessions on this split hold fewer sets than the plan wanted for{' '}
+                          {cappedRows.length === 1 ? '1 muscle' : `${cappedRows.length} muscles`}, so their targets are set to what fits
+                          {' '}(e.g. {muscleDisplayName(cappedRows[0].muscle)} {targetOf(cappedRows[0].muscle, cappedRows[0].sets)} of the {cappedRows[0].sets} wanted).
+                          {' '}One muscle gets about 10–12 hard sets a session; longer sessions or another day for it raise the target.
+                        </p>
+                      )}
+                      {short.length > 0 && (
+                        <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-short">
+                          {sessionDurationMinutes}-minute sessions fit fewer sets than planned for {short.length === 1 ? '1 muscle' : `${short.length} muscles`}
+                          {' '}(e.g. {muscleDisplayName(short[0].muscle)} {delivered[short[0].muscle] ?? 0} of {short[0].sets}).
+                          {' '}Longer sessions or a second day for those muscles closes the gap.
+                        </p>
+                      )}
+                      {lowRows.length > 0 && (
+                        <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-mev">
+                          At or below MEV (the least that still grows a muscle):{' '}
+                          {lowRows.map((r) => `${muscleDisplayName(r.muscle)} ${delivered[r.muscle] ?? 0} (MEV ${r.mev})`).join(', ')}.
+                          {' '}Expect maintenance, not growth, there unless you add direct work.
+                        </p>
+                      )}
+                      <ul className="grid grid-cols-1 gap-1.5 text-subhead sm:grid-cols-2" data-testid="builder-volume-bands">
+                        {rows.map(({ muscle, sets, mev, mrv }) => {
+                          const done = hasDelivered ? delivered[muscle] ?? 0 : sets;
+                          const target = targetOf(muscle, sets);
+                          const low = isAtOrBelowMev(done, mev);
+                          return (
+                            <li key={muscle} className="flex items-baseline justify-between gap-2 rounded bg-card/50 px-2 py-1.5">
+                              <span className="text-ink">
+                                {muscleDisplayName(muscle)}
+                                {low && <span className="ml-1.5 text-caption font-semibold text-status-warn">≤ MEV</span>}
+                              </span>
+                              <span className="tabular-nums text-ink-2 text-right">
+                                <span className={`font-semibold ${low ? 'text-status-warn' : done > mrv ? 'text-status-bad' : 'text-ink'}`}>{done}</span>
+                                {hasDelivered && done !== target && <> of {target}</>}
+                                {target !== sets && <span className="text-ink-3"> ({sets} wanted)</span>} · MEV {mev} · MRV {mrv}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {heads.length > 0 && (
+                        <p className="mt-3 text-caption text-ink-2" data-testid="builder-head-sets">
+                          Prioritized heads at peak week:{' '}
+                          {priorityAdjustments
+                            .filter((a) => a.head)
+                            .map((a) => `${priorityLabel(a)} ${headSets[a.head!] ?? 0} sets`)
+                            .join(', ')}
+                          .
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Week by week: sets per muscle for every generated week, the
+                RIR each week prescribes, and the deload's real numbers.
+                Panel: "Show sets per muscle for every week, ramping from MEV
+                toward MRV"; the review only showed the peak week. */}
+            {fullProgram && planWeeks.length > 0 && (
+              <div className="p-4 bg-fill/50 rounded-lg" data-testid="builder-week-by-week">
+                <p className="text-subhead font-medium text-ink-2 mb-1">Week by week</p>
+                <p className="text-caption text-ink-3 mb-2">{rampExplanation(fullProgram.periodization.model, planWeeks)}</p>
+                {rirLine(planWeeks) && (
+                  <p className="text-caption text-ink-2 mb-1" data-testid="builder-rir-line">
+                    <span className="font-semibold text-ink">Effort:</span> {rirLine(planWeeks)}
+                  </p>
+                )}
+                {deloadLine && (
+                  <p className="text-caption text-ink-2 mb-3">
+                    <span className="font-semibold text-ink">Deload:</span> {deloadLine}
+                  </p>
+                )}
+                {(() => {
+                  const bandRows = plannedVolumeWithBands(fullProgram.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-caption tabular-nums" data-testid="builder-week-table">
+                        <thead>
+                          <tr className="text-ink-3">
+                            <th scope="col" className="text-left font-medium py-1 pr-2">Sets</th>
+                            {planWeeks.map((w) => (
+                              <th key={w.weekNumber} scope="col" className={`text-right font-medium py-1 px-1 ${w.isDeload ? 'text-status-warn' : ''}`}>
+                                {w.isDeload ? 'Deload' : `W${w.weekNumber}`}
+                              </th>
+                            ))}
+                          </tr>
+                          <tr className="text-ink-3">
+                            <th scope="row" className="text-left font-normal py-0.5 pr-2">Volume</th>
+                            {planWeeks.map((w) => (
+                              <td key={w.weekNumber} className="text-right py-0.5 px-1">{Math.round(w.volumeModifier * 100)}%</td>
+                            ))}
+                          </tr>
+                          <tr className="text-ink-3 border-b border-sep">
+                            <th scope="row" className="text-left font-normal py-0.5 pr-2">RIR</th>
+                            {planWeeks.map((w) => (
+                              <td key={w.weekNumber} className="text-right py-0.5 px-1">
+                                {w.rir ? (w.rir.min === w.rir.max ? w.rir.min : `${w.rir.min}–${w.rir.max}`) : '–'}
+                              </td>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bandRows.map(({ muscle, mev }) => (
+                            <tr key={muscle} aria-label={`${muscleDisplayName(muscle)}: ${rampLine(planWeeks, muscle)}`}>
+                              <th scope="row" className="text-left font-normal text-ink py-0.5 pr-2 whitespace-nowrap">{muscleDisplayName(muscle)}</th>
+                              {planWeeks.map((w) => {
+                                const sets = Math.round(w.sets[muscle] ?? 0);
+                                // A deload sits under MEV by design; flag training weeks only.
+                                const low = !w.isDeload && isAtOrBelowMev(sets, mev);
+                                return (
+                                  <td key={w.weekNumber} className={`text-right py-0.5 px-1 ${low ? 'text-status-warn font-semibold' : 'text-ink-2'}`}>
+                                    {sets}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+                <p className="text-caption text-ink-3 mt-2">Amber: at or below the muscle&apos;s MEV that week.</p>
               </div>
             )}
 

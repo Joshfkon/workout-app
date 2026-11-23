@@ -174,8 +174,10 @@ export function suggestedOrderLine(
   if (plan.order === 'full_body_rotation') {
     return 'Order: one lift per body part, taking turns around the body.';
   }
-  const big = opts.beginner ? 'big lifts that work several muscles' : 'big compound lifts';
-  return `Order: ${big} first, then smaller ones. Within each, rested muscles furthest behind this week go first.`;
+  if (opts.beginner) {
+    return 'Order: big lifts that work several muscles first, then smaller ones. Rested muscles that have had the least work this week go first.';
+  }
+  return 'Order: big compound lifts first, then smaller ones. Within each, rested muscles furthest behind this week go first.';
 }
 
 // ============================================================

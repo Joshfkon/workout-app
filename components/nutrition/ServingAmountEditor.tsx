@@ -20,6 +20,8 @@ import {
   DEFAULT_SERVING_CHIPS,
   type FoodAmountModel,
 } from '@/lib/nutrition/servingScaling';
+import { stepAmount } from '@/lib/nutrition/portionDefaults';
+import { IconMinus, IconPlus } from '@tabler/icons-react';
 
 export interface ServingAmountValue {
   amount: string;
@@ -94,8 +96,17 @@ export function ServingAmountEditor({
     <div className="space-y-3">
       <label className="block text-subhead font-medium text-ink-2">Amount</label>
 
-      {/* Amount input + unit selector */}
+      {/* − amount + stepper, then the unit selector */}
       <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setAmount(stepAmount(value.amount, unit, -1).toString())}
+          aria-label="Less"
+          data-testid={`${testIdPrefix}-step-down`}
+          className="flex-shrink-0 w-11 rounded-lg bg-card text-ink flex items-center justify-center shadow-card hover:bg-fill transition-colors"
+        >
+          <IconMinus size={18} aria-hidden="true" />
+        </button>
         <input
           type="number"
           inputMode="decimal"
@@ -105,8 +116,17 @@ export function ServingAmountEditor({
           onChange={(e) => setAmount(e.target.value)}
           aria-label="Amount"
           data-testid={`${testIdPrefix}-amount`}
-          className="flex-1 min-w-0 px-4 py-2.5 text-headline font-medium bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
+          className="flex-1 min-w-0 px-3 py-2.5 text-headline font-medium text-center bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
         />
+        <button
+          type="button"
+          onClick={() => setAmount(stepAmount(value.amount, unit, 1).toString())}
+          aria-label="More"
+          data-testid={`${testIdPrefix}-step-up`}
+          className="flex-shrink-0 w-11 rounded-lg bg-card text-ink flex items-center justify-center shadow-card hover:bg-fill transition-colors"
+        >
+          <IconPlus size={18} aria-hidden="true" />
+        </button>
         {model.units.length > 1 ? (
           <select
             value={value.unitId}

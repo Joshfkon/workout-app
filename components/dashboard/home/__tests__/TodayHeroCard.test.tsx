@@ -150,7 +150,8 @@ describe('TodayHeroCard — next-up recommendation', () => {
     );
 
     expect(screen.getByText('Ready to train?')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start workout' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start today’s workout' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start empty' })).toBeInTheDocument();
     expect(screen.getByText('Build a program')).toBeInTheDocument();
     expect(screen.queryByText('Log dinner')).not.toBeInTheDocument();
   });
@@ -350,12 +351,12 @@ describe('TodayHeroCard — freestyle training style', () => {
 
 
 describe('TodayHeroCard — no plan: one tap into a workout', () => {
-  it('Start workout opens an empty workout directly (no confirm screen)', async () => {
+  it('Start empty opens an empty workout directly (no confirm screen)', async () => {
     const user = userEvent.setup();
     render(
       <TodayHeroCard workout={null} scheduled={null} hasPlan={false} mesocycleName={null} meal={null} />
     );
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    await user.click(screen.getByRole('button', { name: 'Start empty' }));
     expect(mockStart).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('link', { name: /quick workout/i })).not.toBeInTheDocument();
   });

@@ -95,6 +95,14 @@ export interface SetFeedback {
    * lifter's own pick. Dropped whenever the RIR is edited.
    */
   rirSource?: 'sensor';
+  /**
+   * What the app expected for this set when it was logged: reps at the
+   * suggested load (components/workout/setPrediction). Display only — the
+   * "You did 9 ✓" line and the accuracy tally; never read by the engine.
+   * Absent when the set had no forecast (first time on a lift, timed,
+   * ramp, rep-total) or predates the feature.
+   */
+  prediction?: { repCount: number; weightKg: number };
 }
 
 /** Type of progression applied to an exercise */
@@ -105,6 +113,13 @@ export type VolumeStatus = 'below_mev' | 'effective' | 'optimal' | 'approaching_
 
 /** Weight unit preference */
 export type WeightUnit = 'kg' | 'lb';
+
+/**
+ * Length unit preference (height, tape measurements). Chosen separately from
+ * WeightUnit; when unset it follows the weight unit (kg→cm, lb→in). See
+ * lib/units/lengthUnits.
+ */
+export type LengthUnit = 'cm' | 'in';
 
 /** Rating scale for subjective measures (1-5) */
 export type Rating = 1 | 2 | 3 | 4 | 5;
@@ -233,6 +248,12 @@ export interface User {
 export interface UserPreferences {
   /** Weight unit preference */
   units: WeightUnit;
+
+  /**
+   * Length unit for height and body measurements. Unset = follows `units`
+   * (kg→cm, lb→in); read it through resolveLengthUnit (lib/units/lengthUnits).
+   */
+  lengthUnits?: LengthUnit;
 
   /**
    * Plan (mesocycles) or freestyle (lib/training/trainingStyle). Unset =
@@ -1534,6 +1555,12 @@ export interface RecoveryFactors {
   
   /** Warnings about recovery limitations */
   warnings: string[];
+
+  /**
+   * What moved `volumeMultiplier` off 100%, one entry per factor, e.g.
+   * "sleep 2/5 ×0.85". Empty when nothing did.
+   */
+  volumeReasons?: string[];
 }
 
 /**
@@ -1691,6 +1718,14 @@ export interface FullProgramRecommendation {
   
   /** Program notes and recommendations */
   programNotes: string[];
+
+  /**
+   * Weekly targets the generated sessions cannot hold: `wanted` is the
+   * `volumePerMuscle` target, `fits` the credited sets the peak week's
+   * sessions actually contain (the effective target). Absent on programs
+   * generated before it existed.
+   */
+  volumeCaps?: Partial<Record<MuscleGroup, { wanted: number; fits: number }>>;
 }
 
 // ============ REP RANGE SYSTEM ============
@@ -3192,6 +3227,34 @@ export function calculatePercentBodyweight(
  * 1 = highest priority (most focus), 5 = lowest priority (maintenance only)
  */
 export type MusclePriorityLevel = 1 | 2 | 3 | 4 | 5;
+
+/**
+ * Single heads a lifter can prioritize on their own, under the coarse group
+ * whose weekly target carries them: the volume model's fine children
+ * (services/volumeBands FINE_CHILD_MUSCLES) that have their own exercises.
+ * "I couldn't target side delts separately" (UX panel): Shoulders alone was
+ * too coarse for a bodybuilder bringing up one head. Every key here must be
+ * in the user_muscle_priorities CHECK (asserted against the migration in
+ * services/__tests__/musclePriorityVocabulary.test.ts).
+ */
+export const MUSCLE_PRIORITY_HEADS: Partial<Record<MuscleGroup, readonly StandardMuscleGroup[]>> = {
+  chest: ['chest_upper', 'chest_lower'],
+  shoulders: ['front_delts', 'lateral_delts', 'rear_delts'],
+  back: ['lats', 'upper_back'],
+  triceps: ['triceps_long', 'triceps_lat_med'],
+  glutes: ['glute_med'],
+  calves: ['gastrocnemius', 'soleus'],
+  abs: ['obliques'],
+  traps: ['upper_traps', 'mid_lower_traps'],
+};
+
+/** The coarse group a prioritizable head belongs to (undefined otherwise). */
+export function priorityHeadParent(muscle: string): MuscleGroup | undefined {
+  for (const [group, heads] of Object.entries(MUSCLE_PRIORITY_HEADS) as [MuscleGroup, readonly StandardMuscleGroup[]][]) {
+    if ((heads as readonly string[]).includes(muscle)) return group;
+  }
+  return undefined;
+}
 
 /**
  * User's muscle group training priority preference

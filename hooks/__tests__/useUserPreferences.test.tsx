@@ -179,6 +179,47 @@ describe('useUserPreferences', () => {
     });
   });
 
+  describe('length units', () => {
+    const loadWith = async (preferences: Record<string, unknown>) => {
+      mockSingle.mockResolvedValue({
+        data: { goal: null, experience: null, height_cm: null, weight_kg: null, preferences },
+      });
+      const hook = renderHook(() => useUserPreferences());
+      await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
+      return hook;
+    };
+
+    it('derives length from weight for a user who never chose one (kg→cm, lb→in)', async () => {
+      const kg = await loadWith({ units: 'kg' });
+      expect(kg.result.current.preferences.lengthUnits).toBe('cm');
+      kg.unmount();
+      const lb = await loadWith({ units: 'lb' });
+      expect(lb.result.current.preferences.lengthUnits).toBe('in');
+    });
+
+    it('keeps a stored length choice independent of the weight unit', async () => {
+      const { result } = await loadWith({ units: 'kg', lengthUnits: 'in' });
+      expect(result.current.preferences.units).toBe('kg');
+      expect(result.current.preferences.lengthUnits).toBe('in');
+
+      // Switching weight leaves an explicit length choice alone.
+      mockSelect.mockReturnValue({ eq: () => ({ single: async () => ({ data: { preferences: {} } }) }) });
+      await act(async () => {
+        await result.current.updatePreference('units', 'lb');
+      });
+      expect(result.current.preferences.lengthUnits).toBe('in');
+    });
+
+    it('a derived length follows a weight switch until the user picks one', async () => {
+      const { result } = await loadWith({ units: 'kg' });
+      mockSelect.mockReturnValue({ eq: () => ({ single: async () => ({ data: { preferences: {} } }) }) });
+      await act(async () => {
+        await result.current.updatePreference('units', 'lb');
+      });
+      expect(result.current.preferences.lengthUnits).toBe('in');
+    });
+  });
+
   describe('return value structure', () => {
     it('returns expected properties', () => {
       const { result } = renderHook(() => useUserPreferences());

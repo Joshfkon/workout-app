@@ -761,7 +761,7 @@ describe('order line (why this exercise first)', () => {
       'Order: big compound lifts first, then smaller ones. Within each, rested muscles furthest behind this week go first.'
     );
     expect(suggestedOrderLine(plan, { beginner: true })).toBe(
-      'Order: big lifts that work several muscles first, then smaller ones. Within each, rested muscles furthest behind this week go first.'
+      'Order: big lifts that work several muscles first, then smaller ones. Rested muscles that have had the least work this week go first.'
     );
   });
 

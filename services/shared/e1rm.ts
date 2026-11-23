@@ -100,8 +100,17 @@ export function estimateE1RMFromRpe(
   reps: number,
   rpe?: number | null
 ): E1RMEstimate | null {
-  const rir = rpe != null && rpe > 0 ? Math.max(0, rpeToRir(rpe)) : 0;
-  return estimateE1RM(weight, reps, rir);
+  return estimateE1RM(weight, reps, rirForE1RM(rpe));
+}
+
+/**
+ * The reps-in-reserve `estimateE1RMFromRpe` credits a set with: the bucketed
+ * `rpeToRir` of its logged RPE, or 0 (taken to failure) when none was
+ * logged. Exported so a surface EXPLAINING an estimate ("180 × 10 with ~2
+ * left") states the same number the estimator used.
+ */
+export function rirForE1RM(rpe?: number | null): number {
+  return rpe != null && rpe > 0 ? Math.max(0, rpeToRir(rpe)) : 0;
 }
 
 /**

@@ -19,7 +19,8 @@ import {
   LANDMARK_VERSION,
   LANDMARK_VERSION_PREFERENCE_KEY,
 } from '@/lib/migrations/volume-landmarks';
-import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
+import type { Goal, Experience, WeightUnit, LengthUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
+import { resolveLengthUnit } from '@/lib/units/lengthUnits';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { refreshUserStore } from '@/components/providers/UserStoreHydrator';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
@@ -41,6 +42,7 @@ import type { PreferenceSaveStatus } from '@/components/settings/PreferencesTabP
  */
 interface AutoSavedPreferences {
   units: WeightUnit;
+  lengthUnits: LengthUnit;
   restTimer: number;
   showFormCues: boolean;
   showWarmupSuggestions: boolean;
@@ -87,6 +89,8 @@ export default function SettingsPage() {
   const [storedHeightCm, setStoredHeightCm] = useState<number | null>(null);
   const [storedWeightKg, setStoredWeightKg] = useState<number | null>(null);
   const [units, setUnits] = useState<WeightUnit>('kg');
+  // Height is shown in this (not `units`): lib/units/lengthUnits.
+  const [lengthUnits, setLengthUnits] = useState<LengthUnit>('cm');
   const [restTimer, setRestTimer] = useState(180);
   const [showFormCues, setShowFormCues] = useState(true);
   const [showWarmupSuggestions, setShowWarmupSuggestions] = useState(true);
@@ -128,26 +132,15 @@ export default function SettingsPage() {
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
 
-  // Convert display values when units change, then save the choice at once.
+  // Convert the weight display when the weight unit changes, then save the
+  // choice at once. Length is its own setting: the current length unit is
+  // saved alongside so a user who never picked one (length followed weight)
+  // doesn't see their height flip to the other unit.
   const handleUnitsChange = (newUnits: WeightUnit) => {
     if (newUnits === units) return;
     const prevUnits = units;
-    const prevHeightDisplay = heightDisplay;
     const prevWeightDisplay = weightDisplay;
-    let nextHeightDisplay = heightDisplay;
     let nextWeightDisplay = weightDisplay;
-
-    // Convert existing display values to new units
-    if (heightDisplay) {
-      const heightVal = parseFloat(heightDisplay);
-      if (units === 'kg' && newUnits === 'lb') {
-        // cm -> inches
-        nextHeightDisplay = cmToInches(heightVal).toFixed(1);
-      } else if (units === 'lb' && newUnits === 'kg') {
-        // inches -> cm
-        nextHeightDisplay = inchesToCm(heightVal).toFixed(1);
-      }
-    }
 
     if (weightDisplay) {
       const weightVal = parseFloat(weightDisplay);
@@ -160,24 +153,51 @@ export default function SettingsPage() {
       }
     }
 
-    setHeightDisplay(nextHeightDisplay);
     setWeightDisplay(nextWeightDisplay);
     setUnits(newUnits);
 
-    // Height/weight are stored metric, so converting their display is not an
-    // edit: move the saved snapshot along with them unless the user had
-    // already typed an unsaved value (that one stays "unsaved").
+    // Weight is stored metric, so converting its display is not an edit:
+    // move the saved snapshot along with it unless the user had already typed
+    // an unsaved value (that one stays "unsaved").
     const snapshot = initialValuesRef.current;
     const snapshotExtras: Record<string, unknown> = {};
-    if (prevHeightDisplay === snapshot.heightDisplay) snapshotExtras.heightDisplay = nextHeightDisplay;
     if (prevWeightDisplay === snapshot.weightDisplay) snapshotExtras.weightDisplay = nextWeightDisplay;
 
     autoSavePreferences(
-      { units: newUnits },
+      { units: newUnits, lengthUnits },
       () => {
         setUnits(prevUnits);
-        setHeightDisplay(prevHeightDisplay);
         setWeightDisplay(prevWeightDisplay);
+      },
+      snapshotExtras
+    );
+  };
+
+  // Same for the length unit: converts the height display, saves at once.
+  const handleLengthUnitsChange = (newLength: LengthUnit) => {
+    if (newLength === lengthUnits) return;
+    const prevLength = lengthUnits;
+    const prevHeightDisplay = heightDisplay;
+    let nextHeightDisplay = heightDisplay;
+
+    if (heightDisplay) {
+      const heightVal = parseFloat(heightDisplay);
+      nextHeightDisplay =
+        newLength === 'in' ? cmToInches(heightVal).toFixed(1) : inchesToCm(heightVal).toFixed(1);
+    }
+
+    setHeightDisplay(nextHeightDisplay);
+    setLengthUnits(newLength);
+
+    const snapshot = initialValuesRef.current;
+    const snapshotExtras: Record<string, unknown> = {};
+    if (prevHeightDisplay === snapshot.heightDisplay) snapshotExtras.heightDisplay = nextHeightDisplay;
+
+    autoSavePreferences(
+      { lengthUnits: newLength },
+      () => {
+        setLengthUnits(prevLength);
+        setHeightDisplay(prevHeightDisplay);
       },
       snapshotExtras
     );
@@ -250,11 +270,13 @@ export default function SettingsPage() {
           setBeginnerMode(resolveBeginnerMode(prefs.beginnerMode, data.experience));
           const userUnits = (prefs.units as WeightUnit) || 'kg';
           setUnits(userUnits);
+          const userLengthUnits = resolveLengthUnit(prefs, userUnits);
+          setLengthUnits(userLengthUnits);
           
           // Store metric values and convert to display units
           if (data.height_cm) {
             setStoredHeightCm(data.height_cm);
-            const displayHeight = userUnits === 'lb' 
+            const displayHeight = userLengthUnits === 'in'
               ? cmToInches(data.height_cm).toFixed(1)
               : String(data.height_cm);
             setHeightDisplay(displayHeight);
@@ -359,6 +381,7 @@ export default function SettingsPage() {
       availableEquipment: JSON.stringify(availableEquipment),
       injuryHistory: JSON.stringify(injuryHistory),
       units,
+      lengthUnits,
       restTimer,
       showFormCues,
       showWarmupSuggestions,
@@ -382,7 +405,7 @@ export default function SettingsPage() {
     
     setHasUnsavedChanges(isDirty);
   }, [goal, experience, heightDisplay, weightDisplay, age, sleepQuality, stressLevel, trainingAge, 
-      availableEquipment, injuryHistory, units, restTimer, showFormCues, showWarmupSuggestions, 
+      availableEquipment, injuryHistory, units, lengthUnits, restTimer, showFormCues, showWarmupSuggestions, 
       prioritizeHypertrophy, skipPreWorkoutCheckIn, trackWaistInCheckin, showAiCoachNotes, volumeLandmarks,
       isLoading, settingsQuery.data, initialValues]);
 
@@ -426,7 +449,7 @@ export default function SettingsPage() {
       
       if (heightDisplay) {
         const heightVal = parseFloat(heightDisplay);
-        heightToSave = units === 'lb' ? inchesToCm(heightVal) : heightVal;
+        heightToSave = lengthUnits === 'in' ? inchesToCm(heightVal) : heightVal;
       }
       
       if (weightDisplay) {
@@ -532,6 +555,7 @@ export default function SettingsPage() {
         availableEquipment: JSON.stringify(availableEquipment),
         injuryHistory: JSON.stringify(injuryHistory),
         units,
+        lengthUnits,
         restTimer,
         showFormCues,
         showWarmupSuggestions,
@@ -583,6 +607,7 @@ export default function SettingsPage() {
 
         // Every other reader of these prefs: the shared preferences hook…
         if (patch.units !== undefined) applyPreferenceLocally('units', patch.units);
+        if (patch.lengthUnits !== undefined) applyPreferenceLocally('lengthUnits', patch.lengthUnits);
         if (patch.restTimer !== undefined) applyPreferenceLocally('restTimerDefault', patch.restTimer);
         if (patch.showFormCues !== undefined) applyPreferenceLocally('showFormCues', patch.showFormCues);
         if (patch.showWarmupSuggestions !== undefined) {
@@ -624,7 +649,7 @@ export default function SettingsPage() {
 
   /** A Preferences-tab switch: flip it and save it. */
   const autoSaveToggle =
-    (key: Exclude<keyof AutoSavedPreferences, 'units' | 'restTimer'>, setter: (value: boolean) => void) =>
+    (key: Exclude<keyof AutoSavedPreferences, 'units' | 'lengthUnits' | 'restTimer'>, setter: (value: boolean) => void) =>
     (value: boolean) => {
       setter(value);
       autoSavePreferences({ [key]: value }, () => setter(!value));
@@ -751,6 +776,7 @@ export default function SettingsPage() {
           trainingAge={trainingAge}
           setTrainingAge={setTrainingAge}
           units={units}
+          lengthUnits={lengthUnits}
           sleepQuality={sleepQuality}
           setSleepQuality={setSleepQuality}
           stressLevel={stressLevel}
@@ -782,6 +808,8 @@ export default function SettingsPage() {
         <PreferencesTabPanel
           units={units}
           handleUnitsChange={handleUnitsChange}
+          lengthUnits={lengthUnits}
+          handleLengthUnitsChange={handleLengthUnitsChange}
           restTimer={restTimer}
           setRestTimer={handleRestTimerChange}
           showFormCues={showFormCues}
