@@ -15,9 +15,14 @@
  * Pure: no storage, no clock. The caller passes the last-used value in.
  */
 
-import { isHouseholdNoun, round2, type FoodAmountModel } from './servingScaling';
+import { getUnit, isHouseholdNoun, round2, trimNum, type FoodAmountModel, type UnitMacros } from './servingScaling';
 
-export type PortionReason = 'last' | 'serving' | 'typical' | 'model';
+/**
+ * Where the starting amount came from: your last log of this food ('last'),
+ * the logged row you reopened ('logged'), the food's own serving
+ * ('serving'), a typical portion ('typical'), or the model's default ('model').
+ */
+export type PortionReason = 'last' | 'logged' | 'serving' | 'typical' | 'model';
 
 export interface DefaultPortion {
   amount: number;
@@ -47,7 +52,7 @@ export function defaultPortion(
   }
 
   if (fallback && hasUnit(fallback.unitId) && fallback.amount > 0) {
-    return { amount: fallback.amount, unitId: fallback.unitId, reason: 'model' };
+    return { amount: fallback.amount, unitId: fallback.unitId, reason: 'logged' };
   }
 
   const defaultUnit = model.units.find((u) => u.id === model.defaultUnitId) ?? model.units[0];
@@ -102,21 +107,116 @@ const TYPICAL_BY_CATEGORY: Record<string, number> = {
   fruits: 140,
 };
 
-/** Typical portion for a system food, or null when we don't know one. */
-export function typicalPortionGramsForSystemFood(food: {
-  name: string;
-  category?: string | null;
-  subcategory?: string | null;
-}): number | null {
+/** Meat and fish portions are cooked weights: say so. */
+const COOKED_SUBCATEGORIES = new Set(['poultry', 'beef', 'pork', 'game', 'fish', 'seafood']);
+
+/**
+ * A picture of the amount for people who don't think in grams. Only where
+ * the comparison is a fair one; otherwise the gram figure stands alone.
+ */
+const HINT_BY_SUBCATEGORY: Record<string, string> = {
+  poultry: 'about the size of your palm',
+  beef: 'about the size of your palm',
+  pork: 'about the size of your palm',
+  game: 'about the size of your palm',
+  fish: 'about the size of your palm',
+  seafood: 'about the size of your palm',
+  grains: 'about a cup',
+  starches: 'about a cup',
+  nuts: 'a small handful',
+  protein_powder: 'about one scoop',
+};
+
+type SystemFoodLike = { name: string; category?: string | null; subcategory?: string | null };
+
+export interface TypicalPortion {
+  grams: number;
+  /** True for meat/fish, whose typical portion is a cooked weight. */
+  cooked: boolean;
+  /** Plain-words picture of the amount ("about the size of your palm"). */
+  hint: string | null;
+}
+
+/** Typical portion for a system food, with how to picture it, or null. */
+export function typicalPortionForSystemFood(food: SystemFoodLike): TypicalPortion | null {
+  const sub = food.subcategory ?? null;
   const byName = TYPICAL_BY_NAME[food.name.trim()];
-  if (byName) return byName;
-  if (food.subcategory && TYPICAL_BY_SUBCATEGORY[food.subcategory]) {
-    return TYPICAL_BY_SUBCATEGORY[food.subcategory];
+  const grams =
+    byName ??
+    (sub && TYPICAL_BY_SUBCATEGORY[sub]) ??
+    (food.category && TYPICAL_BY_CATEGORY[food.category]) ??
+    null;
+  if (!grams) return null;
+  // A by-name portion (28 g of cheddar) doesn't fit the subcategory's picture.
+  const fromSub = !byName && !!sub && !!TYPICAL_BY_SUBCATEGORY[sub];
+  return {
+    grams,
+    cooked: fromSub && COOKED_SUBCATEGORIES.has(sub!),
+    hint: fromSub ? HINT_BY_SUBCATEGORY[sub!] ?? null : null,
+  };
+}
+
+/** Typical portion for a system food, or null when we don't know one. */
+export function typicalPortionGramsForSystemFood(food: SystemFoodLike): number | null {
+  return typicalPortionForSystemFood(food)?.grams ?? null;
+}
+
+const GRAMS_PER_OZ = 28.3495;
+
+/**
+ * One plain line saying what the starting amount is and where it came from,
+ * with its calories and protein, e.g.
+ *   "113 g · about 4 oz, a typical cooked portion · 186 kcal, 35 g protein"
+ *   "1 large egg (the food's serving) · 78 kcal, 6 g protein"
+ *   "150 g · what you logged last time · 248 kcal, 47 g protein"
+ *
+ * Panel finding (6/6): "The default portion size for chicken wasn't
+ * explained. I just accepted it without knowing how much it was."
+ *
+ * Returns null for a bare model default in grams (100 g is the unit the data
+ * is stored in, not a portion; the editor says "No standard serving").
+ * `units` is the user's weight preference: imperial users get the ounce
+ * equivalent of a gram amount, metric users the plain-words picture.
+ */
+export function describeDefaultPortion(
+  portion: DefaultPortion,
+  model: FoodAmountModel,
+  opts: { units?: 'lb' | 'kg' | null; typical?: TypicalPortion | null; macros: UnitMacros }
+): string | null {
+  const unit = getUnit(model, portion.unitId);
+  const amount = `${trimNum(portion.amount)} ${unit.noun}`;
+  const numbers = `${Math.round(opts.macros.calories)} kcal, ${Math.round(opts.macros.protein)} g protein`;
+
+  let source: string;
+  switch (portion.reason) {
+    case 'last':
+    case 'logged':
+      source = `${amount} · what you logged last time`;
+      break;
+    case 'serving':
+      source = `${amount} (the food's serving)`;
+      break;
+    case 'typical': {
+      const typical = opts.typical ?? null;
+      const what = `a typical ${typical?.cooked ? 'cooked ' : ''}portion`;
+      const imperial = opts.units !== 'kg' && unit.id === 'g';
+      const parts: string[] = [];
+      if (imperial) {
+        const oz = Math.round((portion.amount / GRAMS_PER_OZ) * 2) / 2;
+        parts.push(`about ${trimNum(oz)} oz, ${what}`);
+      } else {
+        parts.push(what);
+      }
+      if (typical?.hint) parts.push(typical.hint);
+      source = `${amount} · ${parts.join(', ')}`;
+      break;
+    }
+    case 'model':
+    default:
+      if (unit.kind === 'weight') return null;
+      source = `${amount} (the food's listed serving)`;
   }
-  if (food.category && TYPICAL_BY_CATEGORY[food.category]) {
-    return TYPICAL_BY_CATEGORY[food.category];
-  }
-  return null;
+  return `${source} · ${numbers}`;
 }
 
 /**

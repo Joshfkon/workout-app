@@ -36,7 +36,13 @@ import {
   getRecentAmounts,
   recordLastUsedServingForKeys,
 } from '@/lib/nutrition/lastUsedServing';
-import { defaultPortion, typicalPortionGramsForSystemFood } from '@/lib/nutrition/portionDefaults';
+import {
+  defaultPortion,
+  describeDefaultPortion,
+  typicalPortionForSystemFood,
+  type DefaultPortion,
+  type TypicalPortion,
+} from '@/lib/nutrition/portionDefaults';
 import {
   dedupeRecentFoods,
   filterRecentFoods,
@@ -145,6 +151,11 @@ interface AddFoodModalProps {
   onQuickAdd?: (food: QuickAddFood) => Promise<void>;
   /** Batch variant for a meal's "Add all" — one combined undo. */
   onQuickAddMany?: (foods: QuickAddFood[]) => Promise<void>;
+  /**
+   * The user's weight preference. Imperial users see a gram default's ounce
+   * equivalent ("113 g · about 4 oz, ..."); metric users a plain picture.
+   */
+  units?: 'lb' | 'kg';
 }
 
 export interface QuickAddFood {
@@ -421,6 +432,7 @@ export function AddFoodModal({
   onQuickAddMany,
   onOpenDescribe,
   onOpenSavedMeals,
+  units,
 }: AddFoodModalProps) {
   const [activeTab, setActiveTab] = useState<AddFoodTab>('search');
   const [searchView, setSearchView] = useState<SearchView>('recent');
@@ -446,6 +458,11 @@ export function AddFoodModal({
   // result. The model below tells the editor which units/chips to offer.
   const [amountValue, setAmountValue] = useState<ServingAmountValue>({ amount: '100', unitId: 'g' });
   const [recentAmounts, setRecentAmounts] = useState<number[]>([]);
+  // The starting portion and where it came from, so the editor can say so
+  // ("113 g · about 4 oz, a typical cooked portion") until the user changes it.
+  const [primedPortion, setPrimedPortion] = useState<
+    { portion: DefaultPortion; typical: TypicalPortion | null } | null
+  >(null);
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
 
   // Manual entry
@@ -638,10 +655,15 @@ export function AddFoodModal({
   const primeAmountForFood = (
     model: FoodAmountModel,
     foodKeys: string[],
-    opts: { typicalGrams?: number | null; fallback?: { amount: number; unitId: string } } = {}
+    opts: { typical?: TypicalPortion | null; fallback?: { amount: number; unitId: string } } = {}
   ) => {
     const lastUsed = getLastUsedServingForKeys(foodKeys);
-    const portion = defaultPortion(model, { lastUsed, ...opts });
+    const portion = defaultPortion(model, {
+      lastUsed,
+      typicalGrams: opts.typical?.grams ?? null,
+      fallback: opts.fallback,
+    });
+    setPrimedPortion({ portion, typical: opts.typical ?? null });
     setAmountValue({ amount: portion.amount.toString(), unitId: portion.unitId });
     setRecentAmounts(getRecentAmounts(foodKeys[0], portion.unitId, 2));
   };
@@ -720,7 +742,7 @@ export function AddFoodModal({
     setSelectedCustomFood(null);
     setSelectedRecent(null);
     primeAmountForFood(buildSystemModel(food), foodKeysFor({ id: food.id, name: food.name }), {
-      typicalGrams: typicalPortionGramsForSystemFood(food),
+      typical: typicalPortionForSystemFood(food),
     });
   };
 
@@ -950,6 +972,16 @@ export function AddFoodModal({
     !!activeSelection &&
     !activeSelection.model.units.some((u) => u.kind === 'serving' && isHouseholdNoun(u.noun));
   const showUsdaSection = debouncedQuery.length >= 3;
+  // Where the starting amount came from, shown only while it is still the
+  // starting amount (an edited amount is the user's own).
+  const portionSourceLine = (() => {
+    if (!activeSelection || !primedPortion) return null;
+    const { portion, typical } = primedPortion;
+    if (amountValue.unitId !== portion.unitId || parseFloat(amountValue.amount) !== portion.amount) return null;
+    if (!activeSelection.model.units.some((u) => u.id === portion.unitId)) return null;
+    const { macros } = computeServing(activeSelection.model, portion.amount, portion.unitId);
+    return describeDefaultPortion(portion, activeSelection.model, { units, typical, macros });
+  })();
 
   return (
     <Modal
@@ -1092,7 +1124,13 @@ export function AddFoodModal({
                       testIdPrefix="add-food"
                     />
 
-                    {noStandardServing && (
+                    {portionSourceLine && (
+                      <p className="text-caption text-ink-2" data-testid="add-food-portion-source">
+                        Starting amount: {portionSourceLine}
+                      </p>
+                    )}
+
+                    {noStandardServing && !portionSourceLine && (
                       <p className="text-caption text-ink-2" data-testid="add-food-no-serving">
                         No standard serving for this food. Set how much you ate.
                       </p>
@@ -1504,6 +1542,11 @@ export function AddFoodModal({
                     recentAmounts={recentAmounts}
                     testIdPrefix="add-food"
                   />
+                  {portionSourceLine && (
+                    <p className="text-caption text-ink-2 mt-2" data-testid="add-food-portion-source">
+                      Starting amount: {portionSourceLine}
+                    </p>
+                  )}
                 </div>
 
                 {/* Action Buttons */}

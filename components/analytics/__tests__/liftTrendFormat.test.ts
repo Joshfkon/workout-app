@@ -8,7 +8,9 @@ import {
   exampleSetPoint,
   moreWorkouts,
   nextTrendHint,
+  risingSlippingNames,
   setLabel,
+  shortNameList,
   workoutsUntilTrend,
 } from '../liftTrendFormat';
 
@@ -112,5 +114,32 @@ describe('liftTrendFormat', () => {
       expect(exampleSetPoint([{ history: [p(200), p(90)] }, { history: [p(120)] }])?.e1rmKg).toBe(120);
       expect(exampleSetPoint([])).toBeNull();
     });
+  });
+});
+
+describe('naming the lifts behind the counts (panel r19)', () => {
+  it('lists at most three names, then "+N more"', () => {
+    expect(shortNameList(['A'])).toBe('A');
+    expect(shortNameList(['A', 'B', 'C'])).toBe('A, B, C');
+    expect(shortNameList(['A', 'B', 'C', 'D', 'E'])).toBe('A, B, C (+2 more)');
+  });
+
+  it('names confident rising/slipping lifts, with the gym for per-gym tracks', () => {
+    const l = (name: string, direction: 'rising' | 'flat' | 'down', extra = {}) => ({
+      name,
+      direction,
+      lowConfidence: false,
+      locationLabel: null as string | null,
+      ...extra,
+    });
+    expect(
+      risingSlippingNames([
+        l('Leg Press', 'rising', { locationLabel: 'Home' }),
+        l('Bench', 'rising', { lowConfidence: true }),
+        l('Row', 'down'),
+        l('Curl', 'flat'),
+      ])
+    ).toBe('Rising: Leg Press (Home). Slipping: Row.');
+    expect(risingSlippingNames([l('Curl', 'flat')])).toBeNull();
   });
 });

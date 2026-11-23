@@ -53,6 +53,8 @@ describe('LiftTrendsCard', () => {
     const card = screen.getByTestId('lift-trends-summary');
     expect(card).toHaveTextContent('Last 12 weeks');
     expect(card).toHaveTextContent('1 of 3 lifts rising');
+    // Which lifts, not just how many (panel r19).
+    expect(screen.getByTestId('lift-trends-names')).toHaveTextContent('Rising: Squat. Slipping: Barbell row.');
     expect(card).toHaveTextContent('Bench press has been flat for 3 weeks.');
 
     const squat = screen.getByTestId('lift-row-squat');

@@ -112,6 +112,7 @@ describe('buildProgressSummary', () => {
       weight: 'Weight is down 2.8 lb over the last 30 days.',
       weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
       strength: 'Over the last 12 weeks, 1 of your 3 tracked lifts is going up and none are slipping.',
+      strengthNames: null,
       lifts: [],
     });
   });
@@ -121,6 +122,7 @@ describe('buildProgressSummary', () => {
       weight: 'Weight is down 1.4 lb over the last 30 days.',
       weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
       strength: null,
+      strengthNames: null,
       lifts: [],
     });
   });
@@ -220,5 +222,42 @@ describe('liftBreakdown (the "See each lift" list)', () => {
 
   it('is empty without a summary', () => {
     expect(liftBreakdown(null, 'lb')).toEqual([]);
+  });
+});
+
+describe('strengthNames (panel r19: name the lifts, not just a count)', () => {
+  const t = (name: string, direction: LiftTrend['direction'], over: Partial<LiftTrend> = {}) =>
+    ({ name, direction, lowConfidence: false, locationLabel: null, seriesKey: name, history: [], ...over }) as unknown as LiftTrend;
+
+  it('names the rising and slipping lifts next to the counts', () => {
+    const lifts = [
+      t('Bench Press', 'rising'),
+      t('Barbell Row', 'rising'),
+      t('Hack Squat', 'rising'),
+      t('RDL', 'rising'),
+      t('Pulldown', 'rising'),
+      t('Squat', 'down'),
+      t('Curl', 'flat'),
+      t('Leg Press', 'rising', { lowConfidence: true }),
+    ];
+    const s = buildProgressSummary({
+      weighIns: [],
+      liftTrends: trends({ lifts, rising: 5, flat: 1, down: 1, rebuilding: 1 }),
+      units: 'lb',
+      now: NOW,
+    })!;
+    // The counts are unchanged; the names are the same confident lifts.
+    expect(s.strength).toBe('Over the last 12 weeks, 1 of your 7 tracked lifts is slipping and 5 are going up.');
+    expect(s.strengthNames).toBe('Rising: Bench Press, Barbell Row, Hack Squat (+2 more). Slipping: Squat.');
+  });
+
+  it('says nothing extra when every lift is flat', () => {
+    const s = buildProgressSummary({
+      weighIns: [],
+      liftTrends: trends({ lifts: [t('Curl', 'flat'), t('Squat', 'flat')], flat: 2 }),
+      units: 'lb',
+      now: NOW,
+    })!;
+    expect(s.strengthNames).toBeNull();
   });
 });
