@@ -918,7 +918,10 @@ describe('ExerciseCard', () => {
       });
     });
 
-    it('softens the copy when the e1RM is transferred from another lift (no own history)', async () => {
+    // UX round 14: on a cold start the only basis is the app's own rough
+    // guess, so it must not warn the lifter about that guess. It used to show
+    // "90 lbs × 13 may be near max" on the very weight × reps it prefilled.
+    it('cold start: no near-max warning or forecast on the app’s own starting guess', async () => {
       const user = userEvent.setup();
       render(
         <ExerciseCard
@@ -927,22 +930,27 @@ describe('ExerciseCard', () => {
           onSetComplete={jest.fn().mockResolvedValue('id')}
           coldStartSuggestion={{
             weightKg: 60,
-            reason: 'estimated from your Iso-Lateral Low Row strength',
-            explanation: 'Transferred from a logged related exercise.',
+            reason: 'starting point estimated from your training profile',
+            explanation: 'Based on your training profile.',
           }}
         />
       );
 
-      // Cold-start prefill: 60 kg × 10 (curve answer on the transfer e1RM of
-      // 84 kg). Rep-max at 60 kg = round(30·(84/60−1)) = 12.
-      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
-      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      // The initial prefill carries no forecast at all.
+      await act(() => new Promise((r) => setTimeout(r, 400)));
+      expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('predicted-rir')).not.toBeInTheDocument();
+      expect(screen.queryByText(/may be more than you can do/)).not.toBeInTheDocument();
 
-      await waitFor(() => {
-        expect(screen.getByTestId('effort-warning')).toHaveTextContent(
-          '60 kg × 12 may be near max — estimated from your Iso-Lateral Low Row strength'
-        );
-      });
+      // Stepping reps well past the guess's implied max still claims no max.
+      for (let i = 0; i < 4; i++) {
+        await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      }
+      await act(() => new Promise((r) => setTimeout(r, 400)));
+      expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+      expect(screen.queryByText(/may be near max/)).not.toBeInTheDocument();
+      // One gentle note remains: the strip says it's a guess to adjust.
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting guess.*then adjust/);
     });
   });
 
@@ -1323,6 +1331,31 @@ describe('ExerciseCard', () => {
       expect((banner.match(/last session/g) ?? []).length).toBeLessThanOrEqual(1);
     });
 
+    it('UX round 14: a load step prefills and headlines the reps predicted at the target RIR, not the range floor', () => {
+      // Bench: last time 3 × 135 lbs × 10 at 2 RIR, range 6–10. The engine
+      // steps the load one increment and resets its ask to the floor (6);
+      // the strip's own forecast at the new load says ~9 reps leaves 2.
+      const prev = [0, 1, 2].map(() => ({ weightKg: 135 / 2.20462, reps: 10, rpe: 8 }));
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          exercise={createMockExercise({ name: 'Barbell Bench Press', minWeightIncrementKg: 5 / 2.20462 })}
+          block={createMockBlock({ targetRepRange: [6, 10] as [number, number], targetWeightKg: 135 / 2.20462 })}
+          previousSets={prev}
+          exerciseHistory={{ lastWorkoutDate: weeksAgo(1), lastWorkoutSets: prev, estimatedE1RM: 0, personalRecord: null, totalSessions: 4 }}
+          isActive={true}
+        />
+      );
+      const banner = screen.getByTestId('suggestion-source').closest('p')!;
+      // Weight unchanged: one step up from 135.
+      expect(banner).toHaveTextContent(/^140 lbs × 9 @ 2 RIR/);
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent('135 lbs × 10');
+      // The prefill agrees with the headline.
+      expect(screen.getByRole('button', { name: /Reps: 9 reps/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Reps: 6 reps/ })).not.toBeInTheDocument();
+    });
+
     it('explains "RIR" accessibly where the banner shows the target', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       const abbr = screen
@@ -1619,6 +1652,42 @@ describe('ExerciseCard', () => {
       flushDebounce();
 
       expect(screen.getByRole('button', { name: /Reps: 10 reps/ })).toBeInTheDocument();
+    });
+
+    it('UX round 14: a weight typed over a rough cold-start estimate keeps reps and claims no max', async () => {
+      const user = setupUser();
+      // Glute Drive repro: an 80 lb profile guess (≈ 120 lb implied max). The
+      // lifter types 225. Before: reps refilled to 1, "225 lbs × 1 may be
+      // near max" and "225 lbs ⇒ ~1 reps @ 2 RIR (from your est. max 120 lbs)".
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          block={createMockBlock({ targetRepRange: [10, 15] as [number, number], targetWeightKg: 80 / 2.20462 })}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+          coldStartSuggestion={{
+            weightKg: 80 / 2.20462,
+            reason: 'starting point estimated from your training profile',
+            explanation: 'Based on your bodyweight.',
+            estimateSource: 'bodyweight_ratio',
+          }}
+        />
+      );
+      const before = screen.getByRole('button', { name: /Reps: \d+ reps/ }).getAttribute('aria-label');
+      expect(before).not.toMatch(/Reps: 1 reps?/);
+
+      await editWeight(user, /Weight: /, '225');
+      flushDebounce();
+
+      expect(screen.getByRole('button', { name: /Reps: \d+ reps/ }).getAttribute('aria-label')).toBe(before);
+      expect(screen.getByTestId('weight-edit-recompute-note')).toHaveAttribute('aria-hidden', 'true');
+      expect(screen.queryByText(/est\. max/)).not.toBeInTheDocument();
+      act(() => {
+        jest.advanceTimersByTime(400);
+      });
+      expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+      expect(screen.queryByText(/may be near max/)).not.toBeInTheDocument();
     });
 
     it('logging the set clears the dirty flags for the next set', async () => {

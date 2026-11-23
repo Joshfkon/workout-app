@@ -1915,6 +1915,44 @@ export interface SeedRecommendation {
 }
 
 /**
+ * The rep count to PREFILL (and headline) for a session-start seed.
+ *
+ * A position-matched load step ('add_load') resets the engine's rep ask to
+ * the range floor — the minimum that still counts. Prefilling that floor
+ * contradicted the app's own forecast: last time 135 × 10 at 2 RIR, today
+ * 140 × 6–9, a prefilled 6 under a hint reading "~9 reps would leave 2, your
+ * target" — logged as-is, it reads as a regression. Here the prefill is the
+ * reps the SAME curve the hint reads predicts at the target reserve, capped
+ * to the range and never below the engine's floor. The weight is untouched.
+ *
+ * Every other seed keeps its own rep target (`seedReps`); undefined when the
+ * seed carries none. `e1rmKg` must be the capacity anchor the strip's effort
+ * hint uses at session start (last-session resolved, else cold start).
+ */
+export function seedRepsAtTarget(
+  seed: Pick<SeedRecommendation, 'seedReps' | 'anchorSource' | 'positionMatch' | 'repRange'>,
+  opts: { loadKg: number; e1rmKg?: number; targetRir: number }
+): number | undefined {
+  if (seed.seedReps === undefined) return undefined;
+  if (seed.anchorSource !== 'position_match' || seed.positionMatch?.progression !== 'add_load') {
+    return seed.seedReps;
+  }
+  if (!(opts.e1rmKg && opts.e1rmKg > 0) || !(opts.loadKg > 0)) return seed.seedReps;
+  const maxReps = estimateRepsForWeight(opts.loadKg, {
+    lastWeightKg: 0,
+    lastReps: 0,
+    lastRir: 0,
+    setsCompletedThisExercise: 0,
+    sessionBestE1RMKg: opts.e1rmKg,
+    targetRepRange: seed.repRange,
+    targetRir: 0,
+  });
+  if (maxReps == null) return seed.seedReps;
+  const atTarget = Math.floor(maxReps - Math.max(0, opts.targetRir));
+  return Math.max(seed.seedReps, Math.min(seed.repRange[1], atTarget));
+}
+
+/**
  * Compute the working-set weight from the e1RM anchor for the middle of the rep
  * range, clamped to ±WORKING_WEIGHT_CLAMP_FRACTION of the best recent working
  * weight, gated by the all-sets bump rule, and floored by the

@@ -17,6 +17,11 @@ interface MuscleProgressionCardProps {
   exerciseNames?: Map<string, string>;
   /** Diet goal, used to explain what "on pace" means for the phase */
   goal?: PlateauGoal;
+  /**
+   * Days of history the rates are fitted over — the lift list's window
+   * (LIFT_TREND_WINDOW_DAYS), since the card rolls up those same lifts.
+   */
+  windowDays?: number;
 }
 
 function muscleDisplayName(muscle: string): string {
@@ -95,6 +100,30 @@ export function cappedRateText(names: string[]): string {
 }
 
 /**
+ * The card's subtitle: what the rate is, over what window, against what
+ * expectation — and, plainly, that a muscle's rate is the AVERAGE of its
+ * lifts, so it can sit below its fastest lift without contradicting it.
+ */
+export function muscleProgressionSubtitle(
+  goal: PlateauGoal | undefined,
+  expectedPct: number,
+  windowDays?: number
+): string {
+  const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
+  const weeks = windowDays ? Math.round(windowDays / 7) : null;
+  const over = weeks ? ` over the last ${weeks} weeks` : '';
+  const average =
+    " A muscle's rate is the average of its lifts, weighted by sets. Tap a muscle to see each lift.";
+  if (normalizedGoal === 'cut') {
+    return `How fast each muscle's lifts are getting stronger${over}. You're eating less to lose fat, so holding strength counts as on track.${average}`;
+  }
+  if (normalizedGoal === 'maintenance') {
+    return `How fast each muscle's lifts are getting stronger${over}. You're eating to hold your weight, so holding strength counts as on track.${average}`;
+  }
+  return `How fast each muscle's lifts are getting stronger${over}, vs the ~${expectedPct}% a week expected at your level.${average}`;
+}
+
+/**
  * "Progression by muscle group" — how each muscle's lifts are trending vs
  * the expected E1RM gain rate for the user's experience level. Rows expand
  * to show per-exercise pace.
@@ -103,7 +132,7 @@ export function cappedRateText(names: string[]): string {
  * /dashboard/analytics?tab=strength&section=muscle-progression (the Train
  * page's Progression card deep-links here).
  */
-export function MuscleProgressionCard({ groups, exerciseNames, goal }: MuscleProgressionCardProps) {
+export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays }: MuscleProgressionCardProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (muscle: string) => {
@@ -128,13 +157,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
   const cappedGroups = activeGroups.filter((g) => g.rateImplausible);
 
   const expectedPct = groups[0].expectedWeeklyPct;
-  const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
-  const subtitle =
-    normalizedGoal === 'cut'
-      ? "How fast each muscle's lifts are getting stronger. You're eating less to lose fat, so holding strength counts as on track."
-      : normalizedGoal === 'maintenance'
-        ? "How fast each muscle's lifts are getting stronger. You're eating to hold your weight, so holding strength counts as on track."
-        : `How fast each muscle's lifts are getting stronger, vs the ~${expectedPct}% a week expected at your level.`;
+  const subtitle = muscleProgressionSubtitle(goal, expectedPct, windowDays);
 
   return (
     <Card id="muscle-progression" padding="none" className="scroll-mt-4">

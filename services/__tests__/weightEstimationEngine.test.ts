@@ -19,6 +19,8 @@ import {
   LOWER_BODY_MACHINE_ISOLATION_RATIO_FLOOR,
   SAME_MUSCLE_TRANSFER_FACTOR,
   DEFAULT_SAME_PATTERN_TRANSFER_FACTOR,
+  SAME_MOVEMENT_TRANSFER_FACTOR,
+  EXPERIENCE_BW_RATIO_MULTIPLIER,
   type BodyComposition,
   type ExerciseHistoryEntry,
   type UserStrengthProfile,
@@ -1231,5 +1233,82 @@ describe('edge cases', () => {
 
     // Should still work using the completed set
     expect(result).toBeDefined();
+  });
+});
+
+// ============================================
+// UX round 14: experienced lifter, never-trained glute machine
+// ============================================
+
+describe('cold start for an experienced lifter (Glute Drive Machine)', () => {
+  const lbToKg = (lb: number) => lb / 2.20462;
+  // The persona's logged leg day: Hack Squat 305 × 10, RDL ~190 × 10, plus isolations.
+  const candidates: TransferCandidate[] = buildTransferCandidatesFromRows([
+    { weightKg: lbToKg(305), reps: 10, rpe: 7.5, exercise: { id: 'hack', name: 'Hack Squat', primaryMuscle: 'quads', movementPattern: 'squat', equipmentRequired: ['machine'] } },
+    { weightKg: lbToKg(190), reps: 10, rpe: 7.5, exercise: { id: 'rdl', name: 'Romanian Deadlift', primaryMuscle: 'hamstrings', movementPattern: 'hinge', equipmentRequired: ['barbell'] } },
+    { weightKg: lbToKg(120), reps: 14, rpe: 7.5, exercise: { id: 'ext', name: 'Leg Extension', primaryMuscle: 'quads', movementPattern: 'isolation_knee_extension', equipmentRequired: ['machine'] } },
+    { weightKg: lbToKg(85), reps: 14, rpe: 7.5, exercise: { id: 'curl', name: 'Lying Leg Curl', primaryMuscle: 'hamstrings', movementPattern: 'isolation_knee_flexion', equipmentRequired: ['machine'] } },
+  ]);
+  const gluteDriveMeta = { primaryMuscle: 'glutes', movementPattern: 'hinge', equipmentRequired: ['machine'] };
+  const estimate = (opts?: { candidates?: TransferCandidate[]; experience?: Experience }) =>
+    quickWeightEstimate(
+      'Glute Drive Machine',
+      { min: 10, max: 15 },
+      2,
+      95,
+      180,
+      20,
+      opts?.experience ?? 'advanced',
+      undefined,
+      'lb',
+      undefined,
+      { transferCandidates: opts?.candidates ?? candidates, targetMeta: gluteDriveMeta }
+    );
+
+  it('seeds from the logged Romanian Deadlift (known pair), not a bodyweight guess', () => {
+    const rec = estimate();
+    expect(rec.estimateSource).toBe('exercise_transfer');
+    expect(rec.transferFrom).toBe('Romanian Deadlift');
+    // Was 80 lb from the bodyweight rung.
+    expect(rec.recommendedWeight).toBeGreaterThanOrEqual(130);
+    expect(rec.recommendedWeight).toBeLessThanOrEqual(200);
+  });
+
+  it('rung 3: same movement pattern, different lower-body muscle, transfers at the lower factor', () => {
+    const result = estimateFromTransferCandidates(
+      'Cable Pull-Through',
+      { primaryMuscle: 'glutes', movementPattern: 'hip_hinge', equipmentRequired: ['cable'] },
+      candidates
+    );
+    expect(result).not.toBeNull();
+    expect(result!.rung).toBe('same_movement');
+    expect(result!.fromExercise).toBe('Romanian Deadlift');
+    expect(result!.factor).toBe(SAME_MOVEMENT_TRANSFER_FACTOR);
+  });
+
+  it('rung 3 never seeds a bodyweight target or a non-lower-body muscle', () => {
+    expect(
+      estimateFromTransferCandidates('Glute Bridge', { primaryMuscle: 'glutes', movementPattern: 'hinge', equipmentRequired: ['bodyweight'] }, candidates)
+    ).toBeNull();
+    expect(
+      estimateFromTransferCandidates('Machine Back Extension', { primaryMuscle: 'erectors', movementPattern: 'hinge', equipmentRequired: ['machine'] }, candidates)
+    ).toBeNull();
+  });
+
+  it('without related history, the bodyweight guess reflects advanced experience', () => {
+    const advanced = estimate({ candidates: [] });
+    const intermediate = estimate({ candidates: [], experience: 'intermediate' });
+    expect(advanced.estimateSource).toBe('bodyweight_ratio');
+    expect(EXPERIENCE_BW_RATIO_MULTIPLIER.advanced).toBeGreaterThan(1);
+    expect(advanced.recommendedWeight).toBeGreaterThan(intermediate.recommendedWeight * 1.2);
+  });
+
+  it('leaves a lift WITH history on its own history', () => {
+    const rec = quickWeightEstimate(
+      'Glute Drive Machine', { min: 10, max: 15 }, 2, 95, 180, 20, 'advanced', undefined, 'lb', 100,
+      { transferCandidates: candidates, targetMeta: gluteDriveMeta }
+    );
+    expect(rec.estimateSource).toBe('direct_history');
+    expect(rec.transferFrom).toBeUndefined();
   });
 });

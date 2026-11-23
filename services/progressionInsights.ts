@@ -465,6 +465,18 @@ export function getMuscleGroupProgression(
       pace = 'behind';
     }
 
+    // A muscle is never "behind" (or "plateaued") while one of its own
+    // lifts is rising at least as fast as the expected pace: the weighted
+    // average can sit under the bar when flat accessories dilute one rising
+    // staple, but telling the lifter their biceps are behind next to an
+    // EZ curl climbing +2.9%/wk reads as broken. Floor it at on track.
+    const risingAtPace = analyzed.some(
+      (i) => i.weeklyChangePct > 0 && i.weeklyChangePct >= expectedWeeklyPct
+    );
+    if ((pace === 'behind' || pace === 'plateaued') && risingAtPace) {
+      pace = 'on_track';
+    }
+
     results.push({
       muscleGroup,
       pace,

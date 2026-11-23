@@ -145,6 +145,58 @@ export interface LiftTrendsSummary {
   stalled: { name: string; weeks: number } | null;
   /** Days of history the summary was computed over. */
   windowDays: number;
+  /**
+   * The per-lift series behind `lifts` (every lift in the window, not only
+   * the tracked ten), for the Strength tab's "Strength by muscle" rollup —
+   * so that card rolls up EXACTLY these lifts, window and e1RMs instead of a
+   * second fetch that could disagree. Only present when requested
+   * (`includeRollup`); older persisted summaries lack it.
+   */
+  rollup?: LiftRollupInput;
+}
+
+/** One trended series (a lift, or a machine lift at one gym). */
+export interface LiftRollupSeries {
+  /** Same as LiftTrend.seriesKey. */
+  key: string;
+  exerciseId: string;
+  /** Display name, with the gym when the lift is split by gym. */
+  name: string;
+  /** The exercise's primary muscle; null when unknown (skipped by the rollup). */
+  muscle: string | null;
+  snapshots: ExercisePerformanceSnapshot[];
+  /** User-marked "different equipment" session dates on this series. */
+  boundaries: string[];
+}
+
+export interface LiftRollupInput {
+  series: LiftRollupSeries[];
+  goal?: PlateauGoal;
+  /** Program start as a local YYYY-MM-DD (already normalized). */
+  programStartDate: string | null;
+}
+
+/**
+ * Plain inputs for services/progressionInsights.getMuscleGroupProgression,
+ * keyed by series key (so a lift split by gym rolls up per gym, as it trends).
+ */
+export function muscleProgressionInputFromRollup(rollup: LiftRollupInput): {
+  snapshotsByExercise: Map<string, ExercisePerformanceSnapshot[]>;
+  muscleByExercise: Map<string, string>;
+  exerciseNames: Map<string, string>;
+  discontinuitiesByExercise: Map<string, string[]>;
+} {
+  const snapshotsByExercise = new Map<string, ExercisePerformanceSnapshot[]>();
+  const muscleByExercise = new Map<string, string>();
+  const exerciseNames = new Map<string, string>();
+  const discontinuitiesByExercise = new Map<string, string[]>();
+  for (const s of rollup.series) {
+    snapshotsByExercise.set(s.key, s.snapshots);
+    if (s.muscle) muscleByExercise.set(s.key, s.muscle);
+    exerciseNames.set(s.key, s.name);
+    if (s.boundaries.length > 0) discontinuitiesByExercise.set(s.key, s.boundaries);
+  }
+  return { snapshotsByExercise, muscleByExercise, exerciseNames, discontinuitiesByExercise };
 }
 
 /**
@@ -152,8 +204,8 @@ export interface LiftTrendsSummary {
  * client refresh and the Progress tab compute over identical data.
  */
 export const LIFT_TREND_SESSION_SELECT = `id, completed_at, location_id, gym_locations (name),
-  exercise_blocks (equipment_changed, location_id, gym_locations (name),
-    exercises (id, name, exercise_type, equipment_required, is_bodyweight, progression_scope_override),
+  exercise_blocks (id, equipment_changed, location_id, gym_locations (name),
+    exercises (id, name, primary_muscle, exercise_type, equipment_required, is_bodyweight, progression_scope_override),
     set_logs (weight_kg, reps, rpe, is_warmup))`;
 
 /** Completed-session row shape expected from the workout_sessions query. */
@@ -164,9 +216,13 @@ export interface LiftTrendSessionRow {
   location_id?: string | null;
   gym_locations?: { name: string | null } | null;
   exercise_blocks: {
+    /** Block id — lets sets still queued in the offline outbox join their block. */
+    id?: string;
     exercises: {
       id: string;
       name: string;
+      /** Feeds the Strength tab's "Strength by muscle" rollup. */
+      primary_muscle?: string | null;
       exercise_type?: string | null;
       equipment_required?: string[] | null;
       is_bodyweight?: boolean | null;
@@ -223,6 +279,8 @@ export interface ComputeLiftTrendsOptions {
    * MIN_SESSIONS_FOR_TREND sessions after it are flagged lowConfidence.
    */
   programStartDate?: string | null;
+  /** Also return the per-lift series for the muscle rollup (`rollup`). */
+  includeRollup?: boolean;
 }
 
 /**
@@ -243,6 +301,7 @@ export function computeLiftTrends(
   const GLOBAL_TRACK = '*';
   const tracksByExercise = new Map<string, Map<string, SeriesAccumulator>>();
   const nameByExercise = new Map<string, string>();
+  const muscleByExercise = new Map<string, string>();
   const trackFor = (exerciseId: string, trackKey: string, label: string | null) => {
     let tracks = tracksByExercise.get(exerciseId);
     if (!tracks) {
@@ -323,6 +382,7 @@ export function computeLiftTrends(
       if (topE1RM <= 0) continue;
 
       nameByExercise.set(exercise.id, exercise.name);
+      if (exercise.primary_muscle) muscleByExercise.set(exercise.id, exercise.primary_muscle);
       track.snapshots.push({
         id: `${session.id}-${exercise.id}`,
         userId: '',
@@ -527,5 +587,24 @@ export function computeLiftTrends(
     earlyLifts,
     stalled,
     windowDays: LIFT_TREND_WINDOW_DAYS,
+    ...(options.includeRollup
+      ? {
+          rollup: {
+            series: series.map((s) => {
+              const base = nameByExercise.get(s.exerciseId) ?? 'Exercise';
+              return {
+                key: s.seriesKey,
+                exerciseId: s.exerciseId,
+                name: s.locationLabel ? `${base} (${s.locationLabel})` : base,
+                muscle: muscleByExercise.get(s.exerciseId) ?? null,
+                snapshots: s.snapshots,
+                boundaries: s.boundaries,
+              };
+            }),
+            goal,
+            programStartDate: programStart,
+          },
+        }
+      : {}),
   };
 }
