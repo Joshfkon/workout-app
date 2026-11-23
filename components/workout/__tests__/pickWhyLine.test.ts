@@ -26,3 +26,12 @@ describe('pickWhyLine', () => {
     );
   });
 });
+
+describe('capToLocationDumbbells', () => {
+  const { capToLocationDumbbells } = jest.requireActual('../SuggestedWorkoutSheet');
+  it('caps a dumbbell lift at the location heaviest dumbbell, and leaves others alone', () => {
+    expect(capToLocationDumbbells(30, { name: 'Dumbbell Bench Press', equipment_required: ['dumbbells'] }, 20)).toBe(20);
+    expect(capToLocationDumbbells(30, { name: 'Barbell Row', equipment_required: ['barbell'] }, 20)).toBe(30);
+    expect(capToLocationDumbbells(30, { name: 'Dumbbell Curl', equipment_required: null }, null)).toBe(30);
+  });
+});

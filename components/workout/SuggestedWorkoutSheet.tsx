@@ -168,6 +168,26 @@ function estimatePickStart(
   );
 }
 
+/**
+ * Cap a dumbbell lift's load at the location's heaviest dumbbell. Shared by
+ * the sheet's preview line and handleStart, so the preview never promises a
+ * load the workout won't open with.
+ */
+export function capToLocationDumbbells(
+  weightKg: number,
+  exercise: Pick<SheetExercise, 'name' | 'equipment_required'>,
+  dumbbellMaxKg: number | null | undefined
+): number {
+  if (
+    dumbbellMaxKg &&
+    weightKg > dumbbellMaxKg &&
+    `${exercise.name} ${(exercise.equipment_required ?? []).join(' ')}`.toLowerCase().includes('dumbbell')
+  ) {
+    return dumbbellMaxKg;
+  }
+  return weightKg;
+}
+
 /** Plain words for what a new lift's starting weight rests on. */
 const START_BASIS: Record<string, string> = {
   related_exercise: 'similar lifts you’ve logged',
@@ -752,16 +772,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         }
 
         // Cap dumbbell suggestions at the location's heaviest dumbbell.
-        const dumbbellMaxKg = selectedLocation?.dumbbell_max_kg;
-        if (
-          dumbbellMaxKg &&
-          suggestedWeight > dumbbellMaxKg &&
-          `${exercise.name} ${(exercise.equipment_required ?? []).join(' ')}`
-            .toLowerCase()
-            .includes('dumbbell')
-        ) {
-          suggestedWeight = dumbbellMaxKg;
-        }
+        suggestedWeight = capToLocationDumbbells(suggestedWeight, exercise, selectedLocation?.dumbbell_max_kg);
 
         let reason = pick.reason;
         if (substituted && pick.substitution) {
@@ -1094,7 +1105,12 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                         {pickWhyLine({
                           isRecent: recentExerciseIds.includes(exercise.id),
                           muscleLabel: STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle,
-                          rec: estimatePickStart(exercise, pick, profile, transferCandidates),
+                          rec: (() => {
+                            const r = estimatePickStart(exercise, pick, profile, transferCandidates);
+                            return r
+                              ? { ...r, recommendedWeight: capToLocationDumbbells(r.recommendedWeight, exercise, selectedLocation?.dumbbell_max_kg) }
+                              : null;
+                          })(),
                           units: profile?.preferences?.units === 'kg' ? 'kg' : 'lb',
                         })}
                       </span>
