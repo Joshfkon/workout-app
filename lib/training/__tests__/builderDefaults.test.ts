@@ -14,6 +14,11 @@ import {
   deloadSummary,
   rampExplanation,
   recoveryVolumeExplanation,
+  headsOf,
+  formatHeadSets,
+  defaultSessionMinutes,
+  sessionLengthOptions,
+  onboardingScheduleDefaults,
 } from '@/lib/training/builderDefaults';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { getEffectiveBand } from '@/services/volumeBands';
@@ -220,5 +225,110 @@ describe('recoveryVolumeExplanation', () => {
     });
     expect(rf.volumeReasons).toEqual(['age 38 ×0.95', 'sleep 2/5 ×0.85']);
     expect(recoveryVolumeExplanation(rf)).toMatch(/81%/);
+  });
+});
+
+describe('heads in the week table', () => {
+  const plan = {
+    mesocycleWeeks: [
+      {
+        isDeload: false,
+        volumeModifier: 1,
+        sessions: [
+          {
+            exercises: [
+              { exercise: { primaryMuscle: 'lateral_delts', secondaryMuscles: [] }, sets: 6 },
+              { exercise: { primaryMuscle: 'chest', secondaryMuscles: ['front_delts'] }, sets: 3 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it('credits each head per week (indirect work at half)', () => {
+    const [w] = weekByWeekPlan(plan);
+    expect(w.heads.lateral_delts).toBe(6);
+    expect(w.heads.front_delts).toBe(1.5);
+    expect(headsOf('shoulders')).toEqual(['front_delts', 'lateral_delts', 'rear_delts']);
+    expect(headsOf('quads')).toEqual([]);
+  });
+
+  it('formats head sets to the half set', () => {
+    expect(formatHeadSets(6)).toBe('6');
+    expect(formatHeadSets(1.5)).toBe('1.5');
+    expect(formatHeadSets(undefined)).toBe('0');
+  });
+});
+
+describe('defaultSessionMinutes', () => {
+  it('keeps the last block’s length, else 75 for advanced and 60 otherwise', () => {
+    expect(defaultSessionMinutes('advanced', 50)).toBe(50);
+    expect(defaultSessionMinutes('advanced', null)).toBe(75);
+    expect(defaultSessionMinutes('intermediate')).toBe(60);
+    expect(defaultSessionMinutes('novice', 500)).toBe(60);
+  });
+});
+
+describe('sessionLengthOptions', () => {
+  const week = (hamstrings: number, quads: number) => ({
+    mesocycleWeeks: [
+      {
+        isDeload: false,
+        volumeModifier: 1,
+        sessions: [
+          {
+            exercises: [
+              { exercise: { primaryMuscle: 'hamstrings' }, sets: hamstrings },
+              { exercise: { primaryMuscle: 'quads' }, sets: quads },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  const focus = [
+    { muscle: 'hamstrings' as const, mev: 8 },
+    { muscle: 'quads' as const, mev: 8 },
+  ];
+
+  it('offers a longer length with what it changes, and only when it helps', () => {
+    const byMinutes: Record<number, ReturnType<typeof week>> = { 75: week(10, 11), 90: week(8, 8) };
+    const options = sessionLengthOptions(60, focus, { hamstrings: 8, quads: 8 }, (m) => byMinutes[m]);
+    expect(options).toEqual([
+      {
+        minutes: 75,
+        gains: [
+          { muscle: 'hamstrings', from: 8, to: 10 },
+          { muscle: 'quads', from: 8, to: 11 },
+        ],
+        clearsMev: ['hamstrings', 'quads'],
+      },
+    ]);
+  });
+
+  it('offers nothing when nothing is limited, or past 120 minutes', () => {
+    expect(sessionLengthOptions(60, [], {}, () => week(12, 12))).toEqual([]);
+    expect(sessionLengthOptions(110, focus, { hamstrings: 8 }, () => week(12, 12))).toEqual([]);
+    expect(sessionLengthOptions(100, focus, { hamstrings: 8 }, () => week(12, 12)).map((o) => o.minutes)).toEqual([115]);
+  });
+});
+
+describe('onboardingScheduleDefaults', () => {
+  it('maps the onboarding answers to builder defaults', () => {
+    expect(onboardingScheduleDefaults({ trainingDaysPerWeek: 5, currentSplit: 'body_part' })).toEqual({ daysPerWeek: 5, split: 'Bro Split' });
+    expect(onboardingScheduleDefaults({ currentSplit: 'ppl' }).split).toBe('PPL');
+    expect(onboardingScheduleDefaults({ currentSplit: 'upper_lower' }).split).toBe('Upper/Lower');
+    expect(onboardingScheduleDefaults({ currentSplit: 'full_body' }).split).toBe('Full Body');
+  });
+
+  it('reads absent, mistyped and out-of-range answers as no default', () => {
+    const none = { daysPerWeek: null, split: null };
+    expect(onboardingScheduleDefaults(null)).toEqual(none);
+    expect(onboardingScheduleDefaults(undefined)).toEqual(none);
+    expect(onboardingScheduleDefaults({})).toEqual(none);
+    expect(onboardingScheduleDefaults({ trainingDaysPerWeek: '5', currentSplit: 'other' })).toEqual(none);
+    expect(onboardingScheduleDefaults({ trainingDaysPerWeek: 9, currentSplit: 'toString' })).toEqual(none);
+    expect(onboardingScheduleDefaults({ trainingDaysPerWeek: 4.5 }).daysPerWeek).toBeNull();
   });
 });

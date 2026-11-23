@@ -191,6 +191,31 @@ function getExerciseDatabase(): ExerciseEntry[] {
 // ============================================================
 
 /**
+ * Years of training to assume for each experience level when the profile
+ * has none. `users.training_age` defaults to 0 and nothing in onboarding
+ * writes it, so an 11-year advanced lifter was planned as "under a year of
+ * training" (×0.85 volume, linear novice ramp — UX panel, round 19).
+ * Novice stays under the one-year line; intermediate sits in the 1–3 band;
+ * advanced at 5, the line calculateRecoveryFactors already treats as
+ * experienced.
+ */
+export const TRAINING_AGE_BY_EXPERIENCE: Record<Experience, number> = {
+  novice: 0.5,
+  intermediate: 2,
+  advanced: 5,
+};
+
+/**
+ * The training age the planners use: the stored years when the lifter has
+ * set them (> 0), else the experience level's typical value. 0 is the
+ * column default, not an answer, so it counts as unset. Pure.
+ */
+export function effectiveTrainingAge(stored: number | null | undefined, experience: Experience): number {
+  if (typeof stored === 'number' && Number.isFinite(stored) && stored > 0) return stored;
+  return TRAINING_AGE_BY_EXPERIENCE[experience] ?? TRAINING_AGE_BY_EXPERIENCE.intermediate;
+}
+
+/**
  * Calculate recovery factors based on user profile
  * These affect volume, frequency, and deload recommendations
  */
@@ -704,10 +729,17 @@ export function buildPeriodizationPlan(
   // Select periodization model based on experience and training age
   let model: PeriodizationModel;
   
+  // An advanced lifter on a bulk is accumulating: volume climbs toward MRV
+  // and then deloads. Block periodization runs the other way (1.1 → 0.8 →
+  // 0.6 of the sets into a heavy peak), a strength-peaking shape that cut an
+  // off-season bodybuilder's chest from 11 to 8 sets over the block (UX
+  // panel, round 19). Other advanced goals keep block.
   if (profile.experience === 'novice' || profile.trainingAge < 1) {
     model = 'linear';
   } else if (profile.experience === 'intermediate' || profile.trainingAge < 3) {
     model = profile.goal === 'cut' ? 'weekly_undulating' : 'daily_undulating';
+  } else if (profile.goal === 'bulk') {
+    model = 'linear';
   } else {
     model = 'block';
   }
