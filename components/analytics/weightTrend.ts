@@ -89,3 +89,14 @@ export function weightTrendLine(data: readonly WindowWeightPoint[]): WeightTrend
     fitEnd: fit.intercept + fit.slopePerDay * fit.lastX,
   };
 }
+
+/**
+ * How the trend is worked out, in plain words — exactly what
+ * {@link weightTrendLine} does: one straight line fitted (least squares)
+ * through every weigh-in in the range. Not a moving average, and no
+ * weigh-in is dropped.
+ */
+export function weightTrendMethod(weighIns: number, days: number): string {
+  const count = `${weighIns} weigh-in${weighIns === 1 ? '' : 's'}`;
+  return `The trend is a straight line fitted through all ${count} from the last ${days} days (not a 7-day average), so one heavy or light day barely moves it.`;
+}

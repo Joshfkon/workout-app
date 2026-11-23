@@ -1,5 +1,6 @@
 'use client';
 
+import { ProTag } from '@/components/subscription/ProTag';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 /**
@@ -722,7 +723,10 @@ export default function TrainPage() {
                     variant="primary"
                     className="w-full text-body"
                   >
-                    Plan a mesocycle
+                    <span className="inline-flex items-center gap-2">
+                      Plan a mesocycle
+                      <ProTag feature="mesocycleBuilder" tone="onAccent" />
+                    </span>
                   </StyledButton>
                 </Link>
               </div>

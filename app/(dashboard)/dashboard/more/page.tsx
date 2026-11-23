@@ -4,6 +4,8 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { ListGroup, ListRow } from '@/components/ui/ListRow';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
+import { ProTag } from '@/components/subscription/ProTag';
+import type { Feature } from '@/lib/subscription';
 import {
   IconUsers,
   IconUser,
@@ -23,6 +25,8 @@ interface MoreLink {
   name: string;
   href: string;
   icon: TablerIcon;
+  /** Paid feature the page opens (labelled with ProTag; gating unchanged). */
+  feature?: Feature;
 }
 
 interface MoreSection {
@@ -44,7 +48,7 @@ const moreSections: MoreSection[] = [
   {
     title: 'Training',
     links: [
-      { name: 'AI coach', href: '/dashboard/ai-coach', icon: IconSparkles },
+      { name: 'AI coach', href: '/dashboard/ai-coach', icon: IconSparkles, feature: 'ai-coaching' },
       { name: 'Templates', href: '/dashboard/templates', icon: IconTemplate },
     ],
   },
@@ -87,7 +91,16 @@ export default function MorePage() {
               <ListRow
                 key={link.name}
                 href={link.href}
-                title={link.name}
+                title={
+                  link.feature ? (
+                    <span className="inline-flex items-center gap-2">
+                      {link.name}
+                      <ProTag feature={link.feature} />
+                    </span>
+                  ) : (
+                    link.name
+                  )
+                }
                 icon={<Icon size={18} stroke={2} />}
               />
             );

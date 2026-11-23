@@ -11,11 +11,12 @@
  * weight line alone, never a nudge to lift.
  */
 
-import type { EarlyLift, LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
-import { nextTrendHint } from '@/components/analytics/liftTrendFormat';
+import type { EarlyLift, LiftTrend, LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import { nextTrendHint, setLabel } from '@/components/analytics/liftTrendFormat';
 import {
   weighInsInWindow,
   weightTrendLine,
+  weightTrendMethod,
   type WeighInEntry,
 } from '@/components/analytics/weightTrend';
 
@@ -33,8 +34,76 @@ export interface ProgressSummaryInput {
 export interface ProgressSummary {
   /** e.g. "Weight is down 1.6 lb over the last 30 days." */
   weight: string | null;
+  /** How the weight line was worked out (weightTrendMethod); null with no weight line. */
+  weightMethod: string | null;
   /** e.g. "Over the last 12 weeks, 2 of your 3 tracked lifts are going up and none are slipping." */
   strength: string | null;
+  /** Each lift behind the strength sentence (expandable list). */
+  lifts: LiftBreakdownRow[];
+}
+
+/** One lift in the strength breakdown: first vs latest best set, and its direction. */
+export interface LiftBreakdownRow {
+  key: string;
+  name: string;
+  /** Best set of the first workout in the window, e.g. "185 lbs × 8". */
+  then: string;
+  /** Best set of the latest workout, same format. */
+  now: string;
+  /** "Going up" / "Holding steady" / "Slipping" / "Rebuilding" / "Up so far" / "Too early to tell". */
+  direction: string;
+  tone: 'up' | 'flat' | 'down' | 'neutral';
+}
+
+const DIRECTION_WORDS: Record<LiftTrend['direction'], { label: string; tone: LiftBreakdownRow['tone'] }> = {
+  rising: { label: 'Going up', tone: 'up' },
+  flat: { label: 'Holding steady', tone: 'flat' },
+  down: { label: 'Slipping', tone: 'down' },
+};
+
+/**
+ * The lifts behind the strength sentence, one row each: the best set
+ * (highest estimated max) of the first and of the latest workout in the
+ * window — real weight × reps as logged — and the direction the Strength tab
+ * gives it. Trended lifts first (same order as the Strength tab), then lifts
+ * with 2+ workouts but no trend yet. Only data the summary already holds.
+ */
+export function liftBreakdown(
+  summary: LiftTrendsSummary | null | undefined,
+  units: 'lb' | 'kg'
+): LiftBreakdownRow[] {
+  if (!summary) return [];
+  const rows: LiftBreakdownRow[] = [];
+  for (const lift of summary.lifts) {
+    const first = lift.history[0];
+    const last = lift.history[lift.history.length - 1];
+    if (!first || !last) continue;
+    const verdict = lift.lowConfidence
+      ? { label: 'Rebuilding', tone: 'neutral' as const }
+      : DIRECTION_WORDS[lift.direction];
+    rows.push({
+      key: lift.seriesKey,
+      name: lift.locationLabel ? `${lift.name} (${lift.locationLabel})` : lift.name,
+      then: setLabel(first.topSetWeightKg, first.topSetReps, units),
+      now: setLabel(last.topSetWeightKg, last.topSetReps, units),
+      direction: verdict.label,
+      tone: verdict.tone,
+    });
+  }
+  for (const early of summary.earlyLifts ?? []) {
+    const { firstWeightKg: fw, firstReps: fr, latestWeightKg: lw, latestReps: lr } = early;
+    if (early.sessions < 2 || fw == null || fr == null || lw == null || lr == null) continue;
+    const better = earlyComparison([early])?.better === 1;
+    rows.push({
+      key: `early:${early.name}`,
+      name: early.name,
+      then: setLabel(fw, fr, units),
+      now: setLabel(lw, lr, units),
+      direction: better ? 'Up so far' : 'Too early to tell',
+      tone: better ? 'up' : 'neutral',
+    });
+  }
+  return rows;
 }
 
 export function weightSentence(
@@ -117,5 +186,11 @@ export function buildProgressSummary({ weighIns, liftTrends, units, now }: Progr
   const weight = weightSentence(weighIns, units, now);
   const strength = strengthSentence(liftTrends);
   if (!weight && !strength) return null;
-  return { weight, strength };
+  const weightMethod = weight
+    ? weightTrendMethod(
+        weighInsInWindow(weighIns, units, SUMMARY_WEIGHT_WINDOW_DAYS, now).length,
+        SUMMARY_WEIGHT_WINDOW_DAYS
+      )
+    : null;
+  return { weight, weightMethod, strength, lifts: strength ? liftBreakdown(liftTrends, units) : [] };
 }

@@ -56,6 +56,8 @@ export interface ProportionsTargetsCardProps {
   activeMesocycle: Mesocycle | null;
   /** Canonical FFMI (selectCanonicalFfmi) — raw value. */
   currentFfmi: number | null;
+  /** False hides the FFMI ceiling section (food-only users with no FFMI). */
+  showFfmi?: boolean;
   experience: Experience | null;
   heightCm: number | null;
   displayUnit: 'in' | 'cm';
@@ -569,6 +571,7 @@ export function ProportionsTargetsCard({
   activeTarget,
   activeMesocycle,
   currentFfmi,
+  showFfmi = true,
   experience,
   heightCm,
   displayUnit,
@@ -598,18 +601,20 @@ export function ProportionsTargetsCard({
               </AccordionContent>
             </AccordionItem>
           )}
-          <AccordionItem id="ffmi-ceiling">
-            <AccordionTrigger id="ffmi-ceiling">Muscle-to-height ceiling (FFMI)</AccordionTrigger>
-            <AccordionContent id="ffmi-ceiling">
-              <div className="pb-3">
-                <FfmiCeilingSection
-                  currentFfmi={currentFfmi}
-                  targetFfmi={activeTarget?.targetFfmi ?? undefined}
-                  experience={experience}
-                />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
+          {showFfmi && (
+            <AccordionItem id="ffmi-ceiling">
+              <AccordionTrigger id="ffmi-ceiling">Muscle-to-height ceiling (FFMI)</AccordionTrigger>
+              <AccordionContent id="ffmi-ceiling">
+                <div className="pb-3">
+                  <FfmiCeilingSection
+                    currentFfmi={currentFfmi}
+                    targetFfmi={activeTarget?.targetFfmi ?? undefined}
+                    experience={experience}
+                  />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          )}
           <AccordionItem id="weight-projection">
             <AccordionTrigger id="weight-projection">Weight projection</AccordionTrigger>
             <AccordionContent id="weight-projection">

@@ -8,7 +8,8 @@ import { Card, CardContent, Button, Badge, Input } from '@/components/ui';
 import { PricingCard } from '@/components/subscription';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
-import { TIER_FEATURES, SubscriptionTier } from '@/lib/stripe';
+import { SubscriptionTier } from '@/lib/stripe';
+import { planComparisonRows } from '@/lib/subscription/planComparison';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
 
 // Wrapper component that uses useSearchParams
@@ -266,18 +267,10 @@ function PricingContent() {
                 </tr>
               </thead>
               <tbody>
-                <FeatureRow feature="Manual workout logging" free={true} pro={true} elite={true} />
-                <FeatureRow feature="Exercise history" free={true} pro={true} elite={true} />
-                <FeatureRow feature="Basic progress tracking" free={true} pro={true} elite={true} />
-                <FeatureRow feature="Workouts per week" free="Unlimited" pro="Unlimited" elite="Unlimited" />
-                <FeatureRow feature="AI mesocycle builder" free={false} pro={true} elite={true} />
-                <FeatureRow feature="Smart weight suggestions" free={false} pro={true} elite={true} />
-                <FeatureRow feature="Advanced analytics" free={false} pro={true} elite={true} />
-                <FeatureRow feature="DEXA scan tracking" free={false} pro={true} elite={true} />
-                <FeatureRow feature="Coaching calibration" free={false} pro={false} elite={true} />
-                <FeatureRow feature="Strength percentiles" free={false} pro={false} elite={true} />
-                <FeatureRow feature="Regional body comp analysis" free={false} pro={false} elite={true} />
-                <FeatureRow feature="Priority support" free={false} pro={true} elite={true} />
+                {/* Straight from TIER_FEATURES (lib/subscription/planComparison). */}
+                {planComparisonRows().map((row) => (
+                  <FeatureRow key={row.feature} feature={row.feature} free={row.free} pro={row.pro} elite={row.elite} />
+                ))}
               </tbody>
             </table>
           </div>

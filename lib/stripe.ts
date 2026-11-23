@@ -77,7 +77,8 @@ export const TIER_FEATURES = {
       'AI mesocycle builder',
       'Smart weight suggestions',
       'Advanced analytics',
-      'Unlimited workouts',
+      // (No "Unlimited workouts" here: Free is unlimited too, and the
+      // comparison table reads these lists — lib/subscription/planComparison.)
       'Priority support',
     ],
     limits: {

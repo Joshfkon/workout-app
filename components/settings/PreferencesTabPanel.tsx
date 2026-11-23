@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { IconCheck } from '@tabler/icons-react';
 import type { WeightUnit } from '@/types/schema';
 import { Card, CardHeader, CardTitle, CardContent, SegmentedControl, Slider, Toggle } from '@/components/ui';
@@ -9,6 +10,8 @@ import { MealReminderSettings } from '@/components/settings/MealReminderSettings
 import { EducationPreferencesCard } from '@/components/settings/EducationPreferencesCard';
 import { TextSizeControl } from '@/components/settings/TextSizeControl';
 import { BEGINNER_MODE_DESCRIPTION, BEGINNER_MODE_TITLE } from '@/lib/beginnerMode';
+import { useTrackingFocus } from '@/hooks/useTrackingFocus';
+import { ALSO_LIFTS_DESCRIPTION, ALSO_LIFTS_TITLE } from '@/lib/onboarding/trackingFocus';
 
 /**
  * Auto-save state for the Preferences tab: every choice there saves the
@@ -89,6 +92,44 @@ function ToggleRow({
       </div>
       <FieldSaveError field={field} status={status} />
     </div>
+  );
+}
+
+/**
+ * "I also lift weights" — only for people who signed up for food tracking
+ * (the only ones food-only mode can apply to). On = the lifting UI is back
+ * (Train tab, workout starts, strength progress). Saves on tap through
+ * hooks/useTrackingFocus, which every screen reads.
+ */
+export function AlsoLiftsCard() {
+  const { foodOnly, statedFood, setLiftingOn } = useTrackingFocus();
+  const [status, setStatus] = useState<PreferenceSaveStatus>(null);
+  if (!statedFood) return null;
+  const onChange = async (on: boolean) => {
+    setStatus({ state: 'saving', field: 'alsoLifts' });
+    try {
+      await setLiftingOn(on);
+      setStatus({ state: 'saved', field: 'alsoLifts' });
+    } catch {
+      setStatus({ state: 'error', field: 'alsoLifts', message: 'Couldn’t save. Try again.' });
+    }
+  };
+  return (
+    <Card data-testid="also-lifts-card">
+      <CardHeader>
+        <CardTitle>What you track</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ToggleRow
+          field="alsoLifts"
+          title={ALSO_LIFTS_TITLE}
+          description={ALSO_LIFTS_DESCRIPTION}
+          checked={!foodOnly}
+          onChange={(on) => void onChange(on)}
+          status={status}
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -190,6 +231,9 @@ export function PreferencesTabPanel({
           </div>
         </CardContent>
       </Card>
+
+      {/* Food trackers only: bring the lifting UI back. */}
+      <AlsoLiftsCard />
 
       <Card>
         <CardHeader>

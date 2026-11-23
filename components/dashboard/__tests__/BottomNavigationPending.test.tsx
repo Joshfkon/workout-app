@@ -6,6 +6,10 @@ import { BottomNavigation } from '../BottomNavigation';
 let mockPathname = '/dashboard/train';
 jest.mock('next/navigation', () => ({ usePathname: () => mockPathname }));
 jest.mock('@/hooks/useKeyboardOpen', () => ({ useKeyboardOpen: () => false }));
+let mockFoodOnly = false;
+jest.mock('@/hooks/useTrackingFocus', () => ({
+  useTrackingFocus: () => ({ foodOnly: mockFoodOnly, statedFood: mockFoodOnly, setLiftingOn: jest.fn() }),
+}));
 const mockHaptic = jest.fn();
 jest.mock('@/lib/integrations/notifications', () => ({ lightHaptic: () => mockHaptic() }));
 // Keep navigation inert: the test drives the pathname itself.
@@ -30,6 +34,7 @@ const tab = (name: string) => screen.getByRole('link', { name: new RegExp(`^${na
 describe('BottomNavigation — instant feedback on tap', () => {
   beforeEach(() => {
     mockPathname = '/dashboard/train';
+    mockFoodOnly = false;
     mockHaptic.mockReset();
   });
 
@@ -64,5 +69,33 @@ describe('BottomNavigation — instant feedback on tap', () => {
     mockPathname = '/dashboard/history';
     render(<BottomNavigation />);
     expect(tab('Train')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('a food-only user gets Weight where Train was, still five tabs', () => {
+    mockFoodOnly = true;
+    mockPathname = '/dashboard/nutrition/trends';
+    render(<BottomNavigation />);
+    expect(screen.queryByRole('link', { name: /^Train/ })).not.toBeInTheDocument();
+    expect(tab('Weight')).toHaveAttribute('href', '/dashboard/nutrition/trends');
+    expect(screen.getAllByRole('link')).toHaveLength(5);
+    // Weight owns the trends page; Eat keeps the rest of Nutrition.
+    expect(tab('Weight')).toHaveAttribute('aria-current', 'page');
+    expect(tab('Eat')).not.toHaveAttribute('aria-current');
+  });
+
+  it('Eat still lights on the food log for a food-only user', () => {
+    mockFoodOnly = true;
+    mockPathname = '/dashboard/nutrition';
+    render(<BottomNavigation />);
+    expect(tab('Eat')).toHaveAttribute('aria-current', 'page');
+    expect(tab('Weight')).not.toHaveAttribute('aria-current');
+  });
+
+  it('lifters keep Train, and Eat lights on the trends page', () => {
+    mockPathname = '/dashboard/nutrition/trends';
+    render(<BottomNavigation />);
+    expect(tab('Train')).toHaveAttribute('href', '/dashboard/train');
+    expect(screen.queryByRole('link', { name: /^Weight/ })).not.toBeInTheDocument();
+    expect(tab('Eat')).toHaveAttribute('aria-current', 'page');
   });
 });

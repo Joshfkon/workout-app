@@ -19,7 +19,7 @@ jest.mock('@/lib/supabase/client', () => ({
   }),
 }));
 
-import { useTextSize, __resetTextSizeStateForTests } from '../useTextSize';
+import { hasChosenTextSize, useTextSize, __resetTextSizeStateForTests } from '../useTextSize';
 
 describe('useTextSize', () => {
   beforeEach(() => {
@@ -94,5 +94,22 @@ describe('useTextSize', () => {
     mockSingle.mockResolvedValue({ data: { preferences: { textSize: 'larger' } } });
     const second = renderHook(() => useTextSize());
     await waitFor(() => expect(second.result.current.textSize).toBe('larger'));
+  });
+
+  it('carries a size picked before sign-up into the new account', async () => {
+    localStorage.setItem('textSize', 'larger'); // picked on the register page
+    mockGetSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } });
+    mockSingle.mockResolvedValue({ data: { preferences: { units: 'kg' } } });
+    renderHook(() => useTextSize());
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith({ preferences: { units: 'kg', textSize: 'larger' } })
+    );
+  });
+
+  it('knows whether a size was ever picked', () => {
+    expect(hasChosenTextSize()).toBe(false);
+    const { result } = renderHook(() => useTextSize());
+    act(() => result.current.setTextSize('default'));
+    expect(hasChosenTextSize()).toBe(true);
   });
 });

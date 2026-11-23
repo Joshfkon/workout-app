@@ -1,5 +1,6 @@
 import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
-import { buildProgressSummary, strengthSentence, weightSentence } from '../progressSummary';
+import { buildProgressSummary, liftBreakdown, strengthSentence, weightSentence } from '../progressSummary';
+import type { LiftTrend } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 
 const NOW = new Date('2026-11-22T12:00:00');
 
@@ -102,14 +103,18 @@ describe('buildProgressSummary', () => {
       buildProgressSummary({ weighIns: weighIns(190, -0.1), liftTrends: trends({ rising: 1, flat: 2 }), units: 'lb', now: NOW })
     ).toEqual({
       weight: 'Weight is down 2.8 lb over the last 30 days.',
+      weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
       strength: 'Over the last 12 weeks, 1 of your 3 tracked lifts is going up and none are slipping.',
+      lifts: [],
     });
   });
 
   it('gives a food-only user the weight line alone', () => {
     expect(buildProgressSummary({ weighIns: weighIns(160, -0.05), liftTrends: trends(), units: 'lb', now: NOW })).toEqual({
       weight: 'Weight is down 1.4 lb over the last 30 days.',
+      weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
       strength: null,
+      lifts: [],
     });
   });
 
@@ -138,5 +143,75 @@ describe('early comparison before a trend exists', () => {
     const { strengthSentence } = jest.requireActual('../progressSummary');
     const s = strengthSentence({ lifts: [], rising: 0, flat: 0, down: 0, rebuilding: 0, insufficientData: 2, windowDays: 84, earlyLifts: [early({}), early({ name: 'Bench', latestWeightKg: 50, firstWeightKg: 50, latestReps: 7, firstReps: 8 })] });
     expect(s).toContain('So far, 1 of your 2 lifts beats their first workout (heavier, or more reps).');
+  });
+});
+
+describe('liftBreakdown (the "See each lift" list)', () => {
+  const point = (date: string, weightKg: number, reps: number) => ({
+    date,
+    e1rmKg: weightKg * (1 + reps / 30),
+    topSetWeightKg: weightKg,
+    topSetReps: reps,
+  });
+  const lift = (over: Partial<LiftTrend>): LiftTrend =>
+    ({
+      exerciseId: 'bench',
+      seriesKey: 'bench',
+      name: 'Bench Press',
+      locationId: null,
+      locationLabel: null,
+      direction: 'rising',
+      weeklyChangePct: 1,
+      currentE1RMKg: 100,
+      sessionCount: 4,
+      history: [point('2026-09-01', 80, 8), point('2026-10-01', 82.5, 8), point('2026-11-20', 85, 8)],
+      lowConfidence: false,
+      calibrationReason: null,
+      excludedDates: [],
+      discontinuityDate: null,
+      plateau: null,
+      ...over,
+    }) as LiftTrend;
+
+  it('names each lift with its first and latest best set (real weight × reps) and direction', () => {
+    const rows = liftBreakdown(
+      trends({
+        lifts: [
+          lift({}),
+          lift({ seriesKey: 'squat', name: 'Squat', direction: 'down', history: [point('2026-09-01', 100, 5), point('2026-11-20', 100, 3)] }),
+          lift({ seriesKey: 'row', name: 'Row', lowConfidence: true }),
+        ],
+        rising: 1,
+        down: 1,
+        rebuilding: 1,
+      }),
+      'kg'
+    );
+    expect(rows.map((r) => [r.name, r.then, r.now, r.direction])).toEqual([
+      ['Bench Press', '80 kg × 8', '85 kg × 8', 'Going up'],
+      ['Squat', '100 kg × 5', '100 kg × 3', 'Slipping'],
+      ['Row', '80 kg × 8', '85 kg × 8', 'Rebuilding'],
+    ]);
+  });
+
+  it('adds lifts without a trend yet, first vs latest, never calling one a trend', () => {
+    const rows = liftBreakdown(
+      trends({
+        earlyLifts: [
+          { name: 'Curl', sessions: 2, bestWeightKg: 15, bestReps: 10, firstWeightKg: 12.5, firstReps: 10, latestWeightKg: 15, latestReps: 10 },
+          { name: 'Dip', sessions: 2, bestWeightKg: 10, bestReps: 8, firstWeightKg: 10, firstReps: 8, latestWeightKg: 10, latestReps: 8 },
+          { name: 'Fly', sessions: 1, bestWeightKg: 10, bestReps: 8, firstWeightKg: 10, firstReps: 8, latestWeightKg: 10, latestReps: 8 },
+        ],
+      }),
+      'kg'
+    );
+    expect(rows.map((r) => [r.name, r.then, r.now, r.direction])).toEqual([
+      ['Curl', '12.5 kg × 10', '15 kg × 10', 'Up so far'],
+      ['Dip', '10 kg × 8', '10 kg × 8', 'Too early to tell'],
+    ]);
+  });
+
+  it('is empty without a summary', () => {
+    expect(liftBreakdown(null, 'lb')).toEqual([]);
   });
 });

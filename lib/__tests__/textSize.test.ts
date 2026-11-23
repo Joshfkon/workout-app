@@ -4,6 +4,8 @@ import {
   TEXT_SIZE_CSS,
   applyTextSizeToDocument,
   isTextSize,
+  systemPreferredTextSize,
+  textSizeForSystemBodyPx,
 } from '../textSize';
 
 describe('text size', () => {
@@ -71,5 +73,60 @@ describe('tailwind type scale', () => {
     const [fs, opts] = fontSize[token];
     expect(px(fs)).toBe(size);
     expect(px(opts.lineHeight)).toBe(lineHeight);
+  });
+
+  describe('following the OS text size (iOS Dynamic Type) until a size is picked', () => {
+    beforeEach(() => {
+      localStorage.clear();
+      document.documentElement.removeAttribute('data-text-size');
+    });
+
+    it('maps the -apple-system-body size: 17px default, 19px Large, 21px+ Larger', () => {
+      expect(textSizeForSystemBodyPx(17)).toBe('default');
+      expect(textSizeForSystemBodyPx(15)).toBe('default');
+      expect(textSizeForSystemBodyPx(19)).toBe('large');
+      expect(textSizeForSystemBodyPx(21)).toBe('larger');
+      expect(textSizeForSystemBodyPx(28)).toBe('larger');
+      expect(textSizeForSystemBodyPx(NaN)).toBe('default');
+    });
+
+    it('is Default where the keyword is unsupported (no signal)', () => {
+      // jsdom, like non-Apple browsers, rejects the font keyword.
+      expect(systemPreferredTextSize()).toBe('default');
+      new Function(TEXT_SIZE_BOOT_SCRIPT)();
+      expect(document.documentElement.hasAttribute('data-text-size')).toBe(false);
+    });
+
+    function withSystemBody(px: number, run: () => void) {
+      const desc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'font');
+      const getComputed = window.getComputedStyle;
+      Object.defineProperty(CSSStyleDeclaration.prototype, 'font', {
+        configurable: true,
+        get: () => '-apple-system-body',
+        set: () => {},
+      });
+      window.getComputedStyle = (() => ({ fontSize: `${px}px` })) as unknown as typeof window.getComputedStyle;
+      try {
+        run();
+      } finally {
+        if (desc) Object.defineProperty(CSSStyleDeclaration.prototype, 'font', desc);
+        else delete (CSSStyleDeclaration.prototype as unknown as Record<string, unknown>).font;
+        window.getComputedStyle = getComputed;
+      }
+    }
+
+    it('follows a larger OS size before first paint when nothing was picked', () => {
+      withSystemBody(19, () => {
+        expect(systemPreferredTextSize()).toBe('large');
+        new Function(TEXT_SIZE_BOOT_SCRIPT)();
+      });
+      expect(document.documentElement.getAttribute('data-text-size')).toBe('large');
+    });
+
+    it('a picked size (Default included) always beats the OS size', () => {
+      localStorage.setItem('textSize', 'default');
+      withSystemBody(23, () => new Function(TEXT_SIZE_BOOT_SCRIPT)());
+      expect(document.documentElement.hasAttribute('data-text-size')).toBe(false);
+    });
   });
 });
