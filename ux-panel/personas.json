@@ -63,6 +63,18 @@
       "account": { "goal": "maintenance", "experience": "intermediate", "units": "lb", "sex": "male", "weightKg": 91, "heightCm": 183, "birthYear": 1968, "history": "light", "injuryAreas": ["shoulder"], "textSize": "larger" }
     },
     {
+      "id": "offseason-bodybuilder-vince",
+      "name": "Vince",
+      "age": 29,
+      "summary": "Competitive natural bodybuilder, 11 years lifting, has placed in two shows and is now in an off-season building phase. Trains a 5-day body-part split heavy on isolation work and counts weekly hard sets per muscle. Knows MEV, MRV, RIR, mesocycles and stretch-under-load as well as the app does, so he wants that language, not plain-English hand-holding, and spots generic or wrong training advice instantly.",
+      "goals": "Bring up lagging side delts and hamstrings; run planned mesocycles that ramp volume toward MRV and then deload; see weekly sets per muscle against MEV/MRV; keep a slow lean bulk of about 0.25 kg a week.",
+      "experience": "advanced",
+      "patience": 3,
+      "techComfort": 5,
+      "previousApps": "A paid hypertrophy-programming app, Google Sheets, MacroFactor",
+      "account": { "goal": "bulk", "experience": "advanced", "units": "lb", "sex": "male", "weightKg": 95, "heightCm": 180, "birthYear": 1997, "history": "high", "split": "bodypart" }
+    },
+    {
       "id": "busy-parent-lena",
       "name": "Lena",
       "age": 39,

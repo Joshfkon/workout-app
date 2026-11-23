@@ -97,6 +97,24 @@ const LIFTS = [
  * real rotation, ending so the next day is push — otherwise the app's split
  * detection has nothing true to read.
  */
+/**
+ * `account.split: 'bodypart'`: a bodybuilder's 5-day body-part split —
+ * chest, back, legs, shoulders, arms — with the isolation work that makes it
+ * one. Isolations log higher reps, as they would.
+ */
+const BODYPART_DAYS = [
+  [['Barbell Bench Press', 0.75], ['Incline Dumbbell Press', 0.3], ['Cable Fly', 0.18, 'iso']],
+  [['Barbell Row', 0.65], ['Lat Pulldown', 0.6], ['Cable Row', 0.6]],
+  [['Hack Squat', 1.1], ['Romanian Deadlift', 0.9], ['Lying Leg Curl', 0.4, 'iso'], ['Leg Extension', 0.55, 'iso'], ['Standing Calf Raise', 0.9, 'iso']],
+  [['Dumbbell Shoulder Press', 0.25], ['Lateral Raise', 0.1, 'iso'], ['Rear Delt Fly', 0.08, 'iso']],
+  [['EZ Bar Curl', 0.3, 'iso'], ['Incline Dumbbell Curl', 0.1, 'iso'], ['Tricep Pushdown', 0.3, 'iso'], ['Skull Crusher', 0.3, 'iso']],
+].map((day) => day.map(([name, base, kind]) => ({ name, base, ...(kind === 'iso' ? { reps: [14, 12, 11] } : {}) })));
+
+/** Sessions in one full turn of a split (how often each lift comes round). */
+export function splitLength(split) {
+  return split === 'bodypart' ? BODYPART_DAYS.length : split === 'ppl' ? 3 : 2;
+}
+
 const PPL_DAYS = [
   ['Barbell Bench Press', 'Dumbbell Bench Press'],
   ['Barbell Row', 'Lat Pulldown'],
@@ -104,6 +122,7 @@ const PPL_DAYS = [
 ].map((names) => names.map((n) => LIFTS.find((l) => l.name === n)));
 
 export function liftsForSession(split, w) {
+  if (split === 'bodypart') return BODYPART_DAYS[w % BODYPART_DAYS.length];
   if (split === 'ppl') return PPL_DAYS[w % 3];
   return w % 2 === 0 ? LIFTS.slice(0, 3) : LIFTS.slice(3, 6);
 }
@@ -120,6 +139,8 @@ const FOODS = [
 const HISTORY = {
   regular: { workouts: 9, spanDays: 21, weighIns: 11, foodDays: 5 },
   light: { workouts: 3, spanDays: 14, weighIns: 4, foodDays: 2 },
+  // Five sessions a week (a body-part split), daily weigh-ins and food.
+  high: { workouts: 15, spanDays: 21, weighIns: 20, foodDays: 7 },
   'food-only': { workouts: 0, spanDays: 21, weighIns: 7, foodDays: 7 },
 };
 
@@ -192,8 +213,11 @@ export async function seedReturningUser(admin, userId, persona) {
   if (foods.length) await must(admin.from('food_log').insert(foods), 'food_log');
 
   if (!h.workouts) return;
-  const names = LIFTS.map((l) => l.name);
+  // Every lift this persona's split will log (a body-part split goes beyond LIFTS).
+  const names = [...new Set(Array.from({ length: h.workouts }, (_, w) => liftsForSession(a.split, w)).flat().map((l) => l.name))];
   const exercises = await must(admin.from('exercises').select('id, name').in('name', names), 'exercises');
+  const missing = names.filter((n) => !exercises.some((e) => e.name === n));
+  if (missing.length) throw new Error(`seed: exercises not in the local library: ${missing.join(', ')}`);
   const byName = Object.fromEntries(exercises.map((e) => [e.name, e.id]));
   // Strength follows the PERSONA's real experience, not the account's setting:
   // Maya "joined a gym last week" but her account says novice, which seeded
@@ -239,7 +263,7 @@ export async function seedReturningUser(admin, userId, persona) {
       // Realistic progression: ~1.5% per time this lift is trained (each lift
       // comes round every other session, every third on a PPL split), rounded to plate steps. A flat
       // +2.5 kg per session read as an implausible +10%/week on light lifts.
-      const timesTrained = Math.floor(w / (a.split === 'ppl' ? 3 : 2));
+      const timesTrained = Math.floor(w / splitLength(a.split));
       // Round in the persona's OWN units: a lb lifter logs 120 or 125, never
       // 55 kg (= 121.3 lb), and an off-grid seeded load made the app's
       // suggestions and PRs look broken ("121.25 lbs", "PR vs 192.9").
@@ -247,7 +271,8 @@ export async function seedReturningUser(admin, userId, persona) {
       const load = a.units === 'lb'
         ? Math.max(5, Math.round((rawKg * 2.20462) / 5) * 5) / 2.20462
         : Math.max(5, Math.round(rawKg / 2.5) * 2.5);
-      const repsBase = beginner ? [10, 9, 8].map((r) => Math.min(12, r + timesTrained)) : [10, 9, 8];
+      const baseReps = lift.reps ?? [10, 9, 8];
+      const repsBase = beginner ? baseReps.map((r) => Math.min(12, r + timesTrained)) : baseReps;
       const sets = repsBase.map((reps, i) => ({
         exercise_block_id: block.id,
         set_number: i + 1,
