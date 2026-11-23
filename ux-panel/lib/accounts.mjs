@@ -151,6 +151,27 @@ const HISTORY = {
 };
 
 /**
+ * `account.tier: 'pro'`: the subscriptions row that makes the app treat the
+ * account as Pro (lib/subscription getEffectiveTier, hooks/useSubscription):
+ * tier 'pro', status 'active'. 'active' rather than 'trialing' matters — a
+ * 'trialing' row inside the 14-day users.trial_started_at window counts as the
+ * in-app trial, which unlocks Elite, not Pro. No Stripe ids: nothing here
+ * talks to Stripe, and the panel only ever seeds a LOCAL database. The period
+ * is the persona's week (the week review calls it a Pro trial). The row
+ * references auth.users ON DELETE CASCADE, so cleanupSynthetic removes it.
+ */
+export function proSubscriptionRow(userId, now = new Date()) {
+  return {
+    user_id: userId,
+    tier: 'pro',
+    status: 'active',
+    current_period_start: now.toISOString(),
+    current_period_end: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    cancel_at_period_end: false,
+  };
+}
+
+/**
  * Give a returning persona a profile (onboarding done) and a few weeks of
  * plausible history so Progress, Recents and Train have something to show.
  * Numbers are illustrative inputs only — the app computes everything else.
@@ -191,6 +212,8 @@ export async function seedReturningUser(admin, userId, persona) {
       .eq('id', userId),
     'update users',
   );
+
+  if (a.tier === 'pro') await must(admin.from('subscriptions').upsert(proSubscriptionRow(userId), { onConflict: 'user_id' }), 'subscriptions');
 
   const kcal = Math.round(a.weightKg * (a.goal === 'bulk' ? 38 : a.goal === 'cut' ? 26 : 32));
   const protein = Math.round(a.weightKg * 2);

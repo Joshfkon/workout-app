@@ -396,6 +396,20 @@ export async function writeReview({ llm, persona, goalText, run, lens = null }) 
 }
 
 /**
+ * What the week review tells a persona about Free vs Pro. A persona seeded
+ * on Pro (account.tier 'pro', see proSubscriptionRow in lib/accounts.mjs) had
+ * every Pro feature unlocked all week, so they're told it was a Pro trial and
+ * the pay question becomes whether they'd keep paying once it ends.
+ */
+export function pricingContext(persona) {
+  const tiers = `Free covers ${FREE_FEATURES.join(', ').toLowerCase()}. Pro (${PRO_MONTHLY_PRICE}/month) adds ${PRO_FEATURES.join(', ').toLowerCase()}.`;
+  if (persona.account?.tier === 'pro') {
+    return `HyperTrack's pricing: ${tiers} You were on a Pro trial this week, so everything in Pro was unlocked for you. The trial ends now: deciding whether to pay means deciding whether you'd keep paying ${PRO_MONTHLY_PRICE}/month for what you used.`;
+  }
+  return `HyperTrack's pricing: ${tiers} Some of what you used this week may have been Pro features.`;
+}
+
+/**
  * The persona's end-of-week verdict, written once after all of their
  * sessions. Asked relative to what they use now, because "would you keep
  * using it?" after a single short task only ever gets an honest "maybe".
@@ -417,7 +431,7 @@ export async function writeWeekReview({ llm, persona, sessions, lens = null }) {
         content: [
           `It's the end of your first week with HyperTrack. Over the week you used it for these things:\n${lines.join('\n')}`,
           `What you use now: ${persona.previousApps || 'nothing in particular'}. What you want: ${persona.goals}`,
-          `HyperTrack's pricing: Free covers ${FREE_FEATURES.join(', ').toLowerCase()}. Pro (${PRO_MONTHLY_PRICE}/month) adds ${PRO_FEATURES.join(', ').toLowerCase()}. Some of what you used this week may have been Pro features.`,
+          pricingContext(persona),
           "Now decide, as yourself, whether HyperTrack earns a place over what you already do. Judge it against your current way, not against perfection. If it's clearly better or clearly worse for you, say so plainly; only say you're unsure if you truly are.",
           'Answer with submit_week_review, briefly and honestly; do not give numeric ratings.',
         ].join('\n\n'),

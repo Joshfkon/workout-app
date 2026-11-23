@@ -149,7 +149,11 @@ export const QUESTIONS = [
     scope: 'week',
     // v2: personas are told what Free and Pro include before answering, so
     // scores don't compare with v1 runs (the hash includes this).
-    version: 2,
+    // v3: personas seeded on Pro (account.tier 'pro') are told they were on a
+    // Pro trial, so for them it's "would you keep paying", asked after a week
+    // with Pro unlocked (and the plan-training journey); the pooled pay_price
+    // distribution no longer means what v2's did.
+    version: 3,
     label: `Would pay ${PRO_MONTHLY_PRICE}/month`,
     prompt: `HyperTrack Pro costs ${PRO_MONTHLY_PRICE} a month. Would you pay that rather than stay with what you use now? Say why. Answer honestly, in your own words, in one to three sentences.`,
     anchorSets: [

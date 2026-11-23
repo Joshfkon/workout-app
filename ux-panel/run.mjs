@@ -18,7 +18,7 @@ import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-import { JOURNEYS, journeyById } from './journeys.mjs';
+import { JOURNEYS, journeyById, personaRunsJourney } from './journeys.mjs';
 import { QUESTIONS, TASK_QUESTIONS, WEEK_QUESTIONS } from './anchors.mjs';
 import { adminClient, createAccount, newCredentials, seedReturningUser, tagAccount, assertLocalSupabase } from './lib/accounts.mjs';
 import { runJourney, writeReview, writeWeekReview, LENSES } from './lib/agent.mjs';
@@ -116,9 +116,9 @@ async function main() {
   const coreJourneys = wantCore ? JOURNEYS : wantStories ? [] : opts.journeys.split(',').map(journeyById);
   const storiesFile = path.join(HERE, 'stories.json');
 
-  // Task list (persona × journey), honouring per-persona skips.
+  // Task list (persona × journey), honouring per-persona skips and opt-in journeys.
   let tasks = [];
-  for (const p of personas) for (const j of coreJourneys) if (!(p.skip ?? []).includes(j.id)) tasks.push({ persona: p, journey: j });
+  for (const p of personas) for (const j of coreJourneys) if (personaRunsJourney(p, j)) tasks.push({ persona: p, journey: j });
   const storyCount = wantStories ? personas.length * opts.storiesPerPersona : 0;
 
   const reuseDir = opts.reuse ? path.resolve(opts.reuse) : '';

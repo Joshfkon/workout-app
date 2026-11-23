@@ -21,6 +21,11 @@ Similarity Elicitation of Likert Ratings* (arXiv 2510.08338).
 
 1. **Personas** (`personas.json`, 20 to start) have goals, experience, patience
    and tech comfort, plus an `account` block used to seed a returning user.
+   `account.tier: "pro"` (Dre, Vince: personas who'd plausibly pay) seeds an
+   active Pro `subscriptions` row in the local DB (tier `pro`, status
+   `active`, no Stripe ids); it cascades away with the user on cleanup. Their
+   week review says they were on a Pro trial, so the pay question reads as
+   "would you keep paying".
 2. **Journeys** (`journeys.mjs`) are phrased as a user would think of them
    ("log what you had for lunch"), never as UI steps:
    - `first-run`: sign up and onboard
@@ -28,6 +33,10 @@ Similarity Elicitation of Likert Ratings* (arXiv 2510.08338).
    - `log-meal`: search, recents, find the scan entry point
    - `check-progress`
    - `find-setting`: change units
+   - `plan-training` (opt-in): build a mesocycle, compare weekly sets per
+     muscle with MEV/MRV, see the deload plan. Runs only for personas whose
+     `journeys` list names it (the advanced bodybuilders), and is part of
+     `--journeys=core` for them.
 
    **User stories** (`--journeys=stories`) are designer-style scenarios written
    for each persona, for example "Lena has 30 minutes and always does the same
