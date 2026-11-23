@@ -85,7 +85,13 @@ export interface TransferEstimate {
   fromExercise: string;
   sourceE1RMKg: number;
   factor: number;
-  rung: 'same_pattern' | 'same_muscle';
+  /**
+   * same_pattern: known variant pair, or same muscle + pattern + equipment class.
+   * same_muscle: same primary muscle, different pattern.
+   * same_movement: same movement pattern, different (lower-body) prime mover —
+   *   e.g. a glute machine seeded from the lifter's Romanian Deadlift.
+   */
+  rung: 'same_pattern' | 'same_muscle' | 'same_movement';
 }
 
 /** One completed set row (any exercise) for building transfer candidates. */
@@ -154,12 +160,26 @@ export const TRANSFER_PAIR_FACTORS: ReadonlyArray<{ pair: [string, string]; fact
   { pair: ['Incline Barbell Press', 'Barbell Bench Press'], factor: 0.8 },
   { pair: ['Dumbbell Shoulder Press', 'Overhead Press'], factor: 0.8 },
   { pair: ['Hack Squat', 'Leg Press'], factor: 0.7 },
+  // Hip-extension machines vs the hinge most lifters already log. A hip
+  // thrust / glute drive is typically loaded at or above an RDL for the same
+  // reps; 0.9 keeps the first session on the light side.
+  { pair: ['Glute Drive Machine', 'Romanian Deadlift'], factor: 0.9 },
+  { pair: ['Hip Thrust', 'Romanian Deadlift'], factor: 0.9 },
+  { pair: ['Glute Drive Machine', 'Hip Thrust'], factor: 0.9 },
 ];
 
 /** Default carryover for same muscle + same movement pattern (no known pair). */
 export const DEFAULT_SAME_PATTERN_TRANSFER_FACTOR = 0.7;
 /** Carryover when only the primary muscle matches (pattern differs) — lower confidence. */
 export const SAME_MUSCLE_TRANSFER_FACTOR = 0.6;
+/**
+ * Carryover when only the movement pattern matches and the prime mover
+ * differs (rung 3). Restricted to the lower-body hip/knee movers, where a
+ * hinge or squat genuinely loads the same chain; low confidence.
+ */
+export const SAME_MOVEMENT_TRANSFER_FACTOR = 0.6;
+/** Prime movers that share hinge / squat strength closely enough for rung 3. */
+const LOWER_BODY_PRIME_MOVERS = new Set(['glutes', 'hamstrings', 'quads', 'adductors']);
 
 function pairTransferFactor(exerciseA: string, exerciseB: string): number | null {
   for (const { pair, factor } of TRANSFER_PAIR_FACTORS) {
@@ -221,11 +241,18 @@ export function estimateFromTransferCandidates(
 
   const sameMuscle = (c: TransferCandidate) =>
     !!targetMuscle && normalizeToken(c.primaryMuscle) === targetMuscle;
+  // A bodyweight target's load is the body, so a loaded lift's e1RM says
+  // nothing about it. Known pairs and rung 3 skip it (the canonical alias
+  // table folds "Glute Bridge" into Hip Thrust, which would otherwise pair a
+  // bodyweight bridge with a barbell RDL).
+  const targetIsBodyweight = (targetMeta?.equipmentRequired ?? []).some(
+    (e) => normalizeToken(e) === 'bodyweight'
+  );
 
   // Rung 1: known variant pair, or same muscle + pattern + equipment class.
   let best: { candidate: TransferCandidate; factor: number } | null = null;
   for (const c of usable) {
-    const paired = pairTransferFactor(targetName, c.exerciseName);
+    const paired = targetIsBodyweight ? null : pairTransferFactor(targetName, c.exerciseName);
     let factor: number | null = paired;
     if (factor === null) {
       const patternMatch =
@@ -262,6 +289,30 @@ export function estimateFromTransferCandidates(
       factor: SAME_MUSCLE_TRANSFER_FACTOR,
       rung: 'same_muscle',
     };
+  }
+
+  // Rung 3: same movement pattern, different lower-body prime mover — a
+  // never-trained glute machine (hinge) seeds from the lifter's logged RDL
+  // instead of a bodyweight guess. Bodyweight targets are excluded (above).
+  if (targetPattern && LOWER_BODY_PRIME_MOVERS.has(targetMuscle) && !targetIsBodyweight) {
+    let movementBest: TransferCandidate | null = null;
+    for (const c of usable) {
+      if (
+        canonicalizePatternToken(c.movementPattern) === targetPattern &&
+        LOWER_BODY_PRIME_MOVERS.has(normalizeToken(c.primaryMuscle)) &&
+        (!movementBest || c.bestE1RMKg > movementBest.bestE1RMKg)
+      ) {
+        movementBest = c;
+      }
+    }
+    if (movementBest) {
+      return {
+        fromExercise: movementBest.exerciseName,
+        sourceE1RMKg: movementBest.bestE1RMKg,
+        factor: SAME_MOVEMENT_TRANSFER_FACTOR,
+        rung: 'same_movement',
+      };
+    }
   }
 
   return null;
@@ -773,6 +824,23 @@ export function resolveBodyweightRatio(exerciseName: string): number {
   return ratio;
 }
 
+/**
+ * Experience scaling for the bodyweight-ratio rung. The coefficients above
+ * sit between the novice and intermediate strength standards; an advanced
+ * lifter's average standard is ~1.4× the intermediate one (STRENGTH_STANDARDS
+ * below), so 1.35 stays a little on the conservative side. Novice and
+ * intermediate are left as calibrated.
+ */
+export const EXPERIENCE_BW_RATIO_MULTIPLIER: Record<Experience, number> = {
+  novice: 1,
+  intermediate: 1,
+  advanced: 1.35,
+};
+
+export function experienceBodyweightMultiplier(experience: Experience | undefined): number {
+  return (experience && EXPERIENCE_BW_RATIO_MULTIPLIER[experience]) || 1;
+}
+
 // ============================================================
 // STRENGTH STANDARDS BY FFMI AND EXPERIENCE
 // ============================================================
@@ -1211,7 +1279,9 @@ export class WeightEstimationEngine {
   }
   
   private estimateFromBodyweight(exerciseName: string): EstimatedMax {
-    const ratio = resolveBodyweightRatio(exerciseName);
+    // The ratios are a beginner-to-intermediate profile; an advanced lifter's
+    // guess is scaled up so 11 years of training isn't priced like week one.
+    const ratio = resolveBodyweightRatio(exerciseName) * experienceBodyweightMultiplier(this.profile.experience);
 
     return {
       exercise: exerciseName,
@@ -1315,7 +1385,11 @@ export class WeightEstimationEngine {
       confidence: 'low',
       rationale:
         estimatedMax.source === 'exercise_transfer' && estimatedMax.transfer
-          ? `Estimated from your ${estimatedMax.transfer.fromExercise} strength (different movement pattern, so ${Math.round(estimatedMax.transfer.factor * 100)}% carryover). Start conservative and adjust based on feel.`
+          ? `Estimated from your ${estimatedMax.transfer.fromExercise} strength (${
+              estimatedMax.transfer.rung === 'same_movement'
+                ? 'same movement, different main muscle'
+                : 'different movement pattern'
+            }, so ${Math.round(estimatedMax.transfer.factor * 100)}% carryover). Start conservative and adjust based on feel.`
           : `Estimated from ${estimatedMax.source.replace(/_/g, ' ')}. Start conservative and adjust based on feel.`,
       warmupProtocol: this.generateWarmupSets(conservativeWeight, exerciseName),
       findingWeightProtocol: {

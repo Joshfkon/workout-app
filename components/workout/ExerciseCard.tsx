@@ -15,7 +15,7 @@ import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, sumDisplayVolume } from '@/lib/utils';
-import { recommendSessionStart, estimateRepsForWeight, fatigueAdjustedE1RM, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
+import { recommendSessionStart, estimateRepsForWeight, fatigueAdjustedE1RM, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, seedRepsAtTarget, type SeedRecommendation } from '@/services/setRecommender';
 import {
   nextSetPrescription,
   sessionBestE1RM as sessionBestE1RMKg,
@@ -23,6 +23,8 @@ import {
   coldStartE1RM as coldStartE1RMKg,
   toPrevSessionSets,
   repTotalNextSetAt as repTotalNextTargetAt,
+  weightEditAnchorE1RM,
+  effortBasisIsColdStartOnly,
 } from '@/services/prescription/sessionPrescription';
 import { framePositionalDelta } from '@/services/suggestionEngine/deltaFraming';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
@@ -1643,6 +1645,19 @@ export const ExerciseCard = memo(function ExerciseCard({
       // 90 × 11 ran past the lifter's estimated max while the plan claimed
       // 2 RIR, and the readout under it said "0 left in the tank".
       const pm = seed.positionMatch;
+      // A load step resets the engine's ask to the range floor; prefill (and
+      // headline) the reps the strip's own forecast gives at the target
+      // reserve instead, at the load actually shown. Weight is unchanged.
+      if (seed.anchorSource === 'position_match' && pm?.progression === 'add_load' && seed.seedReps !== undefined) {
+        const shown = suggestionWeight(seed.weightKg, prevSet?.weightKg);
+        const shownKg = unit === 'lb' ? convertWeight(shown, 'lb', 'kg') : shown;
+        const reps = seedRepsAtTarget(seed, {
+          loadKg: shownKg,
+          e1rmKg: lastSessionE1RM ?? coldStartE1RM,
+          targetRir: effectiveTargetRir,
+        });
+        return { seed: reps !== undefined ? { ...seed, seedReps: reps } : seed, prevSet };
+      }
       if (seed.anchorSource === 'position_match' && pm?.progression === 'add_rep' && seed.seedReps !== undefined) {
         const shown = suggestionWeight(seed.weightKg, prevSet?.weightKg);
         const shownKg = unit === 'lb' ? convertWeight(shown, 'lb', 'kg') : shown;
@@ -1652,7 +1667,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
       return { seed, prevSet };
     },
-    [suggestionWeight, unit, previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, isBodyweightExercise, prevSessionSetsForGating, priorSessionSetsForGating]
+    [suggestionWeight, unit, previousSets, previousTopSetWeightKg, anchorE1RMKg, lastSessionE1RM, coldStartE1RM, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, isBodyweightExercise, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: ONE ANCHOR PER
@@ -1699,13 +1714,18 @@ export const ExerciseCard = memo(function ExerciseCard({
   // answering an edit from a DIFFERENT anchor than the seed is exactly the
   // two-sources-of-truth bug. A planned target weight is still not an anchor
   // — with no e1RM rung, weight edits leave the reps field untouched.
+  // The cold-start estimate is NOT an edit anchor (weightEditAnchorE1RM): it
+  // is the app's own rough guess, and refilling a typed 225 from it snapped
+  // reps to 1 under a "near max" warning. No logged rung → reps untouched.
   const resolveEditAnchorE1RM = useCallback(
     (hasReferenceSet: boolean): number | undefined =>
-      sessionBestE1RM ??
-      (hasReferenceSet
-        ? undefined
-        : (anchorE1RMKg > 0 ? anchorE1RMKg : undefined) ?? lastSessionE1RM ?? coldStartE1RM),
-    [sessionBestE1RM, anchorE1RMKg, lastSessionE1RM, coldStartE1RM]
+      weightEditAnchorE1RM({
+        sessionBestE1RM,
+        storedE1RMKg: anchorE1RMKg,
+        lastSessionE1RM,
+        hasReferenceSet,
+      }),
+    [sessionBestE1RM, anchorE1RMKg, lastSessionE1RM]
   );
 
   // Rationale line for a weight-edit rep recompute ("35 lbs ⇒ ~6 reps @ 2 RIR
@@ -4846,6 +4866,18 @@ export const ExerciseCard = memo(function ExerciseCard({
             // rep_total: no e1RM curve exists for this exercise — no
             // near-max predictions either.
             if (repTotalMode) return null;
+            // Only the rough cold-start estimate to go on (nothing logged for
+            // this lift today or last time): no forecast, so no near-max
+            // warning about the app's own guess. The strip's source line
+            // already says it's a starting guess to adjust after set 1.
+            if (
+              effortBasisIsColdStartOnly({
+                hasLoggedSetToday: completedSets.length > 0,
+                lastSessionE1RM,
+              })
+            ) {
+              return null;
+            }
             const enteredReps = parseInt(input.reps);
             if (isNaN(enteredReps) || enteredReps < 1) return null;
 
