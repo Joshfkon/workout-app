@@ -25,6 +25,15 @@
 /** The real Pro price (lib/stripe.ts), so "would you pay" has a number to judge. */
 export const PRO_MONTHLY_PRICE = '$9.99';
 
+/**
+ * What Free and Pro include, as the app's own pricing lists them
+ * (lib/stripe.ts TIER_FEATURES). Personas are asked whether they'd pay, so
+ * they're told what paying gets them — a real user meets the paywall; ours
+ * never did, and every "no" said "I haven't seen a Pro feature".
+ */
+export const FREE_FEATURES = ['Unlimited workout logging', 'Exercise history', 'Basic progress tracking'];
+export const PRO_FEATURES = ['AI mesocycle builder', 'Smart weight suggestions', 'Advanced analytics', 'Unlimited workouts', 'Priority support'];
+
 export const QUESTIONS = [
   {
     id: 'ease',
@@ -138,6 +147,9 @@ export const QUESTIONS = [
   {
     id: 'pay_price',
     scope: 'week',
+    // v2: personas are told what Free and Pro include before answering, so
+    // scores don't compare with v1 runs (the hash includes this).
+    version: 2,
     label: `Would pay ${PRO_MONTHLY_PRICE}/month`,
     prompt: `HyperTrack Pro costs ${PRO_MONTHLY_PRICE} a month. Would you pay that rather than stay with what you use now? Say why. Answer honestly, in your own words, in one to three sentences.`,
     anchorSets: [

@@ -31,8 +31,10 @@ import { IconArrowsExchange, IconLoader2, IconPlus, IconX } from '@tabler/icons-
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
-import { quickWeightEstimate } from '@/services/weightEstimationEngine';
+import { quickWeightEstimate, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
+
+type TransferCandidate = Awaited<ReturnType<typeof fetchTransferCandidates>>[number];
 import {
   buildSuggestedWorkout,
   detectSplitDay,
@@ -69,6 +71,7 @@ import { now as clockNow } from '@/lib/clock';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, resolveMuscleToStandard } from '@/types/schema';
+import { formatWeight } from '@/lib/utils';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
 import { formatTargetRange } from '@/services/shared/setModality';
 
@@ -128,7 +131,90 @@ interface SheetProfile {
   experience: string | null;
   injury_history: string[] | null;
   /** users.preferences; injuryAreas = standing injuries from onboarding. */
-  preferences?: { injuryAreas?: unknown } | null;
+  preferences?: { injuryAreas?: unknown; units?: 'kg' | 'lb' } | null;
+}
+
+/**
+ * The starting weight a pick will be seeded with, and what it rests on.
+ * One function for the preview line in the sheet and for handleStart, so the
+ * number the user is told is the number the workout opens with.
+ */
+function estimatePickStart(
+  exercise: Pick<SheetExercise, 'name' | 'primary_muscle' | 'movement_pattern' | 'equipment_required'>,
+  pick: { repRange: [number, number]; targetRir: number },
+  profile: SheetProfile | null,
+  transferCandidates: TransferCandidate[]
+): WorkingWeightRecommendation | null {
+  if (!profile?.weight_kg || !profile?.height_cm) return null;
+  return quickWeightEstimate(
+    exercise.name,
+    { min: pick.repRange[0], max: pick.repRange[1] },
+    pick.targetRir,
+    profile.weight_kg,
+    profile.height_cm,
+    profile.body_fat_percent || 20,
+    (profile.experience || 'intermediate') as Experience,
+    undefined,
+    'kg',
+    undefined,
+    {
+      transferCandidates,
+      targetMeta: {
+        primaryMuscle: exercise.primary_muscle,
+        movementPattern: exercise.movement_pattern,
+        equipmentRequired: exercise.equipment_required,
+      },
+    }
+  );
+}
+
+/**
+ * Cap a dumbbell lift's load at the location's heaviest dumbbell. Shared by
+ * the sheet's preview line and handleStart, so the preview never promises a
+ * load the workout won't open with.
+ */
+export function capToLocationDumbbells(
+  weightKg: number,
+  exercise: Pick<SheetExercise, 'name' | 'equipment_required'>,
+  dumbbellMaxKg: number | null | undefined
+): number {
+  if (
+    dumbbellMaxKg &&
+    weightKg > dumbbellMaxKg &&
+    `${exercise.name} ${(exercise.equipment_required ?? []).join(' ')}`.toLowerCase().includes('dumbbell')
+  ) {
+    return dumbbellMaxKg;
+  }
+  return weightKg;
+}
+
+/** Plain words for what a new lift's starting weight rests on. */
+const START_BASIS: Record<string, string> = {
+  related_exercise: 'similar lifts you’ve logged',
+  strength_standards: 'typical strength for your experience and bodyweight',
+  bodyweight_ratio: 'your bodyweight',
+  calibration: 'your strength test',
+};
+
+/**
+ * Why this lift, and where its first weight comes from — the panel's
+ * "no explanation why it picked Upright Row or 65 lbs".
+ */
+export function pickWhyLine(args: {
+  isRecent: boolean;
+  muscleLabel: string;
+  rec: Pick<WorkingWeightRecommendation, 'recommendedWeight' | 'confidence' | 'transferFrom' | 'estimateSource'> | null;
+  units: 'kg' | 'lb';
+}): string {
+  const { isRecent, muscleLabel, rec, units } = args;
+  if (isRecent) return 'You’ve done this recently — weights start from your last sets.';
+  const lead = `New to you — a top ${muscleLabel.toLowerCase()} pick for your equipment.`;
+  if (!rec || rec.confidence === 'find_working_weight' || !(rec.recommendedWeight > 0)) {
+    return `${lead} You’ll find your starting weight on the first set.`;
+  }
+  const w = formatWeight(rec.recommendedWeight, units);
+  const basis = rec.transferFrom ? `your ${rec.transferFrom}` : START_BASIS[rec.estimateSource ?? ''];
+  return basis ? `${lead} Starts at ~${w}, estimated from ${basis}.` : `${lead} Starts at ~${w} (an estimate).`;
 }
 
 interface SuggestedWorkoutSheetProps {
@@ -181,6 +267,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [exercises, setExercises] = useState<SheetExercise[]>([]);
   const [recentExerciseIds, setRecentExerciseIds] = useState<string[]>([]);
+  // Loaded with the plan data so each pick can preview its starting weight.
+  const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
   // Recent sessions' exercise ids, most recent first — for the push/pull/legs
   // rotation check (detectSplitDay).
   const [recentSessionExerciseIds, setRecentSessionExerciseIds] = useState<string[][]>([]);
@@ -232,7 +320,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-        const [exercisesRes, usageRes, profileRes, unavailable, locationRows] = await Promise.all([
+        const [exercisesRes, usageRes, profileRes, unavailable, locationRows, transfers] = await Promise.all([
           supabase
             .from('exercises')
             .select(
@@ -252,7 +340,9 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             .single(),
           fetchUnavailableEquipment(userId).catch(() => [] as string[]),
           fetchTrainingLocations(userId).catch(() => [] as TrainingLocationRow[]),
+          fetchTransferCandidates(userId, supabase).catch(() => [] as TransferCandidate[]),
         ]);
+        setTransferCandidates(transfers);
 
         setExercises((exercisesRes.data ?? []) as SheetExercise[]);
         setProfile((profileRes.data as SheetProfile | null) ?? null);
@@ -666,31 +756,12 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         const substituted = isActiveSubstitution(pick);
         let suggestedWeight = 0;
         let lowConfidenceSeed = false;
-        if (profile?.weight_kg && profile?.height_cm) {
-          // Substitutes are estimated from the SUBSTITUTE's own name — the
-          // original exercise's e1RM/history is never grafted on. First-time
-          // substitutes fall through to related-lift / strength-standard
-          // seeding, which the engine flags low-confidence.
-          const weightRec = quickWeightEstimate(
-            exercise.name,
-            { min: repRange[0], max: repRange[1] },
-            pick.targetRir,
-            profile.weight_kg,
-            profile.height_cm,
-            profile.body_fat_percent || 20,
-            (profile.experience || 'intermediate') as Experience,
-            undefined,
-            'kg',
-            undefined,
-            {
-              transferCandidates,
-              targetMeta: {
-                primaryMuscle: exercise.primary_muscle,
-                movementPattern: exercise.movement_pattern,
-                equipmentRequired: exercise.equipment_required,
-              },
-            }
-          );
+        // Substitutes are estimated from the SUBSTITUTE's own name — the
+        // original exercise's e1RM/history is never grafted on. First-time
+        // substitutes fall through to related-lift / strength-standard
+        // seeding, which the engine flags low-confidence.
+        const weightRec = estimatePickStart(exercise, pick, profile, transferCandidates);
+        if (weightRec) {
           suggestedWeight =
             weightRec.confidence === 'find_working_weight'
               ? 0
@@ -701,16 +772,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         }
 
         // Cap dumbbell suggestions at the location's heaviest dumbbell.
-        const dumbbellMaxKg = selectedLocation?.dumbbell_max_kg;
-        if (
-          dumbbellMaxKg &&
-          suggestedWeight > dumbbellMaxKg &&
-          `${exercise.name} ${(exercise.equipment_required ?? []).join(' ')}`
-            .toLowerCase()
-            .includes('dumbbell')
-        ) {
-          suggestedWeight = dumbbellMaxKg;
-        }
+        suggestedWeight = capToLocationDumbbells(suggestedWeight, exercise, selectedLocation?.dumbbell_max_kg);
 
         let reason = pick.reason;
         if (substituted && pick.substitution) {
@@ -1038,6 +1100,19 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                         })}
                         {exercise.exercise_type === 'duration_based' ? '' : ' reps'} ·{' '}
                         {rirTargetLabel(pick.targetRir)}
+                      </span>
+                      <span className="block text-caption text-ink-2" data-testid="suggested-pick-why">
+                        {pickWhyLine({
+                          isRecent: recentExerciseIds.includes(exercise.id),
+                          muscleLabel: STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle,
+                          rec: (() => {
+                            const r = estimatePickStart(exercise, pick, profile, transferCandidates);
+                            return r
+                              ? { ...r, recommendedWeight: capToLocationDumbbells(r.recommendedWeight, exercise, selectedLocation?.dumbbell_max_kg) }
+                              : null;
+                          })(),
+                          units: profile?.preferences?.units === 'kg' ? 'kg' : 'lb',
+                        })}
                       </span>
                       <span className="block text-caption text-ink-3">{pick.reason}</span>
                       {sub && (
