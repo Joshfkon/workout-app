@@ -1025,7 +1025,12 @@ export function generateFullMesocycleWithFatigue(
   totalWeeks?: number,
   /** Settings → Muscle priorities as volume adjustments (lib/training/
    *  builderDefaults priorityVolumeAdjustments). Optional; omitted = none. */
-  volumeAdjustments?: VolumeAdjustmentInput[]
+  volumeAdjustments?: VolumeAdjustmentInput[],
+  /** The split the user chose in the builder. The builder's split menu used
+   *  to be cosmetic — this function always recommended its own split from
+   *  days per week, so "Upper/Lower" came back as Full Body (UX panel).
+   *  Omitted → the recommendation. */
+  splitOverride?: Split
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
@@ -1069,9 +1074,13 @@ export function generateFullMesocycleWithFatigue(
   // Step 3: Get split recommendation (import from mesocycleBuilder)
   const { recommendSplit } = require('./mesocycleBuilder');
   const splitRec = recommendSplit(daysPerWeek, profile.goal, profile.experience, sessionMinutes);
-  const split: Split = splitRec.split;
+  const split: Split = splitOverride ?? splitRec.split;
 
-  programNotes.push(`Split: ${split} - ${splitRec.reason}`);
+  programNotes.push(
+    splitOverride && splitOverride !== splitRec.split
+      ? `Split: ${split} (your choice)`
+      : `Split: ${split} - ${splitRec.reason}`
+  );
 
   // Step 4: Build periodization plan
   const periodization = buildPeriodizationPlan(profile, recoveryFactors, totalWeeks);

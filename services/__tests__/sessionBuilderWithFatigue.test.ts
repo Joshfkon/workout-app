@@ -493,6 +493,19 @@ describe('sessionBuilderWithFatigue', () => {
   describe('generateFullMesocycleWithFatigue', () => {
     const profile = createProfile();
 
+    it('follows the split the user chose instead of recommending its own', () => {
+      const recommended = generateFullMesocycleWithFatigue(5, profile, 60, undefined, [], 1, 6);
+      const bro = generateFullMesocycleWithFatigue(5, profile, 60, undefined, [], 1, 6, undefined, 'Bro Split');
+      expect(bro.split).toBe('Bro Split');
+      expect(bro.sessions.map((s) => s.day)).toEqual(['Chest', 'Back', 'Shoulders', 'Arms', 'Legs']);
+      expect(bro.programNotes.join(' ')).toMatch(/Split: Bro Split/);
+      const ul = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6, undefined, 'Upper/Lower');
+      expect(ul.split).toBe('Upper/Lower');
+      expect(ul.sessions.map((s) => s.day)).toEqual(['Upper A', 'Lower A', 'Upper B', 'Lower B']);
+      // No choice → the recommendation, as before.
+      expect(generateFullMesocycleWithFatigue(5, profile, 60, undefined, [], 1, 6).split).toBe(recommended.split);
+    });
+
     it('a high-priority muscle (Settings → Muscle priorities) gets more weekly sets', () => {
       const base = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6);
       const prioritized = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6, [
