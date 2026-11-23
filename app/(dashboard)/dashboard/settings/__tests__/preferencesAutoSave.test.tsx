@@ -211,6 +211,24 @@ describe('Settings → Preferences auto-save', () => {
     expect(selectedLength()).toBe('in');
   });
 
+  it('shows Weight and Length units at the top of Settings, without opening a section', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+    // Landing tab (Profile): the unit controls are already on screen.
+    const units = await screen.findByTestId('settings-units-card');
+    expect(within(units).getByRole('radiogroup', { name: 'Weight units' })).toBeInTheDocument();
+    expect(within(units).getByRole('radiogroup', { name: 'Length units' })).toBeInTheDocument();
+    // Above the section switcher, and saved straight from there.
+    const sections = screen.getByRole('radiogroup', { name: 'Settings sections' });
+    expect(units.compareDocumentPosition(sections) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(weightRadio('lb'));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('save-status-units')).toHaveTextContent('Saved'));
+    // Only one set of unit controls on the Preferences tab too.
+    await user.click(screen.getByRole('radio', { name: 'Preferences' }));
+    expect(screen.getAllByRole('radiogroup', { name: 'Weight units' })).toHaveLength(1);
+  });
+
   it('puts Units first and confirms a save next to it, announced via aria-live', async () => {
     const user = userEvent.setup();
     renderSettings();

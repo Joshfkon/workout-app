@@ -82,6 +82,46 @@ describe('Onboarding benchmarks page', () => {
     expect(mockPush).toHaveBeenCalledTimes(1);
   });
 
+  it('puts what the tests are for and what skipping changes in a bulleted box above everything else', () => {
+    render(<BenchmarksPage />);
+    const box = screen.getByTestId('benchmarks-purpose');
+    expect(box.querySelectorAll('li').length).toBeGreaterThanOrEqual(4);
+    expect(box).toHaveTextContent(/What a test does:/);
+    expect(box).toHaveTextContent(/If you skip:/);
+    // Above Skip and above every lift card.
+    for (const later of [screen.getByTestId('skip-benchmarks'), screen.getByRole('button', { name: /Bench Press/i })]) {
+      expect(box.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('Skip shows it is working the moment it is tapped', async () => {
+    let finish: () => void = () => {};
+    mockComplete.mockReturnValue(new Promise((r) => (finish = () => r({ error: null }))));
+    const user = userEvent.setup();
+    render(<BenchmarksPage />);
+
+    await user.click(screen.getByTestId('skip-benchmarks'));
+
+    const skip = screen.getByTestId('skip-benchmarks');
+    expect(skip).toHaveTextContent('Opening the app…');
+    expect(skip).toHaveAttribute('aria-busy', 'true');
+    expect(skip).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(/Skipped\. Finishing setup/);
+    expect(mockPush).not.toHaveBeenCalled();
+    finish();
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
+  });
+
+  it('Start Testing goes busy at once and stays busy through navigation', async () => {
+    const user = userEvent.setup();
+    render(<BenchmarksPage />);
+    await user.click(screen.getByRole('button', { name: /Bench Press/i }));
+    await user.click(screen.getByTestId('start-benchmarks'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/calibrate?session=sess-1'));
+    expect(screen.getByTestId('start-benchmarks')).toHaveTextContent('Starting…');
+    expect(screen.getByTestId('start-benchmarks')).toBeDisabled();
+  });
+
   it('still lands on the dashboard if saving completion fails', async () => {
     mockComplete.mockRejectedValue(new Error('offline'));
     const user = userEvent.setup();

@@ -50,3 +50,42 @@ export const SKIPPED_EXPERIENCE: Experience = 'intermediate';
 export function experienceForLiftingAnswer(answer: LiftingAnswer | null): Experience {
   return answer === null ? SKIPPED_EXPERIENCE : EXPERIENCE_FOR_ANSWER[answer];
 }
+
+/**
+ * auth user_metadata key for the exact sign-up answer, so onboarding can show
+ * it back ("2–3 years") instead of asking again. The coarse enum still goes
+ * to `experience`.
+ */
+export const LIFTING_ANSWER_METADATA_KEY = 'lifting_answer';
+
+/** The sign-up answer from user_metadata, or null (skipped, or an older account). */
+export function liftingAnswerFromMetadata(metadata: Record<string, unknown> | null | undefined): LiftingAnswer | null {
+  const raw = metadata?.[LIFTING_ANSWER_METADATA_KEY];
+  return LIFTING_OPTIONS.some((o) => o.value === raw) ? (raw as LiftingAnswer) : null;
+}
+
+const EXPERIENCE_RANGE_LABEL: Record<Experience, string> = {
+  novice: 'Under a year',
+  intermediate: '1–3 years',
+  advanced: '3+ years',
+};
+
+/**
+ * What onboarding shows back as "your lifting experience": the exact sign-up
+ * answer when there is one, else the stored level's range. `fromSignUp` is
+ * false when there is no sign-up answer to show (skipped, or an account made
+ * before the answer was kept), so the screen doesn't claim it was asked.
+ */
+export function experienceSummary(
+  answer: LiftingAnswer | null,
+  experience: string | null | undefined
+): { label: string; fromSignUp: boolean } | null {
+  if (answer && answer !== 'no') {
+    const option = LIFTING_OPTIONS.find((o) => o.value === answer);
+    return { label: option?.label ?? EXPERIENCE_RANGE_LABEL[EXPERIENCE_FOR_ANSWER[answer]], fromSignUp: true };
+  }
+  if (experience === 'novice' || experience === 'intermediate' || experience === 'advanced') {
+    return { label: EXPERIENCE_RANGE_LABEL[experience], fromSignUp: false };
+  }
+  return null;
+}

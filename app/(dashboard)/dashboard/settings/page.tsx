@@ -32,7 +32,7 @@ import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
 import { ProfileTabPanel } from '@/components/settings/ProfileTabPanel';
 import { TrainingTabPanel } from '@/components/settings/TrainingTabPanel';
-import { PreferencesTabPanel } from '@/components/settings/PreferencesTabPanel';
+import { PreferencesTabPanel, UnitsCard } from '@/components/settings/PreferencesTabPanel';
 import { AccountTabPanel } from '@/components/settings/AccountTabPanel';
 import type { PreferenceSaveStatus } from '@/components/settings/PreferencesTabPanel';
 
@@ -743,6 +743,16 @@ export default function SettingsPage() {
         subtitle="Customize your training preferences and account"
       />
 
+      {/* Units sit above the sections: the setting people open Settings for
+          most, visible on every tab without a tap. */}
+      <UnitsCard
+        units={units}
+        handleUnitsChange={handleUnitsChange}
+        lengthUnits={lengthUnits}
+        handleLengthUnitsChange={handleLengthUnitsChange}
+        saveStatus={prefSaveStatus}
+      />
+
       <SegmentedControl
         label="Settings sections"
         options={SETTINGS_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
@@ -806,10 +816,6 @@ export default function SettingsPage() {
 
       {activeTab === 'preferences' && (
         <PreferencesTabPanel
-          units={units}
-          handleUnitsChange={handleUnitsChange}
-          lengthUnits={lengthUnits}
-          handleLengthUnitsChange={handleLengthUnitsChange}
           restTimer={restTimer}
           setRestTimer={handleRestTimerChange}
           showFormCues={showFormCues}

@@ -110,6 +110,14 @@ export interface StarterTargetsInput {
    * sized for four hour-long sessions a week.
    */
   liftsWeights?: boolean;
+  /**
+   * The pace picked in onboarding's training step (a macro-calculator goal).
+   * Kept only when it runs the same direction as `phase`; otherwise the
+   * phase's default pace is used (phaseToNutritionGoal).
+   */
+  nutritionGoal?: NutritionGoal | null;
+  /** Sessions a week the lifter said they train (2–7); replaces the starter 4. */
+  workoutsPerWeek?: number | null;
 }
 
 /**
@@ -126,8 +134,11 @@ export function starterTargets(
     height_cm: heightCm,
     age,
     sex,
-    goal: phaseToNutritionGoal(phase, null),
+    goal: phaseToNutritionGoal(phase, input.nutritionGoal ?? null),
     ...STARTER_ACTIVITY_SETTINGS,
+    ...(input.liftsWeights !== false && input.workoutsPerWeek && input.workoutsPerWeek >= 1 && input.workoutsPerWeek <= 7
+      ? { workouts_per_week: Math.round(input.workoutsPerWeek) }
+      : {}),
     ...(input.liftsWeights === false ? { workouts_per_week: 0 } : {}),
   };
   return { settings, targets: targetsFromMacroSettings(weightKg, settings) };

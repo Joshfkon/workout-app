@@ -12,8 +12,17 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { updateOnboardingStep, completeOnboarding, confirmedOnboardingGoal, type TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import type { StandingInjuryArea } from '@/lib/training/standingInjuries';
 import { GoalStep } from './_components/GoalStep';
+import { TrainingStep } from './_components/TrainingStep';
+import {
+  EMPTY_TRAINING_SETUP,
+  rateForGoal,
+  trainingPreferencesPatch,
+  trainingSetupFromPreferences,
+  type TrainingSetupAnswers,
+} from '@/lib/onboarding/trainingSetup';
+import { experienceSummary, liftingAnswerFromMetadata } from '@/lib/onboarding/experienceOptions';
 import { TextSizeControl } from '@/components/settings/TextSizeControl';
-import { starterTargets } from '@/lib/nutrition/phaseTargets';
+import { phaseToNutritionGoal, starterTargets } from '@/lib/nutrition/phaseTargets';
 import { askedForBenchmarks, skipsBenchmarks, statedTrackingFocus } from '@/lib/onboarding/trackingFocus';
 import { resolveBeginnerMode } from '@/lib/beginnerMode';
 import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
@@ -64,8 +73,9 @@ export default function OnboardingBodyCompPage() {
   const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
   
-  // Step state: 'units' -> 'body-comp' -> 'goal'
-  const [step, setStep] = useState<'units' | 'body-comp' | 'goal'>('units');
+  // Step state: 'units' -> 'body-comp' -> 'goal' -> 'training' (lifters only,
+  // optional). Nothing is saved until the last of these is left.
+  const [step, setStep] = useState<'units' | 'body-comp' | 'goal' | 'training'>('units');
   // The highlighted unit IS the selection: Continue saves whatever is shown
   // as picked, no extra tap needed. It starts from the stored preference
   // (default Imperial) and follows it if that loads late, until the user
@@ -151,6 +161,12 @@ export default function OnboardingBodyCompPage() {
   // novices (lib/beginnerMode). Saved on Continue for lifters.
   const [beginnerMode, setBeginnerMode] = useState(false);
   const beginnerTouched = useRef(false);
+  // Sign-up's experience answer, shown back on the goal step (not re-asked).
+  const [experienceShown, setExperienceShown] = useState<{ label: string; fromSignUp: boolean } | null>(null);
+  // Optional training step (lifters): days, split, and the bulk/cut pace.
+  const [trainingAnswers, setTrainingAnswers] = useState<TrainingSetupAnswers>(EMPTY_TRAINING_SETUP);
+  const trainingTouched = useRef(false);
+  const [trainingBusy, setTrainingBusy] = useState<'continue' | 'skip' | null>(null);
   useEffect(() => {
     if (injuryAreasSeeded.current || preferences.injuryAreas.length === 0) return;
     injuryAreasSeeded.current = true;
@@ -275,10 +291,12 @@ export default function OnboardingBodyCompPage() {
       if (userData?.age) {
         setAgeDisplay((current) => current || String(userData.age));
       }
+      const prefs = (userData?.preferences as Record<string, unknown> | null) ?? {};
       if (!beginnerTouched.current) {
-        const prefs = (userData?.preferences as Record<string, unknown> | null) ?? {};
         setBeginnerMode(resolveBeginnerMode(prefs.beginnerMode, userData?.experience));
       }
+      setExperienceShown(experienceSummary(liftingAnswerFromMetadata(user.user_metadata), userData?.experience));
+      if (!trainingTouched.current) setTrainingAnswers(trainingSetupFromPreferences(prefs));
       const savedGoal = confirmedOnboardingGoal(userData);
       if (savedGoal) {
         // Don't overwrite a pick the user made while this was loading.
@@ -331,16 +349,22 @@ export default function OnboardingBodyCompPage() {
   // Daily calorie + protein targets for the picked goal, from the same
   // calculation a phase switch uses (lib/nutrition/phaseTargets), so what
   // this step shows is exactly what Eat starts with.
-  const starter = goal
-    ? starterTargets({
-        phase: goal,
-        weightKg: useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg(),
-        heightCm: getHeightCm(),
-        age: getAge(),
-        sex,
-        liftsWeights: !foodFocus,
-      })
-    : null;
+  // `training` = the optional training step's answers (null = skipped or not
+  // asked): the picked pace and days a week feed the same calculation.
+  const starterFor = (training: TrainingSetupAnswers | null) =>
+    goal
+      ? starterTargets({
+          phase: goal,
+          weightKg: useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg(),
+          heightCm: getHeightCm(),
+          age: getAge(),
+          sex,
+          liftsWeights: !foodFocus,
+          nutritionGoal: training ? rateForGoal(goal, training.rate) : null,
+          workoutsPerWeek: training?.daysPerWeek ?? null,
+        })
+      : null;
+  const starter = starterFor(null);
   const createStarterTargets = !existingTargets && !hasMacroSettings;
 
   // Synchronous double-tap guard (as on /register): two taps land before the
@@ -348,8 +372,9 @@ export default function OnboardingBodyCompPage() {
   // coaching session. The ref flips in the same tick.
   const goalSubmittingRef = useRef(false);
 
-  const handleContinue = async () => {
+  const handleContinue = async (training: TrainingSetupAnswers | null = null) => {
     if (!goal || !sex || goalSubmittingRef.current) return;
+    const starter = starterFor(training);
     goalSubmittingRef.current = true;
     setIsLoading(true);
     // On success we navigate away: stay busy until the route changes rather
@@ -427,11 +452,15 @@ export default function OnboardingBodyCompPage() {
         await updatePreference('injuryAreas', injuryAnswer);
       }
 
-      // Beginner mode (lifters; food-only users aren't asked). Best-effort:
-      // Settings → Preferences can always change it.
+      // Beginner mode (lifters; food-only users aren't asked), plus the
+      // optional training step's days and split, in one merge into
+      // users.preferences. Best-effort: Settings can always change them.
       if (!foodFocus) {
         try {
-          await savePreferencesPatch(supabase, user.id, { beginnerMode });
+          await savePreferencesPatch(supabase, user.id, {
+            beginnerMode,
+            ...(training ? trainingPreferencesPatch(training) : {}),
+          });
         } catch (err) {
           console.error('Error saving beginner mode:', err);
         }
@@ -464,8 +493,26 @@ export default function OnboardingBodyCompPage() {
       if (!navigating) {
         goalSubmittingRef.current = false;
         setIsLoading(false);
+        setTrainingBusy(null);
       }
     }
+  };
+
+  // Goal step → the optional training step for lifters; food-only users
+  // (and anyone not lifting) finish straight from the goal step.
+  const handleGoalContinue = () => {
+    if (!goal || !sex) return;
+    if (foodFocus) {
+      void handleContinue(null);
+      return;
+    }
+    setStep('training');
+  };
+
+  const finishTrainingStep = (skip: boolean) => {
+    if (goalSubmittingRef.current) return;
+    setTrainingBusy(skip ? 'skip' : 'continue');
+    void handleContinue(skip ? null : trainingAnswers);
   };
   
   const canContinue = bodyComp !== null && bodyComp.ffmi > 0;
@@ -650,6 +697,29 @@ export default function OnboardingBodyCompPage() {
     );
   }
 
+  if (step === 'training') {
+    const trainingStarter = starterFor(trainingAnswers);
+    return (
+      <TrainingStep
+        answers={trainingAnswers}
+        onChange={(next) => {
+          trainingTouched.current = true;
+          setTrainingAnswers(next);
+        }}
+        goal={goal}
+        defaultRate={goal && goal !== 'maintenance' ? phaseToNutritionGoal(goal, null) : null}
+        rateApplies={createStarterTargets}
+        weightKg={useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg()}
+        units={units}
+        targets={trainingStarter ? trainingStarter.targets : null}
+        busy={trainingBusy ?? (isLoading ? 'continue' : null)}
+        onBack={() => setStep('goal')}
+        onSkip={() => finishTrainingStep(true)}
+        onContinue={() => finishTrainingStep(false)}
+      />
+    );
+  }
+
   // Goal selection step
   if (step === 'goal') {
     const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
@@ -694,9 +764,10 @@ export default function OnboardingBodyCompPage() {
                 setBeginnerMode(value);
               },
             })}
+        experience={experienceShown}
         isLoading={isLoading}
         onBack={() => setStep('body-comp')}
-        onContinue={handleContinue}
+        onContinue={handleGoalContinue}
       />
     );
   }
