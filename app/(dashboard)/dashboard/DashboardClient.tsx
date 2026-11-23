@@ -70,6 +70,8 @@ import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStar
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
 import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCard';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { WeeklySetsCard } from '@/components/dashboard/home/WeeklySetsCard';
 import { heroOffersWorkoutStart, todayHeroVariant } from '@/components/dashboard/home/TodayHeroCard';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
@@ -307,6 +309,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const router = useRouter();
   // Food-only (said "food tracking", never lifted here): no workout entries.
   const { foodOnly } = useTrackingFocus();
+  const beginnerMode = useBeginnerMode();
   const supabase = createUntypedClient();
 
   const [isLoading, setIsLoading] = useState(!hasInitialData);
@@ -1632,6 +1635,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           row below the logging chips instead. */}
       {!foodFocus && !foodOnly && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
 
+      {/* Quick log chips, right under the hero: logging is the most
+          frequent thing done on Home, so it sits above the glance cards. */}
+      <QuickLogRow
+        onLogWeight={() => setActiveModal('weight')}
+        onLogWater={userId ? () => setActiveModal('water') : undefined}
+        onLogFood={() => router.push(addFoodHref())}
+        onLogSleep={userId ? () => setActiveModal('sleep') : undefined}
+        onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
+        onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
+      />
+
       {/* 2. Today: Eat · Recovery · This week (depth one tap away) */}
       <TodayCard
         nutritionTotals={nutritionTotals}
@@ -1651,18 +1665,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         onOpenDetails={openToday}
       />
 
+      {/* Weekly sets vs MEV–MRV, on Home again (it had moved into the Today
+          sheet). Lifters only; beginner mode keeps it out, as it does on the
+          workout screen. Same rows as the sheet and the Sets per week page. */}
+      {!foodOnly && !beginnerMode && <WeeklySetsCard rows={volumeRows} />}
+
       {/* 3. At most one nudge */}
       {nudgeCard}
-
-      {/* 4. Quick log chips — each opens a sheet */}
-      <QuickLogRow
-        onLogWeight={() => setActiveModal('weight')}
-        onLogWater={userId ? () => setActiveModal('water') : undefined}
-        onLogFood={() => router.push(addFoodHref())}
-        onLogSleep={userId ? () => setActiveModal('sleep') : undefined}
-        onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
-        onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
-      />
 
       {/* Food-only users (hooks/useTrackingFocus) get no workout entry at
           all; "I also lift weights" in Settings brings it back. */}
