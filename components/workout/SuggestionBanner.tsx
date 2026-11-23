@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { IconSparkles, IconInfoCircle, IconAlertTriangle } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
-import { effortTargetPhrase, plainWorkoutText } from '@/lib/beginnerMode';
+import { beginnerEffortTarget, plainWorkoutText } from '@/lib/beginnerMode';
 import { whyThisWeightSummary, type WhyThisWeight } from './whyThisWeight';
 
 /**
@@ -255,7 +255,7 @@ export function SuggestionBanner({
                 {weightLabel} × {repsLabel}
                 {showRir ? (
                   <span className="font-normal text-ink-2" data-testid="suggestion-rir-plain">
-                    {` · ${effortTargetPhrase(rir)}`}
+                    {` · ${beginnerEffortTarget(rir)}`}
                   </span>
                 ) : null}
               </span>
@@ -358,7 +358,7 @@ export function SuggestionBanner({
             ? [
                 ...(reason
                   ? [
-                      `${weightLabel} × ${repsLabel}${showRir ? `, ${effortTargetPhrase(rir)}` : ''} — ${plainWorkoutText(reason)}.`,
+                      `${weightLabel} × ${repsLabel}${showRir ? `, ${beginnerEffortTarget(rir)}` : ''} — ${plainWorkoutText(reason)}.`,
                     ]
                   : []),
                 ...explanation.map(plainWorkoutText),

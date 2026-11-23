@@ -1,6 +1,6 @@
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PRCelebration, type PRCelebrationData } from '../PRCelebration';
+import { PRCelebration, PR_CELEBRATION_DWELL_MS, type PRCelebrationData } from '../PRCelebration';
 
 const celebration: PRCelebrationData = {
   id: 'set-1',
@@ -28,6 +28,35 @@ describe('PRCelebration', () => {
     render(<PRCelebration celebration={celebration} onDone={onDone} />);
     await user.click(screen.getByRole('button'));
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  // UX panel round 19: mid-screen for 3 s it covered the card's next-set
+  // suggestion and its "Why:" line. Now a short-lived banner at the top.
+  it('sits at the top of the screen, clear of the exercise card', () => {
+    render(<PRCelebration celebration={celebration} onDone={jest.fn()} />);
+    const layer = screen.getByTestId('pr-celebration');
+    expect(layer.className).toMatch(/\btop-0\b/);
+    expect(layer.className).not.toMatch(/\binset-0\b/);
+    expect(layer.className).not.toMatch(/\bitems-center\b/);
+  });
+
+  it('dwells 2 s, not 3', () => {
+    expect(PR_CELEBRATION_DWELL_MS).toBe(2000);
+    jest.useFakeTimers();
+    try {
+      const onDone = jest.fn();
+      render(<PRCelebration celebration={celebration} onDone={onDone} />);
+      act(() => {
+        jest.advanceTimersByTime(1999);
+      });
+      expect(onDone).not.toHaveBeenCalled();
+      act(() => {
+        jest.advanceTimersByTime(1);
+      });
+      expect(onDone).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('auto-dismisses after the timeout', () => {

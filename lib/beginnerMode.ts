@@ -79,8 +79,12 @@ export function plainRirText(text: string): string {
     .replace(/\bRIR\b/g, 'reps left')
     .replace(/\s+in the tank\b/g, ' in you')
     .replace(/\bleft in reserve\b/g, 'left')
-    .replace(/\bleaving (\d+\+?) in reserve\b/g, (_m, n: string) =>
-      `stopping ${n} rep${n === '1' ? '' : 's'} short of failure`
+    // No "failure" for a first-week lifter (UX panel round 19): the same
+    // number as how many more they could still do.
+    .replace(/\bleaving (\d+\+?) in reserve\b/g, (_m, n: string) => `stopping when you could still do ${n} more`)
+    .replace(
+      /\b([Ss])top(ping)? (\d+\+?) reps? short of failure\b/g,
+      (_m, s: string, ing: string | undefined, n: string) => `${s}top${ing ? 'ping' : ''} when you could still do ${n} more`
     )
     .replace(/\s+in reserve\b/g, ' left');
 }

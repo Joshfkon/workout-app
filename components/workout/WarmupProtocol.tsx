@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Card, InfoTooltip } from '@/components/ui';
 import type { WarmupSet, WeightUnit } from '@/types/schema';
 import { roundToPlateIncrement, formatWeightValue } from '@/lib/utils';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 
 interface WarmupProtocolProps {
   warmupSets: WarmupSet[];
@@ -28,6 +29,8 @@ export function WarmupProtocol({
 }: WarmupProtocolProps) {
   const [completedSets, setCompletedSets] = useState<Set<number>>(new Set());
   const [isExpanded, setIsExpanded] = useState(true);
+  // Beginner mode: "Warm-up sets", not "protocol" (UX panel round 19).
+  const beginner = useBeginnerMode();
 
   const toggleSet = (setNumber: number) => {
     setCompletedSets((prev) => {
@@ -80,7 +83,7 @@ export function WarmupProtocol({
             {allCompleted ? '✓' : completedSets.size}
           </div>
           <span className="text-subhead font-medium text-ink">
-            Warmup protocol
+            {beginner ? 'Warm-up sets' : 'Warmup protocol'}
           </span>
           <span className="text-caption text-ink-3">
             ({completedSets.size}/{warmupSets.length})

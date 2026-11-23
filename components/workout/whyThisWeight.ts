@@ -239,3 +239,29 @@ export function isEmptyBarLoad(loadKg: number, equipment: string | null | undefi
   if ((equipment ?? '').toLowerCase() !== 'barbell') return false;
   return loadKg >= 19.9 && loadKg <= 20.5;
 }
+
+/** Whether a line claims an earlier session on this lift ("last session", "last time"). */
+export function claimsPastSession(text: string | null | undefined): boolean {
+  return !!text && /\blast (?:session|time)\b/i.test(text);
+}
+
+/**
+ * The card's suggestion copy with every "last session" / "last time" claim
+ * removed when the lift has no completed logged set to point at (UX panel
+ * round 19: a beginner read "last session" on a lift she had never done).
+ * Round 18 applied the same rule to the suggested-workout sheet
+ * (hasCompletedLift). Lines without such a claim pass through unchanged, and
+ * a lift WITH a completed logged set is never touched. Pure: wording only.
+ */
+export function withoutUnbackedHistoryClaims<
+  T extends { source: string; reason: string; explanation: string[]; why: WhyThisWeight | null },
+>(info: T, hasCompletedLoggedSet: boolean): T {
+  if (hasCompletedLoggedSet) return info;
+  return {
+    ...info,
+    source: claimsPastSession(info.source) ? '' : info.source,
+    reason: claimsPastSession(info.reason) ? '' : info.reason,
+    explanation: info.explanation.filter((line) => !claimsPastSession(line)),
+    why: info.why?.ref === 'last_session' ? null : info.why,
+  };
+}
