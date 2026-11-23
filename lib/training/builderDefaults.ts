@@ -1,0 +1,68 @@
+import { detectSplit } from '@/services/suggestedWorkout';
+import type { StandardMuscleGroup } from '@/types/schema';
+import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
+import type { MuscleGroup } from '@/types/schema';
+
+/** Days of history the builder reads to prefill the schedule. */
+export const BUILDER_HISTORY_DAYS = 28;
+
+export interface BuilderHistoryDefaults {
+  /** Sessions per week over the window (2–7), or null with too little history. */
+  daysPerWeek: number | null;
+  /** The split the history reads as, when it reads as one. */
+  splitKind: 'body_part' | 'ppl' | null;
+  /** One line for the builder, e.g. "From your last 4 weeks: 5 sessions a week, a body-part split." */
+  summary: string | null;
+}
+
+/**
+ * Builder defaults from what the lifter has actually been doing. The builder
+ * opened at 4 days / Upper-Lower for everyone; an advanced lifter on a 5-day
+ * body-part split (UX panel) read that as the app not knowing him. Pure.
+ *
+ * @param sessions completed sessions in the last BUILDER_HISTORY_DAYS days,
+ *   oldest first, each as its exercises' standard primary muscles.
+ * @param spanDays days the history actually covers (first session → today),
+ *   so 15 sessions over 3 weeks reads 5 a week, not 15 / 4 weeks. Defaults to
+ *   the full window.
+ */
+export function builderDefaultsFromHistory(
+  sessions: StandardMuscleGroup[][],
+  spanDays: number = BUILDER_HISTORY_DAYS
+): BuilderHistoryDefaults {
+  // Fewer than two weeks' worth of sessions says little about a schedule.
+  if (sessions.length < 4) return { daysPerWeek: null, splitKind: null, summary: null };
+  const weeks = Math.min(BUILDER_HISTORY_DAYS, Math.max(7, spanDays)) / 7;
+  const perWeek = Math.min(7, Math.max(2, Math.round(sessions.length / weeks)));
+  const split = detectSplit(sessions);
+  const splitKind = split?.kind ?? null;
+  const splitText = splitKind === 'body_part' ? ', a body-part split' : splitKind === 'ppl' ? ', push/pull/legs' : '';
+  return {
+    daysPerWeek: perWeek,
+    splitKind,
+    summary: `From your recent training: ${perWeek} sessions a week${splitText}.`,
+  };
+}
+
+/** A row of user_muscle_priorities (1 = high … 5 = low). */
+export interface MusclePriorityRow {
+  muscle_group: MuscleGroup;
+  priority: number;
+}
+
+/**
+ * Settings → Muscle priorities as the generator's volume adjustments, with
+ * the same multipliers the imbalance engine applies (services/
+ * measurementImbalanceEngine): 1 → +20%, 2 → +10%, 4 → −5%, 5 → −10%. The
+ * builder never passed them, so "bring up my side delts" changed nothing.
+ */
+export function priorityVolumeAdjustments(rows: MusclePriorityRow[]): VolumeAdjustmentInput[] {
+  const out: VolumeAdjustmentInput[] = [];
+  for (const row of rows) {
+    const m =
+      row.priority === 1 ? 1.2 : row.priority === 2 ? 1.1 : row.priority === 4 ? 0.95 : row.priority === 5 ? 0.9 : 1;
+    if (m === 1) continue;
+    out.push({ muscleGroup: row.muscle_group, volumeMultiplier: m, reason: row.priority <= 2 ? 'user_priority' : 'dominant' });
+  }
+  return out;
+}

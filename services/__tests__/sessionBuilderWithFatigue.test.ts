@@ -493,6 +493,15 @@ describe('sessionBuilderWithFatigue', () => {
   describe('generateFullMesocycleWithFatigue', () => {
     const profile = createProfile();
 
+    it('a high-priority muscle (Settings → Muscle priorities) gets more weekly sets', () => {
+      const base = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6);
+      const prioritized = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6, [
+        { muscleGroup: 'hamstrings', volumeMultiplier: 1.2, reason: 'user_priority' },
+      ]);
+      expect(prioritized.volumePerMuscle.hamstrings.sets).toBeGreaterThan(base.volumePerMuscle.hamstrings.sets);
+      expect(prioritized.programNotes.join(' ')).toMatch(/priority muscles: hamstrings/);
+    });
+
     it.each([4, 5, 6, 7, 8])(
       'generates exactly the chosen %i weeks with the deload last',
       (totalWeeks) => {

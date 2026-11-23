@@ -57,7 +57,7 @@ import {
 import { requiredStabilizersFor } from './muscleRecovery';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation, type VolumeAdjustmentInput } from './mesocycleBuilder';
 import { getEffectiveBand, type CoarseMuscle } from './volumeBands';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
 import { estimatePlannedSessionMinutes } from './workoutDurationEstimator';
@@ -1022,7 +1022,10 @@ export function generateFullMesocycleWithFatigue(
    * week). Drives how many weeks are generated, so `mesocycleWeeks[N-1]` is
    * the deload for an N-week block. Omitted → the recovery-derived default.
    */
-  totalWeeks?: number
+  totalWeeks?: number,
+  /** Settings → Muscle priorities as volume adjustments (lib/training/
+   *  builderDefaults priorityVolumeAdjustments). Optional; omitted = none. */
+  volumeAdjustments?: VolumeAdjustmentInput[]
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
@@ -1084,7 +1087,7 @@ export function generateFullMesocycleWithFatigue(
     profile.goal,
     recoveryFactors,
     laggingAreas,
-    undefined,
+    volumeAdjustments,
     profile.enhancedAthleteMode
   );
   
@@ -1102,6 +1105,10 @@ export function generateFullMesocycleWithFatigue(
   // Add note if lagging areas are being addressed
   if (laggingAreas && laggingAreas.length > 0) {
     programNotes.push(`🎯 Extra volume allocated for: ${laggingAreas.join(', ')}`);
+  }
+  const prioritized = (volumeAdjustments ?? []).filter((a) => a.reason === 'user_priority' && a.volumeMultiplier > 1);
+  if (prioritized.length > 0) {
+    programNotes.push(`🎯 Extra volume for your priority muscles: ${prioritized.map((a) => a.muscleGroup).join(', ')}`);
   }
   
   if (timeVolumeModifier < 1.0) {
