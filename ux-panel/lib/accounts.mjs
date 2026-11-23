@@ -182,7 +182,12 @@ export async function seedReturningUser(admin, userId, persona) {
   const names = LIFTS.map((l) => l.name);
   const exercises = await must(admin.from('exercises').select('id, name').in('name', names), 'exercises');
   const byName = Object.fromEntries(exercises.map((e) => [e.name, e.id]));
-  const strength = { none: 0.5, novice: 0.7, intermediate: 1.0, advanced: 1.3 }[a.experience] ?? 0.8;
+  // Strength follows the PERSONA's real experience, not the account's setting:
+  // Maya "joined a gym last week" but her account says novice, which seeded
+  // 88 lb Romanian deadlifts and read as the app prescribing far too heavy.
+  // A true beginner's first weeks sit around the empty bar / light dumbbells.
+  const STRENGTH = { none: 0.35, novice: 0.7, intermediate: 1.0, advanced: 1.3 };
+  const strength = STRENGTH[persona.experience] ?? STRENGTH[a.experience] ?? 0.8;
   for (let w = 0; w < h.workouts; w++) {
     const offset = -Math.round(h.spanDays - (w * h.spanDays) / h.workouts);
     const date = day(offset);
