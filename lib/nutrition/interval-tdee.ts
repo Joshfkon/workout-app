@@ -753,7 +753,10 @@ export function intervalNextStep(result: Pick<IntervalTDEEResult, 'source' | 'we
     const logged = Math.round(latestIncomplete.intakeCompleteness * latestIncomplete.intervalDays);
     return `Food was logged on ${logged} of ${latestIncomplete.intervalDays} days between your last weigh-ins — it needs about 2 of every 3. Log the days you eat and it starts using your data.`;
   }
-  if (result.intervals.length > 0 && result.intervals.every((d) => d.excludedReason === 'short')) {
+  // Two+ weigh-ins but no stretch: segmentIntervals only cuts spans of at
+  // least MIN_INTERVAL_DAYS, so weigh-ins that are all closer together than
+  // that yield no intervals at all (not 'short' ones).
+  if (result.intervals.length === 0 || result.intervals.every((d) => d.excludedReason === 'short')) {
     return 'Your weigh-ins are under 5 days apart so far. Keep weighing in — once they span 5+ days it starts using your data.';
   }
   return 'Keep weighing in every few days and logging food — it switches to your own data as soon as a full stretch is in.';

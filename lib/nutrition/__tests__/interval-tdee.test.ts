@@ -194,6 +194,14 @@ describe('intervalNextStep', () => {
     expect(intervalNextStep({ ...base, weighInCount: 2, intervals: [interval({ intervalDays: 3, excludedReason: 'short' })] })).toMatch(/under 5 days apart/);
     expect(intervalNextStep({ ...base, source: 'blended', weighInCount: 4 })).toBeNull();
   });
+
+  it('weigh-ins all under 5 days apart: the real estimator output names the 5-day rule', () => {
+    const intakeDays = dailyIntake(NOW, -4, 0, 2800);
+    const weighIns: WeighIn[] = [-3, -1, 0].map((off) => ({ date: dateAt(NOW, off), weightLb: 180 }));
+    const result = estimateIntervalTDEE({ now: NOW, weighIns, intakeDays, formulaTDEE: 2500, formulaWeightLb: 180 });
+    expect(result.intervals).toEqual([]);
+    expect(intervalNextStep(result)).toMatch(/under 5 days apart/);
+  });
 });
 
 describe('estimateIntervalTDEE — single weigh-in', () => {
