@@ -1,11 +1,11 @@
 {
- "capturedAt": "2026-11-23T22:31:40.108Z",
- "baseUrl": "http://localhost:3100",
+ "capturedAt": "2026-11-23T22:45:14.620Z",
+ "baseUrl": "http://localhost:3101",
  "persona": "hevy-switcher-sam",
  "screens": {
   "home": {
    "url": "/dashboard",
-   "text": "Mon, Nov 23 Maintaining Good afternoon Text too small? Make it bigger. A A A Next up · 5:31 PM Log dinner 2,528 kcal and 158g protein still to go — you're behind pace Log food Start today’s workout Other ways to start a workout Quick log Water Food Weight Sleep Blood pressure Today Eat 158 g protein to go · behind 2,528 left Recovery Sleep, steps and HRV This week 3 lifts rising · 174.1 lb, 0.0 lb/wk 14 behind Sets this week vs MEV–MRV 14 below MEV Abs 0 of 6–20 Calves 0 of 8–20 Chest 0 of 8–22 Triceps 0 of 8–24 Shoulders 3 of 12–26 Traps 1.5 of 6–20 See all 14 muscles How are you feeling today? A quick check-in tunes today’s suggestions Check in",
+   "text": "Mon, Nov 23 Maintaining Good afternoon Text too small? Make it bigger. A A A Next up · 5:45 PM Log dinner 2,528 kcal and 158g protein still to go — you're behind pace Log food Start today’s workout Other ways to start a workout Quick log Water Food Weight Sleep Blood pressure Today Eat 158 g protein to go · behind 2,528 left Recovery Sleep, steps and HRV This week 3 lifts rising · 174.9 lb, +0.3 lb/wk 14 behind Sets this week vs MEV–MRV 14 below MEV Abs 0 of 6–20 Calves 0 of 8–20 Chest 0 of 8–22 Triceps 0 of 8–24 Shoulders 3 of 12–26 Traps 1.5 of 6–20 See all 14 muscles How are you feeling today? A quick check-in tunes today’s suggestions Check in",
    "ok": true
   },
   "eat": {
@@ -15,7 +15,7 @@
   },
   "progress": {
    "url": "/dashboard/analytics",
-   "text": "Progress Are you progressing? Weight is steady over the last 30 days. The trend is a straight line fitted through all 11 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it. Over the last 12 weeks, 3 of your 6 tracked lifts are going up and none are slipping. See each lift (6) Strength Body Wellness Sets this week vs MEV–MRV 14 below MEV Abs 0 of 6–20 Calves 0 of 8–20 Chest 0 of 8–22 Triceps 0 of 8–24 Shoulders 3 of 12–26 Traps 1.5 of 6–20 See all 14 muscles Last 12 weeks 3 of 6 lifts rising How est. max is worked out Barbell Bench Press Latest best set 135 lbs × 10 est. max 195.0 lbs · +1.9%/wk Rising Romanian Deadlift Latest best set 160 lbs × 1",
+   "text": "Progress Are you progressing? Weight is up 0.6 lb over the last 30 days. The trend is a straight line fitted through all 11 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it. Over the last 12 weeks, 3 of your 6 tracked lifts are going up and none are slipping. Rising: Barbell Bench Press, Romanian Deadlift, Barbell Back Squat. See each lift (6) Strength Body Wellness Sets this week vs MEV–MRV 14 below MEV Abs 0 of 6–20 Calves 0 of 8–20 Chest 0 of 8–22 Triceps 0 of 8–24 Shoulders 3 of 12–26 Traps 1.5 of 6–20 See all 14 muscles Last 12 weeks 3 of 6 lifts rising Rising: Barbell Bench Press, Romanian Deadlift, Barbell Back Squat. How est. max is wor",
    "ok": true
   },
   "builder": {
@@ -25,11 +25,11 @@
   },
   "settings": {
    "url": "/dashboard/settings",
-   "text": "Settings Customize your training preferences and account Profile Training Preferences Account Appearance Control how HyperTrack looks across all your devices Theme Light, dark, or match your device. Synced to your account. Dark Light System Profile Your physical stats and training background Primary goal Build muscle (bulk) Maintain / recomp Lose fat (cut) Adjusts your nutrition targets and training recommendations Experience level Novice (< 1 year) Intermediate (1-3 years) Advanced (3+ years) Changing this will reset your volume landmarks to defaults Height (inches) Required for FFMI and weight recommendations Body Weight (lbs) Required for AI weight recommendations in workouts Age Used to ",
+   "text": "Settings Customize your training preferences and account Units Pick each one on its own, for example kg for the bar and inches for the tape. Weight (lifts, body weight) kg lb Length (height, body measurements) cm inches Profile Training Preferences Account Appearance Control how HyperTrack looks across all your devices Theme Light, dark, or match your device. Synced to your account. Dark Light System Profile Your physical stats and training background Primary goal Build muscle (bulk) Maintain / recomp Lose fat (cut) Adjusts your nutrition targets and training recommendations Experience level Novice (< 1 year) Intermediate (1-3 years) Advanced (3+ years) Changing this will reset your volume l",
    "ok": true
   },
   "workout": {
-   "url": "/dashboard/workout/d8ea73c3-2704-4d0f-a8ed-4e67845e2806",
+   "url": "/dashboard/workout/5b872180-41d2-4b7f-898e-f10e623f1943",
    "text": "Upper Body exercise 1 of 4 · ~30 min left Timer starts with warmup or set Finish Gym Sets this week vs your target range Details Biceps 2.6 counted of 3 sets 10–26 Ready Shoulders 2.6 counted of 3 sets 12–26 Ready Traps 1.3 counted of 1.5 sets 6–20 Ready Abs 0 counted of 0 sets 6–20 Ready Chest 0 counted of 0 sets 8–22 Ready Triceps 0 counted of 0 sets 8–24 Ready Show all (+8) After today’s plan: 6 below target Barbell Bench Press ▲ Trend: ahead Chest · last session 135 lbs × 10, × 9, × 8 @ 1–2 RIR · 3,645 lbs vol 0 Warmup protocol (0/1) 140 lbs × 9 @ 2 RIR (reps in reserve: how many more you could have done) (stop 2 reps short of failure) Why: Last time 135 lbs × 10, 2 reps left → one weigh",
    "ok": true
   }
