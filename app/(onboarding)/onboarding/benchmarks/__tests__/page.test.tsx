@@ -41,10 +41,14 @@ describe('Onboarding benchmarks page', () => {
 
   it('says what the tests are for and what skipping does, with skip first', () => {
     render(<BenchmarksPage />);
-    expect(screen.getByTestId('benchmarks-purpose')).toHaveTextContent(/starting weights we suggest/);
-    expect(screen.getByTestId('benchmarks-skip-cost')).toHaveTextContent(
-      'Your first weight suggestions will be estimates; they sharpen after a workout or two.'
-    );
+    const purpose = screen.getByTestId('benchmarks-purpose');
+    expect(purpose).toHaveTextContent(/^Optional\./);
+    expect(purpose).toHaveTextContent(/warm-up sets and one hard set/);
+    expect(purpose).toHaveTextContent(/starting weights we suggest/);
+    const cost = screen.getByTestId('benchmarks-skip-cost');
+    expect(cost).toHaveTextContent(/estimated from your experience and body weight/);
+    expect(cost).toHaveTextContent(/refine after your first few sets/);
+    expect(cost).toHaveTextContent(/Strength percentiles stay off until you test\./);
     const skip = screen.getByTestId('skip-benchmarks');
     const start = screen.getByRole('button', { name: /Pick lifts to test/ });
     // Skip comes before any lift choice in the page.

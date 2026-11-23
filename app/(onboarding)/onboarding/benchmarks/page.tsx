@@ -171,7 +171,9 @@ function BenchmarksContent() {
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">Test your strength? (optional)</h1>
         <p className="text-ink-2" data-testid="benchmarks-purpose">
-          These tests only set the starting weights we suggest in workouts.
+          Optional. A test is a few warm-up sets and one hard set of a lift at a gym, then you log
+          the weight and reps. It sets the starting weights we suggest in workouts and turns on your
+          strength percentiles.
         </p>
       </div>
 
@@ -188,13 +190,20 @@ function BenchmarksContent() {
         >
           Skip and start using the app
         </Button>
-        {/* What skipping costs, in one plain line: small, and it fixes itself. */}
-        <p className="text-body text-ink-2 text-center" data-testid="benchmarks-skip-cost">
-          Your first weight suggestions will be estimates; they sharpen after a workout or two.
-        </p>
+        {/* Exactly what skipping changes: small, and the first part fixes itself. */}
+        <div className="text-body text-ink-2 space-y-1" data-testid="benchmarks-skip-cost">
+          <p className="font-medium text-ink">If you skip:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              Starting weights are estimated from your experience and body weight, and refine after
+              your first few sets.
+            </li>
+            <li>Strength percentiles stay off until you test.</li>
+          </ul>
+        </div>
         <p className="text-caption text-ink-3 text-center">
           Most people skip this. Not lifting? Nothing here affects food tracking. You can test any
-          time later from Analytics.
+          time later from Progress.
         </p>
       </div>
 

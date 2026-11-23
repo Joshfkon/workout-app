@@ -5,7 +5,7 @@
  * settings query) in step. A failed save puts the control back.
  */
 
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -114,13 +114,25 @@ function renderSettings() {
 
 async function openPreferences(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('radio', { name: 'Preferences' }));
-  return screen.getByRole('radiogroup', { name: 'Units' });
+  return screen.getByRole('radiogroup', { name: 'Weight units' });
 }
 
-/** The selected unit ('kg' | 'lb'), read from the Units radio group. */
+const weightRadio = (name: 'kg' | 'lb') =>
+  within(screen.getByRole('radiogroup', { name: 'Weight units' })).getByRole('radio', { name });
+const lengthRadio = (name: 'cm' | 'inches') =>
+  within(screen.getByRole('radiogroup', { name: 'Length units' })).getByRole('radio', { name });
+
+/** The selected weight unit ('kg' | 'lb'). */
 function selectedUnit(): 'kg' | 'lb' | null {
-  if (screen.getByRole('radio', { name: 'kg & cm' }).getAttribute('aria-checked') === 'true') return 'kg';
-  if (screen.getByRole('radio', { name: 'lb & inches' }).getAttribute('aria-checked') === 'true') return 'lb';
+  if (weightRadio('kg').getAttribute('aria-checked') === 'true') return 'kg';
+  if (weightRadio('lb').getAttribute('aria-checked') === 'true') return 'lb';
+  return null;
+}
+
+/** The selected length unit ('cm' | 'in'). */
+function selectedLength(): 'cm' | 'in' | null {
+  if (lengthRadio('cm').getAttribute('aria-checked') === 'true') return 'cm';
+  if (lengthRadio('inches').getAttribute('aria-checked') === 'true') return 'in';
   return null;
 }
 
@@ -147,13 +159,14 @@ describe('Settings → Preferences auto-save', () => {
     expect(screen.queryByRole('button', { name: /save preferences/i })).not.toBeInTheDocument();
     expect(selectedUnit()).toBe('kg');
 
-    await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
+    await user.click(weightRadio('lb'));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     // Only the preferences JSONB is written, merged over what is stored —
-    // keys saved elsewhere (theme) survive.
+    // keys saved elsewhere (theme) survive. Length is pinned to what it was
+    // showing (cm), so changing weight never flips height to inches.
     expect(mockUpdate).toHaveBeenCalledWith({
-      preferences: { units: 'lb', restTimer: 180, theme: 'dark' },
+      preferences: { units: 'lb', lengthUnits: 'cm', restTimer: 180, theme: 'dark' },
     });
     expect(await screen.findByText('Saved')).toBeInTheDocument();
 
@@ -167,6 +180,35 @@ describe('Settings → Preferences auto-save', () => {
     expect(cached?.userRow.preferences.units).toBe('lb');
     // …and the form was not reset by its own cache write.
     expect(selectedUnit()).toBe('lb');
+    expect(selectedLength()).toBe('cm');
+  });
+
+  it('shows weight and length as separate top-level choices; an old user gets length from weight', async () => {
+    storedPreferences = { units: 'lb', restTimer: 180, theme: 'dark' };
+    const user = userEvent.setup();
+    renderSettings();
+    await openPreferences(user);
+    // No lengthUnits stored: inches, as the old "lb & inches" setting gave.
+    expect(selectedUnit()).toBe('lb');
+    expect(selectedLength()).toBe('in');
+  });
+
+  it('saves the length unit on its own', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+    await openPreferences(user);
+    expect(selectedLength()).toBe('cm');
+
+    await user.click(lengthRadio('inches'));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    expect(mockUpdate).toHaveBeenCalledWith({
+      preferences: { units: 'kg', lengthUnits: 'in', restTimer: 180, theme: 'dark' },
+    });
+    expect(mockApplyPreferenceLocally).toHaveBeenCalledWith('lengthUnits', 'in');
+    await waitFor(() => expect(screen.getByTestId('save-status-lengthUnits')).toHaveTextContent('Saved'));
+    expect(selectedUnit()).toBe('kg');
+    expect(selectedLength()).toBe('in');
   });
 
   it('puts Units first and confirms a save next to it, announced via aria-live', async () => {
@@ -179,7 +221,7 @@ describe('Settings → Preferences auto-save', () => {
     const headings = screen.getAllByText(/^(Units|Text size|App preferences)$/);
     expect(headings.map((h) => h.textContent)).toEqual(['Units', 'Text size', 'App preferences']);
 
-    await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
+    await user.click(weightRadio('lb'));
 
     // ONE confirmation: the visible pill in the Units card is itself the
     // live region's content — no second hidden "Units saved" message.
@@ -205,7 +247,7 @@ describe('Settings → Preferences auto-save', () => {
     await openPreferences(user);
 
     failNextUpdate = true;
-    await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
+    await user.click(weightRadio('lb'));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't save: network down/i);
     expect(selectedUnit()).toBe('kg');

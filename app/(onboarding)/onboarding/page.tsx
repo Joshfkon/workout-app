@@ -4,7 +4,7 @@ import { IconApple, IconBarbell, IconChartLine, IconCheck, IconRuler2, IconSpark
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, ExplainedTerm } from '@/components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, ExplainedTerm, SegmentedControl } from '@/components/ui';
 import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
@@ -18,7 +18,8 @@ import { askedForBenchmarks, skipsBenchmarks, statedTrackingFocus } from '@/lib/
 import { resolveBeginnerMode } from '@/lib/beginnerMode';
 import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
 import { saveMacroSettings } from '@/lib/actions/nutrition';
-import type { WeightUnit } from '@/types/schema';
+import type { LengthUnit, WeightUnit } from '@/types/schema';
+import { lengthUnitForWeightUnit, resolveLengthUnit } from '@/lib/units/lengthUnits';
 
 // Unit conversion helpers
 const cmToInches = (cm: number) => cm / 2.54;
@@ -54,7 +55,7 @@ const BODY_FAT_OPTIONS = {
   ]
 };
 
-/** Typical adult body fat, used only when the user taps "Not sure". */
+/** Typical adult body fat, used only when the user skips ("I don't know — skip"). */
 function typicalBodyFat(sex: 'male' | 'female'): string {
   return sex === 'female' ? '32' : '22';
 }
@@ -69,17 +70,35 @@ export default function OnboardingBodyCompPage() {
   // as picked, no extra tap needed. It starts from the stored preference
   // (default Imperial) and follows it if that loads late, until the user
   // picks one themselves.
+  // Weight and length are separate choices; the Imperial / Metric cards are
+  // a shortcut that sets both.
   const [selectedUnits, setSelectedUnits] = useState<WeightUnit>(preferences.units || 'lb');
+  const [selectedLength, setSelectedLength] = useState<LengthUnit>(() =>
+    resolveLengthUnit(preferences, preferences.units || 'lb')
+  );
   const unitsTouched = useRef(false);
+  const storedLength = resolveLengthUnit(preferences, preferences.units || 'lb');
   useEffect(() => {
-    if (!unitsTouched.current && preferences.units) setSelectedUnits(preferences.units);
-  }, [preferences.units]);
-  const pickUnits = (u: WeightUnit) => {
+    if (unitsTouched.current) return;
+    if (preferences.units) setSelectedUnits(preferences.units);
+    setSelectedLength(storedLength);
+  }, [preferences.units, storedLength]);
+  const pickSystem = (u: WeightUnit) => {
+    unitsTouched.current = true;
+    setSelectedUnits(u);
+    setSelectedLength(lengthUnitForWeightUnit(u));
+  };
+  const pickWeight = (u: WeightUnit) => {
     unitsTouched.current = true;
     setSelectedUnits(u);
   };
+  const pickLength = (l: LengthUnit) => {
+    unitsTouched.current = true;
+    setSelectedLength(l);
+  };
   const [isSavingUnits, setIsSavingUnits] = useState(false);
   const units = selectedUnits;
+  const lengthUnit = selectedLength;
 
   const [isLoading, setIsLoading] = useState(false);
   const [existingDexa, setExistingDexa] = useState<{
@@ -101,7 +120,7 @@ export default function OnboardingBodyCompPage() {
   // Optional: only the calorie target needs it (restored from the profile).
   const [ageDisplay, setAgeDisplay] = useState<string>('');
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
-  // True when the user chose "Not sure" and we filled in a typical value.
+  // True when the user skipped body fat and we filled in a typical value.
   // A guessed body fat must not drive a muscle-mass verdict or a goal pick.
   const [bfEstimated, setBfEstimated] = useState(false);
   const [useDexa, setUseDexa] = useState(false);
@@ -143,7 +162,9 @@ export default function OnboardingBodyCompPage() {
     if (isSavingUnits) return;
     setIsSavingUnits(true);
     try {
+      // One after the other: each is a read-merge-write of users.preferences.
       await updatePreference('units', selectedUnits);
+      await updatePreference('lengthUnits', selectedLength);
 
       // Track progress
       const supabase = createUntypedClient();
@@ -163,7 +184,7 @@ export default function OnboardingBodyCompPage() {
   
   // Convert display values to metric for calculations
   const getHeightCm = () => {
-    if (units === 'lb') {
+    if (lengthUnit === 'in') {
       // Imperial: use feet + inches
       const feet = parseFloat(heightFeet) || 0;
       const inches = parseFloat(heightInches) || 0;
@@ -183,6 +204,23 @@ export default function OnboardingBodyCompPage() {
     return units === 'lb' ? lbsToKg(val) : val;
   };
   
+  // A height saved earlier (re-entering onboarding), filled into the height
+  // fields in the length unit picked on the first step. Once only, so it
+  // never overwrites what the user types.
+  const [savedHeightCm, setSavedHeightCm] = useState<number | null>(null);
+  const heightPrefilled = useRef(false);
+  useEffect(() => {
+    if (step !== 'body-comp' || savedHeightCm == null || heightPrefilled.current) return;
+    heightPrefilled.current = true;
+    if (lengthUnit === 'in') {
+      const { feet, inches } = inchesToFeetInches(cmToInches(savedHeightCm));
+      setHeightFeet((current) => current || String(feet));
+      setHeightInches((current) => current || String(inches));
+    } else {
+      setHeightDisplay((current) => current || String(savedHeightCm));
+    }
+  }, [step, savedHeightCm, lengthUnit]);
+
   // Computed values
   const [bodyComp, setBodyComp] = useState<{
     leanMassKg: number;
@@ -228,15 +266,8 @@ export default function OnboardingBodyCompPage() {
       if (macroSettingsRow) setHasMacroSettings(true);
       
       if (userData?.height_cm) {
-        // Convert to display units
-        if (units === 'lb') {
-          const totalInches = cmToInches(userData.height_cm);
-          const { feet, inches } = inchesToFeetInches(totalInches);
-          setHeightFeet(String(feet));
-          setHeightInches(String(inches));
-        } else {
-          setHeightDisplay(String(userData.height_cm));
-        }
+        // Shown once the length unit is settled (see the effect below).
+        setSavedHeightCm(userData.height_cm);
       }
       if (userData?.sex) {
         setSex(userData.sex as 'male' | 'female');
@@ -277,7 +308,7 @@ export default function OnboardingBodyCompPage() {
       setBodyComp(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heightDisplay, heightFeet, heightInches, weightDisplay, bodyFatPercent, useDexa, existingDexa, sex, units]);
+  }, [heightDisplay, heightFeet, heightInches, weightDisplay, bodyFatPercent, useDexa, existingDexa, sex, units, lengthUnit]);
   
   const handleUseDexa = () => {
     if (existingDexa) {
@@ -504,7 +535,7 @@ export default function OnboardingBodyCompPage() {
           </div>
           
           <p className="text-ink-2">
-            First, which measurement system do you prefer?
+            First, which units do you use? Pick a system, or set weight and length separately.
           </p>
         </div>
         
@@ -515,7 +546,8 @@ export default function OnboardingBodyCompPage() {
                 { value: 'lb' as const, title: 'Imperial', detail: 'lb & inches', Icon: IconRuler2 },
                 { value: 'kg' as const, title: 'Metric', detail: 'kg & cm', Icon: IconWorld },
               ]).map(({ value, title, detail, Icon }) => {
-                const checked = selectedUnits === value;
+                // A system is "picked" only while both choices match it.
+                const checked = selectedUnits === value && selectedLength === lengthUnitForWeightUnit(value);
                 return (
                   <button
                     key={value}
@@ -524,7 +556,7 @@ export default function OnboardingBodyCompPage() {
                     aria-checked={checked}
                     aria-label={`${title} (${detail})`}
                     data-testid={`units-option-${value}`}
-                    onClick={() => pickUnits(value)}
+                    onClick={() => pickSystem(value)}
                     className={`relative p-6 rounded-xl border-2 transition-all ${
                       checked ? 'border-action bg-action/10' : 'border-sep hover:border-sep bg-fill/50'
                     }`}
@@ -546,9 +578,44 @@ export default function OnboardingBodyCompPage() {
                 );
               })}
             </div>
+
+            {/* The two choices on their own, always visible: e.g. kg on the
+                bar but inches for height and the tape. */}
+            <div className="mt-5 space-y-3" data-testid="units-separate">
+              <div>
+                <p className="text-subhead font-medium text-ink mb-1.5">
+                  Weight <span className="text-caption text-ink-3 font-normal">(lifts, body weight)</span>
+                </p>
+                <SegmentedControl<WeightUnit>
+                  label="Weight units"
+                  value={selectedUnits}
+                  onChange={pickWeight}
+                  options={[
+                    { value: 'kg', label: 'kg' },
+                    { value: 'lb', label: 'lb' },
+                  ]}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <p className="text-subhead font-medium text-ink mb-1.5">
+                  Length <span className="text-caption text-ink-3 font-normal">(height, body measurements)</span>
+                </p>
+                <SegmentedControl<LengthUnit>
+                  label="Length units"
+                  value={selectedLength}
+                  onChange={pickLength}
+                  options={[
+                    { value: 'cm', label: 'cm' },
+                    { value: 'in', label: 'inches' },
+                  ]}
+                  className="w-full"
+                />
+              </div>
+            </div>
             
             <p className="text-caption text-ink-3 text-center mt-4">
-              You can change this anytime in Settings
+              You can change these anytime in Settings
             </p>
           </CardContent>
         </Card>
@@ -574,7 +641,7 @@ export default function OnboardingBodyCompPage() {
           aria-busy={isSavingUnits}
           data-testid="units-continue"
         >
-          Continue with {selectedUnits === 'lb' ? 'Imperial' : 'Metric'}
+          Continue with {selectedUnits} &amp; {selectedLength === 'in' ? 'inches' : 'cm'}
           <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
@@ -587,7 +654,7 @@ export default function OnboardingBodyCompPage() {
   if (step === 'goal') {
     const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
     // Body-fat-aware guidance, mirroring the mesocycle builder's DEXA thresholds
-    // A typical-value guess ("Not sure") never drives a recommendation.
+    // A typical-value guess (skipped body fat) never drives a recommendation.
     const recommended: 'bulk' | 'cut' | null = bfEstimated || !bf || isNaN(bf)
       ? null
       : bf >= (sex === 'male' ? 20 : 30)
@@ -712,7 +779,7 @@ export default function OnboardingBodyCompPage() {
                       data-testid={`sex-option-${option.value}`}
                       onClick={() => {
                         setSex(option.value);
-                        // A "Not sure" estimate follows the sex it was based on.
+                        // A skipped-body-fat estimate follows the sex it was based on.
                         if (bfEstimated) setBodyFatPercent(typicalBodyFat(option.value));
                       }}
                       className={`min-h-[44px] rounded-input border-2 text-body font-medium transition-colors ${
@@ -742,7 +809,7 @@ export default function OnboardingBodyCompPage() {
               hint="Used to work out your daily calorie target."
             />
             
-            {units === 'lb' ? (
+            {lengthUnit === 'in' ? (
               <div>
                 <label className="block text-body font-medium text-ink mb-2">Height</label>
                 <div className="flex gap-2">
@@ -800,8 +867,10 @@ export default function OnboardingBodyCompPage() {
 
             <div>
               <p className="text-caption text-ink-2 mb-2" data-testid="body-fat-why">
-                Why we ask for body fat: it splits your weight into muscle and fat, so we can suggest a
-                goal and track muscle, not just weight.
+                Body fat % is how much of your weight is fat. We use it to split your weight into muscle
+                and fat, so we can suggest a goal and track muscle, not just weight. To estimate it, use a
+                smart scale or scan reading, or compare yourself to the visual guide. Optional: you can
+                skip it.
               </p>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
@@ -829,7 +898,7 @@ export default function OnboardingBodyCompPage() {
                         ? 'Using DEXA scan data'
                         : bfEstimated
                           ? undefined
-                          : "Don't know it? Use the visual guide, or tap Not sure."
+                          : "Know your number? Type it in. Otherwise use the visual guide, or skip."
                     }
                   />
                 </div>
@@ -854,15 +923,15 @@ export default function OnboardingBodyCompPage() {
                   data-testid="body-fat-estimate-note"
                 >
                   <span className="mr-1.5 inline-block rounded-full bg-fill px-2 py-0.5 text-caption font-medium text-ink">
-                    Estimated
+                    Skipped
                   </span>
-                  {bodyFatPercent}%, about average for {sex === 'female' ? 'women' : 'men'}. Change it if you
-                  know better.
+                  Using {bodyFatPercent}%, about average for {sex === 'female' ? 'women' : 'men'}, for now.
+                  Type your own number any time.
                 </p>
               )}
               {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && !sex && (
                 <p className="mt-2 text-caption text-ink-2" data-testid="body-fat-needs-sex">
-                  Pick your sex above to use the visual guide or a typical estimate.
+                  Pick your sex above to use the visual guide or to skip this.
                 </p>
               )}
               {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && sex && (
@@ -878,7 +947,7 @@ export default function OnboardingBodyCompPage() {
                     setShowBodyFatGuide(false);
                   }}
                 >
-                  Not sure — use a typical estimate
+                  I don’t know — skip
                 </button>
               )}
               
@@ -982,7 +1051,7 @@ export default function OnboardingBodyCompPage() {
           <CardContent>
             {bodyComp && bfEstimated ? (
               <p className="text-body text-ink-2" data-testid="body-comp-estimated">
-                We&apos;re using a typical body-fat value, so we&apos;ll skip the muscle-mass rating for now.
+                You skipped body fat, so we&apos;re using a typical value and leaving out the muscle-mass rating for now.
                 Add your real number later in Settings and we&apos;ll fill this in.
               </p>
             ) : bodyComp ? (
@@ -1080,7 +1149,7 @@ export default function OnboardingBodyCompPage() {
           <p className="text-caption text-ink-2 text-right" data-testid="body-comp-missing">
             Add your {missingBodyComp.join(', ').replace(/, ([^,]*)$/, ' and $1')} to continue.
             {missingBodyComp.includes('body-fat estimate') &&
-              ' Not sure of your body fat? Pick the closest look in the visual guide, or tap Not sure.'}
+              ' Not sure of your body fat? Pick the closest look in the visual guide, or tap “I don’t know — skip”.'}
           </p>
         )}
         <Button
