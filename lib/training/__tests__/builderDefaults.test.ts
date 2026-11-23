@@ -59,4 +59,10 @@ describe('plannedVolumeWithBands', () => {
     expect(rows.map((r) => r.muscle)).toEqual(['chest', 'hamstrings']);
     expect(rows[0]).toEqual({ muscle: 'chest', sets: 20, ...getEffectiveBand('chest') });
   });
+
+  it('uses the enhanced recovery profile the generator used', () => {
+    const [row] = plannedVolumeWithBands({ shoulders: 35 }, { recoveryProfile: 'enhanced' });
+    expect(row.mrv).toBe(getEffectiveBand('shoulders', { recoveryProfile: 'enhanced' }).mrv);
+    expect(row.mrv).toBeGreaterThan(getEffectiveBand('shoulders').mrv);
+  });
 });

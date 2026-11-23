@@ -2,7 +2,7 @@ import { detectSplit } from '@/services/suggestedWorkout';
 import type { StandardMuscleGroup } from '@/types/schema';
 import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
 import type { MuscleGroup } from '@/types/schema';
-import { COARSE_MUSCLES, getEffectiveBand, type CoarseMuscle } from '@/services/volumeBands';
+import { COARSE_MUSCLES, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
 
 /** Days of history the builder reads to prefill the schedule. */
 export const BUILDER_HISTORY_DAYS = 28;
@@ -69,13 +69,17 @@ export function priorityVolumeAdjustments(rows: MusclePriorityRow[]): VolumeAdju
 }
 
 /** The plan's weekly sets per coarse muscle with its MEV–MRV band (pure). */
-export function plannedVolumeWithBands(volumePerMuscle: Record<string, { sets: number } | number>): { muscle: CoarseMuscle; sets: number; mev: number; mrv: number }[] {
+export function plannedVolumeWithBands(
+  volumePerMuscle: Record<string, { sets: number } | number>,
+  /** Same recovery profile the generator clamped with (enhanced MRVs are higher). */
+  ctx?: BandContext
+): { muscle: CoarseMuscle; sets: number; mev: number; mrv: number }[] {
   const out: { muscle: CoarseMuscle; sets: number; mev: number; mrv: number }[] = [];
   for (const muscle of COARSE_MUSCLES) {
     const v = volumePerMuscle[muscle];
     const sets = typeof v === 'number' ? v : v?.sets;
     if (!sets) continue;
-    const band = getEffectiveBand(muscle);
+    const band = getEffectiveBand(muscle, ctx);
     out.push({ muscle, sets, mev: band.mev, mrv: band.mrv });
   }
   return out;

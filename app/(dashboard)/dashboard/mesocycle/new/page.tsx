@@ -513,7 +513,7 @@ export default function NewMesocyclePage() {
         {
           userId: user.id,
           name,
-          splitType,
+          splitType: fullProgram?.split ?? splitType,
           // days_per_week counts SESSIONS per week (7 days x 2/day = 14).
           daysPerWeek: plannedSessionsPerWeek,
           sessionsPerDay: effectiveSessionsPerDay,
@@ -1156,7 +1156,7 @@ export default function NewMesocyclePage() {
               </div>
               <div className="flex justify-between py-2 border-b border-sep">
                 <span className="text-ink-2">Split</span>
-                <span className="text-ink font-medium">{splitType}</span>
+                <span className="text-ink font-medium">{fullProgram?.split ?? splitType}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-sep">
                 <span className="text-ink-2">Frequency</span>
@@ -1501,7 +1501,7 @@ export default function NewMesocyclePage() {
                 <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle</p>
                 <p className="text-caption text-ink-3 mb-3">Planned sets at peak week vs each muscle&apos;s MEV–MRV range.</p>
                 <ul className="grid grid-cols-1 gap-1.5 text-subhead sm:grid-cols-2" data-testid="builder-volume-bands">
-                  {plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle).map(({ muscle, sets, mev, mrv }) => (
+                  {plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' }).map(({ muscle, sets, mev, mrv }) => (
                     <li key={muscle} className="flex items-baseline justify-between rounded bg-card/50 px-2 py-1.5">
                       <span className="text-ink">{muscleDisplayName(muscle)}</span>
                       <span className="tabular-nums text-ink-2">

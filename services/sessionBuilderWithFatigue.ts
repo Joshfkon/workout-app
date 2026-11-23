@@ -948,6 +948,11 @@ export function buildDUPSession(
 // FULL MESOCYCLE BUILDER WITH FATIGUE INTEGRATION
 // ============================================================
 
+/** Sessions a split's rotation needs so no muscle group is skipped in a week. */
+export function splitRotationLength(split: Split): number {
+  return split === 'Bro Split' ? 5 : split === 'Upper/Lower' ? 4 : split === 'Full Body' ? 1 : 3;
+}
+
 /**
  * Build session templates based on split
  */
@@ -989,7 +994,7 @@ function buildSessionTemplates(split: Split, daysPerWeek: number): SessionTempla
   // rotation ('Push 1' ... 'Legs 2'); above 6 sessions/week (daily training or
   // two-a-day, up to 14) every split repeats its rotation the same way so the
   // planned week really contains daysPerWeek sessions.
-  if ((split === 'PPL' && daysPerWeek >= 6) || daysPerWeek > 6) {
+  if ((split === 'PPL' && daysPerWeek >= 6) || daysPerWeek > 6 || daysPerWeek > baseTemplates.length) {
     const rounds = Math.max(2, Math.ceil(daysPerWeek / baseTemplates.length));
     const repeated: SessionTemplate[] = [];
     for (let round = 1; round <= rounds; round++) {
@@ -1074,10 +1079,18 @@ export function generateFullMesocycleWithFatigue(
   // Step 3: Get split recommendation (import from mesocycleBuilder)
   const { recommendSplit } = require('./mesocycleBuilder');
   const splitRec = recommendSplit(daysPerWeek, profile.goal, profile.experience, sessionMinutes);
-  const split: Split = splitOverride ?? splitRec.split;
+  // A chosen split is honoured only when the week has room for its whole
+  // rotation: a 5-day Bro Split in 4 sessions dropped Legs every week.
+  const overrideFits = !!splitOverride && splitRotationLength(splitOverride) <= daysPerWeek;
+  const split: Split = overrideFits ? splitOverride! : splitRec.split;
 
+  if (splitOverride && !overrideFits) {
+    warnings.push(
+      `${splitOverride} needs ${splitRotationLength(splitOverride)} sessions a week; with ${daysPerWeek} it would skip muscle groups, so this plan uses ${split}.`
+    );
+  }
   programNotes.push(
-    splitOverride && splitOverride !== splitRec.split
+    overrideFits && splitOverride !== splitRec.split
       ? `Split: ${split} (your choice)`
       : `Split: ${split} - ${splitRec.reason}`
   );

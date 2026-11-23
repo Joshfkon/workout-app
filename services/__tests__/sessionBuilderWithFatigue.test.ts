@@ -506,6 +506,20 @@ describe('sessionBuilderWithFatigue', () => {
       expect(generateFullMesocycleWithFatigue(5, profile, 60, undefined, [], 1, 6).split).toBe(recommended.split);
     });
 
+    it('never drops a muscle group: a split whose rotation does not fit the week falls back, with a warning', () => {
+      const p = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6, undefined, 'Bro Split');
+      expect(p.split).not.toBe('Bro Split');
+      expect(p.warnings.join(' ')).toMatch(/Bro Split needs 5 sessions a week/);
+      const trained = new Set(p.sessions.flatMap((s) => s.exercises.map((e) => e.exercise.primaryMuscle)));
+      expect(trained.has('quads') || trained.has('hamstrings')).toBe(true);
+    });
+
+    it('a short rotation repeats to fill the week: Full Body ×6 is six sessions', () => {
+      const p = generateFullMesocycleWithFatigue(6, profile, 60, undefined, [], 1, 6, undefined, 'Full Body');
+      expect(p.split).toBe('Full Body');
+      expect(p.sessions).toHaveLength(6);
+    });
+
     it('a high-priority muscle (Settings → Muscle priorities) gets more weekly sets', () => {
       const base = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6);
       const prioritized = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, 6, [
