@@ -14,10 +14,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, MUSCLE_PRIORITY_HEADS } from '@/types/schema';
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', '..', 'supabase', 'migrations');
-const MIGRATION_FILE = '20260809000001_muscle_priorities_erectors.sql';
+// The LATEST migration that rewrites the CHECK (heads were added after
+// erectors; 20260809000001_muscle_priorities_erectors.sql came first).
+const MIGRATION_FILE = '20261123000001_muscle_priorities_heads.sql';
+const PRIORITY_HEADS: string[] = Object.values(MUSCLE_PRIORITY_HEADS).flatMap((h) => [...(h ?? [])]);
 const SETTINGS_FILE = path.join(
   __dirname, '..', '..', 'components', 'settings', 'MusclePrioritySettings.tsx'
 );
@@ -46,8 +49,20 @@ const vocabulary = parseCheckVocabulary(
 const rendered = parseRenderedRegions(fs.readFileSync(SETTINGS_FILE, 'utf8'));
 
 describe('muscle-priority vocabulary', () => {
-  it('the CHECK constraint matches MUSCLE_GROUPS exactly', () => {
-    expect([...vocabulary].sort()).toEqual([...MUSCLE_GROUPS].sort());
+  it('the CHECK constraint matches MUSCLE_GROUPS plus the prioritizable heads exactly', () => {
+    expect([...vocabulary].sort()).toEqual([...MUSCLE_GROUPS, ...PRIORITY_HEADS].sort());
+  });
+
+  it('accepts single heads such as side delts (UX panel: "couldn\'t target side delts")', () => {
+    expect(vocabulary).toEqual(expect.arrayContaining(['lateral_delts', 'rear_delts', 'chest_upper']));
+  });
+
+  it('is the newest migration that rewrites the constraint', () => {
+    const rewriting = fs
+      .readdirSync(MIGRATIONS_DIR)
+      .filter((f) => /user_muscle_priorities_muscle_group_check/.test(fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8')))
+      .sort();
+    expect(rewriting[rewriting.length - 1]).toBe(MIGRATION_FILE);
   });
 
   it('lists no duplicates', () => {
@@ -60,6 +75,10 @@ describe('muscle-priority vocabulary', () => {
 });
 
 describe('muscle-priority settings form', () => {
+  it('every prioritizable head hangs under a group the form renders', () => {
+    for (const group of Object.keys(MUSCLE_PRIORITY_HEADS)) expect(rendered).toContain(group);
+  });
+
   it('renders every muscle group, so none is silently un-prioritizable', () => {
     expect([...rendered].sort()).toEqual([...MUSCLE_GROUPS].sort());
   });
