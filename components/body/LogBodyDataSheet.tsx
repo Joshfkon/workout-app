@@ -35,6 +35,7 @@ import {
   saveDexaScan,
 } from '@/lib/body/bodyLog';
 import { cmToIn, inToCm, getLocalDateString, inputWeightToKg } from '@/lib/utils';
+import { useLengthUnit } from '@/hooks/useLengthUnit';
 
 export type BodyLogSegment = 'weight' | 'measurements' | 'dexa';
 
@@ -87,7 +88,8 @@ export function LogBodyDataSheet({
   const [segment, setSegment] = useState<BodyLogSegment>(initialSegment);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const tapeUnit: 'in' | 'cm' = preferredUnit === 'lb' ? 'in' : 'cm';
+  // Tape unit: the user's length setting (follows the weight unit until set).
+  const tapeUnit = useLengthUnit(preferredUnit);
 
   // ---------------- Weight ----------------
   const [weightValue, setWeightValue] = useState(

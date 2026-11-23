@@ -57,14 +57,42 @@ describe('RegisterPage — experience question', () => {
     expect(sentData()).toMatchObject({ experience: 'novice', tracking_focus: 'food' });
   });
 
-  it('sends the picked answer', async () => {
+  it('sends the picked answer, mapped onto the experience level', async () => {
     const user = await fillIn();
-    await user.click(screen.getByRole('radio', { name: '3+ years' }));
-    expect(screen.getByRole('radio', { name: '3+ years' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByRole('radio', { name: '3–5 years' }));
+    expect(screen.getByRole('radio', { name: '3–5 years' })).toHaveAttribute('aria-checked', 'true');
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
     expect(sentExperience()).toBe('advanced');
     expect(sentData()).not.toHaveProperty('tracking_focus');
+  });
+
+  it('offers a "just started" answer and finer, non-overlapping ranges', async () => {
+    await fillIn();
+    const labels = screen.getAllByRole('radio').map((r) => r.textContent);
+    expect(labels).toEqual([
+      'No, food tracking',
+      'Just started (under 6 months)',
+      '6–12 months',
+      '1–2 years',
+      '2–3 years',
+      '3–5 years',
+      '5+ years',
+    ]);
+  });
+
+  it('a lifter of about two years can answer exactly (signs up as intermediate)', async () => {
+    const user = await fillIn();
+    await user.click(screen.getByRole('radio', { name: '2–3 years' }));
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
+    expect(sentExperience()).toBe('intermediate');
+  });
+
+  it('says what the answer changes', async () => {
+    await fillIn();
+    expect(screen.getByText(/starting weekly sets and first weight suggestions/)).toBeInTheDocument();
+    expect(screen.getByText(/Change it any time in Settings/)).toBeInTheDocument();
   });
 });
 

@@ -106,6 +106,13 @@ export type VolumeStatus = 'below_mev' | 'effective' | 'optimal' | 'approaching_
 /** Weight unit preference */
 export type WeightUnit = 'kg' | 'lb';
 
+/**
+ * Length unit preference (height, tape measurements). Chosen separately from
+ * WeightUnit; when unset it follows the weight unit (kg→cm, lb→in). See
+ * lib/units/lengthUnits.
+ */
+export type LengthUnit = 'cm' | 'in';
+
 /** Rating scale for subjective measures (1-5) */
 export type Rating = 1 | 2 | 3 | 4 | 5;
 
@@ -233,6 +240,12 @@ export interface User {
 export interface UserPreferences {
   /** Weight unit preference */
   units: WeightUnit;
+
+  /**
+   * Length unit for height and body measurements. Unset = follows `units`
+   * (kg→cm, lb→in); read it through resolveLengthUnit (lib/units/lengthUnits).
+   */
+  lengthUnits?: LengthUnit;
 
   /**
    * Plan (mesocycles) or freestyle (lib/training/trainingStyle). Unset =

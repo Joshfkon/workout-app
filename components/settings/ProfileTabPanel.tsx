@@ -1,6 +1,6 @@
 'use client';
 
-import type { Goal, Experience, Rating } from '@/types/schema';
+import type { Goal, Experience, LengthUnit, Rating } from '@/types/schema';
 import { Card, CardHeader, CardTitle, CardContent, Select, Input, Button } from '@/components/ui';
 import { ThemeToggle } from '@/components/settings/ThemeToggle';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
@@ -22,6 +22,8 @@ interface ProfileTabPanelProps {
   trainingAge: string;
   setTrainingAge: (value: string) => void;
   units: 'kg' | 'lb';
+  /** Height is shown in the length unit (Settings → Preferences → Units). */
+  lengthUnits: LengthUnit;
   
   // Recovery profile
   sleepQuality: Rating;
@@ -52,6 +54,7 @@ export function ProfileTabPanel({
   trainingAge,
   setTrainingAge,
   units,
+  lengthUnits,
   sleepQuality,
   setSleepQuality,
   stressLevel,
@@ -122,14 +125,14 @@ export function ProfileTabPanel({
           />
 
           <Input
-            label={`Height (${units === 'lb' ? 'inches' : 'cm'})`}
+            label={`Height (${lengthUnits === 'in' ? 'inches' : 'cm'})`}
             type="number"
             step="0.1"
-            min={units === 'lb' ? '40' : '100'}
-            max={units === 'lb' ? '96' : '250'}
+            min={lengthUnits === 'in' ? '40' : '100'}
+            max={lengthUnits === 'in' ? '96' : '250'}
             value={heightDisplay}
             onChange={(e) => setHeightDisplay(e.target.value)}
-            placeholder={units === 'lb' ? 'e.g., 69' : 'e.g., 175'}
+            placeholder={lengthUnits === 'in' ? 'e.g., 69' : 'e.g., 175'}
             hint="Required for FFMI and weight recommendations"
           />
 

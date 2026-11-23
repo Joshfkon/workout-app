@@ -6,30 +6,23 @@ import { useRouter } from 'next/navigation';
 import { IconEye, IconEyeOff } from '@tabler/icons-react';
 import { Button, Input, Card } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
-import type { Goal, Experience } from '@/types/schema';
+import type { Goal } from '@/types/schema';
 import { TRACKING_FOCUS_METADATA_KEY } from '@/lib/onboarding/trackingFocus';
+import {
+  LIFTING_OPTIONS,
+  experienceForLiftingAnswer,
+  type LiftingAnswer,
+} from '@/lib/onboarding/experienceOptions';
 import { TextSizeQuickPicker } from '@/components/settings/TextSizeQuickPicker';
 
-/**
- * Plain-language answers to "Do you lift weights?". Asked so it doesn't
- * assume lifting is why someone signed up: "No, food tracking" is a real
- * answer, and it tells Home to lead with food (lib/onboarding/trackingFocus).
- * Someone who doesn't lift yet starts as a novice if they ever do.
+/*
+ * "Do you lift weights?" is asked in plain language so it doesn't assume
+ * lifting is why someone signed up: "No, food tracking" is a real answer, and
+ * it tells Home to lead with food (lib/onboarding/trackingFocus). The finer
+ * year ranges and their mapping onto the experience enum live in
+ * lib/onboarding/experienceOptions. The question stays here (not in
+ * onboarding) because the food-tracking answer shapes onboarding itself.
  */
-type LiftingAnswer = 'no' | Experience;
-const LIFTING_OPTIONS: { value: LiftingAnswer; label: string }[] = [
-  { value: 'no', label: 'No, food tracking' },
-  { value: 'novice', label: 'Under 1 year' },
-  { value: 'intermediate', label: '1–3 years' },
-  { value: 'advanced', label: '3+ years' },
-];
-
-/**
- * What a skipped experience question signs up as: the same default sign-up
- * always used (intermediate), so making the question optional doesn't quietly
- * change anyone's starting training volume. Editable in Settings.
- */
-const SKIPPED_EXPERIENCE: Experience = 'intermediate';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -38,7 +31,8 @@ export default function RegisterPage() {
   // Goal is chosen in onboarding (with an explanation); sign-up sends the
   // neutral default so the profile row is complete either way.
   const goal: Goal = 'maintenance';
-  // Optional: null = skipped, which signs up as SKIPPED_EXPERIENCE.
+  // Optional: null = skipped, which signs up as SKIPPED_EXPERIENCE
+  // (lib/onboarding/experienceOptions).
   const [liftingAnswer, setLiftingAnswer] = useState<LiftingAnswer | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -96,8 +90,7 @@ export default function RegisterPage() {
           emailRedirectTo: redirectUrl,
           data: {
             goal,
-            experience:
-              liftingAnswer === null ? SKIPPED_EXPERIENCE : liftingAnswer === 'no' ? 'novice' : liftingAnswer,
+            experience: experienceForLiftingAnswer(liftingAnswer),
             ...(liftingAnswer === 'no' ? { [TRACKING_FOCUS_METADATA_KEY]: 'food' } : {}),
           },
         },
@@ -258,7 +251,7 @@ export default function RegisterPage() {
               <span className="text-ink-3 font-normal">(optional)</span>
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {LIFTING_OPTIONS.map((option) => {
+              {LIFTING_OPTIONS.map((option, index) => {
                 const checked = liftingAnswer === option.value;
                 return (
                   <button
@@ -269,7 +262,8 @@ export default function RegisterPage() {
                     data-testid={`experience-option-${option.value}`}
                     // Tapping the picked option again clears it (back to "skip").
                     onClick={() => setLiftingAnswer(checked ? null : option.value)}
-                    className={`min-h-[44px] px-2 rounded-input border-2 text-subhead font-medium transition-colors ${
+                    // "No" and "Just started" span the row; the year ranges pair up.
+                    className={`${index < 2 ? 'col-span-2 ' : ''}min-h-[44px] px-2 rounded-input border-2 text-subhead font-medium transition-colors ${
                       checked ? 'border-action bg-action/10 text-ink' : 'border-sep bg-fill/50 text-ink-2 hover:text-ink'
                     }`}
                   >
@@ -279,7 +273,8 @@ export default function RegisterPage() {
               })}
             </div>
             <p id="lifting-hint" className="text-caption text-ink-3 mt-1">
-              Only used to pitch workout suggestions. Not sure? Skip it.
+              Sets your starting weekly sets and first weight suggestions (under a year also turns on
+              Beginner mode). Change it any time in Settings. Not sure? Skip it.
             </p>
           </div>
 

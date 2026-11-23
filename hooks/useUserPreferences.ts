@@ -3,13 +3,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useAuthUser } from '@/hooks/useAuthUser';
-import type { Goal, Experience, WeightUnit } from '@/types/schema';
+import type { Goal, Experience, LengthUnit, WeightUnit } from '@/types/schema';
+import { lengthUnitForWeightUnit, parseLengthUnit } from '@/lib/units/lengthUnits';
 import { parseStandingInjuryAreas, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
 interface UserPreferences {
   goal: Goal;
   experience: Experience;
   units: WeightUnit;
+  /**
+   * Height / tape unit, always resolved: the stored `lengthUnits` choice, else
+   * the one implied by `units` (kg→cm, lb→in) — lib/units/lengthUnits.
+   */
+  lengthUnits: LengthUnit;
   heightCm: number | null;
   weightKg: number | null;
   restTimerDefault: number;
@@ -29,6 +35,7 @@ const defaultPreferences: UserPreferences = {
   goal: 'maintenance',
   experience: 'intermediate',
   units: 'lb', // Default to imperial
+  lengthUnits: 'in',
   heightCm: null,
   weightKg: null,
   restTimerDefault: 180,
@@ -42,6 +49,20 @@ const defaultPreferences: UserPreferences = {
 // Global state to share preferences across components
 let globalPreferences: UserPreferences = defaultPreferences;
 let globalListeners: Set<(prefs: UserPreferences) => void> = new Set();
+// The STORED length choice (null = none yet, so lengthUnits follows units).
+let explicitLengthUnits: LengthUnit | null = null;
+
+/** Apply one key, keeping a derived lengthUnits in step with units. */
+function withPreference<K extends keyof UserPreferences>(
+  prefs: UserPreferences,
+  key: K,
+  value: UserPreferences[K]
+): UserPreferences {
+  const next = { ...prefs, [key]: value };
+  if (key === 'lengthUnits') explicitLengthUnits = value as LengthUnit;
+  if (key === 'units' && !explicitLengthUnits) next.lengthUnits = lengthUnitForWeightUnit(value as WeightUnit);
+  return next;
+}
 
 function notifyListeners(prefs: UserPreferences) {
   globalPreferences = prefs;
@@ -83,10 +104,13 @@ export function useUserPreferences() {
 
         if (data) {
           const prefs = data.preferences as Record<string, unknown> || {};
+          const units = (prefs.units as WeightUnit) || 'lb'; // Default to imperial
+          explicitLengthUnits = parseLengthUnit(prefs.lengthUnits);
           const newPrefs: UserPreferences = {
             goal: (data.goal as Goal) || 'maintenance',
             experience: (data.experience as Experience) || 'intermediate',
-            units: (prefs.units as WeightUnit) || 'lb', // Default to imperial
+            units,
+            lengthUnits: explicitLengthUnits ?? lengthUnitForWeightUnit(units),
             heightCm: data.height_cm as number | null,
             weightKg: data.weight_kg as number | null,
             restTimerDefault: (prefs.restTimer as number) || 180,
@@ -118,12 +142,13 @@ export function useUserPreferences() {
     const supabase = createUntypedClient();
 
     // Update local state immediately for responsiveness
-    const newPrefs = { ...globalPreferences, [key]: value };
-    notifyListeners(newPrefs);
+    const previousPrefs = globalPreferences;
+    const previousExplicitLength = explicitLengthUnits;
+    notifyListeners(withPreference(globalPreferences, key, value));
 
     // Persist to database
     try {
-      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn' || key === 'trackWaistInCheckin' || key === 'injuryAreas') {
+      if (key === 'units' || key === 'lengthUnits' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn' || key === 'trackWaistInCheckin' || key === 'injuryAreas') {
         // These go in the preferences JSONB column
         const { data: currentUser } = await supabase
           .from('users')
@@ -159,7 +184,8 @@ export function useUserPreferences() {
     } catch (err) {
       console.error('Failed to save preference:', err);
       // Revert on error
-      notifyListeners(globalPreferences);
+      explicitLengthUnits = previousExplicitLength;
+      notifyListeners(previousPrefs);
     }
   }, [authUser]);
 
@@ -185,5 +211,5 @@ export function applyPreferenceLocally<K extends keyof UserPreferences>(
   key: K,
   value: UserPreferences[K]
 ): void {
-  notifyListeners({ ...globalPreferences, [key]: value });
+  notifyListeners(withPreference(globalPreferences, key, value));
 }

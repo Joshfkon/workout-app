@@ -7,21 +7,32 @@ import { BEGINNER_MODE_DESCRIPTION, BEGINNER_MODE_TITLE } from '@/lib/beginnerMo
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import { STANDING_INJURY_OPTIONS, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
-// Short gym labels, each with one plain line so a beginner (or someone easing
-// back after an injury) knows what they're picking.
-const GOAL_OPTIONS: { value: TrainingGoal; label: string; description: string }[] = [
-  { value: 'cut', label: 'Cut', description: 'Lose fat while keeping your muscle.' },
+// Plain labels first, the gym term in brackets, plus one plain line, so a
+// beginner (or someone easing back after an injury) knows what they're
+// picking. The stored values (users.goal) are unchanged.
+const GOAL_OPTIONS: { value: TrainingGoal; label: string; term?: string; description: string }[] = [
+  { value: 'cut', label: 'Lose fat', term: 'cut', description: 'Eat a little less than you burn, keeping your muscle.' },
   { value: 'maintenance', label: 'Maintain', description: 'Stay at about your weight. Good for getting back into it.' },
-  { value: 'bulk', label: 'Bulk', description: 'Gain some weight to build muscle.' },
+  { value: 'bulk', label: 'Build muscle', term: 'bulk', description: 'Eat a little more than you burn to gain muscle.' },
 ];
 
 // Food-only users (said "No, food tracking" at sign-up): the same goals,
-// described without muscle or training.
+// labelled and described without muscle or training.
+const FOOD_GOAL_LABELS: Record<TrainingGoal, string> = {
+  cut: 'Lose weight',
+  maintenance: 'Maintain',
+  bulk: 'Gain weight',
+};
 const FOOD_GOAL_DESCRIPTIONS: Record<TrainingGoal, string> = {
   cut: 'Lose weight at a steady pace.',
   maintenance: 'Stay at about your weight.',
   bulk: 'Gain weight slowly.',
 };
+
+/** Where the daily numbers come from, in one plain line. */
+export const TARGETS_SOURCE_COPY =
+  'Calories: your estimated daily burn (from your weight, height, age, sex and a typical activity level), ' +
+  'set a little lower to lose fat or a little higher to build muscle. Protein: scaled to your lean body mass.';
 
 /** Daily targets shown under the goal: new ones for this goal, or ones the user already has. */
 export interface GoalStepTargets {
@@ -141,7 +152,12 @@ export function GoalStep({
                 {isSelected && <IconCheck size={13} stroke={3} />}
               </span>
               <span className="min-w-0">
-                <span className="block font-semibold text-ink">{option.label}</span>
+                <span className="block font-semibold text-ink">
+                  {foodFocus ? FOOD_GOAL_LABELS[option.value] : option.label}
+                  {option.term && (
+                    <span className="font-normal text-ink-2"> ({option.term})</span>
+                  )}
+                </span>
                 <span className="block text-body text-ink-2 mt-1">
                   {foodFocus ? FOOD_GOAL_DESCRIPTIONS[option.value] : option.description}
                 </span>
@@ -158,7 +174,8 @@ export function GoalStep({
         <p className="flex items-start gap-2 text-subhead text-ink-2" data-testid="goal-body-fat-note">
           <IconInfoCircle size={16} className="mt-0.5 flex-shrink-0 text-ink-3" aria-hidden="true" />
           <span>
-            At ~{bodyFatPercent.toFixed(0)}% body fat, {recommended === 'cut' ? 'a cut' : 'a bulk'} could also
+            At ~{bodyFatPercent.toFixed(0)}% body fat,{' '}
+            {recommended === 'cut' ? 'losing fat (a cut)' : 'building muscle (a bulk)'} could also
             suit you. Have a plan, like a show? Go with that.
           </span>
         </p>
@@ -177,6 +194,11 @@ export function GoalStep({
               ? 'Worked out from your goal, weight, height and age. Change them any time in Eat.'
               : 'Kept as they are. Change them any time in Eat.'}
           </p>
+          {dailyTargets.kind === 'new' && (
+            <p className="text-caption text-ink-2 mt-1" data-testid="goal-targets-source">
+              {TARGETS_SOURCE_COPY}
+            </p>
+          )}
         </div>
       ) : targetsNeedAge ? (
         <p className="text-subhead text-ink-2" data-testid="goal-targets-need-age">
