@@ -128,6 +128,43 @@ export function coldStartE1RM(
 }
 
 /**
+ * Capacity anchor for a weight-edit rep refill — LOGGED rungs only:
+ * session-best (a set logged today), else (when the edit has no reference set
+ * of its own) the stored e1RM, else last session's resolved e1RM.
+ *
+ * The cold-start estimate is deliberately NOT a rung here. It is the app's
+ * own rough guess (bodyweight / transfer heuristics), so answering a typed
+ * weight from it fabricates a capacity: a lifter who typed 225 over an 80 lb
+ * guess got "225 × 1 may be near max (from your est. max 120 lbs)" and his
+ * reps snapped to 1. With no logged rung, the reps field is left as it was.
+ */
+export function weightEditAnchorE1RM(rungs: {
+  sessionBestE1RM?: number;
+  storedE1RMKg?: number;
+  lastSessionE1RM?: number;
+  hasReferenceSet: boolean;
+}): number | undefined {
+  if (rungs.sessionBestE1RM !== undefined) return rungs.sessionBestE1RM;
+  if (rungs.hasReferenceSet) return undefined;
+  if (rungs.storedE1RMKg !== undefined && rungs.storedE1RMKg > 0) return rungs.storedE1RMKg;
+  return rungs.lastSessionE1RM;
+}
+
+/**
+ * True when the only capacity basis for an effort forecast is the rough
+ * cold-start estimate: nothing logged for this lift today and no usable
+ * previous session. A near-max warning built on that basis is the app
+ * warning about its own guess ("90 lbs × 13 may be near max" on the very
+ * weight × reps it prefilled), so callers show no near-max claim then.
+ */
+export function effortBasisIsColdStartOnly(rungs: {
+  hasLoggedSetToday: boolean;
+  lastSessionE1RM?: number;
+}): boolean {
+  return !rungs.hasLoggedSetToday && rungs.lastSessionE1RM === undefined;
+}
+
+/**
  * Last session's sets in the shape the session-to-session bump gate wants.
  *
  * The gate exists because a load increase must be EARNED by every working set
