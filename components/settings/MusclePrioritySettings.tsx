@@ -3,10 +3,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { MUSCLE_GROUPS, type MuscleGroup, type MusclePriorityLevel } from '@/types/schema';
+import {
+  MUSCLE_GROUPS,
+  MUSCLE_PRIORITY_HEADS,
+  STANDARD_MUSCLE_DISPLAY_NAMES,
+  type MuscleGroup,
+  type MusclePriorityLevel,
+  type StandardMuscleGroup,
+} from '@/types/schema';
+
+/** A coarse group, or one of its prioritizable heads (side delts…). */
+type PriorityKey = MuscleGroup | StandardMuscleGroup;
 
 interface MusclePriorityData {
-  muscleGroup: MuscleGroup;
+  muscleGroup: PriorityKey;
   priority: MusclePriorityLevel;
   reason?: string;
 }
@@ -61,7 +71,7 @@ export function MusclePrioritySettings({
   onSave,
   className = '',
 }: MusclePrioritySettingsProps) {
-  const [priorities, setPriorities] = useState<Map<MuscleGroup, MusclePriorityData>>(new Map());
+  const [priorities, setPriorities] = useState<Map<PriorityKey, MusclePriorityData>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,10 +87,11 @@ export function MusclePrioritySettings({
         .select('*')
         .eq('user_id', userId);
 
-      const priorityMap = new Map<MuscleGroup, MusclePriorityData>();
+      const priorityMap = new Map<PriorityKey, MusclePriorityData>();
 
-      // First, initialize all muscles with default priority (3)
-      MUSCLE_GROUPS.forEach((muscle) => {
+      // First, initialize all muscles (and their prioritizable heads) with
+      // default priority (3)
+      ALL_PRIORITY_KEYS.forEach((muscle) => {
         priorityMap.set(muscle, {
           muscleGroup: muscle,
           priority: 3,
@@ -89,7 +100,7 @@ export function MusclePrioritySettings({
 
       // Then override with saved priorities from database
       if (!error && data) {
-        data.forEach((row: { muscle_group: MuscleGroup; priority: MusclePriorityLevel; reason?: string }) => {
+        data.forEach((row: { muscle_group: PriorityKey; priority: MusclePriorityLevel; reason?: string }) => {
           priorityMap.set(row.muscle_group, {
             muscleGroup: row.muscle_group,
             priority: row.priority,
@@ -105,7 +116,7 @@ export function MusclePrioritySettings({
     loadPriorities();
   }, [userId]);
 
-  const handlePriorityChange = useCallback((muscle: MuscleGroup, priority: MusclePriorityLevel) => {
+  const handlePriorityChange = useCallback((muscle: PriorityKey, priority: MusclePriorityLevel) => {
     setPriorities((prev) => {
       const newMap = new Map(prev);
       const existing = newMap.get(muscle);
@@ -162,8 +173,8 @@ export function MusclePrioritySettings({
   };
 
   const handleReset = () => {
-    const newMap = new Map<MuscleGroup, MusclePriorityData>();
-    MUSCLE_GROUPS.forEach((muscle) => {
+    const newMap = new Map<PriorityKey, MusclePriorityData>();
+    ALL_PRIORITY_KEYS.forEach((muscle) => {
       newMap.set(muscle, {
         muscleGroup: muscle,
         priority: 3,
@@ -171,13 +182,6 @@ export function MusclePrioritySettings({
     });
     setPriorities(newMap);
     setHasChanges(true);
-  };
-
-  const formatMuscleName = (muscle: string) => {
-    return muscle
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
   };
 
   if (isLoading) {
@@ -227,60 +231,37 @@ export function MusclePrioritySettings({
             <h3 className="text-body font-medium text-ink-2 mb-3">{region}</h3>
             <div className="space-y-2">
               {muscles.map((muscle) => {
-                const priorityData = priorities.get(muscle);
-                const priority = priorityData?.priority || 3;
-
+                const heads = MUSCLE_PRIORITY_HEADS[muscle] ?? [];
+                const headSet = heads.some((h) => (priorities.get(h)?.priority ?? 3) !== 3);
                 return (
-                  <div
-                    key={muscle}
-                    className="flex flex-col gap-2 p-3 bg-fill/50 rounded-lg sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex items-center justify-between gap-3 sm:justify-start">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-8 rounded ${PRIORITY_COLORS[priority]}`} />
-                        <span className="text-body font-medium text-ink">
-                          {formatMuscleName(muscle)}
-                        </span>
-                      </div>
-
-                      {/* Current Priority Label (next to name on mobile) */}
-                      <Badge
-                        variant={PRIORITY_BADGE_VARIANTS[priority]}
-                        size="sm"
-                        className="justify-center sm:hidden"
-                      >
-                        {PRIORITY_LABELS[priority]}
-                      </Badge>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {/* Priority Buttons */}
-                      <div className="flex gap-1">
-                        {([1, 2, 3, 4, 5] as MusclePriorityLevel[]).map((level) => (
-                          <button
-                            key={level}
-                            onClick={() => handlePriorityChange(muscle, level)}
-                            className={`w-8 h-8 rounded-lg text-caption font-medium transition-all ${
-                              priority === level
-                                ? `${PRIORITY_COLORS[level]} text-white`
-                                : 'bg-sep text-ink-2 hover:bg-sep'
-                            }`}
-                            title={PRIORITY_LABELS[level]}
-                          >
-                            {level}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Current Priority Label (inline on desktop) */}
-                      <Badge
-                        variant={PRIORITY_BADGE_VARIANTS[priority]}
-                        size="sm"
-                        className="hidden w-24 justify-center sm:inline-flex"
-                      >
-                        {PRIORITY_LABELS[priority]}
-                      </Badge>
-                    </div>
+                  <div key={muscle} className="space-y-1">
+                    <PriorityRow
+                      muscle={muscle}
+                      label={formatMuscleName(muscle)}
+                      priority={priorities.get(muscle)?.priority || 3}
+                      onChange={handlePriorityChange}
+                    />
+                    {/* Single heads (side delts, upper chest…): a bodybuilder
+                        bringing up one head could only prioritize the group. */}
+                    {heads.length > 0 && (
+                      <details className="ml-4 group" open={headSet} data-testid={`priority-heads-${muscle}`}>
+                        <summary className="cursor-pointer py-1 text-caption text-action">
+                          Target one head ({heads.map((h) => STANDARD_MUSCLE_DISPLAY_NAMES[h]).join(', ')})
+                        </summary>
+                        <div className="mt-1 space-y-1">
+                          {heads.map((head) => (
+                            <PriorityRow
+                              key={head}
+                              muscle={head}
+                              label={STANDARD_MUSCLE_DISPLAY_NAMES[head]}
+                              priority={priorities.get(head)?.priority || 3}
+                              onChange={handlePriorityChange}
+                              compact
+                            />
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
                 );
               })}
@@ -305,7 +286,87 @@ export function MusclePrioritySettings({
   );
 }
 
-function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePriorityData> }) {
+/** Every key the form can set: the coarse groups and their heads. */
+const ALL_PRIORITY_KEYS: PriorityKey[] = [
+  ...MUSCLE_GROUPS,
+  ...Object.values(MUSCLE_PRIORITY_HEADS).flatMap((heads) => [...(heads ?? [])]),
+];
+
+/** "Side Delts" for a head, "Shoulders" for a group. */
+function formatMuscleName(muscle: string): string {
+  const head = STANDARD_MUSCLE_DISPLAY_NAMES[muscle as StandardMuscleGroup];
+  if (head && !(MUSCLE_GROUPS as readonly string[]).includes(muscle)) return head;
+  return muscle
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function PriorityRow({
+  muscle,
+  label,
+  priority,
+  onChange,
+  compact = false,
+}: {
+  muscle: PriorityKey;
+  label: string;
+  priority: MusclePriorityLevel;
+  onChange: (muscle: PriorityKey, priority: MusclePriorityLevel) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-2 rounded-lg sm:flex-row sm:items-center sm:justify-between ${
+        compact ? 'p-2 bg-fill/30' : 'p-3 bg-fill/50'
+      }`}
+      data-testid={`priority-row-${muscle}`}
+    >
+      <div className="flex items-center justify-between gap-3 sm:justify-start">
+        <div className="flex items-center gap-3">
+          <div className={`w-2 ${compact ? 'h-6' : 'h-8'} rounded ${PRIORITY_COLORS[priority]}`} />
+          <span className={`${compact ? 'text-subhead' : 'text-body'} font-medium text-ink`}>{label}</span>
+        </div>
+
+        {/* Current Priority Label (next to name on mobile) */}
+        <Badge variant={PRIORITY_BADGE_VARIANTS[priority]} size="sm" className="justify-center sm:hidden">
+          {PRIORITY_LABELS[priority]}
+        </Badge>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {/* Priority Buttons */}
+        <div className="flex gap-1">
+          {([1, 2, 3, 4, 5] as MusclePriorityLevel[]).map((level) => (
+            <button
+              key={level}
+              onClick={() => onChange(muscle, level)}
+              className={`w-8 h-8 rounded-lg text-caption font-medium transition-all ${
+                priority === level ? `${PRIORITY_COLORS[level]} text-white` : 'bg-sep text-ink-2 hover:bg-sep'
+              }`}
+              title={PRIORITY_LABELS[level]}
+              aria-label={`${label}: ${PRIORITY_LABELS[level]}`}
+              aria-pressed={priority === level}
+            >
+              {level}
+            </button>
+          ))}
+        </div>
+
+        {/* Current Priority Label (inline on desktop) */}
+        <Badge
+          variant={PRIORITY_BADGE_VARIANTS[priority]}
+          size="sm"
+          className="hidden w-24 justify-center sm:inline-flex"
+        >
+          {PRIORITY_LABELS[priority]}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+function PrioritySummary({ priorities }: { priorities: Map<PriorityKey, MusclePriorityData> }) {
   const highPriority = Array.from(priorities.values()).filter((p) => p.priority <= 2);
   const lowPriority = Array.from(priorities.values()).filter((p) => p.priority >= 4);
 
@@ -318,12 +379,6 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
       </div>
     );
   }
-
-  const formatMuscleName = (muscle: string) =>
-    muscle
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
 
   return (
     <div className="p-4 bg-fill/50 rounded-lg space-y-3">
@@ -358,7 +413,8 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
       )}
 
       <p className="text-caption text-ink-3">
-        High priority muscles get up to 20% more volume. Low priority muscles get reduced volume.
+        High priority muscles get up to 20% more volume. A single head gets half that on its group, and
+        its exercises lead the group&apos;s slot in each session. Low priority muscles get reduced volume.
       </p>
     </div>
   );
@@ -380,7 +436,7 @@ export function useMusclePriorities(userId: string) {
 
       if (!error && data) {
         setPriorities(
-          data.map((row: { muscle_group: MuscleGroup; priority: MusclePriorityLevel; reason?: string }) => ({
+          data.map((row: { muscle_group: PriorityKey; priority: MusclePriorityLevel; reason?: string }) => ({
             muscleGroup: row.muscle_group,
             priority: row.priority,
             reason: row.reason,

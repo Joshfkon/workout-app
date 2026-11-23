@@ -42,6 +42,7 @@ import {
 import { TrainingScheduleSelector, SessionExerciseList } from '@/components/mesocycle';
 import { getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { weekByWeekPlan, deloadSummary, formatRir } from '@/lib/training/builderDefaults';
 import { MESOCYCLE_PLAN_QUERY_PREFIX } from '@/hooks/useMesocyclePlan';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
@@ -1222,13 +1223,26 @@ export default function MesocyclePage() {
               {/* Deload */}
               <div className="p-4 bg-fill/50 rounded-lg">
                 <h3 className="font-medium text-ink mb-2">Deload week</h3>
-                <p className="text-subhead text-ink-2">
-                  Week {activeMesocycle.deload_week} reduces volume by 50% while maintaining intensity. This lets accumulated fatigue dissipate.
-                </p>
-                <div className="mt-2 flex gap-2 text-caption">
-                  <span className="px-2 py-1 bg-sep rounded">Volume: -50%</span>
-                  <span className="px-2 py-1 bg-sep rounded">Intensity: Same</span>
-                </div>
+                {(() => {
+                  // The stored plan's own deload numbers. This card used to
+                  // say "intensity: same" while the generator dropped loads
+                  // to 60% and RIR to 4.
+                  const d = deloadSummary(weekByWeekPlan(activeMesocycle.program_data as FullProgramRecommendation | null));
+                  return (
+                    <>
+                      <p className="text-subhead text-ink-2">
+                        Week {activeMesocycle.deload_week} cuts volume to {d ? d.volumePercent : 50}%
+                        {d?.loadPercent != null ? ` with loads at ${d.loadPercent}%` : ''}
+                        {d?.rir ? ` and ${formatRir(d.rir)}` : ''}. This lets accumulated fatigue dissipate.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-caption" data-testid="mesocycle-deload-chips">
+                        <span className="px-2 py-1 bg-sep rounded">Volume: {d ? d.volumePercent : 50}%</span>
+                        {d?.loadPercent != null && <span className="px-2 py-1 bg-sep rounded">Loads: {d.loadPercent}%</span>}
+                        {d?.rir && <span className="px-2 py-1 bg-sep rounded">Effort: {formatRir(d.rir)}</span>}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </CardContent>
