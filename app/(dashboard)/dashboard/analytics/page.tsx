@@ -83,6 +83,7 @@ import {
   type ProgressTab,
 } from './progressTabs';
 import { buildProgressSummary } from './progressSummary';
+import { ProgressSummaryCard } from './ProgressSummaryCard';
 import { now as clockNow } from '@/lib/clock';
 import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
 import { listOutbox } from '@/lib/offline/setOutbox';
@@ -1576,17 +1577,7 @@ function AnalyticsPageContent() {
         actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
       />
 
-      {progressSummary && (
-        <div className="rounded-card bg-card p-4 shadow-card" data-testid="progress-summary">
-          <p className="text-caption text-ink-2">Are you progressing?</p>
-          {progressSummary.weight && (
-            <p className="mt-0.5 text-body text-ink" data-testid="progress-summary-weight">{progressSummary.weight}</p>
-          )}
-          {progressSummary.strength && (
-            <p className="mt-0.5 text-body text-ink" data-testid="progress-summary-strength">{progressSummary.strength}</p>
-          )}
-        </div>
-      )}
+      {progressSummary && <ProgressSummaryCard summary={progressSummary} />}
 
       {/* Tab Navigation */}
       <div className="flex rounded-[10px] bg-fill p-0.5" role="tablist" aria-label="Progress sections">

@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import { formatDate, formatChartTickDate, dateTickStep, showDateTick, parseLocalDate } from '@/lib/utils';
 import { now as clockNow } from '@/lib/clock';
-import { DAY_MS, weighInsInWindow, weightTrendLine } from './weightTrend';
+import { DAY_MS, weighInsInWindow, weightTrendLine, weightTrendMethod } from './weightTrend';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 import type { PhaseType } from '@/types/schema';
 import { PHASE_STYLE, PHASE_BAND_OPACITY } from '@/components/body/phaseStyle';
@@ -261,8 +261,8 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
           >
             {trend.perWeek > 0 ? '+' : trend.perWeek < 0 ? '−' : ''}
             {Math.abs(trend.perWeek).toFixed(1)} {preferredUnit}/wk
-          </span>{' '}
-          · the trend smooths out day-to-day water swings, so it can differ from your latest weigh-in
+          </span>
+          . {weightTrendMethod(chartData.length, TIMEFRAME_DAYS[timeframe])} It can differ from your latest weigh-in.
         </p>
       )}
 
