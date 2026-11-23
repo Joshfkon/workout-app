@@ -58,7 +58,9 @@ export async function fetchLiftTrendsSummary(): Promise<LiftTrendsSummary | null
     (sessionsRes.data ?? []) as unknown as LiftTrendSessionRow[],
     (goalRes.data?.goal as PlateauGoal | null) ?? undefined,
     at,
-    { programStartDate: mesoRes.data?.[0]?.start_date ?? null }
+    // includeRollup: the Strength tab's "Strength by muscle" card rolls up
+    // these same series, so a lift and its muscle can never disagree.
+    { programStartDate: mesoRes.data?.[0]?.start_date ?? null, includeRollup: true }
   );
 }
 

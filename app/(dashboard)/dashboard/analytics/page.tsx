@@ -73,6 +73,7 @@ import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
 import { useLiftTrends } from '@/hooks/useLiftTrends';
+import { muscleProgressionInputFromRollup } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { useBodyOrFoodLogged } from '@/hooks/useBodyOrFoodLogged';
 import {
   hasRecentLifting,
@@ -192,14 +193,6 @@ interface UserProfile {
   experience: Experience;
   targetBodyFatPercent: number | null;
   targetWeightKg: number | null;
-}
-
-/** Raw inputs for the muscle-group progression card (services/progressionInsights) */
-interface ProgressionRawData {
-  snapshotsByExercise: Map<string, ExercisePerformanceSnapshot[]>;
-  muscleByExercise: Map<string, string>;
-  exerciseNames: Map<string, string>;
-  goal?: PlateauGoal;
 }
 
 // Get time range label
@@ -395,13 +388,9 @@ function AnalyticsPageContent() {
 
   // Per-time-range result cache (P1-2) — lives for the page's lifetime.
   const analyticsRangeCacheRef = useRef(
-    new Map<string, { plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>; progressionRaw: ProgressionRawData | null }>()
+    new Map<string, { plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> }>()
   );
   const [plateauAlerts, setPlateauAlerts] = useState<Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>>([]);
-  // Raw inputs for the muscle-group progression card. Classification happens
-  // in a render-side memo so it re-runs when the user profile (experience)
-  // finishes loading, without refetching workout data.
-  const [progressionRaw, setProgressionRaw] = useState<ProgressionRawData | null>(null);
 
   // Wellness state
   const [hydrationData, setHydrationData] = useState<Array<{ date: string; totalMl: number }>>([]);
@@ -635,7 +624,7 @@ function AnalyticsPageContent() {
     if (!sectionParam || isLoading) return;
     const el = document.getElementById(sectionParam);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [sectionParam, activeTab, isLoading, liftTrendsSummary, progressionRaw]);
+  }, [sectionParam, activeTab, isLoading, liftTrendsSummary]);
 
   // Fetch goals tab data (mesocycle, targets, weight history, measurements).
   // Keyed on bodyRefreshKey so a save from the unified log sheet (the header
@@ -1022,8 +1011,9 @@ function AnalyticsPageContent() {
     return () => { cancelled = true; };
   }, [userId, timeRange]);
 
-  // Fetch workout data for the Strength tab's plateau alerts and
-  // muscle-progression card. (The Training tab this fetch also fed was
+  // Fetch workout data for the Strength tab's plateau alerts. (The
+  // muscle-progression card rolls up the lift-trend series instead — see
+  // muscleProgression below.) (The Training tab this fetch also fed was
   // removed — its totals/volume/recent-workout views live on the Train page.)
   // P1-2 (perf): results are cached per time range for the page's lifetime —
   // flipping 7d -> 30d -> 7d no longer refetches the whole nested query tree.
@@ -1033,7 +1023,6 @@ function AnalyticsPageContent() {
         const cached = analyticsRangeCacheRef.current.get(timeRange);
         if (cached) {
           setPlateauAlerts(cached.plateauAlerts);
-          setProgressionRaw(cached.progressionRaw);
           return;
         }
 
@@ -1063,12 +1052,14 @@ function AnalyticsPageContent() {
               exercises!inner (
                 id,
                 name,
-                primary_muscle
+                primary_muscle,
+                exercise_type
               ),
               set_logs!inner (
                 id,
                 weight_kg,
                 reps,
+                rpe,
                 is_warmup,
                 logged_at
               )
@@ -1155,31 +1146,26 @@ function AnalyticsPageContent() {
         if (workoutSessions.length === 0) {
           // Genuinely zero workouts in range (server AND local outbox agree).
           setPlateauAlerts([]);
-          setProgressionRaw(null);
           analyticsRangeCacheRef.current.set(timeRange, {
             plateauAlerts: [],
-            progressionRaw: null,
           });
           return;
         }
 
         // Per-session snapshots per exercise (for plateau detection), plus
-        // each exercise's name and primary muscle (for the progression card).
+        // each exercise's name.
         const snapshotMap = new Map<string, ExercisePerformanceSnapshot[]>();
         const exerciseNameMap = new Map<string, string>();
-        const muscleByExercise = new Map<string, string>();
 
         workoutSessions.forEach((session: any) => {
           if (session.exercise_blocks) {
             session.exercise_blocks.forEach((block: any) => {
               if (!block.exercises || !block.set_logs) return;
 
-              const muscle = block.exercises.primary_muscle;
               const exerciseId = block.exercises.id;
               const exerciseName = block.exercises.name;
 
               const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
-              if (muscle) muscleByExercise.set(exerciseId, muscle);
 
               // Duration exercises carry seconds in reps: no e1RM snapshot, no
               // plateau trend — a stable hold ceiling is not a plateau.
@@ -1248,19 +1234,8 @@ function AnalyticsPageContent() {
         detectedPlateauAlerts.sort((a, b) => b.result.weeksSinceProgress - a.result.weeksSinceProgress);
         setPlateauAlerts(detectedPlateauAlerts);
 
-        // Raw inputs for the muscle-group progression card: per-exercise
-        // session snapshots plus each exercise's primary muscle.
-        const progressionRawResult: ProgressionRawData = {
-          snapshotsByExercise: snapshotMap,
-          muscleByExercise,
-          exerciseNames: exerciseNameMap,
-          goal: (goalRow?.goal as PlateauGoal | null) ?? undefined,
-        };
-        setProgressionRaw(progressionRawResult);
-
         analyticsRangeCacheRef.current.set(timeRange, {
           plateauAlerts: detectedPlateauAlerts,
-          progressionRaw: progressionRawResult,
         });
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
@@ -1271,22 +1246,32 @@ function AnalyticsPageContent() {
   }, [timeRange]);
 
   // Muscle-group progression classification (services/progressionInsights).
+  // Rolls up the SAME per-lift series, window (LIFT_TREND_WINDOW_DAYS), goal
+  // and program boundary as the lift list above it, so a muscle's rate always
+  // follows from the lifts listed under it. (It used to run over this page's
+  // own fetch at the hidden 30-day default range, without logged RPE — an
+  // advanced lifter's +2.9%/wk curl read as biceps "+0%/wk, Behind pace".)
   // Recomputes when the profile loads so pace is judged against the right
-  // experience level; workout data itself comes from the cached fetch above.
+  // experience level.
+  const liftRollup = liftTrendsSummary?.rollup ?? null;
+  const muscleProgressionInput = useMemo(
+    () => (liftRollup ? muscleProgressionInputFromRollup(liftRollup) : null),
+    [liftRollup]
+  );
   const muscleProgression = useMemo(() => {
-    if (!progressionRaw) return [];
+    if (!liftRollup || !muscleProgressionInput) return [];
     return getMuscleGroupProgression({
-      snapshotsByExercise: progressionRaw.snapshotsByExercise,
-      muscleByExercise: progressionRaw.muscleByExercise,
+      snapshotsByExercise: muscleProgressionInput.snapshotsByExercise,
+      muscleByExercise: muscleProgressionInput.muscleByExercise,
+      discontinuitiesByExercise: muscleProgressionInput.discontinuitiesByExercise,
       experience: userProfile?.experience ?? 'intermediate',
-      referenceDate: new Date(),
-      goal: progressionRaw.goal,
+      referenceDate: clockNow(),
+      goal: liftRollup.goal,
       // Lifts straddling the current program with too few sessions since it
-      // roll up as "calibrating" (no rate) instead of feeding a real-looking
-      // %/wk — the same gate liftTrends uses.
-      programStartDate: activeMesocycle?.startedAt ?? null,
+      // roll up as "calibrating" (no rate) — the same gate liftTrends uses.
+      programStartDate: liftRollup.programStartDate,
     });
-  }, [progressionRaw, userProfile?.experience, activeMesocycle?.startedAt]);
+  }, [liftRollup, muscleProgressionInput, userProfile?.experience]);
 
   // Calculated values
   const latestScan = scans[0];
@@ -1798,8 +1783,9 @@ function AnalyticsPageContent() {
           {muscleProgression.length > 0 && (
             <MuscleProgressionCard
               groups={muscleProgression}
-              exerciseNames={progressionRaw?.exerciseNames}
-              goal={progressionRaw?.goal}
+              exerciseNames={muscleProgressionInput?.exerciseNames}
+              goal={liftRollup?.goal}
+              windowDays={liftTrendsSummary?.windowDays}
             />
           )}
 

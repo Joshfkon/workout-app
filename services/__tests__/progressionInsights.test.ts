@@ -41,6 +41,43 @@ function buildSnapshots(
   return snapshots;
 }
 
+describe('getMuscleGroupProgression: never "behind" next to a lift at pace', () => {
+  it('floors a muscle at on track when one of its lifts rises at least at the expected pace', () => {
+    // Advanced bulk expects ~0.15%/wk. One lift at +0.3%/wk diluted by nine
+    // flat accessories averages under the on-track bar (0.075%/wk).
+    const snapshotsByExercise = new Map<string, ExercisePerformanceSnapshot[]>();
+    const muscleByExercise = new Map<string, string>();
+    snapshotsByExercise.set('rising', buildSnapshots('rising', 12, 100, 0.3));
+    muscleByExercise.set('rising', 'lats');
+    for (let i = 0; i < 9; i++) {
+      snapshotsByExercise.set(`flat-${i}`, buildSnapshots(`flat-${i}`, 12, 100, 0));
+      muscleByExercise.set(`flat-${i}`, 'lats');
+    }
+    const [lats] = getMuscleGroupProgression({
+      snapshotsByExercise,
+      muscleByExercise,
+      experience: 'advanced',
+      goal: 'bulk',
+      referenceDate: '2026-06-30',
+    });
+    expect(lats.avgWeeklyChangePct).toBeLessThan(getExpectedPace('advanced', 'bulk').onTrackAtPct);
+    expect(lats.insights.some((i) => i.weeklyChangePct >= lats.expectedWeeklyPct)).toBe(true);
+    expect(lats.pace).toBe('on_track');
+  });
+
+  it('still says behind when none of the lifts reaches the pace', () => {
+    const snapshotsByExercise = new Map([['flat', buildSnapshots('flat', 12, 100, 0)]]);
+    const [g] = getMuscleGroupProgression({
+      snapshotsByExercise,
+      muscleByExercise: new Map([['flat', 'lats']]),
+      experience: 'advanced',
+      goal: 'bulk',
+      referenceDate: '2026-06-30',
+    });
+    expect(['behind', 'plateaued']).toContain(g.pace);
+  });
+});
+
 describe('getExerciseProgression', () => {
   it('returns insufficient_data below the minimum session count', () => {
     const snapshots = buildSnapshots('ex-1', MIN_SESSIONS_FOR_INSIGHT - 1, 100, 1);
