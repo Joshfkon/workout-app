@@ -71,6 +71,8 @@ import { now as clockNow } from '@/lib/clock';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, resolveMuscleToStandard } from '@/types/schema';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { beginnerMuscleName, beginnerPickReason, beginnerSuggestedFocus } from '@/lib/beginnerMode';
 import { formatWeight } from '@/lib/utils';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
 import { formatTargetRange } from '@/services/shared/setModality';
@@ -262,6 +264,13 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const supabase = createUntypedClient();
 
   const { recoveryStatus, isLoading: recoveryLoading } = useMuscleRecovery();
+  // Beginner mode: everyday muscle names, "behind this week" instead of
+  // weekly-set counts, no MRV. Wording only; the plan is the same.
+  const beginner = useBeginnerMode();
+  const muscleName = (muscle: string) =>
+    beginner
+      ? beginnerMuscleName(muscle)
+      : STANDARD_MUSCLE_DISPLAY_NAMES[muscle as keyof typeof STANDARD_MUSCLE_DISPLAY_NAMES] ?? muscle;
   const { volumeData, isLoading: volumeLoading } = useWeeklyVolume();
 
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -1048,10 +1057,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       {aiPlan && (
         <div className="space-y-3">
           {locationChipRow}
-          <p className="text-subhead text-ink-2">{aiPlan.focus}</p>
+          <p className="text-subhead text-ink-2" data-testid="suggested-workout-focus">
+            {beginner ? beginnerSuggestedFocus(aiPlan.focus) : aiPlan.focus}
+          </p>
           {aiPlan.isLightSession && aiPlan.exercises.length > 0 && (
             <p className="text-caption text-status-warn">
-              Volume guardrail: staying under your weekly recoverable maximum.
+              {beginner
+                ? 'Kept light so you can recover.'
+                : 'Volume guardrail: staying under your weekly recoverable maximum.'}
             </p>
           )}
           {aiPlan.exercises.length > 0 && (
@@ -1093,7 +1106,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                         {exercise.name}
                       </span>
                       <span className="block text-caption text-ink-3">
-                        {STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle} · {pick.sets}{' '}
+                        {muscleName(pick.muscle)} · {pick.sets}{' '}
                         {pick.sets === 1 ? 'set' : 'sets'} ·{' '}
                         {formatTargetRange(pick.repRange, {
                           exerciseType: exercise.exercise_type,
@@ -1104,7 +1117,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                       <span className="block text-caption text-ink-2" data-testid="suggested-pick-why">
                         {pickWhyLine({
                           isRecent: recentExerciseIds.includes(exercise.id),
-                          muscleLabel: STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle,
+                          muscleLabel: muscleName(pick.muscle),
                           rec: (() => {
                             const r = estimatePickStart(exercise, pick, profile, transferCandidates);
                             return r
@@ -1114,7 +1127,9 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                           units: profile?.preferences?.units === 'kg' ? 'kg' : 'lb',
                         })}
                       </span>
-                      <span className="block text-caption text-ink-3">{pick.reason}</span>
+                      <span className="block text-caption text-ink-3" data-testid="suggested-pick-reason">
+                        {beginner ? beginnerPickReason(pick.reason, pick.muscle) : pick.reason}
+                      </span>
                       {sub && (
                         <button
                           onClick={() =>

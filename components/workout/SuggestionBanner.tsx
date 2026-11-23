@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { IconSparkles, IconInfoCircle, IconAlertTriangle } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { effortTargetPhrase, plainRirText } from '@/lib/beginnerMode';
 
 /**
  * Live effort check for the CURRENTLY ENTERED weight × reps (the logger's
@@ -134,6 +136,9 @@ export function SuggestionBanner({
 }: SuggestionBannerProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [warningActive, setWarningActive] = useState(false);
+  // Beginner mode: the same numbers, effort in words only (no "RIR").
+  const beginner = useBeginnerMode();
+  const plain = (text: string) => (beginner ? plainRirText(text) : text);
 
   const predictedRir = effortCheck?.predictedRir ?? null;
 
@@ -166,16 +171,18 @@ export function SuggestionBanner({
   // where the number came from, and the engine's terser reason usually says
   // the same thing again in jargon. When either a verdict or a source line is
   // showing, the reason moves to the top of the ⓘ sheet.
-  const reasonInSheet = !!verdict || !!source;
+  // Beginner mode keeps the strip to the numbers and the plain source line:
+  // the engine's reason is jargon-dense, so it always moves to the sheet.
+  const reasonInSheet = !!verdict || !!source || beginner;
 
+  // The entered load × reps, as the caller formatted them for display.
+  const enteredLabel = effortCheck ? `${effortCheck.weightLabel} × ${effortCheck.reps}` : '';
   const warningMessage = effortCheck
     ? effortCheck.softened
-      ? `${effortCheck.weightLabel} × ${effortCheck.reps} may be near max — ${
-          effortCheck.sourceLabel ?? 'estimated for you'
-        }`
+      ? `${enteredLabel} may be near max — ${effortCheck.sourceLabel ?? 'estimated for you'}`
       : effortCheck.predictedRir < 0
-        ? `${effortCheck.weightLabel} × ${effortCheck.reps} — more reps than we think you can do at this weight`
-        : `${effortCheck.weightLabel} × ${effortCheck.reps} — likely all you've got (0 left in the tank)`
+        ? `${enteredLabel} — more reps than we think you can do at this weight`
+        : `${enteredLabel} — likely all you've got${beginner ? '' : ' (0 left in the tank)'}`
     : '';
 
   return (
@@ -209,7 +216,16 @@ export function SuggestionBanner({
         >
           {verdict ? (
             <span data-testid="suggestion-verdict">
-              {verdict} → <span className="font-medium">{weightLabel} × {repsLabel}</span>
+              {plain(verdict)} → <span className="font-medium">{weightLabel} × {repsLabel}</span>
+            </span>
+          ) : beginner ? (
+            <span className="font-medium">
+              {weightLabel} × {repsLabel}
+              {showRir ? (
+                <span className="font-normal" data-testid="suggestion-rir-plain">
+                  {` · ${effortTargetPhrase(rir)}`}
+                </span>
+              ) : null}
             </span>
           ) : (
             <span className="font-medium">
@@ -236,7 +252,7 @@ export function SuggestionBanner({
               data-testid="suggestion-source"
               className="block mt-0.5 text-caption leading-snug text-ink-2"
             >
-              {source}
+              {plain(source)}
             </span>
           ) : null}
         </p>
@@ -271,12 +287,22 @@ export function SuggestionBanner({
         title="How this suggestion works"
       >
         <ul className="space-y-2.5">
-          {[
-            ...(reasonInSheet && reason
-              ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
-              : explanation),
-            ...(showRir ? [RIR_DEFINITION_LINE] : []),
-          ].map((line, i) => (
+          {(beginner
+            ? [
+                ...(reason
+                  ? [
+                      `${weightLabel} × ${repsLabel}${showRir ? `, ${effortTargetPhrase(rir)}` : ''} — ${plainRirText(reason)}.`,
+                    ]
+                  : []),
+                ...explanation.map(plainRirText),
+              ]
+            : [
+                ...(reasonInSheet && reason
+                  ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
+                  : explanation),
+                ...(showRir ? [RIR_DEFINITION_LINE] : []),
+              ]
+          ).map((line, i) => (
             <li key={i} className="flex items-start gap-2 text-subhead text-ink">
               <span className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0" aria-hidden="true" />
               {line}

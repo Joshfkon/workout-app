@@ -8,10 +8,12 @@ interface ToggleProps {
   disabled?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  /** Accessible name when no visible label is tied to the switch. */
+  label?: string;
 }
 
 const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
-  ({ checked, onChange, disabled = false, size = 'md', className = '' }, ref) => {
+  ({ checked, onChange, disabled = false, size = 'md', className = '', label }, ref) => {
     const sizes = {
       sm: {
         track: 'w-8 h-4',
@@ -38,6 +40,7 @@ const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={label}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
         className={`

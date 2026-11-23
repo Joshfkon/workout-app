@@ -19,6 +19,7 @@ import {
 } from '@/services/coachingEngine';
 import { kgToLbs, lbsToKg, roundToIncrement } from '@/lib/utils';
 import type { WeightUnit } from '@/types/schema';
+import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
 
 function PercentileBar({ percentile, label }: { percentile: number; label: string }) {
   const segments = generatePercentileSegments(percentile);
@@ -92,7 +93,7 @@ function CalibrateContent() {
   useEffect(() => {
     async function fetchSession() {
       if (!sessionId) {
-        router.push('/onboarding');
+        router.push(ONBOARDING_BENCHMARKS_ENTRY);
         return;
       }
       
@@ -105,7 +106,7 @@ function CalibrateContent() {
         .single();
       
       if (error || !sessionData) {
-        router.push('/onboarding');
+        router.push(ONBOARDING_BENCHMARKS_ENTRY);
         return;
       }
       

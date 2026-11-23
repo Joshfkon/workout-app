@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event';
 import { storeSmallestPlate } from '@/lib/workout/smallestPlate';
 import { ExerciseCard } from '../ExerciseCard';
 import { useWorkoutStore, WARMUP_COMPLETION_TTL_MS } from '@/stores/workoutStore';
+import { useUserStore } from '@/stores/userStore';
 import type {
   Exercise,
   ExerciseBlock,
@@ -734,6 +735,27 @@ describe('ExerciseCard', () => {
       expect(line).toHaveTextContent(/if you finish/);
       // Plain words first, the technical term still named.
       expect(line).toHaveTextContent(/\(volume: weight × reps, all sets\)/);
+    });
+
+    it('hides the session volume line in beginner mode', () => {
+      useUserStore.setState({
+        user: {
+          id: 'u1',
+          experience: 'novice',
+          preferences: { units: 'kg', beginnerMode: true },
+          volumeLandmarks: {},
+        } as unknown as import('@/types/schema').User,
+      });
+      try {
+        const sets = [
+          createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 7 }),
+          createMockSetLog({ id: 'set-2', setNumber: 2, weightKg: 100, reps: 9, rpe: 8 }),
+        ];
+        render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+        expect(screen.queryByTestId('session-volume-line')).not.toBeInTheDocument();
+      } finally {
+        useUserStore.setState({ user: null });
+      }
     });
 
     it('renders no session volume line on an untouched inactive exercise', () => {

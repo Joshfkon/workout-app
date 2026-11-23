@@ -91,12 +91,14 @@ jest.mock('@/lib/training/transferCandidates', () => ({
 jest.mock('@/lib/geo/gymChoice', () => ({ markGymChosen: jest.fn() }));
 
 const mockBuild = jest.fn();
+let mockPlanOverride: Record<string, unknown> | null = null;
 jest.mock('@/services/suggestedWorkout', () => {
   const actual = jest.requireActual('@/services/suggestedWorkout');
   return {
     ...actual,
     buildSuggestedWorkout: (input: { maxExercises: number; sessionMinutes: number }) => {
       mockBuild(input);
+      if (mockPlanOverride) return mockPlanOverride;
       return {
         focus: 'Legs and back are recovered and under target.',
         isLightSession: false,
@@ -110,6 +112,8 @@ jest.mock('@/services/suggestedWorkout', () => {
 });
 
 import { SuggestedWorkoutSheet, AI_DURATION_STORAGE_KEY } from '../SuggestedWorkoutSheet';
+import { useUserStore } from '@/stores/userStore';
+import type { User } from '@/types/schema';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -162,5 +166,46 @@ describe('SuggestedWorkoutSheet: one tap to start', () => {
     await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
     expect(mockBuild).toHaveBeenLastCalledWith(expect.objectContaining({ sessionMinutes: 60 }));
     expect(window.localStorage.getItem(AI_DURATION_STORAGE_KEY)).toBe('60');
+  });
+});
+
+describe('SuggestedWorkoutSheet: beginner mode wording', () => {
+  const jargonPlan = {
+    focus: 'Today: quads and lats — rested, and furthest behind on this week’s sets.',
+    isLightSession: false,
+    exercises: [
+      { exerciseId: 'ex-1', muscle: 'quads', reason: 'Quads: 2 of 10 weekly sets done', sets: 3, repRange: [8, 12], targetRir: 2 },
+      { exerciseId: 'ex-2', muscle: 'lats', reason: 'Lats: 0 of 8 weekly sets done', sets: 3, repRange: [8, 12], targetRir: 2 },
+    ],
+  };
+  const setBeginner = (beginnerMode: boolean) =>
+    useUserStore.setState({
+      user: { id: 'user-1', experience: 'novice', preferences: { units: 'kg', beginnerMode }, volumeLandmarks: {} } as unknown as User,
+    });
+  beforeEach(() => {
+    mockPlanOverride = jargonPlan;
+  });
+  afterEach(() => {
+    mockPlanOverride = null;
+    useUserStore.setState({ user: null });
+  });
+
+  it('uses plain muscle names and "behind this week" instead of weekly sets', async () => {
+    setBeginner(true);
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
+    expect(screen.getByTestId('suggested-workout-focus')).toHaveTextContent(
+      'Today: front thighs and back (lats) — rested, and behind this week.'
+    );
+    const reasons = screen.getAllByTestId('suggested-pick-reason').map((el) => el.textContent);
+    expect(reasons).toEqual(['Front thighs: behind this week', 'Back (lats): behind this week']);
+    expect(document.body).not.toHaveTextContent(/weekly sets/);
+  });
+
+  it('keeps the existing wording when beginner mode is off', async () => {
+    setBeginner(false);
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
+    expect(screen.getAllByTestId('suggested-pick-reason')[0]).toHaveTextContent('Quads: 2 of 10 weekly sets done');
   });
 });

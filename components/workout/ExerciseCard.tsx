@@ -66,6 +66,7 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow, clampToChip } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
 import { velocityTargetFit, type VelocityTargetFit } from '@/services/shared/motion/setSummary';
@@ -1014,6 +1015,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   // (services/progressionInsights). Complements the plateau badge: the pace
   // pill covers the non-plateaued states (ahead / on track / behind).
   const experience = useUserStore((s) => s.user?.experience ?? 'intermediate');
+  // Beginner mode (Settings → Preferences): hides the trend / stall pills
+  // and the tonnage line, and says effort in words. Display only.
+  const beginner = useBeginnerMode();
   const progressionInsight: ExerciseProgressionInsight | null = useMemo(() => {
     if (!performanceSnapshots || performanceSnapshots.length === 0) return null;
     return getExerciseProgression({
@@ -3301,7 +3305,8 @@ export const ExerciseCard = memo(function ExerciseCard({
           // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the
           // engine reads sets with (raw Math.round(10 − rpe) disagreed at RPE
           // 7.5: header said 3 where the engine graded 2).
-          rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
+          // Beginner mode: the plain weight × reps only — no "@ 1–2 RIR".
+          rir: !beginner && s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
         };
       }),
       { secondsSuffix: isDurationBased }
@@ -3329,7 +3334,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // expanding the history detail — appended to the Phase 0b honest per-set
     // line rather than the old single-load format it originally rode on.
     const volPart =
-      lastSessionVolume != null
+      lastSessionVolume != null && !beginner
         ? ` · ${lastSessionVolume.toLocaleString('en-US')} ${weightLabel} vol`
         : '';
     // The tag leads the set list instead of trailing the whole line: this
@@ -3376,7 +3381,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // A stall pill ("Stalled: 4 sessions at same load") next to "▲ Trend:
   // ahead" reads as two verdicts arguing; the stall is the actionable one, so
   // it wins the way the plateau badge already does.
-  const showPacePill = !repTotalMode &&
+  const showPacePill = !beginner &&
+    !repTotalMode &&
     !plateau &&
     !progressionStall &&
     !!progressionInsight &&
@@ -3387,7 +3393,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     (!repTotalMode && !!plateau) ||
     showPacePill ||
     !!block.supersetGroupId ||
-    !!progressionStall ||
+    (!beginner && !!progressionStall) ||
     !!loadIncreaseFlag;
 
   // Enhanced mode: surface (never alter) a binding joint-stress cap. The RIR
@@ -3447,7 +3453,8 @@ export const ExerciseCard = memo(function ExerciseCard({
           <div className="flex min-w-0 flex-1 items-center">
             <button
               onClick={onExerciseNameClick}
-              className="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+              // Large text: wrap the name rather than cut it to "Barbell Be…".
+              className="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
             >
               {exercise.name}
             </button>
@@ -3543,7 +3550,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {/* Progression stall (services/progressionHealth 5a): the load or
                 the rep-total target has been effectively parked. Surfaced as
                 its own claim — never disguised as a constraint rationale. */}
-            {progressionStall && (
+            {progressionStall && !beginner && (
               <span
                 className="rounded-full px-2.5 py-1 text-caption font-medium leading-none flex-shrink-0 bg-status-warn/10 text-status-warn"
                 data-testid="progression-stall-pill"
@@ -3604,7 +3611,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             numbers. Shown once a set is logged: before that a "planned total"
             tonnage is one more number above the first set that a lifter
             can't act on. */}
-        {sessionVolume && sessionVolume.projected > 0 && completedSets.length > 0 && (
+        {!beginner && sessionVolume && sessionVolume.projected > 0 && completedSets.length > 0 && (
           <p className="mt-1 text-caption text-ink-2" data-testid="session-volume-line">
             {/* "Volume" is tonnage here — say so in plain words (weight ×
                 reps, added up) the first time it shows; the term stays. */}
@@ -4264,7 +4271,7 @@ export const ExerciseCard = memo(function ExerciseCard({
 
                 {/* Row 3: RIR chips */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-caption font-medium text-ink-2">RIR</span>
+                  <span className="text-caption font-medium text-ink-2">{beginner ? 'Left' : 'RIR'}</span>
                   {EDIT_RIR_OPTIONS.map((option) => {
                     const isSelected = editRir === option.value;
                     return (
@@ -4865,7 +4872,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 ) : weightEditNote && (
                   <>
                     {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
-                    {isDurationBased ? 'seconds' : 'reps'} @ {clampToChip(weightEditNote.rir)} RIR (from your
+                    {isDurationBased ? 'seconds' : 'reps'}{' '}
+                    {beginner ? `with ${clampToChip(weightEditNote.rir)} left` : `@ ${clampToChip(weightEditNote.rir)} RIR`} (from your
                     est. max {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel})
                   </>
                 )}

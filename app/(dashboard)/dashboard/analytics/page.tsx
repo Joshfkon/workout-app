@@ -84,6 +84,7 @@ import {
 } from './progressTabs';
 import { buildProgressSummary } from './progressSummary';
 import { now as clockNow } from '@/lib/clock';
+import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
 import { listOutbox } from '@/lib/offline/setOutbox';
 import {
   rangeStartLocalDay,
@@ -1961,7 +1962,7 @@ function AnalyticsPageContent() {
                 liftTrendsLoaded: liftTrendsQuery.isFetched || !!liftTrendsQuery.data,
                 muscleProgressionCount: muscleProgression.length,
               })}
-              onStart={() => router.push('/onboarding')}
+              onStart={() => router.push(ONBOARDING_BENCHMARKS_ENTRY)}
             />
           )}
         </div>

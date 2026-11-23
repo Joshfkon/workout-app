@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   // Bind dark: variants to the app's own theme attribute (set pre-paint by
@@ -63,14 +64,16 @@ const config: Config = {
         },
       },
       // Design-system type scale: sentence case, one scale everywhere.
+      // In rem (same pixels at the default 16px root) so the Text size
+      // setting (lib/textSize: root font-size 100 / 112.5 / 125%) scales it.
       fontSize: {
-        display: ['40px', { lineHeight: '44px', fontWeight: '700', letterSpacing: '-0.02em' }],
-        'large-title': ['32px', { lineHeight: '38px', fontWeight: '700', letterSpacing: '-0.02em' }],
-        title: ['22px', { lineHeight: '28px', fontWeight: '700', letterSpacing: '-0.01em' }],
-        headline: ['17px', { lineHeight: '22px', fontWeight: '600' }],
-        body: ['15px', { lineHeight: '20px' }],
-        subhead: ['13px', { lineHeight: '18px' }],
-        caption: ['12px', { lineHeight: '16px', fontWeight: '500' }],
+        display: ['2.5rem', { lineHeight: '2.75rem', fontWeight: '700', letterSpacing: '-0.02em' }], // 40/44px
+        'large-title': ['2rem', { lineHeight: '2.375rem', fontWeight: '700', letterSpacing: '-0.02em' }], // 32/38px
+        title: ['1.375rem', { lineHeight: '1.75rem', fontWeight: '700', letterSpacing: '-0.01em' }], // 22/28px
+        headline: ['1.0625rem', { lineHeight: '1.375rem', fontWeight: '600' }], // 17/22px
+        body: ['0.9375rem', { lineHeight: '1.25rem' }], // 15/20px
+        subhead: ['0.8125rem', { lineHeight: '1.125rem' }], // 13/18px
+        caption: ['0.75rem', { lineHeight: '1rem', fontWeight: '500' }], // 12/16px
       },
       borderRadius: {
         input: '8px',
@@ -175,7 +178,15 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `large-text:` applies when the Text size setting is above Default
+    // (lib/textSize stamps data-text-size on <html> only then). For the few
+    // rows whose fixed-px controls (44px steppers, icon buttons) leave too
+    // little room once text grows: wrap or stack them instead of clipping.
+    plugin(({ addVariant }) => {
+      addVariant('large-text', 'html[data-text-size] &');
+    }),
+  ],
 };
 
 export default config;

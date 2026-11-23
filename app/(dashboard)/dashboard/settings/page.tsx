@@ -25,6 +25,8 @@ import { refreshUserStore } from '@/components/providers/UserStoreHydrator';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences, applyPreferenceLocally } from '@/hooks/useUserPreferences';
 import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
+import { resolveBeginnerMode } from '@/lib/beginnerMode';
+import { useUserStore } from '@/stores/userStore';
 import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
 import { ProfileTabPanel } from '@/components/settings/ProfileTabPanel';
@@ -46,6 +48,7 @@ interface AutoSavedPreferences {
   skipPreWorkoutCheckIn: boolean;
   trackWaistInCheckin: boolean;
   showAiCoachNotes: boolean;
+  beginnerMode: boolean;
 }
 
 /** How long the "Saved" confirmation stays up. */
@@ -91,6 +94,8 @@ export default function SettingsPage() {
   const [skipPreWorkoutCheckIn, setSkipPreWorkoutCheckIn] = useState(false);
   const [trackWaistInCheckin, setTrackWaistInCheckin] = useState(true);
   const [showAiCoachNotes, setShowAiCoachNotes] = useState(false);
+  // Shown resolved (stored choice, else on for novices): lib/beginnerMode.
+  const [beginnerMode, setBeginnerMode] = useState(false);
   const [volumeLandmarks, setVolumeLandmarks] = useState(DEFAULT_VOLUME_LANDMARKS.intermediate);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -242,6 +247,7 @@ export default function SettingsPage() {
           
           // Get unit preference first
           const prefs = data.preferences as Record<string, unknown> || {};
+          setBeginnerMode(resolveBeginnerMode(prefs.beginnerMode, data.experience));
           const userUnits = (prefs.units as WeightUnit) || 'kg';
           setUnits(userUnits);
           
@@ -588,6 +594,11 @@ export default function SettingsPage() {
         if (patch.trackWaistInCheckin !== undefined) {
           applyPreferenceLocally('trackWaistInCheckin', patch.trackWaistInCheckin);
         }
+        // Beginner mode is read from the user store (useBeginnerMode):
+        // flip it now; the refresh below confirms it from the row.
+        if (patch.beginnerMode !== undefined) {
+          useUserStore.getState().updatePreferences({ beginnerMode: patch.beginnerMode });
+        }
         // …the user store (units drive formatWeight everywhere)…
         void refreshUserStore(user.id);
         // …and this page's cached row, so a revisit shows the saved value.
@@ -785,6 +796,8 @@ export default function SettingsPage() {
           setTrackWaistInCheckin={autoSaveToggle('trackWaistInCheckin', setTrackWaistInCheckin)}
           showAiCoachNotes={showAiCoachNotes}
           setShowAiCoachNotes={(value) => void handleShowAiCoachNotesChange(value)}
+          beginnerMode={beginnerMode}
+          setBeginnerMode={autoSaveToggle('beginnerMode', setBeginnerMode)}
           saveStatus={prefSaveStatus}
         />
       )}

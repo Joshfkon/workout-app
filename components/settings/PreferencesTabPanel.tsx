@@ -7,6 +7,8 @@ import { EatingWindowSettings } from '@/components/settings/EatingWindowSettings
 import { BloodPressureSettings } from '@/components/settings/BloodPressureSettings';
 import { MealReminderSettings } from '@/components/settings/MealReminderSettings';
 import { EducationPreferencesCard } from '@/components/settings/EducationPreferencesCard';
+import { TextSizeControl } from '@/components/settings/TextSizeControl';
+import { BEGINNER_MODE_DESCRIPTION, BEGINNER_MODE_TITLE } from '@/lib/beginnerMode';
 
 /**
  * Auto-save state for the Preferences tab: every choice there saves the
@@ -83,7 +85,7 @@ function ToggleRow({
           </p>
           <p className="text-caption text-ink-3">{description}</p>
         </div>
-        <Toggle checked={checked} onChange={onChange} />
+        <Toggle checked={checked} onChange={onChange} label={title} />
       </div>
       <FieldSaveError field={field} status={status} />
     </div>
@@ -110,6 +112,8 @@ interface PreferencesTabPanelProps {
   setTrackWaistInCheckin: (value: boolean) => void;
   showAiCoachNotes: boolean;
   setShowAiCoachNotes: (value: boolean) => void;
+  beginnerMode: boolean;
+  setBeginnerMode: (value: boolean) => void;
 
   /** Auto-save feedback ("Saving…" / "Saved" / error), tagged with its control. */
   saveStatus: PreferenceSaveStatus;
@@ -132,6 +136,8 @@ export function PreferencesTabPanel({
   setTrackWaistInCheckin,
   showAiCoachNotes,
   setShowAiCoachNotes,
+  beginnerMode,
+  setBeginnerMode,
   saveStatus,
 }: PreferencesTabPanelProps) {
   return (
@@ -160,6 +166,28 @@ export function PreferencesTabPanel({
             className="w-full"
           />
           <FieldSaveError field="units" status={saveStatus} />
+        </CardContent>
+      </Card>
+
+      {/* Right under Units: the two "make it easier to use" choices. Text
+          size applies and saves on tap (hooks/useTextSize). */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Text size</CardTitle>
+          <p className="text-body text-ink-2 mt-1">Makes all text in the app bigger.</p>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <TextSizeControl />
+          <div className="pt-4 border-t border-sep">
+            <ToggleRow
+              field="beginnerMode"
+              title={BEGINNER_MODE_TITLE}
+              description={BEGINNER_MODE_DESCRIPTION}
+              checked={beginnerMode}
+              onChange={setBeginnerMode}
+              status={saveStatus}
+            />
+          </div>
         </CardContent>
       </Card>
 

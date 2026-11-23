@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { IconCheck, IconChevronDown, IconInfoCircle } from '@tabler/icons-react';
-import { Button, Input } from '@/components/ui';
+import { Button, Input, Toggle } from '@/components/ui';
+import { BEGINNER_MODE_DESCRIPTION, BEGINNER_MODE_TITLE } from '@/lib/beginnerMode';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import { STANDING_INJURY_OPTIONS, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
@@ -48,6 +49,12 @@ export interface GoalStepProps {
   onAgeChange?: (value: string) => void;
   /** Said "No, food tracking" at sign-up: training-only copy is hidden or softened. */
   foodFocus?: boolean;
+  /**
+   * Beginner mode switch, pre-set from experience (on for novices). Omitted
+   * = not offered (food-only users, who don't log workouts).
+   */
+  beginnerMode?: boolean;
+  onBeginnerModeChange?: (value: boolean) => void;
   isLoading: boolean;
   onBack: () => void;
   onContinue: () => void;
@@ -65,6 +72,8 @@ export function GoalStep({
   ageDisplay = '',
   onAgeChange,
   foodFocus = false,
+  beginnerMode,
+  onBeginnerModeChange,
   isLoading,
   onBack,
   onContinue,
@@ -204,6 +213,19 @@ export function GoalStep({
         injuryAreas={injuryAreas}
         onInjuryAreasChange={onInjuryAreasChange}
       />
+
+      {beginnerMode !== undefined && onBeginnerModeChange && (
+        <div
+          className="flex items-center justify-between gap-3 rounded-card bg-card p-4"
+          data-testid="onboarding-beginner-mode"
+        >
+          <div className="min-w-0">
+            <p className="text-body font-medium text-ink">{BEGINNER_MODE_TITLE}</p>
+            <p className="text-caption text-ink-2">{BEGINNER_MODE_DESCRIPTION}</p>
+          </div>
+          <Toggle checked={beginnerMode} onChange={onBeginnerModeChange} label={BEGINNER_MODE_TITLE} />
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 pt-2">
         <div className="flex items-center justify-between">

@@ -103,6 +103,13 @@ export const Toast = memo(function Toast({
 
   return (
     <div
+      // Announced like any confirmation should be: errors interrupt, the rest
+      // wait their turn. Without a live region a quick-add's "Added …" was
+      // invisible to assistive tech (and to the panel, which reads the
+      // accessibility tree), and read as "no confirmation".
+      role={type === 'error' ? 'alert' : 'status'}
+      aria-live={type === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
       className={cn(
         // Solid surface under the accent tint: the toast floats over page
         // content, so a bare /10 background lets whatever is behind it bleed
@@ -145,6 +152,7 @@ export const Toast = memo(function Toast({
           {/* Close button */}
           <button
             onClick={handleDismiss}
+            aria-label="Dismiss"
             className="flex-shrink-0 text-ink-3 hover:text-ink-2 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

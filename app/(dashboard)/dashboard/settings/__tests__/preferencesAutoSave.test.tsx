@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 const mockUpdate = jest.fn();
 let storedPreferences: Record<string, unknown>;
 let failNextUpdate = false;
+let mockExperience = 'intermediate';
 
 function usersTable() {
   return {
@@ -25,7 +26,7 @@ function usersTable() {
                 data: {
                   id: 'user-1',
                   goal: 'maintenance',
-                  experience: 'intermediate',
+                  experience: mockExperience,
                   height_cm: 180,
                   weight_kg: 80,
                   preferences: storedPreferences,
@@ -98,6 +99,8 @@ jest.mock('@/components/settings/EducationPreferencesCard', () => ({
 }));
 
 import SettingsPage from '../page';
+import { useUserStore } from '@/stores/userStore';
+import type { User } from '@/types/schema';
 
 function renderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -126,6 +129,14 @@ describe('Settings → Preferences auto-save', () => {
     jest.clearAllMocks();
     failNextUpdate = false;
     storedPreferences = { units: 'kg', restTimer: 180, theme: 'dark' };
+    useUserStore.setState({
+      user: {
+        id: 'user-1',
+        experience: 'novice',
+        preferences: { units: 'kg' },
+        volumeLandmarks: {},
+      } as unknown as User,
+    });
   });
 
   it('saves units the moment they change, with no Save button', async () => {
@@ -163,9 +174,10 @@ describe('Settings → Preferences auto-save', () => {
     renderSettings();
     await openPreferences(user);
 
-    // Units is the first card on the tab, under a plain "Units" heading.
-    const headings = screen.getAllByText(/^(Units|App preferences)$/);
-    expect(headings[0]).toHaveTextContent('Units');
+    // Units is the first card on the tab, under a plain "Units" heading;
+    // Text size (with Beginner mode) comes right after it.
+    const headings = screen.getAllByText(/^(Units|Text size|App preferences)$/);
+    expect(headings.map((h) => h.textContent)).toEqual(['Units', 'Text size', 'App preferences']);
 
     await user.click(screen.getByRole('radio', { name: 'lb & inches' }));
 
@@ -180,7 +192,7 @@ describe('Settings → Preferences auto-save', () => {
     expect(screen.queryByTestId('save-status-showFormCues')).not.toBeInTheDocument();
 
     // A switch moves the confirmation to its own row.
-    await user.click(screen.getAllByRole('switch')[0]);
+    await user.click(screen.getByRole('switch', { name: 'Show form cues' }));
     await waitFor(() => expect(screen.getByTestId('save-status-showFormCues')).toHaveTextContent('Saved'));
     expect(screen.getByTestId('save-region-showFormCues')).toHaveAttribute('role', 'status');
     expect(screen.queryByTestId('save-status-units')).not.toBeInTheDocument();
@@ -223,9 +235,8 @@ describe('Settings → Preferences auto-save', () => {
     renderSettings();
     await openPreferences(user);
 
-    const switches = screen.getAllByRole('switch');
-    // First switch on the card: "Show form cues" (default on).
-    await user.click(switches[0]);
+    // "Show form cues" (default on).
+    await user.click(screen.getByRole('switch', { name: 'Show form cues' }));
 
     await waitFor(() =>
       expect(mockUpdate).toHaveBeenCalledWith({
@@ -242,8 +253,7 @@ describe('Settings → Preferences auto-save', () => {
     renderSettings();
     await openPreferences(user);
 
-    const switches = screen.getAllByRole('switch');
-    const aiNotes = switches[switches.length - 1];
+    const aiNotes = screen.getByRole('switch', { name: 'AI coach notes' });
     expect(aiNotes).toHaveAttribute('aria-checked', 'false');
     await act(async () => {
       await user.click(aiNotes);
@@ -252,5 +262,28 @@ describe('Settings → Preferences auto-save', () => {
     expect(mockEnsureAiConsent).toHaveBeenCalled();
     expect(aiNotes).toHaveAttribute('aria-checked', 'false');
     expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('shows Beginner mode under Text size, on for a novice, and saves a change', async () => {
+    const user = userEvent.setup();
+    mockExperience = 'novice';
+    renderSettings();
+    await openPreferences(user);
+
+    expect(screen.getByRole('radiogroup', { name: 'Text size' })).toBeInTheDocument();
+    const beginner = screen.getByRole('switch', { name: 'Beginner mode' });
+    // No saved choice: on because the user is a novice.
+    expect(beginner).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText(/effort in plain words/)).toBeInTheDocument();
+
+    await user.click(beginner);
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith({
+        preferences: expect.objectContaining({ beginnerMode: false, units: 'kg', theme: 'dark' }),
+      })
+    );
+    expect(await screen.findByTestId('save-status-beginnerMode')).toHaveTextContent('Saved');
+    expect(useUserStore.getState().user?.preferences.beginnerMode).toBe(false);
+    mockExperience = 'intermediate';
   });
 });

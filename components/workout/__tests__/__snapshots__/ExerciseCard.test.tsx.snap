@@ -15,7 +15,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -145,7 +145,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           role="group"
         >
           <div
-            class="flex items-center gap-1.5"
+            class="flex items-center gap-1.5 large-text:flex-wrap"
           >
             <span
               class="w-4 flex-shrink-0 text-body font-semibold text-ink text-center"
@@ -153,7 +153,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               1
             </span>
             <div
-              class="flex-1 flex items-center min-w-0 rounded-xl bg-card"
+              class="flex-1 flex items-center min-w-0 rounded-xl bg-card large-text:basis-[calc(100%_-_1.375rem)]"
             >
               <button
                 aria-label="Decrease weight"
@@ -220,7 +220,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
             </div>
             <div
-              class="flex-1 flex items-center min-w-0 rounded-xl bg-card"
+              class="flex-1 flex items-center min-w-0 rounded-xl bg-card large-text:basis-[calc(100%_-_1.375rem)] large-text:ml-[1.375rem]"
             >
               <button
                 aria-label="Decrease reps"
@@ -304,7 +304,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           </p>
           <div
             aria-labelledby="effort-q-1"
-            class="flex items-stretch gap-1.5"
+            class="flex items-stretch gap-1.5 large-text:flex-wrap"
             role="group"
           >
             <button
@@ -394,7 +394,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             </button>
             <button
               aria-label="Set type: normal (tap to change)"
-              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-action bg-card hover:bg-fill"
+              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center gap-2 transition-colors large-text:flex-1 large-text:basis-[calc(50%_-_0.1875rem)] text-action bg-card hover:bg-fill"
               title="Normal set"
               type="button"
             >
@@ -417,10 +417,15 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                   d="M20 12v3a3 3 0 0 1 -3 3h-13m3 3l-3 -3l3 -3"
                 />
               </svg>
+              <span
+                class="hidden large-text:inline text-subhead font-medium"
+              >
+                Set type
+              </span>
             </button>
             <button
               aria-label="Add set feedback"
-              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-action bg-card hover:bg-fill"
+              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center gap-2 transition-colors large-text:flex-1 large-text:basis-[calc(50%_-_0.1875rem)] text-action bg-card hover:bg-fill"
               type="button"
             >
               <svg
@@ -451,6 +456,11 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                   d="M19 16v6"
                 />
               </svg>
+              <span
+                class="hidden large-text:inline text-subhead font-medium"
+              >
+                Note
+              </span>
             </button>
           </div>
           <button
@@ -608,7 +618,7 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Pull-ups
           </button>
@@ -821,7 +831,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1013,7 +1023,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1205,7 +1215,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1474,7 +1484,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1684,7 +1694,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>
@@ -1876,7 +1886,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
           class="flex min-w-0 flex-1 items-center"
         >
           <button
-            class="min-w-0 truncate text-left text-headline text-ink hover:text-action transition-colors"
+            class="min-w-0 truncate large-text:whitespace-normal large-text:break-words text-left text-headline text-ink hover:text-action transition-colors"
           >
             Bench Press
           </button>

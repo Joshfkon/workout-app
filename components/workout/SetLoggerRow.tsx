@@ -34,6 +34,8 @@ import { convertWeightForDisplay } from '@/lib/utils';
 import { buildSetLogData, maxRepsFor, weightStepForDisplay } from '@/lib/workout/setLogData';
 import { stepLoad, type LoadGrid } from '@/lib/workout/loadableWeight';
 import { lightHaptic } from '@/lib/integrations/notifications';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { effortLeftPhrase, plainRirText } from '@/lib/beginnerMode';
 
 type WeightMode = 'bodyweight' | 'weighted' | 'assisted';
 
@@ -173,6 +175,13 @@ function DiscomfortSummaryRow({
   );
 }
 
+/**
+ * Large text: the five effort chips need the whole row (their "cruise" /
+ * "maxed" labels clip otherwise), so the set-type and note buttons drop to a
+ * second line, half width each, with their names shown.
+ */
+const LARGE_TEXT_ICON_BUTTON = 'large-text:flex-1 large-text:basis-[calc(50%_-_0.1875rem)]';
+
 /** Effort labels under the RIR numbers (matches the set-feedback semantics). */
 const RIR_LABELS: Record<RepsInTank, string> = {
   4: 'cruise',
@@ -221,6 +230,8 @@ export function SetLoggerRow({
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
   const [showSetTypeSheet, setShowSetTypeSheet] = useState(false);
   const [showPredictionInfo, setShowPredictionInfo] = useState(false);
+  // Beginner mode: effort in words only, never "RIR" / "in the tank".
+  const beginner = useBeginnerMode();
   const [showSheetDiscomfortPicker, setShowSheetDiscomfortPicker] = useState(false);
   const [form, setForm] = useState<FormRating | null>(null);
   const [discomfort, setDiscomfort] = useState<SetDiscomfort | undefined>(undefined);
@@ -467,6 +478,11 @@ export function SetLoggerRow({
 
   // Gym-proof tap targets (P0-4): every interactive control in this row is
   // ≥44px in both axes, with the primary input row at 52px tall.
+  // Large text: each stepper takes its own line (beside the set number when
+  // it shows: w-4 + gap = 1.375rem).
+  const stackedStepperClass = onPlateCalculatorOpen
+    ? 'large-text:basis-full'
+    : 'large-text:basis-[calc(100%_-_1.375rem)]';
   const stepperButtonClass =
     'min-w-[44px] min-h-[56px] flex items-center justify-center rounded-xl text-action active:bg-fill transition-colors disabled:opacity-30';
 
@@ -541,8 +557,10 @@ export function SetLoggerRow({
         </div>
       )}
 
-      {/* Row 1: set number, weight stepper, reps stepper */}
-      <div className="flex items-center gap-1.5">
+      {/* Row 1: set number, weight stepper, reps stepper. With Large /
+          Larger text the fixed 44px steppers leave too little room for the
+          number between them, so weight and reps stack (large-text:). */}
+      <div className="flex items-center gap-1.5 large-text:flex-wrap">
         {!onPlateCalculatorOpen && (
           <span className="w-4 flex-shrink-0 text-body font-semibold text-ink text-center">
             {setNumber}
@@ -551,12 +569,12 @@ export function SetLoggerRow({
 
         {/* Weight */}
         {isPlainBodyweight ? (
-          <div className="flex-1 flex items-center justify-center min-h-[56px] rounded-xl bg-card text-body font-semibold tabular-nums text-ink">
+          <div className={`flex-1 flex items-center justify-center min-h-[56px] rounded-xl bg-card text-body font-semibold tabular-nums text-ink ${stackedStepperClass}`}>
             <span className="text-ink-2 mr-1">BW</span>
             {userBodyweightKg ? `${convertWeightForDisplay(userBodyweightKg, unit)} ${unitLabel}` : ''}
           </div>
         ) : (
-          <div className="flex-1 flex items-center min-w-0 rounded-xl bg-card">
+          <div className={`flex-1 flex items-center min-w-0 rounded-xl bg-card ${stackedStepperClass}`}>
             <button
               type="button"
               onClick={() => stepWeight(-1)}
@@ -587,7 +605,11 @@ export function SetLoggerRow({
         )}
 
         {/* Reps / seconds */}
-        <div className="flex-1 flex items-center min-w-0 rounded-xl bg-card">
+        <div
+          className={`flex-1 flex items-center min-w-0 rounded-xl bg-card ${stackedStepperClass} ${
+            onPlateCalculatorOpen ? '' : 'large-text:ml-[1.375rem]'
+          }`}
+        >
           <button
             type="button"
             onClick={() => stepReps(-1)}
@@ -751,11 +773,17 @@ export function SetLoggerRow({
                   } more than you can likely do`
               : // A forecast for the entered weight, not the chip below (which is
                 // how the set actually felt) — say so, or the two read as a clash.
-                `At this weight: about ${effortCheck.predictedRir} more in the tank (${
-                  RIR_LABELS[clampToChip(effortCheck.predictedRir)]
-                })${
+                `At this weight: ${
+                  beginner
+                    ? effortLeftPhrase(effortCheck.predictedRir)
+                    : `about ${effortCheck.predictedRir} more in the tank (${
+                        RIR_LABELS[clampToChip(effortCheck.predictedRir)]
+                      })`
+                }${
                   effortCheck.repsForTarget != null
-                    ? ` · ~${effortCheck.repsForTarget} reps would leave ${effortCheck.targetRir}, your target`
+                    ? beginner
+                      ? ` · ~${effortCheck.repsForTarget} reps would hit your target`
+                      : ` · ~${effortCheck.repsForTarget} reps would leave ${effortCheck.targetRir}, your target`
                     : clampToChip(effortCheck.predictedRir) === clampToChip(targetRir)
                       ? ' · on target'
                       : ''
@@ -765,7 +793,7 @@ export function SetLoggerRow({
           <button
             type="button"
             onClick={() => setShowPredictionInfo(true)}
-            aria-label="How this RIR prediction works"
+            aria-label={beginner ? 'How this prediction works' : 'How this RIR prediction works'}
             className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center flex-shrink-0 text-ink-2 hover:text-ink transition-colors"
           >
             <IconInfoCircle size={16} />
@@ -786,7 +814,11 @@ export function SetLoggerRow({
           </span>
         )}
       </p>
-      <div className="flex items-stretch gap-1.5" role="group" aria-labelledby={`effort-q-${setNumber}`}>
+      <div
+        className="flex items-stretch gap-1.5 large-text:flex-wrap"
+        role="group"
+        aria-labelledby={`effort-q-${setNumber}`}
+      >
         {RIR_CHIPS.map((chip) => (
           <button
             key={chip}
@@ -815,7 +847,7 @@ export function SetLoggerRow({
           onClick={() => setShowSetTypeSheet(true)}
           disabled={disabled}
           aria-label={selectedSetType === 'normal' ? 'Set type: normal (tap to change)' : `Set type: ${selectedSetType}`}
-          className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
+          className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center gap-2 transition-colors ${LARGE_TEXT_ICON_BUTTON} ${
             selectedSetType !== 'normal'
               ? 'text-on-action bg-action'
               : 'text-action bg-card hover:bg-fill'
@@ -823,6 +855,7 @@ export function SetLoggerRow({
           title={selectedSetType === 'normal' ? 'Normal set' : selectedSetType.replace('_', '-')}
         >
           <IconRepeat size={20} />
+          <span className="hidden large-text:inline text-subhead font-medium">Set type</span>
           {selectedSetType !== 'normal' && (
             <span
               className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-on-action"
@@ -835,13 +868,14 @@ export function SetLoggerRow({
           onClick={() => setShowFeedbackSheet(true)}
           disabled={disabled}
           aria-label="Add set feedback"
-          className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
+          className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center gap-2 transition-colors ${LARGE_TEXT_ICON_BUTTON} ${
             discomfort
               ? 'text-status-bad bg-status-bad-tint'
               : 'text-action bg-card hover:bg-fill'
           }`}
         >
           <IconMessagePlus size={20} />
+          <span className="hidden large-text:inline text-subhead font-medium">Note</span>
           {hasSheetFeedback && (
             <span
               className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
@@ -857,7 +891,7 @@ export function SetLoggerRow({
           had already picked one. */}
       {rirFromSensor && (
         <p className="pl-1 text-caption text-ink-2" data-testid="sensor-rir-note">
-          {RIR_CHIP_TEXT[selectedRir]} RIR estimated from bar speed · tap a chip to change
+          {RIR_CHIP_TEXT[selectedRir]} {beginner ? 'left, estimated' : 'RIR estimated'} from bar speed · tap a chip to change
         </p>
       )}
       {sensorRirOffer !== null && (
@@ -865,7 +899,9 @@ export function SetLoggerRow({
           className="flex items-center justify-between gap-2 px-1 text-subhead text-ink"
           data-testid="sensor-rir-offer"
         >
-          <span>Bar speed suggests {RIR_CHIP_TEXT[sensorRirOffer]} RIR.</span>
+          <span>
+            Bar speed suggests {RIR_CHIP_TEXT[sensorRirOffer]} {beginner ? 'left' : 'RIR'}.
+          </span>
           <span className="flex gap-3">
             <button
               type="button"
@@ -1059,11 +1095,13 @@ export function SetLoggerRow({
           title={`Why ${effortCheck.weightLabel} × ${effortCheck.reps} ≈ ${
             effortCheck.predictedRir < 0
               ? 'past max'
-              : `${effortCheck.predictedRir} left in the tank (RIR)`
+              : beginner
+                ? effortLeftPhrase(effortCheck.predictedRir)
+                : `${effortCheck.predictedRir} left in the tank (RIR)`
           }`}
         >
           <ul className="space-y-2.5" data-testid="predicted-rir-reasoning">
-            {effortCheck.reasoning.map((line, i) => (
+            {(beginner ? effortCheck.reasoning.map(plainRirText) : effortCheck.reasoning).map((line, i) => (
               <li key={i} className="flex items-start gap-2 text-subhead text-ink">
                 <span
                   className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0"
