@@ -13,7 +13,7 @@ jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
     auth: { getSession: mockGetSession },
     from: () => ({
-      select: () => ({ eq: () => ({ single: mockSingle }) }),
+      select: () => ({ eq: () => ({ single: mockSingle, maybeSingle: mockSingle }) }),
       update: mockUpdate,
     }),
   }),
@@ -70,5 +70,29 @@ describe('useTextSize', () => {
     const b = renderHook(() => useTextSize());
     act(() => a.result.current.setTextSize('large'));
     expect(b.result.current.textSize).toBe('large');
+  });
+
+  it('leaves stored preferences untouched when the read fails', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } });
+    mockSingle.mockResolvedValue({ data: null, error: { message: 'boom' } });
+    const { result } = renderHook(() => useTextSize());
+    act(() => result.current.setTextSize('larger'));
+    // Applied locally, but never written over the whole preferences object.
+    expect(localStorage.getItem('textSize')).toBe('larger');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("loads the next account's saved size after switching accounts without a reload", async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } });
+    mockSingle.mockResolvedValue({ data: { preferences: { textSize: 'large' } } });
+    const first = renderHook(() => useTextSize());
+    await waitFor(() => expect(first.result.current.textSize).toBe('large'));
+    first.unmount();
+
+    mockGetSession.mockResolvedValue({ data: { session: { user: { id: 'u2' } } } });
+    mockSingle.mockResolvedValue({ data: { preferences: { textSize: 'larger' } } });
+    const second = renderHook(() => useTextSize());
+    await waitFor(() => expect(second.result.current.textSize).toBe('larger'));
   });
 });

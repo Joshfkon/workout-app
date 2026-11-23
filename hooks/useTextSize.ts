@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
 import {
   DEFAULT_TEXT_SIZE,
   TEXT_SIZE_STORAGE_KEY,
@@ -27,7 +28,10 @@ import {
 let globalSize: TextSize | null = null;
 const listeners = new Set<(size: TextSize) => void>();
 let localWriteSeq = 0;
-let serverSyncStarted = false;
+// The account whose saved size was last pulled. Per user, not per page load:
+// signing out and into another account without a reload must load that
+// account's size, not keep the previous one's.
+let syncedUserId: string | null = null;
 
 function readStoredSize(): TextSize {
   try {
@@ -72,16 +76,10 @@ async function pushSizeToServer(size: TextSize) {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session?.user) return;
-    const { data } = await supabase
-      .from('users')
-      .select('preferences')
-      .eq('id', session.user.id)
-      .single();
-    const current = (data?.preferences as Record<string, unknown>) || {};
-    await supabase
-      .from('users')
-      .update({ preferences: { ...current, textSize: size } })
-      .eq('id', session.user.id);
+    // The shared merge: it reads the stored object first and throws on a
+    // failed read, so a read error can never overwrite the whole preferences
+    // object with just { textSize }.
+    await savePreferencesPatch(supabase, session.user.id, { textSize: size });
   } catch {
     // Offline: localStorage keeps the choice; the next change re-syncs.
   }
@@ -94,12 +92,17 @@ async function reconcileFromServer() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    if (!session?.user) return;
-    const { data } = await supabase
+    if (!session?.user || session.user.id === syncedUserId) return;
+    syncedUserId = session.user.id;
+    const { data, error } = await supabase
       .from('users')
       .select('preferences')
       .eq('id', session.user.id)
       .single();
+    if (error) {
+      syncedUserId = null; // Try again on the next mount.
+      return;
+    }
     const serverSize = (data?.preferences as Record<string, unknown> | null)?.textSize;
     if (!isTextSize(serverSize)) return;
     if (localWriteSeq !== seqAtStart) return; // Changed meanwhile: the user wins.
@@ -119,10 +122,8 @@ export function useTextSize() {
     setTextSizeState(ensureInitialized());
     const listener = (size: TextSize) => setTextSizeState(size);
     listeners.add(listener);
-    if (!serverSyncStarted) {
-      serverSyncStarted = true;
-      void reconcileFromServer();
-    }
+    // Cheap when this account is already synced (one local session read).
+    void reconcileFromServer();
     return () => {
       listeners.delete(listener);
     };
@@ -151,5 +152,5 @@ export function __resetTextSizeStateForTests() {
   globalSize = null;
   listeners.clear();
   localWriteSeq = 0;
-  serverSyncStarted = false;
+  syncedUserId = null;
 }
