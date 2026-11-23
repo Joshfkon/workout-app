@@ -99,7 +99,13 @@ interface TDEEDashboardProps {
   onRefresh?: () => void;
   onSetTarget?: () => void;
   onReset?: () => Promise<ResetResult>;
+  /** The user's weight unit. Estimates arrive in lb and are converted for display. */
+  weightUnit?: 'lb' | 'kg';
+  /** False hides FFMI (food-only users). */
+  showFfmi?: boolean;
 }
+
+const LB_PER_KG = 2.20462;
 
 export function TDEEDashboard({
   estimate,
@@ -124,7 +130,13 @@ export function TDEEDashboard({
   onRefresh,
   onSetTarget,
   onReset,
+  weightUnit = 'lb',
+  showFfmi = true,
 }: TDEEDashboardProps) {
+  // Weights (lb) and per-lb burn rates, in the user's unit.
+  const toUnit = (lbs: number) => (weightUnit === 'kg' ? lbs / LB_PER_KG : lbs);
+  const perUnit = (perLb: number) => (weightUnit === 'kg' ? perLb * LB_PER_KG : perLb);
+  const fmtWeight = (lbs: number) => `${toUnit(lbs).toFixed(1)} ${weightUnit}`;
   const [showDetails, setShowDetails] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetResult, setResetResult] = useState<ResetResult | null>(null);
@@ -157,7 +169,7 @@ export function TDEEDashboard({
           entriesWithNullUnit: 0,
           dateRange: null,
         },
-        message: 'Failed to reset TDEE: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        message: 'Failed to reset your estimated daily burn: ' + (error instanceof Error ? error.message : 'Unknown error'),
       });
     } finally {
       setIsResetting(false);
@@ -234,7 +246,7 @@ export function TDEEDashboard({
               Start tracking your metabolism
             </h3>
             <p className="text-subhead text-ink-2 mt-1">
-              Log your weight and nutrition daily to unlock personalized TDEE estimates.
+              Log your weight and nutrition daily to unlock a personalized estimate of your daily burn.
             </p>
           </div>
           <div className="flex items-center justify-center gap-2 text-subhead text-ink-3">
@@ -271,7 +283,7 @@ export function TDEEDashboard({
           {/* TDEE Value */}
           <div>
             <p className="text-caption text-ink-3 mb-1">
-              Estimated TDEE
+              Estimated daily burn
             </p>
             <p className="text-large-title font-bold text-ink">
               {displayTDEE.toLocaleString()}
@@ -283,8 +295,8 @@ export function TDEEDashboard({
           <div>
             <p className="text-caption text-ink-3 mb-1">Burn rate</p>
             <p className="text-title font-bold text-ink">
-              {displayBurnRate.toFixed(1)}
-              <span className="text-subhead font-normal text-ink-2 ml-1">cal/lb</span>
+              {perUnit(displayBurnRate).toFixed(1)}
+              <span className="text-subhead font-normal text-ink-2 ml-1">cal/{weightUnit}</span>
             </p>
           </div>
         </div>
@@ -391,7 +403,7 @@ export function TDEEDashboard({
 
       {/* TDEE Regression Analysis Graph - prominently displayed when we have data */}
       {regressionAnalysis && regressionAnalysis.dataPoints.length >= 5 && (
-        <TDEERegressionGraph regressionAnalysis={regressionAnalysis} />
+        <TDEERegressionGraph regressionAnalysis={regressionAnalysis} weightUnit={weightUnit} />
       )}
 
       {/* Convergence Chart (shown when expanded) */}
@@ -406,7 +418,9 @@ export function TDEEDashboard({
           <CardContent>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activeEstimate.estimateHistory}>
+                <LineChart
+                  data={activeEstimate.estimateHistory.map((h) => ({ ...h, burnRate: perUnit(h.burnRate) }))}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
                   <XAxis
                     dataKey="date"
@@ -417,11 +431,11 @@ export function TDEEDashboard({
                     }}
                   />
                   <YAxis
-                    domain={[10, 18]}
+                    domain={weightUnit === 'kg' ? [22, 40] : [10, 18]}
                     tick={{ fontSize: 10, fill: '#888' }}
                     tickFormatter={(value) => `${value}`}
                     label={{
-                      value: 'cal/lb',
+                      value: `cal/${weightUnit}`,
                       angle: -90,
                       position: 'insideLeft',
                       fontSize: 10,
@@ -436,10 +450,10 @@ export function TDEEDashboard({
                       fontSize: '12px',
                     }}
                     labelFormatter={(value) => `Date: ${value}`}
-                    formatter={(value: number) => [`${value.toFixed(1)} cal/lb`, 'Burn rate']}
+                    formatter={(value: number) => [`${value.toFixed(1)} cal/${weightUnit}`, 'Burn rate']}
                   />
                   <ReferenceLine
-                    y={activeEstimate.burnRatePerLb}
+                    y={perUnit(activeEstimate.burnRatePerLb)}
                     stroke="#22c55e"
                     strokeDasharray="3 3"
                     label={{
@@ -472,9 +486,9 @@ export function TDEEDashboard({
       {showDetails && onReset && (
         <Card className="p-6">
           <CardHeader className="pb-4">
-            <CardTitle className="text-body">Recalculate TDEE</CardTitle>
+            <CardTitle className="text-body">Recalculate daily burn</CardTitle>
             <p className="text-caption text-ink-3">
-              Reset and recalculate your TDEE estimate from your weight data
+              Reset and recalculate your estimated daily burn from your weight data
             </p>
           </CardHeader>
           <CardContent>
@@ -531,7 +545,7 @@ export function TDEEDashboard({
                         <p className="text-caption text-ink-2 mb-2">Before → After:</p>
                         <div className="space-y-1 text-caption">
                           <div className="flex justify-between">
-                            <span className="text-ink-3">TDEE:</span>
+                            <span className="text-ink-3">Daily burn:</span>
                             <span>
                               <span className="text-ink-2">
                                 {resetResult.oldEstimate.tdee.toLocaleString()}
@@ -546,11 +560,11 @@ export function TDEEDashboard({
                             <span className="text-ink-3">Weight:</span>
                             <span>
                               <span className="text-ink-2">
-                                {resetResult.oldEstimate.currentWeight.toFixed(1)}
+                                {toUnit(resetResult.oldEstimate.currentWeight).toFixed(1)}
                               </span>
                               <span className="text-ink-3 mx-1">→</span>
                               <span className="text-status-ok">
-                                {resetResult.newEstimate.currentWeight.toFixed(1)} lbs
+                                {fmtWeight(resetResult.newEstimate.currentWeight)}
                               </span>
                             </span>
                           </div>
@@ -615,13 +629,13 @@ export function TDEEDashboard({
                       d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                     />
                   </svg>
-                  Reset &amp; Recalculate TDEE
+                  Reset &amp; recalculate
                 </>
               )}
             </Button>
 
             <p className="text-caption text-ink-3 mt-3 text-center">
-              This will delete your current TDEE estimate and recalculate it fresh from your weight
+              This will delete your current estimated daily burn and recalculate it fresh from your weight
               and calorie data.
             </p>
           </CardContent>
@@ -794,14 +808,18 @@ export function TDEEDashboard({
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-subhead text-ink-2">Current</span>
                   <span className="text-subhead font-semibold text-ink">
-                    {currentWeight.toFixed(1)} lbs
+                    {fmtWeight(currentWeight)}
                   </span>
                 </div>
                 {currentFFMI && currentBodyFatPercent && (
                   <div className="flex items-center justify-between mt-2 text-caption">
-                    <span className="text-ink-3">FFMI:</span>
-                    <span className="text-ink-2">{currentFFMI.normalizedFfmi.toFixed(1)}</span>
-                    <span className="text-ink-3 ml-3">BF%:</span>
+                    {showFfmi && (
+                      <>
+                        <span className="text-ink-3">FFMI:</span>
+                        <span className="text-ink-2">{currentFFMI.normalizedFfmi.toFixed(1)}</span>
+                      </>
+                    )}
+                    <span className={`text-ink-3 ${showFfmi ? 'ml-3' : ''}`}>BF%:</span>
                     <span className="text-ink-2">{currentBodyFatPercent.toFixed(1)}%</span>
                   </div>
                 )}
@@ -824,10 +842,10 @@ export function TDEEDashboard({
                       </span>
                       <div className="text-right">
                         <span className="text-subhead font-semibold text-ink">
-                          {prediction.predictedWeight} lbs
+                          {fmtWeight(prediction.predictedWeight)}
                         </span>
                         <span className="text-caption text-ink-3 ml-1">
-                          (±{((prediction.confidenceRange[1] - prediction.confidenceRange[0]) / 2).toFixed(1)})
+                          (±{toUnit((prediction.confidenceRange[1] - prediction.confidenceRange[0]) / 2).toFixed(1)})
                         </span>
                       </div>
                     </div>
@@ -843,6 +861,7 @@ export function TDEEDashboard({
                             <span className="text-status-ok">{bodyComp.bodyFatPercent.optimistic.toFixed(0)}%</span>
                           </div>
                         </div>
+                        {showFfmi && (
                         <div className="flex items-center justify-between">
                           <span className="text-ink-3">FFMI</span>
                           <div className="flex items-center gap-1">
@@ -853,6 +872,7 @@ export function TDEEDashboard({
                             <span className="text-status-ok">{bodyComp.ffmi.optimistic.toFixed(1)}</span>
                           </div>
                         </div>
+                        )}
                         {bodyComp.confidenceLevel === 'low' && (
                           <p className="text-ink-3 mt-1 text-caption">
                             Wide uncertainty range - log DEXA scans to improve
@@ -864,7 +884,7 @@ export function TDEEDashboard({
                         <p className="text-caption">
                           Body composition projection unavailable. 
                           {!heightCm && ' Height required.'}
-                          {!activeEstimate && ' TDEE estimate required.'}
+                          {!activeEstimate && ' Daily burn estimate required.'}
                           {!bodyFatPercent && !latestDexaScan && heightCm && ' Using default body fat estimate.'}
                         </p>
                       </div>
@@ -877,7 +897,7 @@ export function TDEEDashboard({
             {targetWeight && activeEstimate.confidence !== 'unstable' && (
             <div className="mt-4 p-3 bg-action/10 border border-action/20 rounded-lg">
               <p className="text-caption text-action">
-                <span className="font-semibold">Target {targetWeight} lbs:</span>{' '}
+                <span className="font-semibold">Target {fmtWeight(targetWeight)}:</span>{' '}
                 Estimated in{' '}
                 {Math.ceil(
                   Math.abs(currentWeight - targetWeight) /

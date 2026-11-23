@@ -11,6 +11,8 @@ interface TodaySheetProps {
   recovery: ReactNode;
   /** This week section: the glance tiles and the weekly-set detail. */
   week: ReactNode;
+  /** False hides the weekly-sets science note (food-only users). */
+  showTrainingNote?: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ interface TodaySheetProps {
  * Apple Health, the metric tiles, weekly sets and the low-volume alert —
  * plus a short plain-words note for the science terms that appear in here.
  */
-export function TodaySheet({ isOpen, onClose, recovery, week }: TodaySheetProps) {
+export function TodaySheet({ isOpen, onClose, recovery, week, showTrainingNote = true }: TodaySheetProps) {
   return (
     <Sheet isOpen={isOpen} onClose={onClose} title="Today" size="lg" grouped>
       <div className="space-y-6">
@@ -34,6 +36,7 @@ export function TodaySheet({ isOpen, onClose, recovery, week }: TodaySheetProps)
           </h3>
           {week}
         </section>
+        {showTrainingNote && (
         <div className="flex gap-2.5 rounded-card bg-card shadow-card px-4 py-3">
           <IconInfoCircle size={18} className="mt-0.5 flex-shrink-0 text-ink-2" aria-hidden="true" />
           <p className="text-subhead text-ink-2">
@@ -42,6 +45,7 @@ export function TodaySheet({ isOpen, onClose, recovery, week }: TodaySheetProps)
             sets count fully when you stop within about 3 reps of failure.
           </p>
         </div>
+        )}
       </div>
     </Sheet>
   );

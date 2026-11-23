@@ -25,6 +25,8 @@ export interface TodayCardProps {
   latestWeight: { weight: number; unit: string } | null;
   weightRate: GlanceWeightRate | null;
   weightUnit: 'lb' | 'kg';
+  /** Food-only (hooks/useTrackingFocus): no lifts or weekly sets in the copy. */
+  foodOnly?: boolean;
   /** Opens the Today sheet (recovery, tiles, weekly sets). */
   onOpenDetails: () => void;
 }
@@ -57,9 +59,9 @@ function recoveryRow({ lastNight, stepsToday, hrvDeltaPct, readiness }: TodayCar
   };
 }
 
-function weekRow({ liftTrends, volume, latestWeight, weightRate, weightUnit }: TodayCardProps) {
+function weekRow({ liftTrends, volume, latestWeight, weightRate, weightUnit, foodOnly }: TodayCardProps) {
   const parts: string[] = [];
-  if (liftTrends && liftTrends.rising + liftTrends.flat + liftTrends.down > 0) {
+  if (!foodOnly && liftTrends && liftTrends.rising + liftTrends.flat + liftTrends.down > 0) {
     parts.push(`${liftTrends.rising} lift${liftTrends.rising === 1 ? '' : 's'} rising`);
   }
   if (latestWeight) {
@@ -67,10 +69,10 @@ function weekRow({ liftTrends, volume, latestWeight, weightRate, weightUnit }: T
     const w = `${display.toFixed(1)} ${weightUnit}`;
     parts.push(weightRate ? `${w}, ${signed(weightRate.perWeek)} ${weightUnit}/wk` : w);
   }
-  const low = volume?.lowCount ?? 0;
+  const low = foodOnly ? 0 : volume?.lowCount ?? 0;
   return {
     value: low > 0 ? `${low} behind` : undefined,
-    subtitle: parts.length > 0 ? parts.join(' · ') : 'Lifts, weekly sets, weight',
+    subtitle: parts.length > 0 ? parts.join(' · ') : foodOnly ? 'Your weight trend' : 'Lifts, weekly sets, weight',
   };
 }
 

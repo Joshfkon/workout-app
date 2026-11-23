@@ -345,12 +345,15 @@ function WeightProjectionSection({
   targetWeightKg,
   mesocycle,
   weightUnit,
+  displayUnit = 'in',
   partition,
 }: {
   weightHistory: Array<{ date: string; weightKg: number }>;
   targetWeightKg: number | undefined | null;
   mesocycle: Mesocycle | null;
   weightUnit: 'kg' | 'lb';
+  /** Tape unit for the waist-trend line. */
+  displayUnit?: 'in' | 'cm';
   partition?: ResolvedPartition;
 }) {
   const mesocycleWeeks = mesocycle?.totalWeeks ?? DEFAULT_PROJECTION_WEEKS;
@@ -550,10 +553,17 @@ function WeightProjectionSection({
           </p>
           {partition.source === 'waist' && partition.anchor && (
             <p className="text-caption text-ink-3 mt-1">
+              {/* The waist model works in in/lb; shown in the user's units. */}
               Waist trend {partition.anchor.deltaWaistIn >= 0 ? '+' : ''}
-              {partition.anchor.deltaWaistIn.toFixed(2)}&quot; vs{' '}
-              {partition.anchor.deltaWeightLb >= 0 ? '+' : ''}
-              {partition.anchor.deltaWeightLb.toFixed(1)} lb over {partition.anchor.windowDays} days.
+              {displayUnit === 'cm'
+                ? `${(partition.anchor.deltaWaistIn * 2.54).toFixed(1)} cm`
+                : `${partition.anchor.deltaWaistIn.toFixed(2)} in`}{' '}
+              vs {partition.anchor.deltaWeightLb >= 0 ? '+' : ''}
+              {(weightUnit === 'kg'
+                ? partition.anchor.deltaWeightLb / 2.20462
+                : partition.anchor.deltaWeightLb
+              ).toFixed(1)}{' '}
+              {weightUnit} over {partition.anchor.windowDays} days.
             </p>
           )}
         </div>
@@ -624,6 +634,7 @@ export function ProportionsTargetsCard({
                   targetWeightKg={activeTarget?.targetWeightKg}
                   mesocycle={activeMesocycle}
                   weightUnit={weightUnit}
+                  displayUnit={displayUnit}
                   partition={partition}
                 />
               </div>

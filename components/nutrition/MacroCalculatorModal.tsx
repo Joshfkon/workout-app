@@ -60,6 +60,8 @@ interface MacroCalculatorModalProps {
   workoutsPerWeek?: number;
   /** User's current training phase (users.goal), used to pre-select the goal. */
   currentPhase?: 'bulk' | 'cut' | 'maintenance';
+  /** The user's weight unit: the weight field and weekly rates use it. */
+  weightUnit?: 'lb' | 'kg';
 }
 
 /** Typed workouts per week: 0 is a real answer; blank or junk falls back to 4. */
@@ -76,10 +78,18 @@ export function MacroCalculatorModal({
   userStats,
   workoutsPerWeek: plannedWorkoutsPerWeek,
   currentPhase,
+  weightUnit = 'lb',
 }: MacroCalculatorModalProps) {
+  // Weight is typed and shown in the user's unit; the math runs in kg.
+  const toDisplayWeight = (lbs: number) =>
+    formatLbs(weightUnit === 'kg' ? lbsToKg(lbs) : lbs);
+  /** A kg-per-week rate in the user's unit, e.g. "0.45 kg/week". */
+  const weeklyRate = (kgPerWeek: number, digits = 2) =>
+    `${Math.abs(weightUnit === 'kg' ? kgPerWeek : kgPerWeek * 2.20462).toFixed(digits)} ${weightUnit}/week`;
+
   // User stats
   const [weight, setWeight] = useState(
-    userStats?.weightLbs != null ? formatLbs(userStats.weightLbs) : ''
+    userStats?.weightLbs != null ? toDisplayWeight(userStats.weightLbs) : ''
   );
   const [heightFeet, setHeightFeet] = useState('');
   const [heightInches, setHeightInches] = useState('');
@@ -116,7 +126,7 @@ export function MacroCalculatorModal({
   // Update form when userStats props change (after data loads)
   useEffect(() => {
     if (userStats?.weightLbs) {
-      setWeight(formatLbs(userStats.weightLbs));
+      setWeight(toDisplayWeight(userStats.weightLbs));
     }
     if (userStats?.heightInches) {
       const feet = Math.floor(userStats.heightInches / 12);
@@ -133,7 +143,8 @@ export function MacroCalculatorModal({
     if (userStats?.bodyFatPercent) {
       setBodyFat(userStats.bodyFatPercent.toString());
     }
-  }, [userStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toDisplayWeight only reads weightUnit
+  }, [userStats, weightUnit]);
 
   // Update workouts when prop changes
   useEffect(() => {
@@ -177,13 +188,13 @@ export function MacroCalculatorModal({
   const calculateRecommendation = () => {
     setError('');
 
-    const weightLbs = parseFloat(weight);
+    const weightInput = parseFloat(weight);
     const feet = parseFloat(heightFeet) || 0;
     const inches = parseFloat(heightInches) || 0;
     const totalInches = (feet * 12) + inches;
     const ageNum = parseInt(age);
 
-    if (!weightLbs || weightLbs <= 0) {
+    if (!weightInput || weightInput <= 0) {
       setError('Please enter your weight');
       return;
     }
@@ -196,7 +207,7 @@ export function MacroCalculatorModal({
       return;
     }
 
-    const weightKg = lbsToKg(weightLbs);
+    const weightKg = weightUnit === 'kg' ? weightInput : lbsToKg(weightInput);
     const heightCm = inchesToCm(totalInches);
     const bodyFatPercent = bodyFat ? parseFloat(bodyFat) : undefined;
 
@@ -297,13 +308,13 @@ export function MacroCalculatorModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-subhead font-medium text-ink-2 mb-1">
-                Weight (lbs)
+                Weight ({weightUnit})
               </label>
               <Input
                 type="number"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
-                placeholder="175"
+                placeholder={weightUnit === 'kg' ? '80' : '175'}
               />
             </div>
             <div>
@@ -609,12 +620,14 @@ export function MacroCalculatorModal({
             </div>
 
             <div className="text-subhead text-ink-2 bg-card/50 p-3 rounded-lg space-y-2">
-              <p className="mb-2">{recommendation.explanation}</p>
+              {/* The engine's summary line is written in lb; kg users get the
+                  same facts from the unit-aware rows below. */}
+              {weightUnit === 'lb' && <p className="mb-2">{recommendation.explanation}</p>}
               
               {/* Energy Metrics */}
               <div className="flex flex-wrap gap-4 text-caption text-ink-2 pt-2 border-t border-sep">
                 <span>BMR: {recommendation.bmr} cal</span>
-                <span>TDEE: {recommendation.tdee} cal</span>
+                <span>Estimated daily burn: {recommendation.tdee} cal</span>
                 {recommendation.deficit !== 0 && (
                   <span>
                     {recommendation.deficit < 0 ? 'Deficit' : 'Surplus'}: {Math.abs(recommendation.deficit)} cal/day
@@ -622,7 +635,7 @@ export function MacroCalculatorModal({
                 )}
                 {Math.abs(recommendation.weeklyChangeKg) > 0.01 && (
                   <span>
-                    {recommendation.weeklyChangeKg < 0 ? 'Loss' : 'Gain'}: {Math.abs(recommendation.weeklyChangeLbs).toFixed(2)} lb/week
+                    {recommendation.weeklyChangeKg < 0 ? 'Loss' : 'Gain'}: {weeklyRate(recommendation.weeklyChangeKg)}
                   </span>
                 )}
               </div>
@@ -643,7 +656,7 @@ export function MacroCalculatorModal({
                   )}
                   {Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) >= 0.023 && (
                     <p className="text-caption text-ink-3">
-                      Weekly change: {recommendation.requestedWeeklyChangeKg.toFixed(3)} kg → {recommendation.weeklyChangeKg.toFixed(3)} kg
+                      Weekly change: {weeklyRate(recommendation.requestedWeeklyChangeKg)} → {weeklyRate(recommendation.weeklyChangeKg)}
                     </p>
                   )}
                 </div>
@@ -711,7 +724,7 @@ export function MacroCalculatorModal({
                       <div>
                         <span className="text-ink-2">Loss rate:</span>
                         <span className="ml-2 font-semibold text-ink">
-                          {recommendation.cardioPrescription.withCardioWeeklyLossLbs} lb/wk
+                          {weeklyRate(recommendation.cardioPrescription.withCardioWeeklyLossLbs / 2.20462)}
                         </span>
                       </div>
                     </div>

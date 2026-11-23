@@ -139,7 +139,7 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
 
           {isToday && savedSteps === null && (
             <p className="text-caption text-ink-3">
-              Log your steps to improve TDEE accuracy
+              Log your steps to sharpen your estimated daily burn
             </p>
           )}
         </div>

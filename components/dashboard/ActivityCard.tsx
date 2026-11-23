@@ -363,7 +363,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                   <p className="text-subhead font-medium text-ink">Track your steps</p>
                   <p className="text-caption text-ink-2 mt-0.5">
                     {healthKitCapable
-                      ? 'Connect Apple Health to sync steps automatically and improve your TDEE estimate.'
+                      ? 'Connect Apple Health to sync steps automatically and sharpen your estimated daily burn.'
                       : 'Connect Fitbit or Google Fit to sync steps automatically, or enter them manually.'}
                   </p>
                 </div>

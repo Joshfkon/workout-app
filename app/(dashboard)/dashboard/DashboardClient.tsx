@@ -1641,11 +1641,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         stepsToday={healthGlance?.stepsToday ?? null}
         hrvDeltaPct={healthGlance?.hrv?.deltaPct ?? null}
         readiness={checkInStatus === 'done' ? checkInReadiness : null}
-        liftTrends={liftTrends}
-        volume={glanceVolume}
+        // Food-only users (useTrackingFocus) get no lift or weekly-set glance.
+        liftTrends={foodOnly ? null : liftTrends}
+        volume={foodOnly ? null : glanceVolume}
         latestWeight={latestWeight}
         weightRate={weightRate}
         weightUnit={weightUnit}
+        foodOnly={foodOnly}
         onOpenDetails={openToday}
       />
 
@@ -1671,6 +1673,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       <TodaySheet
         isOpen={activeModal === 'today'}
         onClose={() => setActiveModal(null)}
+        showTrainingNote={!foodOnly}
         recovery={
           userId ? (
             <HealthGlanceCard lastNight={lastNight} onLogSleep={() => setActiveModal('sleep')} />
@@ -1681,21 +1684,22 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             <MetricTileGrid
               nutritionTotals={nutritionTotals}
               nutritionTargets={effectiveTargets}
-              liftTrends={liftTrends}
-              volume={glanceVolume}
+              liftTrends={foodOnly ? null : liftTrends}
+              volume={foodOnly ? null : glanceVolume}
               latestWeight={latestWeight}
               weightUnit={weightUnit}
               weightHistory={weightHistory}
               weightRate={weightRate}
               bodyComp={initialData?.bodyCompGlance ?? null}
+              showFfmi={!foodOnly}
               sleep={{ entries: sleepEntries, lastNight, sevenDayAvgHours }}
               onLogSleep={userId && !healthConnected ? () => setActiveModal('sleep') : undefined}
               onLogWeight={() => setActiveModal('weight')}
               phase={normalizedGoal}
               eatingWindow={eatingWindow}
             />
-            {rampBanner}
-            {atrophyCard}
+            {!foodOnly && rampBanner}
+            {!foodOnly && atrophyCard}
           </>
         }
       />

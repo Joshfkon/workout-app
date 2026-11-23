@@ -737,7 +737,7 @@ export function analyzeActivityContribution(
     );
   } else if (stepsPercent < 5) {
     insights.push(
-      `Your step activity is low (${stepsPercent}% of burn). Adding more daily movement could increase your TDEE.`
+      `Your step activity is low (${stepsPercent}% of burn). Adding more daily movement could increase your daily burn.`
     );
   }
 

@@ -78,6 +78,19 @@ describe('TodayCard', () => {
     expect(screen.getByText('Sleep, steps and HRV')).toBeInTheDocument();
     expect(screen.getByText('Lifts, weekly sets, weight')).toBeInTheDocument();
   });
+
+  it('food-only: no lifts or weekly sets, even when the data is there', () => {
+    render(<TodayCard {...props({ foodOnly: true })} />);
+    expect(screen.queryByText(/lifts? rising/)).not.toBeInTheDocument();
+    expect(screen.queryByText('2 behind')).not.toBeInTheDocument();
+    expect(screen.getByText('182.4 lb, −0.6 lb/wk')).toBeInTheDocument();
+  });
+
+  it('food-only with no weigh-ins: the fallback copy is about weight only', () => {
+    render(<TodayCard {...props({ foodOnly: true, latestWeight: null })} />);
+    expect(screen.getByText('Your weight trend')).toBeInTheDocument();
+    expect(screen.queryByText(/Lifts/)).not.toBeInTheDocument();
+  });
 });
 
 describe('pickHomeNudge', () => {
