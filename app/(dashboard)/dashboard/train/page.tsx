@@ -747,6 +747,29 @@ export default function TrainPage() {
         />
       </div>
 
+      {/* Freestyle hides the plan card above, which was the only way into the
+          mesocycle builder from Train. Both advanced personas on the UX panel
+          looked here (and in Templates) for a program builder, found none and
+          gave up. A quiet row keeps it one tap away without leading the page. */}
+      {isFreestyle && (
+        <Link
+          href="/dashboard/mesocycle/new"
+          className="flex items-center gap-3 rounded-card bg-card p-4 shadow-card transition-colors hover:bg-fill/70"
+          data-testid="train-plan-block"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 text-body font-semibold text-ink">
+              Plan a training block
+              <ProTag feature="mesocycleBuilder" />
+            </span>
+            <span className="block text-subhead text-ink-2">
+              A multi-week mesocycle: sets ramp toward your MRV, then a deload.
+            </span>
+          </span>
+          <IconChevronRight size={18} className="flex-shrink-0 text-ink-3" aria-hidden="true" />
+        </Link>
+      )}
+
       {/* Week stats: sets · sessions · volume status */}
       <Link
         href="/dashboard/volume"

@@ -308,6 +308,10 @@ export async function seedReturningUser(admin, userId, persona) {
         weight_kg: load,
         reps,
         rpe: 7.5 + i * 0.5,
+        // The reps-left rating every in-app set carries (the RIR chip). Without
+        // it effective volume excludes the set as unrated, and the volume page
+        // showed "0 effective" for every muscle — a seed gap, not an app bug.
+        feedback: { repsInTank: Math.max(0, Math.round(10 - (7.5 + i * 0.5))), form: 'clean' },
         is_warmup: false,
         set_type: 'normal',
         logged_at: new Date(start.getTime() + (order * 15 + i * 4) * 60 * 1000).toISOString(),
