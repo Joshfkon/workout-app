@@ -1511,21 +1511,22 @@ export default function NewMesocyclePage() {
               <div className="p-4 bg-fill/50 rounded-lg">
                 {(() => {
                   const rows = plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
-                  const delivered = deliveredSetsAtPeak(fullProgram);
-                  const hasDelivered = Object.keys(delivered).length > 0;
-                  const short = rows.filter((r) => isUnderDelivered(r.sets, delivered[r.muscle]));
+                  const deliveredOrNull = deliveredSetsAtPeak(fullProgram);
+                  const hasDelivered = deliveredOrNull !== null;
+                  const delivered = deliveredOrNull ?? {};
+                  const short = hasDelivered ? rows.filter((r) => isUnderDelivered(r.sets, delivered[r.muscle])) : [];
                   return (
                     <>
                       <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle (peak week)</p>
                       <p className="text-caption text-ink-3 mb-3">
                         {hasDelivered
-                          ? 'Sets your sessions contain at peak week, against the plan’s target and each muscle’s MEV–MRV range.'
+                          ? 'Sets your sessions contain at peak week (direct sets plus half credit for indirect work), against the plan’s target and each muscle’s MEV–MRV range.'
                           : 'Planned sets at peak week vs each muscle’s MEV–MRV range.'}
                       </p>
                       {short.length > 0 && (
                         <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-short">
                           {sessionDurationMinutes}-minute sessions fit fewer sets than planned for {short.length === 1 ? '1 muscle' : `${short.length} muscles`}
-                          {' '}(e.g. {muscleDisplayName(short[0].muscle)} {delivered[short[0].muscle]} of {short[0].sets}).
+                          {' '}(e.g. {muscleDisplayName(short[0].muscle)} {delivered[short[0].muscle] ?? 0} of {short[0].sets}).
                           {' '}Longer sessions or a second day for those muscles closes the gap.
                         </p>
                       )}

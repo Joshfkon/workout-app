@@ -3,6 +3,7 @@ import type { StandardMuscleGroup } from '@/types/schema';
 import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
 import type { MuscleGroup } from '@/types/schema';
 import { COARSE_MUSCLES, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
+import { perSetGroupCredits } from '@/services/shared/volumeCredit';
 
 /** Days of history the builder reads to prefill the schedule. */
 export const BUILDER_HISTORY_DAYS = 28;
@@ -87,56 +88,44 @@ export function plannedVolumeWithBands(
 
 
 
-/** Standard (fine) muscle → the coarse group the volume bands use. */
-const FINE_TO_COARSE: Record<string, CoarseMuscle> = {
-  chest_upper: 'chest', chest_lower: 'chest',
-  front_delts: 'shoulders', lateral_delts: 'shoulders', rear_delts: 'shoulders', rotator_cuff: 'shoulders',
-  lats: 'back', upper_back: 'back',
-  triceps_long: 'triceps', triceps_lat_med: 'triceps',
-  upper_traps: 'traps', mid_lower_traps: 'traps',
-  gastrocnemius: 'calves', soleus: 'calves',
-  glute_med: 'glutes', obliques: 'abs',
-};
-
-function coarseOf(muscle: string): CoarseMuscle | null {
-  const m = muscle.toLowerCase();
-  if ((COARSE_MUSCLES as readonly string[]).includes(m)) return m as CoarseMuscle;
-  return FINE_TO_COARSE[m] ?? null;
-}
-
 /** The weeks/sessions shape the builder reads (FullProgramRecommendation). */
 interface ProgramWeeks {
   mesocycleWeeks?: {
     isDeload: boolean;
     volumeModifier: number;
-    sessions: { exercises: { exercise: { primaryMuscle: string }; sets: number }[] }[];
+    sessions: { exercises: { exercise: { primaryMuscle: string; secondaryMuscles?: string[] }; sets: number }[] }[];
   }[];
 }
 
 /**
- * Direct working sets per coarse muscle that the PEAK week's sessions
- * actually contain (the last non-deload week with the highest volume). The
+ * CREDITED working sets per coarse muscle (primary 1, secondary 0.5, the
+ * shared counter — services/shared/volumeCredit perSetGroupCredits) that the
+ * PEAK week's sessions actually contain (the last non-deload week with the
+ * highest volume) — the same currency as the targets and MEV–MRV bands. The
  * weekly target is what the plan aims for; a session is also bounded by its
  * time, exercise count and fatigue budget, so with one day per muscle the
  * days held far fewer sets than the table promised (chest 9 vs 17 — UX
  * panel: "the volume table contradicts the workout structure"). Pure.
  */
-export function deliveredSetsAtPeak(program: ProgramWeeks | null | undefined): Partial<Record<CoarseMuscle, number>> {
+export function deliveredSetsAtPeak(program: ProgramWeeks | null | undefined): Partial<Record<CoarseMuscle, number>> | null {
   const weeks = (program?.mesocycleWeeks ?? []).filter((w) => !w.isDeload);
-  if (weeks.length === 0) return {};
+  // null = no generated weeks to read (not "every muscle got 0").
+  if (weeks.length === 0) return null;
   const peak = weeks.reduce((best, w) => (w.volumeModifier >= best.volumeModifier ? w : best), weeks[0]);
   const out: Partial<Record<CoarseMuscle, number>> = {};
   for (const session of peak.sessions) {
     for (const ex of session.exercises) {
-      const coarse = coarseOf(ex.exercise.primaryMuscle);
-      if (!coarse) continue;
-      out[coarse] = (out[coarse] ?? 0) + ex.sets;
+      for (const { group, credit } of perSetGroupCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? [])) {
+        out[group] = (out[group] ?? 0) + ex.sets * credit;
+      }
     }
   }
+  for (const k of Object.keys(out) as CoarseMuscle[]) out[k] = Math.round((out[k] ?? 0) * 10) / 10;
   return out;
 }
 
-/** A planned muscle whose sessions fit clearly fewer sets than its target. */
+/** A planned muscle whose sessions fit clearly fewer sets than its target
+ *  (a muscle absent from the generated week counts as 0). */
 export function isUnderDelivered(target: number, delivered: number | undefined): boolean {
-  return delivered !== undefined && target > 0 && delivered < target * 0.85;
+  return target > 0 && (delivered ?? 0) < target * 0.85;
 }

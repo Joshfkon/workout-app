@@ -78,12 +78,25 @@ describe('deliveredSetsAtPeak', () => {
       ],
     };
     expect(deliveredSetsAtPeak(program)).toEqual({ chest: 11, shoulders: 7 });
-    expect(deliveredSetsAtPeak(null)).toEqual({});
+    // No generated weeks → null (unknown), not 'every muscle got 0'.
+    expect(deliveredSetsAtPeak(null)).toBeNull();
+    expect(deliveredSetsAtPeak({ mesocycleWeeks: [] })).toBeNull();
+  });
+
+  it('counts secondary muscles at half credit, like the targets and bands do', () => {
+    const program = {
+      mesocycleWeeks: [
+        { isDeload: false, volumeModifier: 1, sessions: [{ exercises: [{ exercise: { primaryMuscle: 'back', secondaryMuscles: ['biceps'] }, sets: 4 }] }] },
+      ],
+    };
+    expect(deliveredSetsAtPeak(program)).toEqual({ back: 4, biceps: 2 });
   });
 
   it('flags a target the sessions clearly can not fit', () => {
     expect(isUnderDelivered(17, 9)).toBe(true);
     expect(isUnderDelivered(17, 16)).toBe(false);
-    expect(isUnderDelivered(17, undefined)).toBe(false);
+    // A planned muscle missing from the generated week is 0, not unknown.
+    expect(isUnderDelivered(17, undefined)).toBe(true);
+    expect(isUnderDelivered(0, undefined)).toBe(false);
   });
 });
