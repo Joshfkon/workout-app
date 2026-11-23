@@ -104,6 +104,19 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               >
                 First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust
               </span>
+              <button
+                class="mt-0.5 inline-flex items-center text-caption font-medium text-action underline underline-offset-2"
+                data-testid="why-this-weight"
+                type="button"
+              >
+                Why this weight?
+                <span
+                  class="ml-1 rounded px-1 py-px text-[10px] font-semibold uppercase leading-none tracking-wide bg-action/15 text-action align-middle"
+                  data-testid="pro-tag"
+                >
+                  Pro
+                </span>
+              </button>
             </p>
           </div>
           <button
@@ -297,9 +310,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               data-testid="rir-preset-note"
             >
                
-              Preset to your target (
-              2
-              ) — tap to change.
+              Preset to your target (2) — tap to change.
             </span>
           </p>
           <div

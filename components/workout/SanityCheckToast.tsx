@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/Button';
 import type { SanityCheckResult } from '@/services/sanityChecks';
 import { getSeverityColor, getCheckTypeTitle, shouldAutoDismiss } from '@/services/sanityChecks';
 import { cn } from '@/lib/utils';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { plainWorkoutText } from '@/lib/beginnerMode';
 
 export interface SanityCheckToastProps {
   check: SanityCheckResult;
@@ -35,6 +37,9 @@ export const SanityCheckToast = memo(function SanityCheckToast({
   const color = getSeverityColor(check.severity);
   const title = getCheckTypeTitle(check.type);
   const canAutoDismiss = shouldAutoDismiss(check.type) && autoDismissMs > 0;
+  // Beginner mode: same check, effort in words ("2+ reps left", not "2+ RIR").
+  const beginner = useBeginnerMode();
+  const plain = (text: string) => (beginner ? plainWorkoutText(text) : text);
 
   // Auto-dismiss logic
   useEffect(() => {
@@ -127,11 +132,11 @@ export const SanityCheckToast = memo(function SanityCheckToast({
               {title}
             </h4>
             <p className="text-subhead text-ink-2 leading-snug">
-              {check.message}
+              {plain(check.message)}
             </p>
             {check.suggestion && (
               <p className="text-caption text-ink-3 mt-2">
-                {check.suggestion}
+                {plain(check.suggestion)}
               </p>
             )}
           </div>
