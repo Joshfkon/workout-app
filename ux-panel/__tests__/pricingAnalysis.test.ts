@@ -139,6 +139,18 @@ describe('analyse / recommend / compareTiers', () => {
     expect(compareTiers(a, flipped).priceOrder).toBeLessThan(0);
   });
 
+  it('reports no package order agreement when one side has no preference (ties)', () => {
+    const fake = (shares: number[], takes: number[]) => ({
+      groups: { all: { gg: takes.map((take) => ({ take })), packages: { take: { V1: 0, V2: 0, V3: 0, V4: 0 }, shares: { V1: shares[0], V2: shares[1], V3: shares[2], V4: shares[3] } } } },
+      recommendation: { price: 4.99, package: 'V1' },
+    });
+    const flat = fake([0.25, 0.25, 0.25, 0.25], [0.5, 0.4, 0.4, 0.2]);
+    const ordered = fake([0.1, 0.2, 0.3, 0.4], [0.6, 0.5, 0.5, 0.1]);
+    const c = compareTiers(flat as never, ordered as never);
+    expect(c.packageOrder).toBeNull();
+    expect(c.priceOrder).toBeCloseTo(1); // tied takes share an average rank on both sides
+  });
+
   it('measures how often SSR agrees with the stated yes/no', () => {
     expect(stanceAgreement(records)).toEqual(expect.objectContaining({ n: 16, rate: 1 }));
     const wrong = [{ ...records[0], packages: { ...records[0].packages, sharp: { ...records[0].packages.sharp, V1: NO } } }];

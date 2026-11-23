@@ -70,6 +70,9 @@ describe('parseVariantChoice / normaliseRanking', () => {
     expect(parseVariantChoice('Option 3, because it is cheaper')).toBe('V3');
     expect(parseVariantChoice("None, I'd stay free")).toBe('none');
     expect(parseVariantChoice('Hard to say')).toBeNull();
+    // A leading None wins over a variant named in the explanation.
+    expect(parseVariantChoice('None — V2 is interesting, but I would not pay for any of these.')).toBe('none');
+    expect(parseVariantChoice('Probably V4, the check-ins')).toBe('V4');
   });
 
   it('completes a ranking: drops unknown and repeated items, appends what is missing', () => {

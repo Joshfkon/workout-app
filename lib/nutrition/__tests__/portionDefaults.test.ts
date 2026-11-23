@@ -163,6 +163,9 @@ describe('describeDefaultPortion (panel r19: say where the default came from)', 
 
   it('typicalPortionForSystemFood only pictures subcategory portions', () => {
     expect(typicalPortionForSystemFood(CHICKEN)).toEqual({ grams: 113, cooked: true, hint: 'about the size of your palm' });
+    // Raw (or unstated) rows carry raw-weight nutrition: no "cooked" label.
+    expect(typicalPortionForSystemFood({ ...CHICKEN, name: 'Chicken Breast (raw, skinless)' })?.cooked).toBe(false);
+    expect(typicalPortionForSystemFood({ ...CHICKEN, name: 'Chicken Breast' })?.cooked).toBe(false);
     expect(typicalPortionForSystemFood({ name: 'Cheddar Cheese', subcategory: 'dairy' })).toEqual({
       grams: 28,
       cooked: false,

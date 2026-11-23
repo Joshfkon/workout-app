@@ -104,9 +104,12 @@ export function parseStance(text) {
 /** "V2 — because…" → 'V2'; "None, …" → 'none'; unparseable → null. */
 export function parseVariantChoice(text) {
   const t = String(text ?? '').trim();
+  // The leading choice wins: "None — V2 is interesting, but…" is a none.
+  const lead = /^\W*(?:option\s*v?|v)\s*([1-4])\b/i.exec(t);
+  if (lead) return `V${lead[1]}`;
+  if (/^\W*(none|neither|no\b|nothing|not any|i wouldn'?t|i would not)/i.test(t)) return 'none';
   const v = /\b(?:v|option\s*v?)\s*([1-4])\b/i.exec(t);
   if (v) return `V${v[1]}`;
-  if (/^\W*(none|neither|no\b|nothing|not any|i wouldn'?t|i would not)/i.test(t)) return 'none';
   return null;
 }
 

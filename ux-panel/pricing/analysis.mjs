@@ -314,19 +314,34 @@ export function recommend(groups, design, tipping = null) {
  * package-share order (PRICING_STUDY.md §2: if they disagree, trust hands-on).
  */
 export function compareTiers(survey, handsOn) {
+  // Average ranks for ties, then Pearson on the ranks (the tie-correct
+  // Spearman). A constant side has no order to agree with: null.
   const order = (xs) => {
     const idx = xs.map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]);
     const ranks = Array(xs.length);
-    idx.forEach(([, i], r) => (ranks[i] = r));
+    for (let s = 0; s < idx.length; ) {
+      let e = s;
+      while (e + 1 < idx.length && idx[e + 1][0] === idx[s][0]) e++;
+      for (let k = s; k <= e; k++) ranks[idx[k][1]] = (s + e) / 2;
+      s = e + 1;
+    }
     return ranks;
   };
   const spearman = (a, b) => {
     if (a.length < 2 || a.some((x) => !Number.isFinite(x)) || b.some((x) => !Number.isFinite(x))) return null;
     const ra = order(a);
     const rb = order(b);
-    const n = a.length;
-    const d2 = ra.reduce((s, r, i) => s + (r - rb[i]) ** 2, 0);
-    return 1 - (6 * d2) / (n * (n * n - 1));
+    const mean = (r) => r.reduce((s, x) => s + x, 0) / r.length;
+    const ma = mean(ra);
+    const mb = mean(rb);
+    let num = 0, va = 0, vb = 0;
+    for (let i = 0; i < ra.length; i++) {
+      num += (ra[i] - ma) * (rb[i] - mb);
+      va += (ra[i] - ma) ** 2;
+      vb += (rb[i] - mb) ** 2;
+    }
+    if (va === 0 || vb === 0) return null;
+    return num / Math.sqrt(va * vb);
   };
   const ids = Object.keys(survey.groups.all.packages.take);
   return {

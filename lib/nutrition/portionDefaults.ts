@@ -110,6 +110,12 @@ const TYPICAL_BY_CATEGORY: Record<string, number> = {
 /** Meat and fish portions are cooked weights: say so. */
 const COOKED_SUBCATEGORIES = new Set(['poultry', 'beef', 'pork', 'game', 'fish', 'seafood']);
 
+/** The food's name says it is cooked ("Chicken Breast (grilled, skinless)"). A
+ *  raw row ("Chicken Breast (raw, …)") or one that doesn't say must not be
+ *  labelled a cooked portion: its nutrition is per raw weight. */
+const COOKED_NAME = /\b(cooked|grilled|roasted|baked|boiled|broiled|fried|pan[- ]?fried|steamed|poached|smoked|seared)\b/i;
+const RAW_NAME = /\braw\b/i;
+
 /**
  * A picture of the amount for people who don't think in grams. Only where
  * the comparison is a fair one; otherwise the gram figure stands alone.
@@ -151,7 +157,7 @@ export function typicalPortionForSystemFood(food: SystemFoodLike): TypicalPortio
   const fromSub = !byName && !!sub && !!TYPICAL_BY_SUBCATEGORY[sub];
   return {
     grams,
-    cooked: fromSub && COOKED_SUBCATEGORIES.has(sub!),
+    cooked: fromSub && COOKED_SUBCATEGORIES.has(sub!) && COOKED_NAME.test(food.name) && !RAW_NAME.test(food.name),
     hint: fromSub ? HINT_BY_SUBCATEGORY[sub!] ?? null : null,
   };
 }
