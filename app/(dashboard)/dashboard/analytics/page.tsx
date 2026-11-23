@@ -69,6 +69,7 @@ import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
 import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
 import { ProgressPhotosHero } from '@/components/analytics/ProgressPhotosHero';
+import { mergeSleepLogIntoWellness, type SleepLogRow } from './wellnessSleep';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
@@ -908,7 +909,7 @@ function AnalyticsPageContent() {
         // newest-first (see fetchAllRowsNewestFirst): a single ascending
         // select was silently capped at 1000 rows, so on the 6m / 1y / all
         // ranges the NEWEST days were the ones dropped.
-        const [hydrationLogs, cardioLogs, checkIns] = await Promise.all([
+        const [hydrationLogs, cardioLogs, checkIns, sleepLogs] = await Promise.all([
           fetchAllRowsNewestFirst((from, to) =>
             supabase
               .from('hydration_log')
@@ -937,6 +938,18 @@ function AnalyticsPageContent() {
               .eq('user_id', userId)
               .gte('date', startDateStr)
               .order('date', { ascending: false })
+              .range(from, to)
+          ),
+          // Sleep logged from Home / the Sleep card / Apple Health lives only
+          // in sleep_log — without this the sleep charts showed check-in
+          // nights only.
+          fetchAllRowsNewestFirst((from, to) =>
+            supabase
+              .from('sleep_log')
+              .select('local_day, hours, quality')
+              .eq('user_id', userId)
+              .gte('local_day', startDateStr)
+              .order('local_day', { ascending: false })
               .range(from, to)
           ),
         ]);
@@ -985,9 +998,9 @@ function AnalyticsPageContent() {
           setCardioData(cardioArray);
         }
 
-        if (checkIns) {
+        if (checkIns || sleepLogs) {
           // Charts read oldest → newest.
-          const transformed = [...checkIns].reverse().map((ci: any) => ({
+          const transformed = [...(checkIns ?? [])].reverse().map((ci: any) => ({
             date: ci.date,
             sleepHours: ci.sleep_hours,
             sleepQuality: ci.sleep_quality,
@@ -999,7 +1012,7 @@ function AnalyticsPageContent() {
             sorenessLevel: ci.soreness_level,
             hungerLevel: ci.hunger_level,
           }));
-          setCheckInData(transformed);
+          setCheckInData(mergeSleepLogIntoWellness(transformed, (sleepLogs ?? []) as SleepLogRow[]));
         }
       } catch (error) {
         console.error('Failed to fetch wellness data:', error);
@@ -1626,6 +1639,20 @@ function AnalyticsPageContent() {
               "Add more data" list further down, never above the chart. */}
           {bodyTrendModule}
 
+          {/* Progress photos right under the weight chart: the mirror check is
+              the other thing people open Body for, so it doesn't sit below
+              the measurement and proportions cards. */}
+          <ProgressPhotosHero
+            photos={progressPhotos}
+            photoUrls={photoUrls}
+            units={units}
+            weightUnit={weightUnit}
+            displayWeight={displayWeightString}
+            onCompare={() => setIsCompareOpen(true)}
+            onTimelapse={() => setIsTimelapseOpen(true)}
+            onAddPhoto={() => setIsAddPhotoOpen(true)}
+          />
+
           {/* Phase verdict + banner only once a phase exists — with none,
               the set-one prompt is a row in "Add more data". Tapping either
               opens the phase editor. */}
@@ -1704,18 +1731,6 @@ function AnalyticsPageContent() {
             displayUnit={units === 'kg' ? 'cm' : 'in'}
             weightUnit={units === 'kg' ? 'kg' : 'lb'}
             weightHistory={weightHistory}
-          />
-
-          {/* Progress Photos Hero */}
-          <ProgressPhotosHero
-            photos={progressPhotos}
-            photoUrls={photoUrls}
-            units={units}
-            weightUnit={weightUnit}
-            displayWeight={displayWeightString}
-            onCompare={() => setIsCompareOpen(true)}
-            onTimelapse={() => setIsTimelapseOpen(true)}
-            onAddPhoto={() => setIsAddPhotoOpen(true)}
           />
 
           <BodyAddMoreData
