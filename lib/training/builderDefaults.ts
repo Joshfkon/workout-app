@@ -1,10 +1,13 @@
 import { detectSplit } from '@/services/suggestedWorkout';
 import {
+  MUSCLE_PRIORITY_HEADS,
   STANDARD_MUSCLE_DISPLAY_NAMES,
   priorityHeadParent,
+  type Experience,
   type MuscleGroup,
   type PeriodizationModel,
   type RecoveryFactors,
+  type Split,
   type StandardMuscleGroup,
 } from '@/types/schema';
 import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
@@ -203,6 +206,36 @@ export interface PlanWeekSummary {
   rir: RirRange | null;
   /** Credited sets per coarse muscle the week's sessions contain. */
   sets: Partial<Record<CoarseMuscle, number>>;
+  /** Credited sets per prioritizable head (MUSCLE_PRIORITY_HEADS), same
+   *  counter, rounded to 0.1. */
+  heads: Partial<Record<StandardMuscleGroup, number>>;
+}
+
+/** Credited sets per standard muscle in a set of sessions (primary 1,
+ *  secondary 0.5 split across what it resolves to). Rounded to 0.1. Pure. */
+function creditedSetsByHead(sessions: PlanWeek['sessions']): Partial<Record<StandardMuscleGroup, number>> {
+  const out: Partial<Record<StandardMuscleGroup, number>> = {};
+  for (const session of sessions) {
+    for (const ex of session.exercises) {
+      for (const { muscle, credit } of perSetCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? [])) {
+        out[muscle] = (out[muscle] ?? 0) + ex.sets * credit;
+      }
+    }
+  }
+  for (const k of Object.keys(out) as StandardMuscleGroup[]) out[k] = Math.round((out[k] ?? 0) * 10) / 10;
+  return out;
+}
+
+/** The heads shown under a group in the week table (side delts under
+ *  shoulders…): the ones a lifter can prioritize. */
+export function headsOf(group: CoarseMuscle): readonly StandardMuscleGroup[] {
+  return MUSCLE_PRIORITY_HEADS[group as MuscleGroup] ?? [];
+}
+
+/** "6", "1.5": a head's credited sets for a table cell. */
+export function formatHeadSets(sets: number | undefined): string {
+  const half = Math.round((sets ?? 0) * 2) / 2;
+  return Number.isInteger(half) ? String(half) : half.toFixed(1);
 }
 
 /**
@@ -218,6 +251,7 @@ export function weekByWeekPlan(program: ProgramWeeks | null | undefined): PlanWe
     intensityModifier: typeof w.intensityModifier === 'number' ? w.intensityModifier : null,
     rir: weekRir(w),
     sets: creditedSetsByGroup(w.sessions),
+    heads: creditedSetsByHead(w.sessions),
   }));
 }
 
@@ -351,14 +385,93 @@ export function headSetsAtPeak(
   const out: Partial<Record<StandardMuscleGroup, number>> = {};
   const peak = peakTrainingWeek(program?.mesocycleWeeks ?? []);
   if (!peak || heads.length === 0) return out;
-  const wanted = new Set(heads);
-  for (const session of peak.sessions) {
-    for (const ex of session.exercises) {
-      for (const { muscle, credit } of perSetCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? [])) {
-        if (wanted.has(muscle)) out[muscle] = (out[muscle] ?? 0) + ex.sets * credit;
-      }
-    }
-  }
-  for (const k of Object.keys(out) as StandardMuscleGroup[]) out[k] = Math.round((out[k] ?? 0) * 10) / 10;
+  const all = creditedSetsByHead(peak.sessions);
+  for (const h of heads) if (all[h] !== undefined) out[h] = all[h];
   return out;
+}
+
+/**
+ * Session length the builder opens at: the length of the lifter's last
+ * block when there is one (it is what they actually train), else 75 minutes
+ * for an advanced lifter and 60 for everyone else. An advanced lifter's
+ * weekly targets (20+ sets for most muscles) do not fit 60-minute sessions
+ * on a 5-day split: on the time and fatigue model quads, triceps and
+ * hamstrings sit at MEV at 60 and 2–3 sets above it at 75 (UX panel, round
+ * 19: "I couldn't find a way to change session length"). Pure.
+ */
+export function defaultSessionMinutes(experience: Experience, previousMinutes?: number | null): number {
+  if (typeof previousMinutes === 'number' && previousMinutes >= 15 && previousMinutes <= 120) return previousMinutes;
+  return experience === 'advanced' ? 75 : 60;
+}
+
+export interface SessionLengthOption {
+  minutes: number;
+  /** Muscles in focus whose peak-week credited sets rise, with before/after. */
+  gains: { muscle: CoarseMuscle; from: number; to: number }[];
+  /** Focus muscles at or below MEV now that clear it at this length. */
+  clearsMev: CoarseMuscle[];
+}
+
+/**
+ * Longer session lengths worth offering next to the "sessions cap these
+ * muscles" banner, each with what it actually changes. `buildAt` generates
+ * the same plan at another length (the caller's generator, so the numbers
+ * are the plan's own). A length is offered only when it lifts a focus
+ * muscle off MEV or adds at least 2 sets across them: on a once-a-week split
+ * the per-session fatigue budget, not the clock, often caps a muscle, and a
+ * button that changes nothing is worse than none. Pure given `buildAt`.
+ */
+export function sessionLengthOptions(
+  currentMinutes: number,
+  focus: { muscle: CoarseMuscle; mev: number }[],
+  current: Partial<Record<CoarseMuscle, number>>,
+  buildAt: (minutes: number) => ProgramWeeks | null,
+  candidates: number[] = [currentMinutes + 15, currentMinutes + 30]
+): SessionLengthOption[] {
+  if (focus.length === 0) return [];
+  const out: SessionLengthOption[] = [];
+  for (const minutes of candidates) {
+    if (minutes <= currentMinutes || minutes > 120) continue;
+    const delivered = deliveredSetsAtPeak(buildAt(minutes));
+    if (!delivered) continue;
+    const gains = focus
+      .map(({ muscle }) => ({ muscle, from: Math.round(current[muscle] ?? 0), to: Math.round(delivered[muscle] ?? 0) }))
+      .filter((g) => g.to > g.from);
+    const clearsMev = focus
+      .filter(({ muscle, mev }) => isAtOrBelowMev(current[muscle], mev) && !isAtOrBelowMev(delivered[muscle], mev))
+      .map((f) => f.muscle);
+    const added = gains.reduce((sum, g) => sum + (g.to - g.from), 0);
+    if (clearsMev.length > 0 || added >= 2) out.push({ minutes, gains, clearsMev });
+  }
+  return out;
+}
+
+/** The schedule a lifter gave at onboarding (users.preferences
+ *  trainingDaysPerWeek / currentSplit), as builder defaults. */
+export interface OnboardingScheduleDefaults {
+  daysPerWeek: number | null;
+  split: Split | null;
+}
+
+const ONBOARDING_SPLIT: Record<string, Split> = {
+  body_part: 'Bro Split',
+  ppl: 'PPL',
+  upper_lower: 'Upper/Lower',
+  full_body: 'Full Body',
+};
+
+/**
+ * Builder defaults from the onboarding answers, used when there is too
+ * little logged history for builderDefaultsFromHistory. Read defensively:
+ * the fields may be absent, mistyped, or 'other'. Pure.
+ */
+export function onboardingScheduleDefaults(preferences: unknown): OnboardingScheduleDefaults {
+  const prefs = preferences && typeof preferences === 'object' ? (preferences as Record<string, unknown>) : {};
+  const days = typeof prefs.trainingDaysPerWeek === 'number' ? prefs.trainingDaysPerWeek : Number.NaN;
+  const daysPerWeek = Number.isInteger(days) && days >= 2 && days <= 7 ? days : null;
+  const split =
+    typeof prefs.currentSplit === 'string' && Object.prototype.hasOwnProperty.call(ONBOARDING_SPLIT, prefs.currentSplit)
+      ? ONBOARDING_SPLIT[prefs.currentSplit]
+      : null;
+  return { daysPerWeek, split };
 }

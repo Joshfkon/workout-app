@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider, Input } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
-import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
+import { calculateRecoveryFactors, effectiveTrainingAge } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import {
   getSessionFromProgramData,
@@ -334,13 +334,19 @@ export default function MesocyclePage() {
         mesocycle.generated_with_enhanced_mode ?? (userData?.enhanced_athlete_mode === true);
 
       // Build extended user profile
+      const experience = (userProfile?.experience as Experience) || 'intermediate';
       const extendedProfile: ExtendedUserProfile = {
         age: userData?.age || 30,
-        experience: (userProfile?.experience as Experience) || 'intermediate',
+        experience,
         goal: (userProfile?.goal as SchemaGoal) || 'maintenance',
         sleepQuality: (userData?.sleep_quality as Rating) || 3,
         stressLevel: (userData?.stress_level as Rating) || 3,
-        trainingAge: userData?.training_age_years || 1,
+        // Settings writes training_age; training_age_years is an older
+        // column. Both default to 0 (unset), so fall back to experience.
+        trainingAge: effectiveTrainingAge(
+          Math.max(Number(userData?.training_age) || 0, Number(userData?.training_age_years) || 0),
+          experience
+        ),
         availableEquipment: (userData?.available_equipment as Equipment[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'],
         injuryHistory: (userData?.injury_history as MuscleGroup[]) || [],
         heightCm: userData?.height_cm || null,

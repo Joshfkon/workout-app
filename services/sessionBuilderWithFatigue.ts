@@ -133,6 +133,18 @@ function estimateExerciseTime(
  */
 export const MAX_SETS_PER_MUSCLE_PER_SESSION = 12;
 
+/**
+ * The effort (RIR) the per-session fatigue budget is checked at, every week
+ * of the block. The budget is a ceiling on how much work one session holds;
+ * checked at each week's own RIR it tightened as the block pushed RIR down
+ * (local cost is sets x 8 x (1 + (3 - RIR) x 0.15)), so a once-a-week muscle
+ * fit 11 sets in week 1 and 8 in week 4 and the plan's volume FELL while the
+ * ramp said it climbed (UX panel, round 19). Lower RIR across the block is
+ * the planned overreach the deload clears; it must not also shrink the
+ * session. 3 RIR is where the intensity factor is 1.
+ */
+export const FATIGUE_GATE_RIR = 3;
+
 /** Every recovered muscle a session plans gets at least this many sets. */
 export const MIN_SETS_PER_PLANNED_MUSCLE = 2;
 
@@ -502,7 +514,7 @@ function selectExercisesWithFatigue(
       exercise,
       Math.min(remainingSets, 3),
       8, // Estimate average reps
-      2, // Estimate RIR
+      FATIGUE_GATE_RIR, // the budget's effort, same as the build loop's check
       startingPosition + selected.length
     );
 
@@ -756,37 +768,32 @@ export function buildDetailedSessionWithFatigue(
         if (minRir <= maxRir) adjustedRIR = Math.min(maxRir, Math.max(minRir, adjustedRIR));
       }
 
-      // Calculate fatigue for this exercise
+      // Calculate fatigue for this exercise: the prescription's own (shown
+      // on the exercise) and the budget's, which is checked at the block's
+      // constant FATIGUE_GATE_RIR so the session ceiling is the same every
+      // week (see FATIGUE_GATE_RIR).
       const avgReps = Math.round((repConfig.min + repConfig.max) / 2);
-      const exerciseFatigue = calculateExerciseFatigue(
-        selection.exercise,
-        selection.sets,
-        avgReps,
-        adjustedRIR,
-        exercisePosition
-      );
+      const fatigueAt = (sets: number, rir: number) =>
+        calculateExerciseFatigue(selection.exercise, sets, avgReps, rir, exercisePosition);
+      const exerciseFatigue = fatigueAt(selection.sets, adjustedRIR);
+      const gateFatigue = fatigueAt(selection.sets, FATIGUE_GATE_RIR);
 
       // Check if we can add this exercise
-      const canAdd = admitExercise(fatigueManager, exerciseFatigue, addedForMuscle === 0);
+      const canAdd = admitExercise(fatigueManager, gateFatigue, addedForMuscle === 0);
 
       if (!canAdd.allowed) {
         // Try to reduce sets to fit
         const reducedSets = Math.max(1, selection.sets - 1);
-        const reducedFatigue = calculateExerciseFatigue(
-          selection.exercise,
-          reducedSets,
-          avgReps,
-          adjustedRIR,
-          exercisePosition
-        );
+        const reducedFatigue = fatigueAt(reducedSets, adjustedRIR);
+        const reducedGate = fatigueAt(reducedSets, FATIGUE_GATE_RIR);
 
-        const canAddReduced = admitExercise(fatigueManager, reducedFatigue, addedForMuscle === 0);
+        const canAddReduced = admitExercise(fatigueManager, reducedGate, addedForMuscle === 0);
         if (!canAddReduced.allowed) {
           continue; // Skip this exercise entirely
         }
 
         selection.sets = reducedSets;
-        fatigueManager.addExercise(reducedFatigue);
+        fatigueManager.addExercise(reducedGate);
 
         exercises.push(
           buildDetailedExercise(
@@ -800,7 +807,7 @@ export function buildDetailedSessionWithFatigue(
           )
         );
       } else {
-        fatigueManager.addExercise(exerciseFatigue);
+        fatigueManager.addExercise(gateFatigue);
 
         exercises.push(
           buildDetailedExercise(
@@ -1138,6 +1145,56 @@ export function indirectCreditByGroup(
     }
   }
   return out;
+}
+
+type RampExercise = { exercise: { primaryMuscle: string; secondaryMuscles?: string[] }; sets: number };
+type RampWeek = { isDeload: boolean; volumeModifier: number; sessions: { exercises: RampExercise[] }[] };
+
+/**
+ * Hold every muscle's credited sets non-decreasing across the accumulation
+ * ramp: wherever a training week programs at least the volume share of the
+ * week before it, the earlier week may not hold more sets of any muscle.
+ * Each week picks its exercises afresh (recovery, fatigue gate, secondary
+ * credit), so a muscle could drift a set or two DOWN while the ramp said it
+ * climbed; this trims the earlier week (never adds work past what the
+ * session's time and fatigue checks admitted). Weeks a model lowers on
+ * purpose (block, weekly undulating) and the deload are left alone.
+ * Mutates the weeks' exercises; returns how many sets it removed. Pure
+ * otherwise.
+ */
+export function enforceNonDecreasingRamp(weeks: RampWeek[]): number {
+  let removed = 0;
+  const training = weeks.filter((w) => !w.isDeload);
+  for (let k = training.length - 2; k >= 0; k--) {
+    const week = training[k];
+    const next = training[k + 1];
+    if (week.volumeModifier > next.volumeModifier) continue;
+    const ceiling = creditedSetsByGroup(next.sessions);
+    // Bounded: every pass removes a set, and a week has finitely many.
+    for (let guard = 0; guard < 500; guard++) {
+      const now = creditedSetsByGroup(week.sessions);
+      const over = (Object.keys(now) as CoarseMuscle[]).find((m) => (now[m] ?? 0) > (ceiling[m] ?? 0) + 1e-6);
+      if (!over) break;
+      // Take the set from the exercise that credits the muscle most (its
+      // own direct work before another muscle's secondary), largest first.
+      let best: { ex: RampExercise; credit: number } | null = null;
+      for (const s of week.sessions) {
+        for (const ex of s.exercises) {
+          if (ex.sets <= 0) continue;
+          const credit = perSetGroupCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? [])
+            .filter((c) => c.group === over)
+            .reduce((sum, c) => sum + c.credit, 0);
+          if (credit <= 0) continue;
+          if (!best || credit > best.credit || (credit === best.credit && ex.sets > best.ex.sets)) best = { ex, credit };
+        }
+      }
+      if (!best) break;
+      best.ex.sets -= 1;
+      removed += 1;
+    }
+    for (const s of week.sessions) s.exercises = s.exercises.filter((ex) => ex.sets > 0);
+  }
+  return removed;
 }
 
 /** The accumulation week with the most volume (the later one on a tie). */
@@ -1541,7 +1598,7 @@ export function generateFullMesocycleWithFatigue(
         return [muscle, { sets: Math.min(vol.sets, sets), frequency: vol.frequency }];
       })
     ) as Record<MuscleGroup, { sets: number; frequency: number }>;
-    const weekSessions = needsSecondPass ? buildWeekSessions(directVolume) : firstPass;
+      const weekSessions = needsSecondPass ? buildWeekSessions(directVolume) : firstPass;
 
     // Indirect-aware allocation — the SAME trim pass generateFullProgram
     // runs (Codex review on 48c5cbe: this path never trimmed, so credited
@@ -1576,6 +1633,23 @@ export function generateFullMesocycleWithFatigue(
       sessions: weekSessions,
       isDeload,
     });
+  }
+
+  // A muscle's sets never fall while the ramp climbs (enforceNonDecreasingRamp).
+  if (enforceNonDecreasingRamp(mesocycleWeeks) > 0) {
+    for (const week of mesocycleWeeks) {
+      for (const session of week.sessions) {
+        session.totalSets = session.exercises.reduce((sum, ex) => sum + ex.sets, 0);
+        session.estimatedMinutes = estimatePlannedSessionMinutes(
+          session.exercises.map((e) => ({
+            sets: e.sets,
+            restSeconds: e.restSeconds,
+            mechanic: e.exercise.pattern === 'isolation' ? 'isolation' : 'compound',
+            muscle: e.exercise.primaryMuscle,
+          }))
+        );
+      }
+    }
   }
 
   // Step 8b: a weekly target the sessions cannot hold is capped at what they

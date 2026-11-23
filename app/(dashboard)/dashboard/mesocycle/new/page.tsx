@@ -2,7 +2,7 @@
 
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidatePlannedFrequency } from '@/hooks/usePlannedFrequency';
@@ -31,11 +31,13 @@ import {
   generateWorkoutTemplates,
   recommendSplit,
   calculateRecoveryFactors,
+  effectiveTrainingAge,
   evaluateMesocycleLength,
   type MesocycleRecommendation,
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
-import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
+import { generateFullMesocycleWithFatigue, sessionSetCapacity } from '@/services/sessionBuilderWithFatigue';
+import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { now as clockNow } from '@/lib/clock';
 import {
   BUILDER_HISTORY_DAYS,
@@ -53,18 +55,28 @@ import {
   rampExplanation,
   recoveryVolumeExplanation,
   priorityLabel,
-  headSetsAtPeak,
+  headsOf,
+  formatHeadSets,
+  defaultSessionMinutes,
+  sessionLengthOptions,
+  onboardingScheduleDefaults,
+  type OnboardingScheduleDefaults,
   type BuilderHistoryDefaults,
   type MusclePriorityRow,
 } from '@/lib/training/builderDefaults';
 import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
-import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
+import { resolveMuscleToStandard, STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup } from '@/types/schema';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 import { IconAlertTriangle, IconBolt, IconBulb, IconCalendar, IconGauge, IconHeartBroken, IconMoon, IconTrendingDown } from '@tabler/icons-react';
 
 /** Days a split's rotation needs so no day is dropped (Bro Split: one per body part). */
 const SPLIT_MIN_DAYS: Record<string, number> = { 'Bro Split': 5, 'Upper/Lower': 4 };
+
+/** The generator's session-cap warning (sessionBuilderWithFatigue Step 8b);
+ *  the review's volume card says it with the fix beside it, so the
+ *  "Things to consider" list leaves it out. */
+const CAP_WARNING = /-minute sessions hold fewer weekly sets/;
 
 export default function NewMesocyclePage() {
   useDocumentTitle('New Mesocycle');
@@ -89,7 +101,9 @@ export default function NewMesocyclePage() {
   const [userAge, setUserAge] = useState<number>(30);
   const [sleepQuality, setSleepQuality] = useState<Rating>(3);
   const [stressLevel, setStressLevel] = useState<Rating>(3);
-  const [trainingAge, setTrainingAge] = useState<number>(1);
+  // users.training_age as stored (0 / null = never set); the planners use
+  // effectiveTrainingAge, which falls back to the experience level.
+  const [storedTrainingAge, setStoredTrainingAge] = useState<number | null>(null);
   const [enhancedAthleteMode, setEnhancedAthleteMode] = useState(false);
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
@@ -101,6 +115,17 @@ export default function NewMesocyclePage() {
   // Two-a-day training: 2 sessions on every training day (fixed-day mode).
   const [sessionsPerDay, setSessionsPerDay] = useState(1);
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState(60);
+  // Once the lifter moves the length, the loaded default stops overwriting it.
+  const sessionLengthTouchedRef = useRef(false);
+  const chooseSessionLength = (minutes: number) => {
+    sessionLengthTouchedRef.current = true;
+    setSessionDurationMinutes(minutes);
+  };
+  const [userId, setUserId] = useState<string | null>(null);
+  // Settings → Muscle priorities, editable from the review step.
+  const [showPriorityEditor, setShowPriorityEditor] = useState(false);
+  // Week table: groups whose heads (side delts…) are listed under them.
+  const [showAllHeads, setShowAllHeads] = useState(false);
   const [useAiRecommendation, setUseAiRecommendation] = useState(true);
   
   // AI recommendations
@@ -117,9 +142,15 @@ export default function NewMesocyclePage() {
   // Muscle priorities (feed the volume step) — lib/training/builderDefaults.
   const [historyDefaults, setHistoryDefaults] = useState<BuilderHistoryDefaults | null>(null);
   const [priorityAdjustments, setPriorityAdjustments] = useState<VolumeAdjustmentInput[]>([]);
-  /** The builder split matching recent training, if it reads as one. */
-  const historySplit: Split | null =
-    historyDefaults?.splitKind === 'body_part' ? 'Bro Split' : historyDefaults?.splitKind === 'ppl' ? 'PPL' : null;
+  // Onboarding answers (users.preferences trainingDaysPerWeek / currentSplit):
+  // the fallback when there is too little history to read a schedule from.
+  const [onboardingDefaults, setOnboardingDefaults] = useState<OnboardingScheduleDefaults | null>(null);
+  const historyUsable = historyDefaults?.daysPerWeek != null;
+  /** The builder split matching recent training, if it reads as one; else
+   *  the split the lifter named at onboarding. */
+  const historySplit: Split | null = historyUsable
+    ? historyDefaults?.splitKind === 'body_part' ? 'Bro Split' : historyDefaults?.splitKind === 'ppl' ? 'PPL' : null
+    : onboardingDefaults?.split ?? null;
 
   // Preferred workout days
   const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
@@ -297,10 +328,11 @@ export default function NewMesocyclePage() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
+        setUserId(user.id);
         // Get user profile with extended fields
         const { data: profile } = await supabase
           .from('users')
-          .select('goal, experience, height_cm, age, sleep_quality, stress_level, training_age, available_equipment, injury_history, enhanced_athlete_mode')
+          .select('goal, experience, height_cm, age, sleep_quality, stress_level, training_age, available_equipment, injury_history, enhanced_athlete_mode, preferences')
           .eq('id', user.id)
           .single();
 
@@ -312,7 +344,7 @@ export default function NewMesocyclePage() {
           if (profile.age) setUserAge(profile.age);
           if (profile.sleep_quality) setSleepQuality(profile.sleep_quality as Rating);
           if (profile.stress_level) setStressLevel(profile.stress_level as Rating);
-          if (profile.training_age !== null && profile.training_age !== undefined) setTrainingAge(profile.training_age);
+          if (profile.training_age !== null && profile.training_age !== undefined) setStoredTrainingAge(Number(profile.training_age));
           if (profile.available_equipment && Array.isArray(profile.available_equipment)) {
             setAvailableEquipment(profile.available_equipment as Equipment[]);
           }
@@ -357,6 +389,21 @@ export default function NewMesocyclePage() {
 
         setIsFirstMesocycle(count === 0);
 
+        // Session length: the last block's, else by experience
+        // (lib/training/builderDefaults defaultSessionMinutes).
+        const { data: lastMeso } = await supabase
+          .from('mesocycles')
+          .select('session_duration_minutes')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const loadedDefault = defaultSessionMinutes(
+          (profile?.experience as Experience | undefined) ?? 'intermediate',
+          (lastMeso as { session_duration_minutes?: number | null } | null)?.session_duration_minutes ?? null
+        );
+        setSessionDurationMinutes((current) => (sessionLengthTouchedRef.current ? current : loadedDefault));
+
         // Muscle priorities from Settings — the generator never saw them.
         const { data: priorityRows } = await supabase
           .from('user_muscle_priorities')
@@ -388,12 +435,24 @@ export default function NewMesocyclePage() {
           : BUILDER_HISTORY_DAYS;
         const defaults = builderDefaultsFromHistory(sessions, spanDays);
         setHistoryDefaults(defaults);
-        if (defaults.daysPerWeek) setDaysPerWeek(defaults.daysPerWeek);
+        const fromOnboarding = onboardingScheduleDefaults((profile as { preferences?: unknown } | null)?.preferences);
+        setOnboardingDefaults(fromOnboarding);
+        const days = defaults.daysPerWeek ?? fromOnboarding.daysPerWeek;
+        if (days) setDaysPerWeek(days);
       }
     }
 
     loadUserData();
   }, []);
+
+  const trainingAge = effectiveTrainingAge(storedTrainingAge, userExperience);
+  const trainingAgeAssumed = !(storedTrainingAge !== null && storedTrainingAge > 0);
+
+  // Lagging areas from the latest DEXA's regional data (when there is one).
+  const laggingAreas = useMemo(() => {
+    if (!latestDexa?.regionalData || !latestDexa.leanMassKg) return [] as string[];
+    return analyzeRegionalComposition(latestDexa.regionalData as DexaRegionalData, latestDexa.leanMassKg).laggingAreas;
+  }, [latestDexa]);
 
   // Build extended profile for full program generation
   const extendedProfile: ExtendedUserProfile = {
@@ -409,6 +468,9 @@ export default function NewMesocyclePage() {
     latestDexa,
     enhancedAthleteMode,
   };
+  // Building the plan at another session length (the review's "try 75 min").
+  const buildProgramAt = (minutes: number) =>
+    generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, minutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay, totalWeeks, priorityAdjustments, splitType as Split);
 
   // Calculate recovery factors for display
   const recoveryFactors = calculateRecoveryFactors(extendedProfile);
@@ -461,28 +523,34 @@ export default function NewMesocyclePage() {
   // weeks and its last one is the deload this page promises.
   useEffect(() => {
     if (useAiRecommendation) {
-      // Analyze regional data for lagging areas (if available)
-      let laggingAreas: string[] = [];
-      if (latestDexa?.regionalData && latestDexa.leanMassKg) {
-        const regionalAnalysis = analyzeRegionalComposition(
-          latestDexa.regionalData as DexaRegionalData,
-          latestDexa.leanMassKg
-        );
-        laggingAreas = regionalAnalysis.laggingAreas;
-      }
-
       // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
-      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay, totalWeeks, priorityAdjustments, splitType as Split);
-      setFullProgram(program);
+      setFullProgram(buildProgramAt(sessionDurationMinutes));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks, priorityAdjustments, splitType]);
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks, priorityAdjustments, splitType, laggingAreas]);
 
   // The generated plan read week by week: credited sets per muscle, volume
   // and load shares, RIR (lib/training/builderDefaults weekByWeekPlan).
   const planWeeks = useMemo(() => weekByWeekPlan(fullProgram), [fullProgram]);
   const deload = useMemo(() => deloadSummary(planWeeks), [planWeeks]);
+
+  // Longer session lengths worth offering where the sessions cap muscles or
+  // leave them at MEV, with what each changes (review step only: two extra
+  // generations).
+  const sessionOptions = useMemo(() => {
+    if (step !== 3 || !fullProgram) return [];
+    const delivered = deliveredSetsAtPeak(fullProgram);
+    if (!delivered) return [];
+    const rows = plannedVolumeWithBands(fullProgram.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
+    const caps = fullProgram.volumeCaps ?? {};
+    const focus = rows.filter(
+      (r) => caps[r.muscle as keyof typeof caps] || isUnderDelivered(r.sets, delivered[r.muscle]) || isAtOrBelowMev(delivered[r.muscle], r.mev)
+    );
+    return sessionLengthOptions(sessionDurationMinutes, focus, delivered, buildProgramAt);
+  // buildProgramAt reads the same inputs that produced fullProgram.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, fullProgram]);
   const deloadLine = deload
     ? `Week ${deload.weekNumber} is a deload: ${deload.volumePercent}% of the sets` +
       (deload.loadPercent !== null ? `, loads at ${deload.loadPercent}% intensity` : '') +
@@ -723,8 +791,12 @@ export default function NewMesocyclePage() {
                 <p className="font-medium text-ink">{recoveryFactors.deloadFrequencyWeeks} weeks</p>
               </div>
             </div>
+            <p className="text-caption text-ink-3 mt-3" data-testid="builder-training-age">
+              Training age: {trainingAge} {trainingAge === 1 ? 'year' : 'years'}
+              {trainingAgeAssumed ? ` (typical for ${userExperience}; set yours in Settings)` : ''}
+            </p>
             {recoveryVolumeExplanation(recoveryFactors) && (
-              <p className="text-caption text-ink-2 mt-3" data-testid="builder-volume-modifier-why">
+              <p className="text-caption text-ink-2 mt-1" data-testid="builder-volume-modifier-why">
                 {recoveryVolumeExplanation(recoveryFactors)}
               </p>
             )}
@@ -847,7 +919,7 @@ export default function NewMesocyclePage() {
               max={120}
               step={5}
               value={sessionDurationMinutes}
-              onChange={(e) => setSessionDurationMinutes(parseInt(e.target.value))}
+              onChange={(e) => chooseSessionLength(parseInt(e.target.value))}
               valueFormatter={(v) => `${v} min`}
               marks={[
                 { value: 15, label: '15' },
@@ -1538,17 +1610,21 @@ export default function NewMesocyclePage() {
               </div>
             </details>
 
-            {/* Warnings */}
-            {fullProgram && fullProgram.warnings.length > 0 && (
+            {/* Warnings (the session-cap one is said by the volume card below,
+                with the fix next to it). */}
+            {fullProgram && fullProgram.warnings.some((w) => !CAP_WARNING.test(w)) && (
               <div className="p-4 bg-status-warn/10 border border-status-warn/20 rounded-lg space-y-2">
                 <p className="text-subhead font-medium text-status-warn">Things to consider</p>
-                {fullProgram.warnings.map((warning, i) => (
+                {fullProgram.warnings.filter((w) => !CAP_WARNING.test(w)).map((warning, i) => (
                   <p key={i} className="text-caption text-status-warn">{warning}</p>
                 ))}
               </div>
             )}
 
-            {/* Weekly Volume Preview */}
+            {/* Weekly sets per muscle: one line per concept, details folded.
+                Muscles the sessions cap or leave at MEV come with the fix —
+                the session-length control — right there (UX panel, round 19:
+                "I couldn't find a way to change session length"). */}
             {recommendation && (
               <div className="p-4 bg-fill/50 rounded-lg">
                 {(() => {
@@ -1556,47 +1632,68 @@ export default function NewMesocyclePage() {
                   const deliveredOrNull = deliveredSetsAtPeak(fullProgram);
                   const hasDelivered = deliveredOrNull !== null;
                   const delivered = deliveredOrNull ?? {};
-                  // Targets the sessions cannot hold are capped at what they
-                  // do hold (the generator's volumeCaps); say what was wanted.
                   const caps = fullProgram?.volumeCaps ?? {};
                   const targetOf = (muscle: string, sets: number) => caps[muscle as keyof typeof caps]?.fits ?? sets;
-                  const cappedRows = rows.filter((r) => caps[r.muscle as keyof typeof caps]);
-                  const short = hasDelivered
-                    ? rows.filter((r) => !caps[r.muscle as keyof typeof caps] && isUnderDelivered(r.sets, delivered[r.muscle]))
+                  const limited = hasDelivered
+                    ? rows.filter((r) => caps[r.muscle as keyof typeof caps] || isUnderDelivered(r.sets, delivered[r.muscle]))
                     : [];
                   const lowRows = hasDelivered ? rows.filter((r) => isAtOrBelowMev(delivered[r.muscle], r.mev)) : [];
-                  // Heads the lifter prioritized, and what the peak week gives them.
-                  const heads = priorityAdjustments.filter((a) => a.head).map((a) => a.head!);
-                  const headSets = headSetsAtPeak(fullProgram, heads);
                   return (
                     <>
-                      <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle (peak week)</p>
+                      <p className="text-subhead font-medium text-ink-2">Weekly sets per muscle (peak week)</p>
                       <p className="text-caption text-ink-3 mb-3">
-                        {hasDelivered
-                          ? 'Sets your sessions contain at peak week (direct sets plus half credit for indirect work), against the plan’s target and each muscle’s MEV–MRV range.'
-                          : 'Planned sets at peak week vs each muscle’s MEV–MRV range.'}
+                        {hasDelivered ? 'Sets in your sessions (indirect work counts half) · MEV–MRV.' : 'Planned sets · MEV–MRV.'}
                       </p>
-                      {cappedRows.length > 0 && (
-                        <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-capped">
-                          {sessionDurationMinutes}-minute sessions on this split hold fewer sets than the plan wanted for{' '}
-                          {cappedRows.length === 1 ? '1 muscle' : `${cappedRows.length} muscles`}, so their targets are set to what fits
-                          {' '}(e.g. {muscleDisplayName(cappedRows[0].muscle)} {targetOf(cappedRows[0].muscle, cappedRows[0].sets)} of the {cappedRows[0].sets} wanted).
-                          {' '}One muscle gets about 10–12 hard sets a session; longer sessions or another day for it raise the target.
-                        </p>
-                      )}
-                      {short.length > 0 && (
-                        <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-short">
-                          {sessionDurationMinutes}-minute sessions fit fewer sets than planned for {short.length === 1 ? '1 muscle' : `${short.length} muscles`}
-                          {' '}(e.g. {muscleDisplayName(short[0].muscle)} {delivered[short[0].muscle] ?? 0} of {short[0].sets}).
-                          {' '}Longer sessions or a second day for those muscles closes the gap.
-                        </p>
-                      )}
-                      {lowRows.length > 0 && (
-                        <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-mev">
-                          At or below MEV (the least that still grows a muscle):{' '}
-                          {lowRows.map((r) => `${muscleDisplayName(r.muscle)} ${delivered[r.muscle] ?? 0} (MEV ${r.mev})`).join(', ')}.
-                          {' '}Expect maintenance, not growth, there unless you add direct work.
-                        </p>
+                      {(limited.length > 0 || lowRows.length > 0) && (
+                        <div className="mb-3 rounded bg-status-warn/10 px-2 py-2" data-testid="builder-volume-capped">
+                          {limited.length > 0 && (
+                            <p className="text-subhead text-ink" data-testid="builder-volume-short">
+                              {sessionDurationMinutes}-min sessions hold less than the target for{' '}
+                              {limited.map((r) => `${muscleDisplayName(r.muscle)} ${formatHeadSets(delivered[r.muscle])}/${r.sets}`).join(', ')}.
+                            </p>
+                          )}
+                          {lowRows.length > 0 && (
+                            <p className="text-subhead text-ink mt-1" data-testid="builder-volume-mev">
+                              At or below MEV: {lowRows.map((r) => `${muscleDisplayName(r.muscle)} ${formatHeadSets(delivered[r.muscle])} (MEV ${r.mev})`).join(', ')}.
+                            </p>
+                          )}
+                          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="builder-session-length-fix">
+                            <span className="text-caption text-ink-2">Session length</span>
+                            <span className="rounded-full bg-action px-3 py-1 text-caption font-semibold text-white" aria-current="true">
+                              {sessionDurationMinutes} min
+                            </span>
+                            {sessionOptions.map((o) => (
+                              <button
+                                key={o.minutes}
+                                type="button"
+                                onClick={() => chooseSessionLength(o.minutes)}
+                                className="rounded-full border border-action px-3 py-1 text-caption font-semibold text-action hover:bg-action/10"
+                                data-testid={`builder-try-${o.minutes}`}
+                                aria-label={`Use ${o.minutes}-minute sessions: ${o.gains.map((g) => `${muscleDisplayName(g.muscle)} ${g.from} to ${g.to}`).join(', ')}`}
+                              >
+                                {o.minutes} min
+                                <span className="ml-1 font-normal text-ink-2">
+                                  {o.gains.slice(0, 3).map((g) => `${muscleDisplayName(g.muscle)} ${g.to}`).join(', ')}
+                                  {o.gains.length > 3 ? ` +${o.gains.length - 3}` : ''}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          {sessionOptions.length === 0 && (
+                            <p className="text-caption text-ink-2 mt-1">
+                              Longer sessions don&apos;t raise these: one session holds about 10–12 hard sets per muscle. Train them twice a week to go higher.
+                            </p>
+                          )}
+                          <details className="mt-1 text-caption text-ink-2">
+                            <summary className="cursor-pointer text-ink-3">Why</summary>
+                            <p className="mt-1">
+                              A {sessionDurationMinutes}-minute session fits about {sessionSetCapacity(sessionDurationMinutes, userGoal)} working sets, and one muscle
+                              gets about 10–12 hard sets before the session&apos;s fatigue budget stops it. Targets the sessions can&apos;t hold are set to what fits
+                              {limited.length > 0 ? ` (${limited.map((r) => `${muscleDisplayName(r.muscle)} ${targetOf(r.muscle, r.sets)} of ${r.sets}`).join(', ')})` : ''}.
+                              {lowRows.length > 0 ? ' At MEV a muscle holds its size rather than growing.' : ''}
+                            </p>
+                          </details>
+                        </div>
                       )}
                       <ul className="grid grid-cols-1 gap-1.5 text-subhead sm:grid-cols-2" data-testid="builder-volume-bands">
                         {rows.map(({ muscle, sets, mev, mrv }) => {
@@ -1611,49 +1708,45 @@ export default function NewMesocyclePage() {
                               </span>
                               <span className="tabular-nums text-ink-2 text-right">
                                 <span className={`font-semibold ${low ? 'text-status-warn' : done > mrv ? 'text-status-bad' : 'text-ink'}`}>{done}</span>
-                                {hasDelivered && done !== target && <> of {target}</>}
-                                {target !== sets && <span className="text-ink-3"> ({sets} wanted)</span>} · MEV {mev} · MRV {mrv}
+                                {hasDelivered && done !== target && <> of {target}</>} · {mev}–{mrv}
                               </span>
                             </li>
                           );
                         })}
                       </ul>
-                      {heads.length > 0 && (
-                        <p className="mt-3 text-caption text-ink-2" data-testid="builder-head-sets">
-                          Prioritized heads at peak week:{' '}
-                          {priorityAdjustments
-                            .filter((a) => a.head)
-                            .map((a) => `${priorityLabel(a)} ${headSets[a.head!] ?? 0} sets`)
-                            .join(', ')}
-                          .
-                        </p>
-                      )}
                     </>
                   );
                 })()}
               </div>
             )}
 
-            {/* Week by week: sets per muscle for every generated week, the
-                RIR each week prescribes, and the deload's real numbers.
-                Panel: "Show sets per muscle for every week, ramping from MEV
-                toward MRV"; the review only showed the peak week. */}
+            {/* Week by week: sets per muscle (and per head: side delts under
+                shoulders…) for every generated week, the RIR each week
+                prescribes, and the deload's real numbers. */}
             {fullProgram && planWeeks.length > 0 && (
               <div className="p-4 bg-fill/50 rounded-lg" data-testid="builder-week-by-week">
                 <p className="text-subhead font-medium text-ink-2 mb-1">Week by week</p>
-                <p className="text-caption text-ink-3 mb-2">{rampExplanation(fullProgram.periodization.model, planWeeks)}</p>
                 {rirLine(planWeeks) && (
-                  <p className="text-caption text-ink-2 mb-1" data-testid="builder-rir-line">
+                  <p className="text-caption text-ink-2" data-testid="builder-rir-line">
                     <span className="font-semibold text-ink">Effort:</span> {rirLine(planWeeks)}
                   </p>
                 )}
                 {deloadLine && (
-                  <p className="text-caption text-ink-2 mb-3">
+                  <p className="text-caption text-ink-2">
                     <span className="font-semibold text-ink">Deload:</span> {deloadLine}
                   </p>
                 )}
+                <details className="text-caption text-ink-3 mb-2">
+                  <summary className="cursor-pointer">Why this ramp</summary>
+                  <p className="mt-1">{rampExplanation(fullProgram.periodization.model, planWeeks)}</p>
+                </details>
                 {(() => {
                   const bandRows = plannedVolumeWithBands(fullProgram.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
+                  // Heads listed by default: shoulders (side delts are the
+                  // usual target) and any group with a prioritized head.
+                  const prioritizedParents = new Set(priorityAdjustments.filter((a) => a.head).map((a) => a.muscleGroup as string));
+                  const prioritizedHeads = new Set(priorityAdjustments.filter((a) => a.head).map((a) => a.head as string));
+                  const headsShown = (muscle: string) => showAllHeads || muscle === 'shoulders' || prioritizedParents.has(muscle);
                   return (
                     <div className="overflow-x-auto">
                       <table className="w-full text-caption tabular-nums" data-testid="builder-week-table">
@@ -1682,7 +1775,7 @@ export default function NewMesocyclePage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {bandRows.map(({ muscle, mev }) => (
+                          {bandRows.flatMap(({ muscle, mev }) => [
                             <tr key={muscle} aria-label={`${muscleDisplayName(muscle)}: ${rampLine(planWeeks, muscle)}`}>
                               <th scope="row" className="text-left font-normal text-ink py-0.5 pr-2 whitespace-nowrap">{muscleDisplayName(muscle)}</th>
                               {planWeeks.map((w) => {
@@ -1695,14 +1788,55 @@ export default function NewMesocyclePage() {
                                   </td>
                                 );
                               })}
-                            </tr>
-                          ))}
+                            </tr>,
+                            ...(headsShown(muscle)
+                              ? headsOf(muscle).map((head) => (
+                                  <tr key={`${muscle}-${head}`} data-testid={`builder-head-row-${head}`}>
+                                    <th scope="row" className="text-left font-normal text-ink-3 py-0.5 pl-3 pr-2 whitespace-nowrap">
+                                      {STANDARD_MUSCLE_DISPLAY_NAMES[head]}
+                                      {prioritizedHeads.has(head) && <span className="ml-1 text-action" aria-label="prioritized">★</span>}
+                                    </th>
+                                    {planWeeks.map((w) => (
+                                      <td key={w.weekNumber} className="text-right py-0.5 px-1 text-ink-3">{formatHeadSets(w.heads[head])}</td>
+                                    ))}
+                                  </tr>
+                                ))
+                              : []),
+                          ])}
                         </tbody>
                       </table>
                     </div>
                   );
                 })()}
-                <p className="text-caption text-ink-3 mt-2">Amber: at or below the muscle&apos;s MEV that week.</p>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-caption">
+                  <span className="text-ink-3">Amber: at or below MEV. Heads count indirect work at half.</span>
+                  <span className="flex gap-3">
+                    <button type="button" className="font-semibold text-action" onClick={() => setShowAllHeads((v) => !v)} data-testid="builder-toggle-heads">
+                      {showAllHeads ? 'Fewer heads' : 'All heads'}
+                    </button>
+                    {userId && (
+                      <button type="button" className="font-semibold text-action" onClick={() => setShowPriorityEditor((v) => !v)} data-testid="builder-edit-priorities">
+                        {showPriorityEditor ? 'Close priorities' : 'Set head priorities'}
+                      </button>
+                    )}
+                  </span>
+                </div>
+                {showPriorityEditor && userId && (
+                  <div className="mt-3" data-testid="builder-priority-editor">
+                    <MusclePrioritySettings
+                      userId={userId}
+                      onSave={(saved) =>
+                        setPriorityAdjustments(
+                          priorityVolumeAdjustments(
+                            saved
+                              .filter((p) => p.priority !== 3)
+                              .map((p) => ({ muscle_group: p.muscleGroup, priority: p.priority }) as MusclePriorityRow)
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                )}
               </div>
             )}
 
