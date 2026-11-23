@@ -128,6 +128,9 @@ export interface LivePr {
   value: number;
   /** Percent for e1rm/weight; absolute for reps/duration. */
   improvement: number;
+  /** The record this set beat, in the same unit as `value` (UX panel: a
+   *  lifter saw "+1%" and asked "a PR compared to what?"). */
+  previous: number;
 }
 
 /** Reps/duration PRs require the weight to be within this fraction of the record weight. */
@@ -205,10 +208,11 @@ export function detectLiveSetPr(input: LivePrDetectionInput): LivePr | null {
         type: 'weight',
         value: setWeight,
         improvement: pctImprovement(setWeight, bestWeight),
+        previous: bestWeight,
       };
     }
     if (setCount > bestCount && atRecordWeight) {
-      return { type: 'duration', value: setCount, improvement: setCount - bestCount };
+      return { type: 'duration', value: setCount, improvement: setCount - bestCount, previous: bestCount };
     }
     return null;
   }
@@ -217,17 +221,18 @@ export function detectLiveSetPr(input: LivePrDetectionInput): LivePr | null {
   // domain) and can never beat a real record.
   const setE1rm = e1rmOf(set);
   if (setE1rm > 0 && setE1rm > bestE1rm) {
-    return { type: 'e1rm', value: setE1rm, improvement: pctImprovement(setE1rm, bestE1rm) };
+    return { type: 'e1rm', value: setE1rm, improvement: pctImprovement(setE1rm, bestE1rm), previous: bestE1rm };
   }
   if (setWeight > bestWeight) {
     return {
       type: 'weight',
       value: setWeight,
       improvement: pctImprovement(setWeight, bestWeight),
+      previous: bestWeight,
     };
   }
   if (setCount > bestCount && atRecordWeight) {
-    return { type: 'reps', value: setCount, improvement: setCount - bestCount };
+    return { type: 'reps', value: setCount, improvement: setCount - bestCount, previous: bestCount };
   }
   return null;
 }

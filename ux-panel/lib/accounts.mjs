@@ -232,7 +232,13 @@ export async function seedReturningUser(admin, userId, persona) {
       // comes round every other session, every third on a PPL split), rounded to plate steps. A flat
       // +2.5 kg per session read as an implausible +10%/week on light lifts.
       const timesTrained = Math.floor(w / (a.split === 'ppl' ? 3 : 2));
-      const load = Math.max(5, Math.round((a.weightKg * lift.base * strength * (1 + 0.015 * timesTrained)) / 2.5) * 2.5);
+      // Round in the persona's OWN units: a lb lifter logs 120 or 125, never
+      // 55 kg (= 121.3 lb), and an off-grid seeded load made the app's
+      // suggestions and PRs look broken ("121.25 lbs", "PR vs 192.9").
+      const rawKg = a.weightKg * lift.base * strength * (1 + 0.015 * timesTrained);
+      const load = a.units === 'lb'
+        ? Math.max(5, Math.round((rawKg * 2.20462) / 5) * 5) / 2.20462
+        : Math.max(5, Math.round(rawKg / 2.5) * 2.5);
       const repsBase = beginner ? [10, 9, 8].map((r) => Math.min(12, r + timesTrained)) : [10, 9, 8];
       const sets = repsBase.map((reps, i) => ({
         exercise_block_id: block.id,

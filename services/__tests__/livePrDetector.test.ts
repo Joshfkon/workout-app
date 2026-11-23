@@ -23,11 +23,13 @@ describe('detectLiveSetPr', () => {
   it('detects an e1RM PR with percent improvement', () => {
     // 100kg x5 @RPE9 (RIR 1) -> Brzycki eff-6 = 100 * 36/31 ≈ 116.1
     const pr = detectLiveSetPr(baseInput());
-    expect(pr).toEqual({
+    expect(pr).toMatchObject({
       type: 'e1rm',
       value: e1rmValueFromRpe(100, 5, 9),
       improvement: 16,
     });
+    expect(pr?.previous).toBeGreaterThan(0);
+    expect(pr!.previous).toBeLessThan(pr!.value);
   });
 
   it('falls back to a weight PR when the set has no e1RM estimate', () => {
@@ -35,7 +37,7 @@ describe('detectLiveSetPr', () => {
     const pr = detectLiveSetPr(
       baseInput({ set: workingSet({ weightKg: 98, reps: 20, rpe: 8 }) })
     );
-    expect(pr).toEqual({ type: 'weight', value: 98, improvement: 3 });
+    expect(pr).toMatchObject({ type: 'weight', value: 98, improvement: 3 });
   });
 
   it('detects a reps PR at >= 95% of the record weight', () => {
@@ -46,7 +48,7 @@ describe('detectLiveSetPr', () => {
         set: workingSet({ weightKg: 96, reps: 10, rpe: 8 }),
       })
     );
-    expect(pr).toEqual({ type: 'reps', value: 10, improvement: 2 });
+    expect(pr).toEqual({ type: 'reps', value: 10, improvement: 2, previous: 8 });
   });
 
   it('does not award a reps PR below the 95% weight tolerance', () => {
@@ -132,14 +134,14 @@ describe('detectLiveSetPr', () => {
       const pr = detectLiveSetPr(
         durationInput({ set: workingSet({ weightKg: 25, reps: 30 }) })
       );
-      expect(pr).toEqual({ type: 'weight', value: 25, improvement: 25 });
+      expect(pr).toMatchObject({ type: 'weight', value: 25, improvement: 25 });
     });
 
     it('detects a hold-duration PR at >= 95% weight', () => {
       const pr = detectLiveSetPr(
         durationInput({ set: workingSet({ weightKg: 20, reps: 60 }) })
       );
-      expect(pr).toEqual({ type: 'duration', value: 60, improvement: 15 });
+      expect(pr).toEqual({ type: 'duration', value: 60, improvement: 15, previous: 45 });
     });
 
     it('never awards an e1RM PR for a duration exercise', () => {
