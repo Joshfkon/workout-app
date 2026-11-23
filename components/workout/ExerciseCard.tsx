@@ -3305,7 +3305,8 @@ export const ExerciseCard = memo(function ExerciseCard({
           // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the
           // engine reads sets with (raw Math.round(10 − rpe) disagreed at RPE
           // 7.5: header said 3 where the engine graded 2).
-          rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
+          // Beginner mode: the plain weight × reps only — no "@ 1–2 RIR".
+          rir: !beginner && s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
         };
       }),
       { secondsSuffix: isDurationBased }
@@ -3333,7 +3334,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // expanding the history detail — appended to the Phase 0b honest per-set
     // line rather than the old single-load format it originally rode on.
     const volPart =
-      lastSessionVolume != null
+      lastSessionVolume != null && !beginner
         ? ` · ${lastSessionVolume.toLocaleString('en-US')} ${weightLabel} vol`
         : '';
     // The tag leads the set list instead of trailing the whole line: this
