@@ -85,8 +85,15 @@ describe('strengthSentence', () => {
         ],
       })
     );
-    expect(s).toBe(
-      'Not enough lifting data for a strength trend yet. Log Barbell Back Squat in 1 more workout to see its trend.'
+    // Plain words naming the lift and how many more times — not "not
+    // enough data for a strength trend" (UX panel: vague, jargony).
+    expect(s).toBe('Log Barbell Back Squat once more to see its trend line.');
+    expect(s).not.toMatch(/enough (lifting )?data/);
+  });
+
+  it('falls back to the plain rule when no lift is named', () => {
+    expect(strengthSentence(trends({ insufficientData: 1 }))).toBe(
+      'Log the same lift in 3 workouts to see its trend line.'
     );
   });
 

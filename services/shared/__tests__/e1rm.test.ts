@@ -4,6 +4,7 @@ import {
   e1rmValue,
   e1rmValueFromRpe,
   impliedE1RMFloor,
+  rirForE1RM,
   E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS,
   E1RM_MAX_EFFECTIVE_REPS,
 } from '../e1rm';
@@ -137,6 +138,27 @@ describe('canonical estimateE1RM', () => {
       expect(impliedE1RMFloor(0, 10, 2)).toBeNull();
       expect(impliedE1RMFloor(100, 0, 2)).toBeNull();
       expect(impliedE1RMFloor(NaN, 10, 2)).toBeNull();
+    });
+  });
+
+  describe('rirForE1RM (the reps-left the Progress explainer quotes)', () => {
+    it('is the bucketed RIR of the logged RPE, 0 with none logged', () => {
+      expect(rirForE1RM(7.5)).toBe(2);
+      expect(rirForE1RM(8)).toBe(2);
+      expect(rirForE1RM(9)).toBe(1);
+      expect(rirForE1RM(6)).toBe(4);
+      expect(rirForE1RM(10)).toBe(0);
+      expect(rirForE1RM(null)).toBe(0);
+      expect(rirForE1RM(undefined)).toBe(0);
+      expect(rirForE1RM(0)).toBe(0);
+    });
+
+    it('is exactly what estimateE1RMFromRpe credits (180 × 10 @ ~2 left = Brzycki at 12 = 259.2)', () => {
+      for (const rpe of [null, 6, 7, 7.5, 8, 9, 10]) {
+        expect(estimateE1RMFromRpe(180, 10, rpe)).toEqual(estimateE1RM(180, 10, rirForE1RM(rpe)));
+      }
+      expect(e1rmValueFromRpe(180, 10, 7.5)).toBe(259.2);
+      expect(e1rmValueFromRpe(180, 10, null)).toBe(240);
     });
   });
 });

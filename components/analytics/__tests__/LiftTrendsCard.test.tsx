@@ -131,12 +131,12 @@ describe('LiftTrendsCard', () => {
     expect(pullUp).toHaveTextContent('6 reps');
     expect(pullUp).toHaveTextContent('Trend in 2 more workouts');
     expect(within(pullUp).queryByTestId('early-lift-change')).not.toBeInTheDocument();
-    expect(screen.queryByText(/No lift has enough/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('lift-trends-empty')).not.toBeInTheDocument();
     // Says plainly, per lift, what unlocks a trend.
     const head = screen.getByTestId('lift-trends-summary');
     expect(head).toHaveTextContent('No strength trends yet');
     expect(screen.getByTestId('lift-first-trend-hint')).toHaveTextContent(
-      'Log Bench Press in 1 more workout to see its trend. A trend needs the same lift in 3 workouts.'
+      'Log Bench Press once more to see its trend line. A trend needs the same lift in 3 workouts.'
     );
     expect(early).toHaveTextContent(/best set on each lift/);
   });
@@ -169,10 +169,50 @@ describe('LiftTrendsCard', () => {
     expect(name.className).not.toMatch(/\btruncate\b/);
     expect(change.className).not.toMatch(/\btruncate\b/);
     expect(change.parentElement?.className).not.toMatch(/\btruncate\b/);
-    // "est. max" is explained in plain words where it first appears.
-    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest single rep/);    // …and so is how the %/wk rate is worked out, over the card's own window.
+    // "est. max" is explained in plain words where it first appears — the
+    // formula, the reps-left rule and the %/wk rate, one tap away.
+    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest single rep/);
+    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/Brzycki/);
     expect(screen.getByTestId('rate-explainer')).toHaveTextContent(
-      new RegExp(`straight line through the est. max of your best set in each workout over the last ${Math.round(summary.windowDays / 7)} weeks`)
+      new RegExp(`straight line through each workout's best-set est. max over the last ${Math.round(summary.windowDays / 7)} weeks`)
     );
+  });
+
+  it("explains est. max on the user's own best set", async () => {
+    const user = userEvent.setup();
+    const withSet = lift({
+      history: [
+        { date: '2026-10-01', e1rmKg: 95, topSetWeightKg: 75, topSetReps: 8, topSetRpe: 9 },
+        { date: '2026-11-01', e1rmKg: 106.7, topSetWeightKg: 80, topSetReps: 8, topSetRpe: 7.5 },
+      ],
+    });
+    render(<LiftTrendsCard summary={{ ...summary, lifts: [withSet] }} units="kg" />);
+    const method = screen.getByTestId('est-max-method');
+    expect(method).not.toHaveAttribute('open');
+    await user.click(within(method).getByText('How est. max is worked out'));
+    expect(method).toHaveAttribute('open');
+    expect(screen.getByTestId('est-max-example')).toHaveTextContent(
+      'Your best set: 80 kg × 8 with ~2 left ≈ 10 reps to failure → est. max 107.5 kg.'
+    );
+  });
+
+  it('gives the empty state one plain next step: log a workout', () => {
+    render(
+      <LiftTrendsCard
+        summary={{ ...summary, lifts: [], rising: 0, flat: 0, down: 0, stalled: null, insufficientData: 0, earlyLifts: [] }}
+        units="lb"
+      />
+    );
+    const empty = screen.getByTestId('lift-trends-empty');
+    expect(empty).toHaveTextContent('No lifts logged in the last 12 weeks.');
+    expect(empty).not.toHaveTextContent(/enough (data|history)/i);
+    const cta = within(empty).getByRole('link', { name: 'Log a workout' });
+    expect(cta).toHaveAttribute('href', '/dashboard/workout/new');
+  });
+
+  it('says what an untrended lift needs in plain words, not "enough history"', () => {
+    render(<LiftTrendsCard summary={{ ...summary, insufficientData: 2 }} units="kg" />);
+    expect(screen.getByText(/2 more lifts have no trend line yet: each needs 3 workouts\./)).toBeInTheDocument();
+    expect(screen.queryByText(/enough history/)).not.toBeInTheDocument();
   });
 });

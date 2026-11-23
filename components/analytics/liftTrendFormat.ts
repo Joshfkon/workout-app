@@ -2,10 +2,12 @@ import {
   MIN_SESSIONS_FOR_TREND,
   type EarlyLift,
   type LiftTrend,
+  type LiftTrendPoint,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { UNASSIGNED_TRACK_KEY } from '@/services/locationTracks';
 import { formatWeight } from '@/lib/utils';
 import { formatLoad } from '@/lib/mcp/summaries';
+import { E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS, E1RM_MAX_EFFECTIVE_REPS, rirForE1RM } from '@/services/shared/e1rm';
 
 /** Shared copy/colour rules for a lift's trend: Strength rows and the lift screen. */
 
@@ -85,9 +87,14 @@ export function moreWorkouts(n: number): string {
   return `${n} more workout${n === 1 ? '' : 's'}`;
 }
 
+/** "once more" / "2 more times". */
+export function moreTimes(n: number): string {
+  return n === 1 ? 'once more' : `${n} more times`;
+}
+
 /**
  * The one concrete next step toward a first trend, for the lift closest to
- * one: "Log Barbell Back Squat in 1 more workout to see its trend." Null
+ * one, in plain words: "Log Squat once more to see its trend line." Null
  * when there is no not-yet-trended lift.
  */
 export function nextTrendHint(earlyLifts: readonly EarlyLift[] | null | undefined): string | null {
@@ -95,7 +102,58 @@ export function nextTrendHint(earlyLifts: readonly EarlyLift[] | null | undefine
   const closest = earlyLifts.reduce((a, b) => (b.sessions > a.sessions ? b : a));
   const n = workoutsUntilTrend(closest.sessions);
   if (n === 0) return null;
-  return `Log ${closest.name} in ${moreWorkouts(n)} to see its trend.`;
+  return `Log ${closest.name} ${moreTimes(n)} to see its trend line.`;
+}
+
+/**
+ * How est. max is worked out, in plain words. Mirrors
+ * services/shared/e1rm (`estimateE1RM`): Brzycki on reps + reps left,
+ * clamped at 12, no estimate past 15.
+ */
+export const EST_MAX_METHOD =
+  `Est. max uses the Brzycki formula: weight × 36 ÷ (37 − reps to failure). ` +
+  `Reps to failure = the reps you did plus the reps you had left, read from the RIR (or RPE) you logged; ` +
+  `a set with no effort logged counts as taken to failure. ` +
+  `Past ${E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS} reps to failure it counts ${E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS}, ` +
+  `and past ${E1RM_MAX_EFFECTIVE_REPS} it makes no estimate. ` +
+  `Counting the reps you had left is why it reads higher than a plain reps-to-max calculator.`;
+
+/**
+ * The method worked through on one of the user's own sets:
+ * "Your best set: 180 lbs × 10 with ~2 left ≈ 12 reps to failure → est. max 260.0 lbs."
+ * The estimate printed is the stored one (the trend's own number), and the
+ * reps-to-failure is the same count the estimator used (`rirForE1RM`). Null
+ * without a loaded rep set. A point persisted before its RPE was carried
+ * (`topSetRpe` undefined) gets no reps-left clause rather than a guessed one.
+ */
+export function estMaxExample(
+  point: Pick<LiftTrendPoint, 'e1rmKg' | 'topSetWeightKg' | 'topSetReps' | 'topSetRpe'> | null | undefined,
+  units: 'lb' | 'kg',
+  lead = 'Your best set'
+): string | null {
+  if (!point || !(point.topSetWeightKg > 0) || !(point.topSetReps > 0) || !(point.e1rmKg > 0)) return null;
+  const set = setLabel(point.topSetWeightKg, point.topSetReps, units);
+  const max = `est. max ${formatWeight(point.e1rmKg, units)}`;
+  if (point.topSetRpe === undefined) return `${lead}: ${set} → ${max}.`;
+  const left = rirForE1RM(point.topSetRpe);
+  const toFailure = point.topSetReps + left;
+  const counted = Math.min(toFailure, E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS);
+  const leftPart = left > 0 ? ` with ~${left} left` : ' taken to failure';
+  const capPart = counted < toFailure ? `, counted as ${counted}` : '';
+  return `${lead}: ${set}${leftPart} ≈ ${toFailure} reps to failure${capPart} → ${max}.`;
+}
+
+/**
+ * The point to work the example on: the highest est. max among the lifts'
+ * latest sets (the numbers the rows show).
+ */
+export function exampleSetPoint(lifts: readonly Pick<LiftTrend, 'history'>[]): LiftTrendPoint | null {
+  let best: LiftTrendPoint | null = null;
+  for (const l of lifts) {
+    const p = l.history[l.history.length - 1];
+    if (p && p.topSetWeightKg > 0 && p.topSetReps > 0 && (!best || p.e1rmKg > best.e1rmKg)) best = p;
+  }
+  return best;
 }
 
 /**

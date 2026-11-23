@@ -9,7 +9,8 @@ import { useLiftTrends } from '@/hooks/useLiftTrends';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { LiftTrend, LiftTrendPoint } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import type { PlateauDetectionResult } from '@/services/plateauDetector';
-import { historyHref, loggedLoad, setLabel, shortDay, signedPct, statusOf } from './liftTrendFormat';
+import { estMaxExample, historyHref, loggedLoad, setLabel, shortDay, signedPct, statusOf } from './liftTrendFormat';
+import { EstMaxMethod } from './EstMaxMethod';
 
 const PROGRESS_HREF = '/dashboard/analytics';
 
@@ -146,7 +147,7 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
                 content={{
                   term: 'Estimated max',
                   shortExplanation:
-                    'The heaviest single rep your recent sets suggest you could lift. Worked out from weight × reps, so you never have to test it.',
+                    'The heaviest single rep your recent sets suggest you could lift. Worked out from weight, reps and the reps you had left (Brzycki formula), so you never have to test it.',
                   learnMoreSlug: 'data-explained',
                 }}
               />
@@ -167,6 +168,7 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
           </div>
           <span className={`rounded-full px-2.5 py-1 text-caption font-semibold ${status.pill}`}>{status.label}</span>
         </div>
+        <EstMaxMethod className="mt-1" example={estMaxExample(latest, units, 'Your last best set')} />
         <Sparkline values={values} width={320} height={110} colorClassName="stroke-action" className="mt-4 w-full" />
         {values.length >= 2 && (
           <div className="mt-1 flex justify-between text-caption text-ink-3 tabular-nums">
