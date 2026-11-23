@@ -62,3 +62,19 @@ describe('starter targets for someone who does not lift', () => {
     expect(targetsFromMacroSettings(72, foodOnly.settings).calories).toBe(foodOnly.targets.calories);
   });
 });
+
+describe('starterTargets: onboarding training-step answers', () => {
+  const base = { phase: 'bulk' as const, weightKg: 80, heightCm: 180, age: 30, sex: 'male' as const };
+
+  it('uses a picked pace in the same direction, and ignores one in the other', () => {
+    expect(starterTargets({ ...base, nutritionGoal: 'moderate_bulk' })!.settings.goal).toBe('moderate_bulk');
+    expect(starterTargets({ ...base, nutritionGoal: 'moderate_cut' })!.settings.goal).toBe('slow_bulk');
+    expect(starterTargets({ ...base, nutritionGoal: null })!.settings.goal).toBe('slow_bulk');
+  });
+
+  it('counts the stated days a week as workouts, never for a food-only tracker', () => {
+    expect(starterTargets({ ...base, workoutsPerWeek: 6 })!.settings.workouts_per_week).toBe(6);
+    expect(starterTargets({ ...base, workoutsPerWeek: null })!.settings.workouts_per_week).toBe(4);
+    expect(starterTargets({ ...base, workoutsPerWeek: 6, liftsWeights: false })!.settings.workouts_per_week).toBe(0);
+  });
+});

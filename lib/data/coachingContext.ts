@@ -5,6 +5,7 @@
  * coaching context for AI-powered personalized training advice.
  */
 
+import { effectiveTrainingAge } from '@/services/mesocycleBuilder';
 import { createClient } from '@/lib/supabase/server';
 import { estimateE1RM, getLocalDateString } from '@/lib/utils';
 import type { CoachingContext, RecentLift, PhaseType } from '@/types/coaching';
@@ -290,7 +291,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       age,
       sex: user.sex || 'male',
       height: user.height_cm || 175,
-      trainingAge: user.training_age_years || 1,
+      trainingAge: effectiveTrainingAge(user.training_age_years ?? null, user.experience || 'intermediate'),
       goal: prefs?.coaching?.primaryGoal || user.goal || undefined,
       experience: user.experience || undefined,
       enhancedAthleteMode: user.enhanced_athlete_mode === true,

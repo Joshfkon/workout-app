@@ -16,6 +16,7 @@ import {
   liftHref,
   moreWorkouts,
   nextTrendHint,
+  risingSlippingNames,
   setLabel,
   signedPct,
   statusOf,
@@ -81,6 +82,7 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
   const confident = summary.rising + summary.flat + summary.down;
   const weeks = Math.round(summary.windowDays / 7);
   const rebuilding = summary.rebuilding;
+  const liftNames = risingSlippingNames(summary.lifts);
   const earlyLifts = summary.earlyLifts ?? [];
   // No trend anywhere yet: name the lift closest to one and how many more
   // workouts it needs, in the user's terms.
@@ -105,6 +107,11 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
               ? 'Your lift trends are rebuilding'
               : 'No strength trends yet'}
         </p>
+        {confident > 0 && liftNames && (
+          <p className="mt-0.5 text-subhead text-ink-2" data-testid="lift-trends-names">
+            {liftNames}
+          </p>
+        )}
         {firstTrendHint && (
           <p className="mt-1 text-subhead text-ink" data-testid="lift-first-trend-hint">
             {firstTrendHint} A trend needs the same lift in {MIN_SESSIONS_FOR_TREND} workouts.

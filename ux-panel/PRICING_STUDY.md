@@ -2,7 +2,7 @@
 
 **Goal.** Choose HyperTrack's price and package shape: which monthly and annual prices, and which features belong in Free vs Pro (and whether a food-only tier is worth having). We compare **options against each other**. We do not forecast revenue. The winning option gets confirmed with a real price test after launch.
 
-**Status.** Plan only. Nothing here has run or spent money.
+**Status.** Built (see §5 and the README's *Pricing study*). Verified only with the free scripted model (`--dry-run --fake-llm`, including `--hands-on`); no paid study has run.
 
 ---
 
@@ -102,6 +102,13 @@ Small panel-only changes:
 - `report.mjs`: a pricing section with curves per segment.
 
 Estimated effort: about one session.
+
+**As built** (where it differs from the list above):
+- The tour is `ux-panel/pricing/tour.mjs` + `pricing/capture-tour.mjs`, not a journey: survey personas never browse.
+- Pricing anchors live in `ux-panel/pricing/anchors.mjs` (versioned and hashed like `anchors.mjs`). Threshold answers have no anchors: their dollar amounts are parsed from the text.
+- The report is `ux-panel/pricing/render.mjs` (written by the run as `pricing-report.html`; `pricing/report.mjs` re-renders).
+- Lifetime ($49.99 / $79.99 / $99.99) is in. V2 and V4 are today's Pro **plus** one feature at the same $9.99, so a V1 "no" that turns into a V2/V4 "yes" isolates the feature; V3 (food-only) is $4.99. All editable in `pricing/questions.mjs`.
+- Quotas for the "both" segment's gender and age had no basis in §1; they are marked as assumptions in the table.
 
 ---
 

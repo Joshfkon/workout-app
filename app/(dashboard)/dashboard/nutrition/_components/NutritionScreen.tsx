@@ -2484,6 +2484,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         isOpen={showAddFood}
         onClose={() => setShowAddFood(false)}
         onAdd={handleAddFood}
+        units={weightUnit}
         defaultMealType={selectedMealType}
         onMealTypeChange={(m) => { setSelectedMealType(m); setQuickMeal(m); }}
         initialTab={addFoodTab}

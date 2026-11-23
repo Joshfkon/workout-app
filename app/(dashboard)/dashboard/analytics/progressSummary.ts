@@ -17,7 +17,7 @@ import {
   type LiftTrend,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
-import { nextTrendHint, setLabel } from '@/components/analytics/liftTrendFormat';
+import { nextTrendHint, risingSlippingNames, setLabel } from '@/components/analytics/liftTrendFormat';
 import {
   weighInsInWindow,
   weightTrendLine,
@@ -43,6 +43,8 @@ export interface ProgressSummary {
   weightMethod: string | null;
   /** e.g. "Over the last 12 weeks, 2 of your 3 tracked lifts are going up and none are slipping." */
   strength: string | null;
+  /** Which lifts the strength counts are, by name: "Rising: Bench Press, Squat." Null with nothing rising/slipping. */
+  strengthNames: string | null;
   /** Each lift behind the strength sentence (expandable list). */
   lifts: LiftBreakdownRow[];
 }
@@ -199,5 +201,6 @@ export function buildProgressSummary({ weighIns, liftTrends, units, now }: Progr
         SUMMARY_WEIGHT_WINDOW_DAYS
       )
     : null;
-  return { weight, weightMethod, strength, lifts: strength ? liftBreakdown(liftTrends, units) : [] };
+  const strengthNames = strength && liftTrends ? risingSlippingNames(liftTrends.lifts) : null;
+  return { weight, weightMethod, strength, strengthNames, lifts: strength ? liftBreakdown(liftTrends, units) : [] };
 }

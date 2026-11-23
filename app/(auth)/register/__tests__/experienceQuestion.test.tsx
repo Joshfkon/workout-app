@@ -47,6 +47,8 @@ describe('RegisterPage — experience question', () => {
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
     expect(sentExperience()).toBe('intermediate');
     expect(sentData()).not.toHaveProperty('tracking_focus');
+    // Nothing to show back in onboarding: no exact answer is stored.
+    expect(sentData()).not.toHaveProperty('lifting_answer');
   });
 
   it('"No, food tracking" signs up as a food tracker (novice if they ever lift)', async () => {
@@ -87,6 +89,8 @@ describe('RegisterPage — experience question', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
     expect(sentExperience()).toBe('intermediate');
+    // The exact answer is kept so onboarding can show it back, not re-ask.
+    expect(sentData()).toMatchObject({ lifting_answer: '2_to_3_years' });
   });
 
   it('says what the answer changes', async () => {

@@ -1,6 +1,10 @@
 import {
   buildSuggestedWorkout,
   suggestedOrderLine,
+  injuryAreasPhrase,
+  injuryPickLine,
+  injuryPlanLine,
+  injuryNoteFromReason,
   type BuildSuggestedWorkoutInput,
   type SuggestedExerciseInput,
   type SuggestedMuscleInput,
@@ -737,6 +741,87 @@ describe('standing-injury safety', () => {
   it('never picks an avoid lift', () => {
     const plan = build({ muscles, exercises, avoidExerciseIds: new Set(['upright']) });
     expect(plan.exercises.map((p) => p.exerciseId)).not.toContain('upright');
+  });
+
+  // UX panel round 19 (returning lifter, shoulder): say what the injury
+  // check changed, per pick. Metadata only — the picks are unchanged.
+  it('notes which lift a pick replaced, without changing the pick', () => {
+    const without = build({ muscles, exercises, maxExercises: 1 });
+    expect(without.exercises[0].injury).toBeUndefined();
+    const plan = build({ muscles, exercises, maxExercises: 1, avoidExerciseIds: ['upright'] });
+    expect(plan.exercises[0].exerciseId).toBe('raise');
+    expect(plan.exercises[0].injury).toEqual({ kind: 'instead_of', pickedId: 'raise', insteadOfId: 'upright' });
+    // Same numbers as before the note existed.
+    const { injury: _ignored, ...rest } = plan.exercises[0];
+    const fromCaution = build({ muscles, exercises, maxExercises: 1, cautionExerciseIds: ['upright'] }).exercises[0];
+    expect(fromCaution.injury).toEqual({ kind: 'instead_of', pickedId: 'raise', insteadOfId: 'upright' });
+    const { injury: _ignored2, ...restCaution } = fromCaution;
+    expect(rest).toEqual(restCaution);
+  });
+
+  it('notes a pick that is itself rated caution (no safe alternative)', () => {
+    const plan = build({ muscles, exercises: [exercises[0]], cautionExerciseIds: ['upright'] });
+    expect(plan.exercises[0].injury).toEqual({ kind: 'caution', pickedId: 'upright' });
+  });
+
+  it('adds no note when the injury check changed nothing', () => {
+    const plan = build({ muscles, exercises, maxExercises: 1, avoidExerciseIds: ['some-other-lift'] });
+    expect(plan.exercises[0].exerciseId).toBe('upright');
+    expect(plan.exercises[0].injury).toBeUndefined();
+  });
+});
+
+describe('injury copy', () => {
+  const nameOf = (id: string) => ({ upright: 'Upright Row', ohp: 'Overhead Press' })[id];
+
+  it('injuryAreasPhrase', () => {
+    expect(injuryAreasPhrase([])).toBeNull();
+    expect(injuryAreasPhrase(['Shoulder'])).toBe('your shoulder');
+    expect(injuryAreasPhrase(['Shoulder', 'Knee'])).toBe('your shoulder and knee');
+    expect(injuryAreasPhrase(['Shoulder', 'Lower back', 'Hip'])).toBe('your shoulder, lower back and hip');
+  });
+
+  it('injuryPickLine', () => {
+    const areas = 'your shoulder';
+    expect(injuryPickLine({ kind: 'instead_of', pickedId: 'raise', insteadOfId: 'upright' }, 'raise', areas, nameOf)).toBe(
+      'For your shoulder: picked instead of Upright Row'
+    );
+    expect(injuryPickLine({ kind: 'caution', pickedId: 'upright' }, 'upright', areas, nameOf)).toBe(
+      'For your shoulder: go light, stop if it hurts'
+    );
+    // Swapped since the note was written: the note does not follow.
+    expect(injuryPickLine({ kind: 'caution', pickedId: 'upright' }, 'raise', areas, nameOf)).toBeNull();
+    expect(injuryPickLine(undefined, 'raise', areas, nameOf)).toBeNull();
+    expect(injuryPickLine({ kind: 'caution', pickedId: 'upright' }, 'upright', null, nameOf)).toBeNull();
+  });
+
+  it('injuryPlanLine answers "does it account for my shoulder?" either way', () => {
+    expect(injuryPlanLine([{ exerciseId: 'raise' }], null)).toBeNull();
+    expect(injuryPlanLine([{ exerciseId: 'raise' }], 'your shoulder')).toBe(
+      'Planned around your shoulder: lifts that strain it are left out, and none of today’s picks needed changing.'
+    );
+    expect(
+      injuryPlanLine(
+        [
+          { exerciseId: 'raise', injury: { kind: 'instead_of', pickedId: 'raise', insteadOfId: 'upright' } },
+          { exerciseId: 'press', injury: { kind: 'caution', pickedId: 'press' } },
+        ],
+        'your shoulder'
+      )
+    ).toBe('Planned around your shoulder: lifts that strain it are left out — 1 lift swapped for one easier on it, 1 to take carefully.');
+  });
+
+  it('injuryNoteFromReason reads the line back off a started block', () => {
+    expect(injuryNoteFromReason('Side Delts: 0 of 12 weekly sets done · For your shoulder: picked instead of Upright Row')).toBe(
+      'For your shoulder: picked instead of Upright Row'
+    );
+    expect(
+      injuryNoteFromReason(
+        'Side Delts: 0 of 12 weekly sets done ↔ Swapped from X (equipment) · For your shoulder: go light, stop if it hurts'
+      )
+    ).toBe('For your shoulder: go light, stop if it hurts');
+    expect(injuryNoteFromReason('Side Delts: 0 of 12 weekly sets done')).toBeNull();
+    expect(injuryNoteFromReason(null)).toBeNull();
   });
 });
 

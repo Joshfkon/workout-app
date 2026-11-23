@@ -145,6 +145,14 @@ describe('common foods say what their numbers are per', () => {
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByText('Peas'));
+    // Opens on a typical portion, which says so (panel r19); once the amount
+    // is the user's own, the editor says there is no standard serving.
+    expect(screen.getByTestId('add-food-portion-source')).toHaveTextContent('85 g · about 3 oz, a typical portion');
+    expect(screen.queryByTestId('add-food-no-serving')).not.toBeInTheDocument();
+    const amount = screen.getByTestId('add-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '60');
+    expect(screen.queryByTestId('add-food-portion-source')).not.toBeInTheDocument();
     expect(screen.getByTestId('add-food-no-serving')).toHaveTextContent('No standard serving');
     await user.click(screen.getByRole('button', { name: 'Clear selection' }));
     await user.click(screen.getByText('Whole Eggs (large, cooked)'));

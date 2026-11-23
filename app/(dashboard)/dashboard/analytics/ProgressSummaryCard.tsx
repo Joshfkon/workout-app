@@ -41,6 +41,11 @@ export function ProgressSummaryCard({ summary }: { summary: ProgressSummary }) {
           {summary.strength}
         </p>
       )}
+      {summary.strength && summary.strengthNames && (
+        <p className="mt-0.5 text-subhead text-ink-2" data-testid="progress-summary-strength-names">
+          {summary.strengthNames}
+        </p>
+      )}
       {summary.lifts.length > 0 && (
         <>
           <button

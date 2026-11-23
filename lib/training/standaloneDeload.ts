@@ -30,6 +30,7 @@
 // calling client component.
 // ============================================================
 
+import { effectiveTrainingAge } from '@/services/mesocycleBuilder';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   checkDeloadTriggers,
@@ -203,7 +204,8 @@ export function buildStandaloneProfile(
     stressLevel: clampRating(row?.stress_level, 3),
     availableEquipment: [],
     injuryHistory: [],
-    trainingAge: row?.training_age_years ?? 0,
+    // 0/null = never set: derive from experience (services/mesocycleBuilder).
+    trainingAge: effectiveTrainingAge(row?.training_age_years ?? null, experience === 'novice' || experience === 'intermediate' || experience === 'advanced' ? experience : 'novice'),
     heightCm: null,
     latestDexa: null,
   };

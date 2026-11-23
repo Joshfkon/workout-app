@@ -20,7 +20,10 @@ interface PRCelebrationProps {
   onDone: () => void;
 }
 
-const AUTO_DISMISS_MS = 3000;
+// Short dwell: the next set's suggestion (and its reason) is what the lifter
+// needs next, and the popup used to sit over it for 3 s (UX panel round 19).
+export const PR_CELEBRATION_DWELL_MS = 2000;
+const AUTO_DISMISS_MS = PR_CELEBRATION_DWELL_MS;
 const INTERACTION_DELAY_MS = 200; // Brief delay before interaction-based dismiss
 const CONFETTI_COLORS = ['#facc15', '#38bdf8', '#4ade80', '#f472b6', '#fb923c', '#a78bfa'];
 const CONFETTI_COUNT = 28;
@@ -49,10 +52,16 @@ function makeConfetti(): ConfettiPiece[] {
 }
 
 /**
- * Full-screen celebratory burst shown the moment a logged set beats the
- * exercise's record. Non-blocking: the confetti layer ignores pointers so
- * the workout stays interactive; tapping the badge dismisses early, and it
- * auto-dismisses after a couple of seconds either way.
+ * Celebratory burst shown the moment a logged set beats the exercise's
+ * record. Non-blocking: the confetti layer ignores pointers so the workout
+ * stays interactive; tapping the badge dismisses early, and it auto-dismisses
+ * after two seconds either way.
+ *
+ * The badge is a compact banner at the TOP of the screen, not a card in the
+ * middle: mid-screen it sat exactly over the exercise card's next-set
+ * suggestion and its "Why:" line (UX panel: the Hevy switcher never saw why
+ * set 2 was picked). The bottom band belongs to the toast, rest timer and
+ * pinned Log set bar, so the top is the one place it covers nothing needed.
  */
 export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
   const reduceMotion = useReducedMotion();
@@ -114,7 +123,8 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.25 } }}
-          className="fixed inset-0 z-[90] pointer-events-none flex items-center justify-center p-6"
+          data-testid="pr-celebration"
+          className="fixed inset-x-0 top-0 z-[90] pointer-events-none flex items-start justify-center px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]"
           aria-live="polite"
           role="status"
         >
@@ -122,7 +132,7 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
           {confetti.map((piece, i) => (
             <motion.span
               key={i}
-              className="absolute top-[38%] rounded-sm"
+              className="absolute top-12 rounded-sm"
               style={{
                 left: `${piece.left}%`,
                 width: piece.size,
@@ -145,8 +155,8 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
           <motion.button
             type="button"
             onClick={onDone}
-            className="pointer-events-auto relative flex flex-col items-center gap-1 rounded-2xl bg-card/95 border border-status-warn/40 shadow-xl shadow-status-warn/20 px-8 py-6 text-center backdrop-blur"
-            initial={reduceMotion ? { opacity: 0 } : { scale: 0.5, opacity: 0, y: 20 }}
+            className="pointer-events-auto relative flex w-full max-w-sm items-center gap-3 rounded-2xl bg-card/95 border border-status-warn/40 shadow-xl shadow-status-warn/20 px-4 py-3 text-left backdrop-blur"
+            initial={reduceMotion ? { opacity: 0 } : { scale: 0.9, opacity: 0, y: -20 }}
             animate={reduceMotion ? { opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={
@@ -155,18 +165,23 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
             aria-label={`${celebration.title}: ${celebration.exerciseName}, ${celebration.detail}. Dismiss.`}
           >
             <motion.span
-              className="text-status-warn"
+              className="flex-shrink-0 text-status-warn"
               aria-hidden="true"
               animate={reduceMotion ? undefined : { rotate: [0, -12, 12, -8, 8, 0] }}
               transition={{ duration: 0.8, delay: 0.15 }}
             >
-              <IconTrophy className="h-12 w-12" stroke={1.75} aria-hidden="true" />
+              <IconTrophy className="h-8 w-8" stroke={1.75} aria-hidden="true" />
             </motion.span>
-            <span className="text-headline font-bold text-status-warn">
-              {celebration.title}
+            <span className="min-w-0 flex-1 leading-snug">
+              <span className="block text-headline">
+                <span className="font-bold text-status-warn">{celebration.title}</span>
+                <span className="text-ink-3" aria-hidden="true">
+                  {' · '}
+                </span>
+                <span className="font-medium text-ink">{celebration.exerciseName}</span>
+              </span>
+              <span className="block text-ink-2 text-subhead tabular-nums">{celebration.detail}</span>
             </span>
-            <span className="text-ink font-medium">{celebration.exerciseName}</span>
-            <span className="text-ink-2 text-subhead tabular-nums">{celebration.detail}</span>
           </motion.button>
         </motion.div>
       )}

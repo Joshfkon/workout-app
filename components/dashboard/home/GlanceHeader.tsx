@@ -78,13 +78,26 @@ export function GlanceHeader({
         <PendingLink
           href="/dashboard/settings"
           aria-label="Settings"
-          className="-m-1 flex h-11 w-11 items-center justify-center rounded-full text-ink-2 transition-[background-color,transform] hover:bg-fill active:scale-95 active:bg-fill"
+          className="relative -m-1 flex h-11 w-11 items-center justify-center rounded-full text-ink-2 transition-[background-color,transform] hover:bg-fill active:scale-95 active:bg-fill"
           pendingClassName="bg-fill text-ink"
           data-testid="home-settings"
         >
           {(pending) =>
             pending ? (
-              <IconLoader2 size={22} className="animate-spin" aria-hidden="true" />
+              <>
+                <IconLoader2 size={22} className="animate-spin" aria-hidden="true" />
+                {/* Words, not just a spinner: on a slow load the panel read
+                    the spinner alone as "my tap didn't register" and tapped
+                    again (round 19). Absolutely placed under the gear, so
+                    nothing shifts; repeat taps are ignored (PendingLink). */}
+                <span
+                  role="status"
+                  data-testid="home-settings-opening"
+                  className="pointer-events-none absolute right-0 top-full mt-0.5 whitespace-nowrap text-caption font-medium text-ink-2"
+                >
+                  Opening Settings…
+                </span>
+              </>
             ) : (
               <IconSettings size={22} aria-hidden="true" />
             )

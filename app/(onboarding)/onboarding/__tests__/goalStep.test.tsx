@@ -94,6 +94,13 @@ async function reachGoalStep(bodyFat = '15', age = '') {
   return user;
 }
 
+/** Continue on the goal step, then Skip the optional training step if it shows (lifters). */
+async function finishGoal(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('goal-continue'));
+  const skip = screen.queryByTestId('training-skip');
+  if (skip) await user.click(skip);
+}
+
 describe('Onboarding goal step', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -109,23 +116,43 @@ describe('Onboarding goal step', () => {
     usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
     let release: () => void = () => {};
     coachingInsertGate = new Promise<void>((r) => (release = r));
-    await reachGoalStep();
+    const user = await reachGoalStep();
+    // Lifters go on to the optional training step; nothing is saved yet.
+    await user.click(screen.getByTestId('goal-continue'));
+    expect(coachingInserts).toBe(0);
 
-    const cont = screen.getByTestId('goal-continue');
+    const cont = screen.getByTestId('training-continue');
     // Two taps in the same tick, before the busy state re-renders.
     act(() => {
       fireEvent.click(cont);
       fireEvent.click(cont);
     });
-    await waitFor(() => expect(screen.getByTestId('goal-continue')).toHaveTextContent('Saving…'));
-    expect(screen.getByTestId('goal-continue')).toBeDisabled();
-    expect(screen.getByTestId('goal-continue')).toHaveAttribute('aria-busy', 'true');
+    await waitFor(() => expect(screen.getByTestId('training-continue')).toHaveTextContent('Saving…'));
+    expect(screen.getByTestId('training-continue')).toBeDisabled();
+    expect(screen.getByTestId('training-continue')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByTestId('training-skip')).toBeDisabled();
 
     await act(async () => release());
     await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
     expect(coachingInserts).toBe(1);
     // Still busy while the route changes: no re-enabled button to tap again.
-    expect(screen.getByTestId('goal-continue')).toBeDisabled();
+    expect(screen.getByTestId('training-continue')).toBeDisabled();
+  });
+
+  it('Skip on the training step shows it is working at once', async () => {
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
+    let release: () => void = () => {};
+    coachingInsertGate = new Promise<void>((r) => (release = r));
+    const user = await reachGoalStep();
+    await user.click(screen.getByTestId('goal-continue'));
+    act(() => {
+      fireEvent.click(screen.getByTestId('training-skip'));
+    });
+    await waitFor(() => expect(screen.getByTestId('training-skip')).toHaveTextContent('Skipping…'));
+    expect(screen.getByTestId('training-skip')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByTestId('training-continue')).toBeDisabled();
+    await act(async () => release());
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
   });
 
   it('presents the body-fat suggestion as information, not a second selection', async () => {
@@ -194,7 +221,7 @@ describe('Onboarding goal step (saved choices)', () => {
     await user.click(screen.getByTestId('goal-option-bulk'));
     await user.click(screen.getByTestId('injury-chip-shoulder'));
     await user.click(screen.getByTestId('injury-chip-lower_back'));
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
     expect(injuryWrites()).toEqual([['injuryAreas', ['shoulder', 'lower_back']]]);
@@ -209,7 +236,7 @@ describe('Onboarding goal step (saved choices)', () => {
 
     await user.click(screen.getByTestId('goal-option-cut'));
     expect(screen.getByTestId('goal-continue')).toBeEnabled();
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
 
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(injuryWrites()).toEqual([]);
@@ -221,7 +248,7 @@ describe('Onboarding goal step (saved choices)', () => {
 
     await user.click(screen.getByTestId('goal-option-cut'));
     await user.click(screen.getByTestId('injury-chip-none'));
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
 
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(injuryWrites()).toEqual([['injuryAreas', []]]);
@@ -234,7 +261,7 @@ describe('Onboarding goal step (saved choices)', () => {
 
     expect(screen.getByTestId('injury-chip-knee')).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByTestId('injury-chip-knee'));
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
 
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(injuryWrites()).toEqual([['injuryAreas', []]]);
@@ -293,7 +320,7 @@ describe('Onboarding goal step: daily targets', () => {
       `${cut.targets.calories.toLocaleString()} kcal`
     );
 
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockSaveMacroSettings).toHaveBeenCalledWith({ ...cut.settings, target_weight_change_per_week: null });
     expect(targetInserts).toEqual([{ user_id: 'u1', ...cut.targets }]);
@@ -309,7 +336,7 @@ describe('Onboarding goal step: daily targets', () => {
     expect(screen.getByTestId('goal-targets-need-age')).not.toHaveTextContent(/Back|last step/);
     expect(screen.getByLabelText('Age')).toHaveValue(null);
 
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockSaveMacroSettings).not.toHaveBeenCalled();
     expect(targetInserts).toEqual([]);
@@ -332,7 +359,7 @@ describe('Onboarding goal step: daily targets', () => {
     // The field doesn't vanish mid-typing once the age becomes valid.
     expect(screen.getByLabelText('Age')).toHaveValue(30);
 
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(userUpdates.find((u) => 'goal' in u)).toMatchObject({ goal: 'maintenance', age: 30 });
     expect(targetInserts).toEqual([{ user_id: 'u1', ...maintain }]);
@@ -350,7 +377,7 @@ describe('Onboarding goal step: daily targets', () => {
     await waitFor(() =>
       expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent('2,400 kcal · 180 g protein')
     );
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockSaveMacroSettings).not.toHaveBeenCalled();
     expect(targetInserts).toEqual([]);
@@ -392,7 +419,7 @@ describe('Onboarding goal step: food-only users', () => {
     await user.click(screen.getByTestId('injury-question-toggle'));
     expect(screen.getByText('Optional. Only used if you ever log a workout.')).toBeInTheDocument();
     await user.click(screen.getByTestId('injury-chip-knee'));
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockUpdatePreference).toHaveBeenCalledWith('injuryAreas', ['knee']);
   });
@@ -501,7 +528,7 @@ describe('Onboarding body composition: age', () => {
   it('saves the age typed here through the one users update', async () => {
     usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep('15', '34');
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(userUpdates.filter((u) => 'age' in u)).toEqual([expect.objectContaining({ age: 34 })]);
   });
@@ -604,7 +631,7 @@ describe('Onboarding: food-only users skip the strength benchmarks', () => {
   it('finishes onboarding and goes to the dashboard, with no coaching session', async () => {
     mockUserMetadata = { tracking_focus: 'food' };
     const user = await reachGoalStep('15', '30');
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
     expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/onboarding/benchmarks'));
@@ -618,14 +645,14 @@ describe('Onboarding: food-only users skip the strength benchmarks', () => {
     mockUserMetadata = { tracking_focus: 'food' };
     window.history.replaceState({}, '', '/onboarding?benchmarks=1');
     const user = await reachGoalStep('15', '30');
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
     expect(coachingInserts).toBe(1);
   });
 
   it('leaves lifters on the benchmarks path', async () => {
     const user = await reachGoalStep('15', '30');
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
     expect(stepWrites[stepWrites.length - 1]).toBe('goal');
   });
@@ -653,9 +680,11 @@ describe('Onboarding: beginner mode on the goal step', () => {
   it('is on for a novice and saved on Continue', async () => {
     usersRow = { goal: 'maintenance', experience: 'novice', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep('15', '30');
+    expect(screen.getByTestId('experience-summary-beginner')).toHaveTextContent('Beginner mode: on');
+    await user.click(screen.getByTestId('experience-summary-change'));
     const toggle = within(screen.getByTestId('onboarding-beginner-mode')).getByRole('switch');
     expect(toggle).toHaveAttribute('aria-checked', 'true');
-    await user.click(screen.getByTestId('goal-continue'));
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(savedBeginner()).toBe(true);
   });
@@ -663,10 +692,12 @@ describe('Onboarding: beginner mode on the goal step', () => {
   it('is off for an experienced lifter, and saves what they switch it to', async () => {
     usersRow = { goal: 'maintenance', experience: 'advanced', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('experience-summary-change'));
     const toggle = within(screen.getByTestId('onboarding-beginner-mode')).getByRole('switch');
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     await user.click(toggle);
-    await user.click(screen.getByTestId('goal-continue'));
+    expect(screen.getByTestId('experience-summary-beginner')).toHaveTextContent('Beginner mode: on');
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(savedBeginner()).toBe(true);
   });
@@ -676,9 +707,147 @@ describe('Onboarding: beginner mode on the goal step', () => {
     usersRow = { goal: 'maintenance', experience: 'novice', onboarding_step: 'body_comp', onboarding_completed: false };
     const user = await reachGoalStep('15', '30');
     expect(screen.queryByTestId('onboarding-beginner-mode')).not.toBeInTheDocument();
-    await user.click(screen.getByTestId('goal-continue'));
+    expect(screen.queryByTestId('onboarding-experience-summary')).not.toBeInTheDocument();
+    await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(savedBeginner()).toBeUndefined();
+  });
+});
+
+describe('Onboarding: experience is asked once (at sign-up)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userUpdates.length = 0;
+    stepWrites.length = 0;
+    targetsRow = null;
+    mockStoredInjuryAreas = [];
+    mockSaveMacroSettings.mockResolvedValue({ success: true });
+  });
+  afterEach(() => {
+    mockUserMetadata = {};
+  });
+
+  it('shows the sign-up answer back as a summary, with no question to answer again', async () => {
+    mockUserMetadata = { lifting_answer: '2_to_3_years' };
+    usersRow = { goal: 'maintenance', experience: 'intermediate', onboarding_step: 'body_comp', onboarding_completed: false };
+    await reachGoalStep('15', '30');
+    const summary = screen.getByTestId('onboarding-experience-summary');
+    expect(summary).toHaveTextContent('Lifting experience: 2–3 years (from sign-up)');
+    expect(summary).toHaveTextContent('Beginner mode: off');
+    // The switch is one tap away, not a second question on the screen.
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Intermediate/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the stored level when sign-up was skipped, without claiming it was asked', async () => {
+    usersRow = { goal: 'maintenance', experience: 'intermediate', onboarding_step: 'body_comp', onboarding_completed: false };
+    await reachGoalStep('15', '30');
+    const summary = screen.getByTestId('onboarding-experience-summary');
+    expect(summary).toHaveTextContent('Lifting experience: 1–3 years');
+    expect(summary).not.toHaveTextContent('from sign-up');
+  });
+});
+
+describe('Onboarding: optional training step (lifters)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userUpdates.length = 0;
+    stepWrites.length = 0;
+    targetsRow = null;
+    mockStoredUnits = 'kg';
+    mockStoredInjuryAreas = [];
+    mockSaveMacroSettings.mockResolvedValue({ success: true });
+    usersRow = { goal: 'maintenance', experience: 'advanced', onboarding_step: 'body_comp', onboarding_completed: false };
+  });
+  afterEach(() => {
+    mockUserMetadata = {};
+  });
+
+  const savedPrefs = () =>
+    userUpdates
+      .map((u) => u.preferences as Record<string, unknown> | undefined)
+      .find((p) => p && 'beginnerMode' in p);
+
+  it('asks days, split and bulk pace on one screen, and saves each where it belongs', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-option-bulk'));
+    await user.click(screen.getByTestId('goal-continue'));
+
+    expect(screen.getByRole('heading', { name: 'How do you train now?' })).toBeInTheDocument();
+    // The calculator's own levels; lean bulk (the default pace) shown picked.
+    expect(screen.getByTestId('training-rate-slow_bulk')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('training-rate-slow_bulk')).toHaveTextContent(
+      'Lean bulk+0.25% of body weight a week (about +0.2 kg a week)'
+    );
+    expect(mockSaveMacroSettings).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId('training-days-5'));
+    await user.click(screen.getByTestId('training-split-body_part'));
+    await user.click(screen.getByTestId('training-rate-moderate_bulk'));
+    const expected = starterTargets({
+      phase: 'bulk',
+      weightKg: 80,
+      heightCm: 180,
+      age: 30,
+      sex: 'male',
+      liftsWeights: true,
+      nutritionGoal: 'moderate_bulk',
+      workoutsPerWeek: 5,
+    })!;
+    expect(screen.getByTestId('training-rate-targets')).toHaveTextContent(
+      `${expected.targets.calories.toLocaleString()} kcal`
+    );
+
+    await user.click(screen.getByTestId('training-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding/benchmarks?session=sess-1'));
+    expect(savedPrefs()).toMatchObject({ trainingDaysPerWeek: 5, currentSplit: 'body_part', beginnerMode: false });
+    expect(mockSaveMacroSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ goal: 'moderate_bulk', workouts_per_week: 5 })
+    );
+    expect(targetInserts[targetInserts.length - 1]).toMatchObject(expected.targets);
+  });
+
+  it('Skip saves none of the answers and keeps the default pace', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-option-bulk'));
+    await user.click(screen.getByTestId('goal-continue'));
+    await user.click(screen.getByTestId('training-days-6'));
+    await user.click(screen.getByTestId('training-rate-aggressive_bulk'));
+    await user.click(screen.getByTestId('training-skip'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(savedPrefs()).not.toHaveProperty('trainingDaysPerWeek');
+    expect(savedPrefs()).not.toHaveProperty('currentSplit');
+    expect(mockSaveMacroSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ goal: 'slow_bulk', workouts_per_week: 4 })
+    );
+  });
+
+  it('asks no pace for Maintain, and Back returns to the goal step', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-continue'));
+    expect(screen.queryByTestId('training-rate')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText("What's your goal right now?")).toBeInTheDocument();
+  });
+
+  it('keeps existing food targets: no pace picker, a pointer to Eat instead', async () => {
+    targetsRow = { calories: 2500, protein: 180 };
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-option-cut'));
+    await user.click(screen.getByTestId('goal-continue'));
+    expect(screen.getByTestId('training-rate-kept')).toHaveTextContent(/kept/);
+    expect(screen.queryByTestId('training-rate-moderate_cut')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('training-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(mockSaveMacroSettings).not.toHaveBeenCalled();
+  });
+
+  it('is never shown to a food-only user', async () => {
+    mockUserMetadata = { tracking_focus: 'food' };
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
+    expect(screen.queryByTestId('onboarding-training-step')).not.toBeInTheDocument();
   });
 });
 

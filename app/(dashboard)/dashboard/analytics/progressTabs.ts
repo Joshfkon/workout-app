@@ -92,3 +92,13 @@ export function orderProgressTabs(lifted: boolean | undefined): ProgressTab[] {
     ? ['body-composition', 'wellness', 'strength']
     : ['strength', 'body-composition', 'wellness'];
 }
+
+/**
+ * Beginner mode before any body scan: hide the FFMI ceiling, the FFMI trend
+ * option and the "log a DEXA scan" prompt (UX panel: "Jargon such as FFMI
+ * and DEXA is shown with no explanation, which is intimidating for a
+ * beginner"). Once a scan exists, FFMI shows with its plain explanation.
+ */
+export function hideBodyScanPrompts(beginnerMode: boolean, scanCount: number): boolean {
+  return beginnerMode && scanCount === 0;
+}

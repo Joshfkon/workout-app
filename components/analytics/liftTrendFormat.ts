@@ -168,3 +168,33 @@ export function earlyLiftChange(lift: EarlyLift, units: 'lb' | 'kg'): string | n
   if (firstWeightKg == null || firstReps == null || latestWeightKg == null || latestReps == null) return null;
   return `First ${setLabel(firstWeightKg, firstReps, units)} → latest ${setLabel(latestWeightKg, latestReps, units)}`;
 }
+
+/** A lift's display name; per-gym tracks carry their gym ("Leg Press (Home)"). */
+function trendName(lift: Pick<LiftTrend, 'name' | 'locationLabel'>): string {
+  return lift.locationLabel ? `${lift.name} (${lift.locationLabel})` : lift.name;
+}
+
+/** "Bench Press, Barbell Row, Hack Squat (+2 more)" — at most `max` names. */
+export function shortNameList(names: readonly string[], max = 3): string {
+  const shown = names.slice(0, max).join(', ');
+  return names.length > max ? `${shown} (+${names.length - max} more)` : shown;
+}
+
+/**
+ * Which lifts are behind the "N of M rising" count, by name — confident
+ * lifts only, the same set the counts use. Panel finding (6/6): "The
+ * strength summary only gives a count of lifts rising, not which lifts."
+ * e.g. "Rising: Bench Press, Barbell Row, Hack Squat (+2 more). Slipping: Squat."
+ * Null when no lift is rising or slipping (flat-only says nothing new).
+ */
+export function risingSlippingNames(
+  lifts: readonly Pick<LiftTrend, 'name' | 'locationLabel' | 'direction' | 'lowConfidence'>[]
+): string | null {
+  const confident = lifts.filter((l) => !l.lowConfidence);
+  const rising = confident.filter((l) => l.direction === 'rising').map(trendName);
+  const down = confident.filter((l) => l.direction === 'down').map(trendName);
+  const parts: string[] = [];
+  if (rising.length > 0) parts.push(`Rising: ${shortNameList(rising)}.`);
+  if (down.length > 0) parts.push(`Slipping: ${shortNameList(down)}.`);
+  return parts.length > 0 ? parts.join(' ') : null;
+}

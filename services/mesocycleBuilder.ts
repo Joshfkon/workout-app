@@ -191,6 +191,31 @@ function getExerciseDatabase(): ExerciseEntry[] {
 // ============================================================
 
 /**
+ * Years of training to assume for each experience level when the profile
+ * has none. `users.training_age` defaults to 0 and nothing in onboarding
+ * writes it, so an 11-year advanced lifter was planned as "under a year of
+ * training" (×0.85 volume, linear novice ramp — UX panel, round 19).
+ * Novice stays under the one-year line; intermediate sits in the 1–3 band;
+ * advanced at 5, the line calculateRecoveryFactors already treats as
+ * experienced.
+ */
+export const TRAINING_AGE_BY_EXPERIENCE: Record<Experience, number> = {
+  novice: 0.5,
+  intermediate: 2,
+  advanced: 5,
+};
+
+/**
+ * The training age the planners use: the stored years when the lifter has
+ * set them (> 0), else the experience level's typical value. 0 is the
+ * column default, not an answer, so it counts as unset. Pure.
+ */
+export function effectiveTrainingAge(stored: number | null | undefined, experience: Experience): number {
+  if (typeof stored === 'number' && Number.isFinite(stored) && stored > 0) return stored;
+  return TRAINING_AGE_BY_EXPERIENCE[experience] ?? TRAINING_AGE_BY_EXPERIENCE.intermediate;
+}
+
+/**
  * Calculate recovery factors based on user profile
  * These affect volume, frequency, and deload recommendations
  */
@@ -704,10 +729,17 @@ export function buildPeriodizationPlan(
   // Select periodization model based on experience and training age
   let model: PeriodizationModel;
   
+  // An advanced lifter on a bulk is accumulating: volume climbs toward MRV
+  // and then deloads. Block periodization runs the other way (1.1 → 0.8 →
+  // 0.6 of the sets into a heavy peak), a strength-peaking shape that cut an
+  // off-season bodybuilder's chest from 11 to 8 sets over the block (UX
+  // panel, round 19). Other advanced goals keep block.
   if (profile.experience === 'novice' || profile.trainingAge < 1) {
     model = 'linear';
   } else if (profile.experience === 'intermediate' || profile.trainingAge < 3) {
     model = profile.goal === 'cut' ? 'weekly_undulating' : 'daily_undulating';
+  } else if (profile.goal === 'bulk') {
+    model = 'linear';
   } else {
     model = 'block';
   }
@@ -751,6 +783,13 @@ export function buildPeriodizationPlan(
  */
 export const ENHANCED_VOLUME_RAMP_BONUS = 0.1;
 
+/** Week-1 share of the plan's weekly sets in a linear block; the last
+ *  accumulation week reaches 100%. A 4-week block steps 75 / 83 / 92 / 100%,
+ *  about one or two sets per muscle per week. */
+export const LINEAR_RAMP_START = 0.75;
+/** Same for daily-undulating blocks, which already vary load within a week. */
+export const DUP_RAMP_START = 0.8;
+
 /**
  * Build week-by-week progression targets
  */
@@ -767,13 +806,18 @@ function buildWeeklyProgression(
 
   switch (model) {
     case 'linear':
-      // Simple linear ramp
+      // Linear ramp: volume starts near the low end of the productive range
+      // and climbs to the plan's full weekly sets in the last accumulation
+      // week (RP-style MEV → MRV). The old 92% → 100% ramp rounded to the
+      // same set counts every week, so the block read as "only RIR changes"
+      // (UX panel round 19).
       for (let i = 1; i <= trainingWeeks; i++) {
         const progress = i / trainingWeeks;
+        const climb = trainingWeeks > 1 ? (i - 1) / (trainingWeeks - 1) : 1;
         weeks.push({
           week: i,
           intensityModifier: 0.85 + (progress * 0.15),  // 85% -> 100%
-          volumeModifier: 0.9 + (progress * (0.1 + rampBonus)), // 90% -> 100% (110% enhanced)
+          volumeModifier: LINEAR_RAMP_START + (climb * (1 - LINEAR_RAMP_START + rampBonus)), // 75% -> 100% (110% enhanced)
           rpeTarget: { min: 6 + Math.floor(progress * 2), max: 7 + Math.floor(progress * 2) },
           focus: progress < 0.5 ? 'Technique and base building' : 'Progressive overload'
         });
@@ -784,10 +828,11 @@ function buildWeeklyProgression(
       // Volume waves within weeks, overall progression across mesocycle
       for (let i = 1; i <= trainingWeeks; i++) {
         const progress = i / trainingWeeks;
+        const climb = trainingWeeks > 1 ? (i - 1) / (trainingWeeks - 1) : 1;
         weeks.push({
           week: i,
           intensityModifier: 0.9 + (progress * 0.1),
-          volumeModifier: 0.85 + (progress * (0.15 + rampBonus)),
+          volumeModifier: DUP_RAMP_START + (climb * (1 - DUP_RAMP_START + rampBonus)), // 80% -> 100%
           rpeTarget: { min: 7, max: 9 },
           focus: `DUP Week ${i}: Rotate hypertrophy/strength/power daily`
         });

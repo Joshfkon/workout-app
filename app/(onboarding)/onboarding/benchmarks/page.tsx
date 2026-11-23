@@ -107,10 +107,13 @@ function BenchmarksContent() {
   };
   
   const handleContinue = async () => {
-    if (!sessionId || selectedBenchmarks.length === 0) return;
-    
+    if (!sessionId || selectedBenchmarks.length === 0 || isLoading || isSkipping) return;
+
+    // Busy at once (spinner + "Starting…"), and it stays busy through the
+    // route change instead of re-enabling under the user's finger.
     setIsLoading(true);
-    
+    let navigating = false;
+
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -128,13 +131,19 @@ function BenchmarksContent() {
       
       // Navigate to calibration
       router.push(`/onboarding/calibrate?session=${sessionId}`);
+      navigating = true;
     } catch (err) {
       console.error('Error updating session:', err);
     } finally {
-      setIsLoading(false);
+      if (!navigating) setIsLoading(false);
     }
   };
   
+  // Warm the dashboard route so Skip lands without a dead pause.
+  useEffect(() => {
+    router.prefetch?.('/dashboard');
+  }, [router]);
+
   // Redirect if no session
   useEffect(() => {
     if (!sessionId) {
@@ -168,30 +177,29 @@ function BenchmarksContent() {
         ))}
       </div>
       
-      <div className="text-center mb-6">
-        <h1 className="text-large-title font-bold text-ink mb-2">Test your strength? (optional)</h1>
-        <p className="text-ink-2" data-testid="benchmarks-purpose">
-          Optional. A test is a few warm-up sets and one hard set of a lift at a gym, then you log
-          the weight and reps. It sets the starting weights we suggest in workouts and turns on your
-          strength percentiles.
-        </p>
+      <div className="text-center">
+        <h1 className="text-large-title font-bold text-ink">Test your strength? (optional)</h1>
       </div>
 
-      {/* Skipping comes first: testing takes about an hour at a gym, and many
-          people sign up elsewhere or don't lift barbells at all. */}
-      <div className="rounded-card bg-card p-4 space-y-3 shadow-card">
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={skipTesting}
-          isLoading={isSkipping}
-          disabled={isLoading}
-          data-testid="skip-benchmarks"
-        >
-          Skip and start using the app
-        </Button>
-        {/* Exactly what skipping changes: small, and the first part fixes itself. */}
-        <div className="text-body text-ink-2 space-y-1" data-testid="benchmarks-skip-cost">
+      {/* What this is for and what skipping changes, as a short list at the
+          very top, above any lift (panel: people still couldn't tell what
+          the tests were for, or what skipping would cost them). */}
+      <div
+        className="rounded-card bg-card p-4 shadow-card space-y-3 text-body text-ink-2"
+        data-testid="benchmarks-purpose"
+      >
+        <p>
+          Optional. A test is a few warm-up sets and one hard set of a lift at a gym, then you log
+          the weight and reps.
+        </p>
+        <div>
+          <p className="font-medium text-ink">What a test does:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Sets the starting weights we suggest in your workouts.</li>
+            <li>Turns on your strength percentiles.</li>
+          </ul>
+        </div>
+        <div data-testid="benchmarks-skip-cost">
           <p className="font-medium text-ink">If you skip:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
@@ -199,11 +207,31 @@ function BenchmarksContent() {
               your first few sets.
             </li>
             <li>Strength percentiles stay off until you test.</li>
+            <li>Everything else works the same. Not lifting? Nothing here affects food tracking.</li>
           </ul>
         </div>
-        <p className="text-caption text-ink-3 text-center">
-          Most people skip this. Not lifting? Nothing here affects food tracking. You can test any
-          time later from Progress.
+        <p className="text-subhead text-ink-3">
+          Most people skip this. You can test any time later from Progress.
+        </p>
+      </div>
+
+      {/* Skipping comes before the lift list: testing takes about an hour at
+          a gym, and many people sign up elsewhere or don't lift barbells. */}
+      <div className="space-y-2">
+        <Button
+          className="w-full active:scale-[0.98]"
+          size="lg"
+          onClick={skipTesting}
+          isLoading={isSkipping}
+          aria-busy={isSkipping}
+          disabled={isLoading}
+          data-testid="skip-benchmarks"
+        >
+          {isSkipping ? 'Opening the app…' : 'Skip and start using the app'}
+        </Button>
+        {/* Said out loud and on screen the moment Skip is tapped. */}
+        <p role="status" aria-live="polite" className="text-subhead text-ink-2 text-center min-h-[1.125rem]">
+          {isSkipping ? 'Skipped. Finishing setup and opening your dashboard…' : ''}
         </p>
       </div>
 
@@ -317,10 +345,15 @@ function BenchmarksContent() {
           onClick={handleContinue} 
           disabled={selectedBenchmarks.length === 0 || isLoading || isSkipping}
           isLoading={isLoading}
+          aria-busy={isLoading}
+          className="active:scale-[0.98]"
+          data-testid="start-benchmarks"
         >
-          {selectedBenchmarks.length === 0
-            ? 'Pick lifts to test'
-            : `Start Testing (${selectedBenchmarks.length} ${selectedBenchmarks.length === 1 ? 'lift' : 'lifts'})`}
+          {isLoading
+            ? 'Starting…'
+            : selectedBenchmarks.length === 0
+              ? 'Pick lifts to test'
+              : `Start Testing (${selectedBenchmarks.length} ${selectedBenchmarks.length === 1 ? 'lift' : 'lifts'})`}
           <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>

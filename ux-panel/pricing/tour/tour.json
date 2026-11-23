@@ -1,0 +1,37 @@
+{
+ "capturedAt": "2026-11-23T22:45:14.620Z",
+ "baseUrl": "http://localhost:3101",
+ "persona": "hevy-switcher-sam",
+ "screens": {
+  "home": {
+   "url": "/dashboard",
+   "text": "Mon, Nov 23 Maintaining Good afternoon Text too small? Make it bigger. A A A Next up · 5:45 PM Log dinner 2,528 kcal and 158g protein still to go — you're behind pace Log food Start today’s workout Other ways to start a workout Quick log Water Food Weight Sleep Blood pressure Today Eat 158 g protein to go · behind 2,528 left Recovery Sleep, steps and HRV This week 3 lifts rising · 174.9 lb, +0.3 lb/wk 14 behind Sets this week vs MEV–MRV 14 below MEV Abs 0 of 6–20 Calves 0 of 8–20 Chest 0 of 8–22 Triceps 0 of 8–24 Shoulders 3 of 12–26 Traps 1.5 of 6–20 See all 14 muscles How are you feeling today? A quick check-in tunes today’s suggestions Check in",
+   "ok": true
+  },
+  "eat": {
+   "url": "/dashboard/nutrition",
+   "text": "Eat Today 2,528 kcal left P 158g C 316g F 70g Protein 0 / 158g Carbs 0 / 316g Fat 0 / 70g 2,528 kcal left Protein 0 / 158 g Carbs 0 / 316 g Fat 0 / 70 g 0 / 2,528 kcal · ~843 per meal Adjust your target for daily steps How this is set Describe Scan Search Meals Foods you log most — tap to add to Breakfast Lunch Dinner Snacks White rice, cooked · 1 cup Chicken breast, grilled · 150 g Oatmeal with banana · 1 bowl Greek yogurt, plain · 170 g Salmon fillet · 150 g Protein shake (whey) · 1 scoop Dinner Nothing logged yet · room for ~632 kcal Add food Breakfast Nothing logged yet · room for ~632 kcal Add food Lunch Nothing logged yet · room for ~632 kcal Add food Snacks Nothing logged yet · room f",
+   "ok": true
+  },
+  "progress": {
+   "url": "/dashboard/analytics",
+   "text": "Progress Are you progressing? Weight is up 0.6 lb over the last 30 days. The trend is a straight line fitted through all 11 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it. Over the last 12 weeks, 3 of your 6 tracked lifts are going up and none are slipping. Rising: Barbell Bench Press, Romanian Deadlift, Barbell Back Squat. See each lift (6) Strength Body Wellness Sets this week vs MEV–MRV 14 below MEV Abs 0 of 6–20 Calves 0 of 8–20 Chest 0 of 8–22 Triceps 0 of 8–24 Shoulders 3 of 12–26 Traps 1.5 of 6–20 See all 14 muscles Last 12 weeks 3 of 6 lifts rising Rising: Barbell Bench Press, Romanian Deadlift, Barbell Back Squat. How est. max is wor",
+   "ok": true
+  },
+  "builder": {
+   "url": "/dashboard/mesocycle/new",
+   "text": "Create mesocycle ? AI-assisted training plan based on your profile Creating your first training program! A mesocycle is a 4-8 week training block designed to progressively build your strength and muscle. We'll help you set up the perfect plan based on your goals and schedule. 📆 Setting your training schedule More training days = higher frequency per muscle (great for growth) Session length determines how many exercises you can do We'll recommend the best split for your schedule Short on time? We'll prioritize the most effective exercises Your schedule affects which muscles get trained together and how often. Your profile Goal Maintenance Experience Intermediate Add a DEXA scan in Body Compo",
+   "ok": true
+  },
+  "settings": {
+   "url": "/dashboard/settings",
+   "text": "Settings Customize your training preferences and account Units Pick each one on its own, for example kg for the bar and inches for the tape. Weight (lifts, body weight) kg lb Length (height, body measurements) cm inches Profile Training Preferences Account Appearance Control how HyperTrack looks across all your devices Theme Light, dark, or match your device. Synced to your account. Dark Light System Profile Your physical stats and training background Primary goal Build muscle (bulk) Maintain / recomp Lose fat (cut) Adjusts your nutrition targets and training recommendations Experience level Novice (< 1 year) Intermediate (1-3 years) Advanced (3+ years) Changing this will reset your volume l",
+   "ok": true
+  },
+  "workout": {
+   "url": "/dashboard/workout/5b872180-41d2-4b7f-898e-f10e623f1943",
+   "text": "Upper Body exercise 1 of 4 · ~30 min left Timer starts with warmup or set Finish Gym Sets this week vs your target range Details Biceps 2.6 counted of 3 sets 10–26 Ready Shoulders 2.6 counted of 3 sets 12–26 Ready Traps 1.3 counted of 1.5 sets 6–20 Ready Abs 0 counted of 0 sets 6–20 Ready Chest 0 counted of 0 sets 8–22 Ready Triceps 0 counted of 0 sets 8–24 Ready Show all (+8) After today’s plan: 6 below target Barbell Bench Press ▲ Trend: ahead Chest · last session 135 lbs × 10, × 9, × 8 @ 1–2 RIR · 3,645 lbs vol 0 Warmup protocol (0/1) 140 lbs × 9 @ 2 RIR (reps in reserve: how many more you could have done) (stop 2 reps short of failure) Why: Last time 135 lbs × 10, 2 reps left → one weigh",
+   "ok": true
+  }
+ }
+}

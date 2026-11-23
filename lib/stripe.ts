@@ -70,8 +70,8 @@ export const TIER_FEATURES = {
   pro: {
     name: 'Pro',
     description: 'For serious lifters',
-    monthlyPrice: 9.99,
-    yearlyPrice: 99,
+    monthlyPrice: 4.99,
+    yearlyPrice: 39.99,
     features: [
       'Everything in Free',
       'AI mesocycle builder',

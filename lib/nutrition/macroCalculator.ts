@@ -282,7 +282,7 @@ export function activityMultiplierFromSteps(avgDailySteps: number): number {
 }
 
 // %BW/week goals
-const GOAL_PERCENT_BW: Record<Goal, { percentBW: number; description: string }> = {
+export const GOAL_PERCENT_BW: Record<Goal, { percentBW: number; description: string }> = {
   aggressive_cut: { percentBW: -0.75, description: "Aggressive cut (~0.75% BW/week)" },
   moderate_cut: { percentBW: -0.5, description: "Moderate cut (~0.5% BW/week)" },
   slow_cut: { percentBW: -0.25, description: "Slow cut (~0.25% BW/week)" },

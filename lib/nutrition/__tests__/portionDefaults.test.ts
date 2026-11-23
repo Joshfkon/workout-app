@@ -1,9 +1,12 @@
 import {
   defaultPortion,
+  describeDefaultPortion,
   stepAmount,
+  typicalPortionForSystemFood,
   typicalPortionGramsForSystemFood,
 } from '../portionDefaults';
 import {
+  computeServing,
   packagedModel,
   servingOptionsModel,
   weightBasedModel,
@@ -59,6 +62,7 @@ describe('defaultPortion', () => {
     expect(defaultPortion(model, { fallback: { amount: 2, unitId: 'serving' } })).toMatchObject({
       amount: 2,
       unitId: 'serving',
+      reason: 'logged',
     });
   });
 });
@@ -103,5 +107,70 @@ describe('stepAmount', () => {
     expect(stepAmount('10', g, -1)).toBe(10);
     expect(stepAmount('', g, 1)).toBe(10);
     expect(stepAmount('abc', serving, 1)).toBe(0.5);
+  });
+});
+
+describe('describeDefaultPortion (panel r19: say where the default came from)', () => {
+  const CHICKEN = { name: 'Chicken Breast (cooked, skinless)', category: 'protein', subcategory: 'poultry' };
+  const model = weightBasedModel(PER100);
+  const line = (
+    portion: ReturnType<typeof defaultPortion>,
+    m = model,
+    units: 'lb' | 'kg' = 'lb',
+    typical = typicalPortionForSystemFood(CHICKEN)
+  ) =>
+    describeDefaultPortion(portion, m, {
+      units,
+      typical,
+      macros: computeServing(m, portion.amount, portion.unitId).macros,
+    });
+
+  it('a typical meat portion: grams, ounces for imperial users, "cooked", and its kcal/protein', () => {
+    const p = defaultPortion(model, { typicalGrams: 113 });
+    expect(line(p)).toBe(
+      '113 g · about 4 oz, a typical cooked portion, about the size of your palm · 186 kcal, 35 g protein'
+    );
+  });
+
+  it('metric users get the plain-words picture, not ounces', () => {
+    const p = defaultPortion(model, { typicalGrams: 113 });
+    const text = line(p, model, 'kg')!;
+    expect(text).toBe('113 g · a typical cooked portion, about the size of your palm · 186 kcal, 35 g protein');
+    expect(text).not.toMatch(/oz/);
+  });
+
+  it("the food's own serving", () => {
+    const egg = withHouseholdServing(weightBasedModel({ calories: 155, protein: 13, carbs: 1, fat: 11 }), {
+      noun: 'large egg',
+      grams: 50,
+    });
+    const p = defaultPortion(egg);
+    expect(line(p, egg, 'lb', null)).toBe("1 large egg (the food's serving) · 78 kcal, 7 g protein");
+  });
+
+  it('what you logged last time (search or a reopened logged row)', () => {
+    expect(line(defaultPortion(model, { lastUsed: { amount: 150, unitId: 'g' } }))).toBe(
+      '150 g · what you logged last time · 248 kcal, 47 g protein'
+    );
+    expect(line(defaultPortion(model, { fallback: { amount: 150, unitId: 'g' } }))).toMatch(
+      /^150 g · what you logged last time/
+    );
+  });
+
+  it('says nothing for a bare 100 g model default (the editor says "no standard serving")', () => {
+    expect(line(defaultPortion(model), model, 'lb', null)).toBeNull();
+  });
+
+  it('typicalPortionForSystemFood only pictures subcategory portions', () => {
+    expect(typicalPortionForSystemFood(CHICKEN)).toEqual({ grams: 113, cooked: true, hint: 'about the size of your palm' });
+    // Raw (or unstated) rows carry raw-weight nutrition: no "cooked" label.
+    expect(typicalPortionForSystemFood({ ...CHICKEN, name: 'Chicken Breast (raw, skinless)' })?.cooked).toBe(false);
+    expect(typicalPortionForSystemFood({ ...CHICKEN, name: 'Chicken Breast' })?.cooked).toBe(false);
+    expect(typicalPortionForSystemFood({ name: 'Cheddar Cheese', subcategory: 'dairy' })).toEqual({
+      grams: 28,
+      cooked: false,
+      hint: null,
+    });
+    expect(typicalPortionForSystemFood({ name: 'Mystery' })).toBeNull();
   });
 });

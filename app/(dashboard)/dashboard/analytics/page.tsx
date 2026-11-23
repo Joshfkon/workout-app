@@ -83,6 +83,7 @@ import { muscleProgressionInputFromRollup } from '@/app/(dashboard)/dashboard/_l
 import { useBodyOrFoodLogged } from '@/hooks/useBodyOrFoodLogged';
 import {
   hasRecentLifting,
+  hideBodyScanPrompts,
   orderProgressTabs,
   parseProgressTabParam,
   resolveActiveProgressTab,
@@ -376,6 +377,8 @@ function AnalyticsPageContent() {
   // Food-only users (hooks/useTrackingFocus) are treated as non-lifters
   // here: Body first, Strength last, no FFMI / body-scan / strength prompts.
   const { foodOnly } = useTrackingFocus();
+  // Beginner mode with no body scan yet: no FFMI / "log a DEXA scan" prompts.
+  const hideScanPrompts = hideBodyScanPrompts(beginnerMode, scans.length);
   const liftedForTabs = foodOnly ? false : hasRecentLifting(liftTrendsQuery.data);
   const dataDefaultTab = resolveDefaultProgressTab({
     hasRecentLifting: liftedForTabs,
@@ -1517,7 +1520,7 @@ function AnalyticsPageContent() {
           : undefined
       }
       onLogWeight={() => setLogSegment('weight')}
-      hideFfmi={foodOnly}
+      hideFfmi={foodOnly || hideScanPrompts}
       phaseSpans={trainingPhases.map((p) => ({
         phaseType: p.phaseType,
         startDay: p.startDay,
@@ -1739,8 +1742,10 @@ function AnalyticsPageContent() {
             activeTarget={activeTarget}
             activeMesocycle={activeMesocycle}
             currentFfmi={ffmiResult?.ffmi ?? null}
-            // Food-only users never see FFMI (lifting jargon), even with a scan.
-            showFfmi={!foodOnly}
+            // Food-only users never see FFMI (lifting jargon), even with a scan;
+            // beginners don't get the FFMI "add a scan" prompt before a scan
+            // exists (panel: FFMI/DEXA unexplained and intimidating).
+            showFfmi={!foodOnly && !hideScanPrompts}
             experience={userProfile?.experience ?? null}
             heightCm={userProfile?.heightCm ?? null}
             displayUnit={preferences?.lengthUnits ?? (units === 'kg' ? 'cm' : 'in')}
@@ -1752,7 +1757,7 @@ function AnalyticsPageContent() {
             needsPhase={!currentPhase}
             phaseHref="/dashboard/phases"
             scanCount={scans.length}
-            offerScan={!foodOnly}
+            offerScan={!foodOnly && !hideScanPrompts}
             onLogScan={() => setLogSegment('dexa')}
             needsGoals={!activeTarget && !showGoalsEditor}
             onSetGoals={openGoalsEditor}
