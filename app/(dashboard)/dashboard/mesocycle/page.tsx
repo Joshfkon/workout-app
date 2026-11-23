@@ -1,5 +1,6 @@
 'use client';
 
+import { ProTag } from '@/components/subscription/ProTag';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect } from 'react';
@@ -698,6 +699,7 @@ export default function MesocyclePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             New mesocycle
+            <ProTag feature="mesocycleBuilder" tone="onAccent" className="ml-2" />
           </Button>
         </Link>
       </div>
@@ -751,7 +753,10 @@ export default function MesocyclePage() {
             Create a mesocycle to plan your training with progressive overload and scheduled deloads.
           </p>
           <Link href="/dashboard/mesocycle/new">
-            <Button className="mt-6">Create your first mesocycle</Button>
+            <Button className="mt-6">
+              Create your first mesocycle
+              <ProTag feature="mesocycleBuilder" tone="onAccent" className="ml-2" />
+            </Button>
           </Link>
         </Card>
       ) : (

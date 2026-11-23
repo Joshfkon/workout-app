@@ -8,6 +8,7 @@ import { Button, Input, Card } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
 import type { Goal, Experience } from '@/types/schema';
 import { TRACKING_FOCUS_METADATA_KEY } from '@/lib/onboarding/trackingFocus';
+import { TextSizeQuickPicker } from '@/components/settings/TextSizeQuickPicker';
 
 /**
  * Plain-language answers to "Do you lift weights?". Asked so it doesn't
@@ -322,6 +323,12 @@ export default function RegisterPage() {
       )}
 
       <div className="mt-4 text-center space-y-2">
+        {/* Text size before sign-up: same localStorage key as Settings, so
+            the choice carries into the new account (hooks/useTextSize). */}
+        <div className="flex items-center justify-center gap-1" data-testid="register-text-size">
+          <span className="text-caption text-ink-3">Text size:</span>
+          <TextSizeQuickPicker compact />
+        </div>
         <p className="text-subhead text-ink-3">
           Get full Elite access for 14 days—no credit card required.
         </p>

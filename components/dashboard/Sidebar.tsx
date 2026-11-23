@@ -17,9 +17,14 @@ import {
   IconBolt,
   IconMenu2,
   IconLogout,
+  IconScale,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import { isActiveWorkoutRoute } from './isActiveWorkoutRoute';
+import { useTrackingFocus } from '@/hooks/useTrackingFocus';
+import { isTabActive, primaryTabsFor } from './foodOnlyNav';
+import { ProTag } from '@/components/subscription/ProTag';
+import type { Feature } from '@/lib/subscription';
 
 interface SidebarNavItem {
   name: string;
@@ -27,6 +32,10 @@ interface SidebarNavItem {
   icon: TablerIcon;
   /** Additional paths that should highlight this item (mirrors the bottom nav). */
   matchPaths?: string[];
+  /** Paths inside this section that another tab owns. */
+  excludePaths?: string[];
+  /** Paid feature the destination opens (labelled with ProTag). */
+  feature?: Feature;
 }
 
 // Primary destinations — mirror the bottom nav
@@ -47,7 +56,7 @@ const primaryNavigation: SidebarNavItem[] = [
 const moreNavigation: SidebarNavItem[] = [
   { name: 'Blood pressure', href: '/dashboard/blood-pressure', icon: IconHeartbeat },
   { name: 'Social feed', href: '/dashboard/feed', icon: IconUsers },
-  { name: 'AI coach', href: '/dashboard/ai-coach', icon: IconSparkles },
+  { name: 'AI coach', href: '/dashboard/ai-coach', icon: IconSparkles, feature: 'ai-coaching' },
   { name: 'Settings', href: '/dashboard/settings', icon: IconSettings },
   { name: 'Science', href: '/dashboard/science', icon: IconFlask },
 ];
@@ -61,14 +70,13 @@ interface SidebarProps {
 export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Food-only users get Weight where Train was (components/dashboard/foodOnlyNav).
+  const { foodOnly } = useTrackingFocus();
+  const primaryItems = primaryTabsFor(primaryNavigation, foodOnly, { icon: IconScale });
 
   const renderNavItem = (item: SidebarNavItem) => {
     // For Home (/dashboard), only match exactly to avoid highlighting when on subpages
-    const isActive = item.href === '/dashboard'
-      ? pathname === '/dashboard'
-      : (item.matchPaths || [item.href]).some(
-          (path) => pathname === path || pathname.startsWith(path + '/')
-        );
+    const isActive = isTabActive({ ...item, exact: item.href === '/dashboard' }, pathname ?? '');
     const Icon = item.icon;
 
     return (
@@ -85,6 +93,7 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
       >
         <Icon size={20} stroke={2} aria-hidden="true" />
         {item.name}
+        {item.feature && <ProTag feature={item.feature} />}
         {item.name === 'Train' && volumeGoalsMet && (
           <span
             className="ml-auto w-2 h-2 rounded-full bg-status-ok"
@@ -139,7 +148,7 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
 
         {/* Navigation */}
         <nav className="p-4 space-y-1">
-          {primaryNavigation.map(renderNavItem)}
+          {primaryItems.map(renderNavItem)}
 
           {/* More section */}
           <p className="px-3 pt-4 pb-1 text-caption font-medium text-ink-3">

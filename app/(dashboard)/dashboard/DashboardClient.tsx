@@ -68,6 +68,8 @@ import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector
 import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
+import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCard';
+import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { heroOffersWorkoutStart, todayHeroVariant } from '@/components/dashboard/home/TodayHeroCard';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
@@ -303,6 +305,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
   const hasInitialData = !!initialData;
   const router = useRouter();
+  // Food-only (said "food tracking", never lifted here): no workout entries.
+  const { foodOnly } = useTrackingFocus();
   const supabase = createUntypedClient();
 
   const [isLoading, setIsLoading] = useState(!hasInitialData);
@@ -1409,7 +1413,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Food-only users (no workouts ever / in 12 weeks, but logging food or
   // weight — or brand new and said "food tracking" at sign-up) get food and weight first and one compact workout entry lower
   // down; lifters keep the workout hero. Every input is already in hand.
+  // Food-only mode (useTrackingFocus) wins: Settings switched lifting off,
+  // so the hero mustn't lead with a plan or schedule either.
   const foodFocus =
+    foodOnly ||
     homeFocus({
       completedWorkoutsCount: initialData?.completedWorkoutsCount,
       recentCompletedWorkouts: liftTrends?.sessionsInWindow,
@@ -1420,11 +1427,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       hasLoggedBodyOrFood,
       statedFocus,
     }) === 'food';
+  // Food-only: an unfinished workout still shows (never strand one); a
+  // plan, schedule or freestyle prompt doesn't. The same inputs feed the
+  // card, so its own variant choice agrees with this one.
+  const heroInputs = {
+    workout: foodOnly && heroWorkout?.state === 'completed' ? null : heroWorkout,
+    scheduled: foodOnly ? null : heroScheduled,
+    hasPlan: foodOnly ? false : !!planMesocycle,
+    freestyle: foodOnly ? false : isFreestyle,
+  };
   const heroVariant = todayHeroVariant({
-    workout: heroWorkout,
-    scheduled: heroScheduled,
-    hasPlan: !!planMesocycle,
-    freestyle: isFreestyle,
+    ...heroInputs,
     meal: mealHero,
     foodFocus,
   });
@@ -1584,6 +1597,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         />
       )}
 
+      {/* One-time "Text too small?" for accounts that never saw onboarding's
+          text size step. Renders nothing once a size is picked or closed. */}
+      <TextSizePromptCard />
+
       {/* Error starting workout */}
       {startWorkoutError && (
         <div className="rounded-card bg-status-bad-tint px-4 py-3 text-subhead text-status-bad">
@@ -1593,10 +1610,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
       {/* 1. "Next up" hero — pending workout first, otherwise the next meal */}
       <TodayHeroCard
-        workout={heroWorkout}
-        scheduled={heroScheduled}
-        hasPlan={!!planMesocycle}
-        freestyle={isFreestyle}
+        workout={heroInputs.workout}
+        scheduled={heroInputs.scheduled}
+        hasPlan={heroInputs.hasPlan}
+        freestyle={heroInputs.freestyle}
         mesocycleName={planMesocycle?.name ?? null}
         eyebrowContext={heroEyebrowContext}
         workoutMeta={workoutHeroMeta}
@@ -1613,7 +1630,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           meal, "done" or nothing, this resumes an unfinished workout or
           opens the start options. Food-focused users get it as a compact
           row below the logging chips instead. */}
-      {!foodFocus && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
+      {!foodFocus && !foodOnly && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
 
       {/* 2. Today: Eat · Recovery · This week (depth one tap away) */}
       <TodayCard
@@ -1645,7 +1662,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
       />
 
-      {foodFocus && <HomeStartWorkout userId={userId} compact />}
+      {/* Food-only users (hooks/useTrackingFocus) get no workout entry at
+          all; "I also lift weights" in Settings brings it back. */}
+      {foodFocus && !foodOnly && <HomeStartWorkout userId={userId} compact />}
 
       {/* Today sheet: the tiles, Apple Health and weekly-set detail that used
           to stack on Home, one tap from the Today card. */}

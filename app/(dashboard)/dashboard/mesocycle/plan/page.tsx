@@ -1,5 +1,6 @@
 'use client';
 
+import { ProTag } from '@/components/subscription/ProTag';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 /**
@@ -329,9 +330,10 @@ function PlanContent() {
           </p>
           <Link
             href="/dashboard/mesocycle/new"
-            className="inline-block mt-4 px-4 py-2.5 rounded-xl bg-action text-on-action text-body font-semibold hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-2 mt-4 px-4 py-2.5 rounded-xl bg-action text-on-action text-body font-semibold hover:opacity-90 transition-opacity"
           >
             Plan a mesocycle
+            <ProTag feature="mesocycleBuilder" tone="onAccent" />
           </Link>
         </div>
       </div>

@@ -8,6 +8,7 @@ import {
   TEXT_SIZE_STORAGE_KEY,
   applyTextSizeToDocument,
   isTextSize,
+  systemPreferredTextSize,
   type TextSize,
 } from '@/lib/textSize';
 
@@ -33,13 +34,26 @@ let localWriteSeq = 0;
 // account's size, not keep the previous one's.
 let syncedUserId: string | null = null;
 
-function readStoredSize(): TextSize {
+function readStoredChoice(): TextSize | null {
   try {
     const stored = localStorage.getItem(TEXT_SIZE_STORAGE_KEY);
-    return isTextSize(stored) ? stored : DEFAULT_TEXT_SIZE;
+    return isTextSize(stored) ? stored : null;
   } catch {
-    return DEFAULT_TEXT_SIZE;
+    return null;
   }
+}
+
+/**
+ * True once a size was picked on this device (any control, including the
+ * register page before sign-up) or pulled from the account. Before that the
+ * app follows the OS text size (lib/textSize systemPreferredTextSize).
+ */
+export function hasChosenTextSize(): boolean {
+  return readStoredChoice() !== null;
+}
+
+function readStoredSize(): TextSize {
+  return readStoredChoice() ?? systemPreferredTextSize();
 }
 
 function setGlobalSize(size: TextSize, persistLocal: boolean) {
@@ -104,7 +118,14 @@ async function reconcileFromServer() {
       return;
     }
     const serverSize = (data?.preferences as Record<string, unknown> | null)?.textSize;
-    if (!isTextSize(serverSize)) return;
+    if (!isTextSize(serverSize)) {
+      // Nothing saved on the account yet, but a size was picked on this
+      // device (e.g. on the register page before the account existed):
+      // carry it into the account.
+      const local = readStoredChoice();
+      if (local && localWriteSeq === seqAtStart) void pushSizeToServer(local);
+      return;
+    }
     if (localWriteSeq !== seqAtStart) return; // Changed meanwhile: the user wins.
     if (serverSize !== globalSize) setGlobalSize(serverSize, true);
   } catch {

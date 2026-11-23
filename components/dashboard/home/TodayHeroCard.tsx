@@ -1,5 +1,6 @@
 'use client';
 
+import { ProTag } from '@/components/subscription/ProTag';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { IconSparkles } from '@tabler/icons-react';
@@ -371,9 +372,10 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
             <StartWorkoutButton className="flex-1" />
             <Link
               href="/dashboard/mesocycle/new"
-              className="flex flex-1 min-h-[50px] items-center justify-center rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110"
+              className="flex flex-1 min-h-[50px] items-center justify-center gap-2 rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110"
             >
               Build a program
+              <ProTag feature="mesocycleBuilder" />
             </Link>
           </div>
         </div>

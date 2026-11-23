@@ -16,6 +16,8 @@ export interface BodyAddMoreDataProps {
   phaseHref: string;
   /** Body scans (DEXA) logged so far; < 2 → offer to log one. */
   scanCount: number;
+  /** False hides the body-scan row (food-only users; hooks/useTrackingFocus). */
+  offerScan?: boolean;
   onLogScan: () => void;
   /** No body goal set → offer to set one. */
   needsGoals: boolean;
@@ -26,11 +28,12 @@ export function BodyAddMoreData({
   needsPhase,
   phaseHref,
   scanCount,
+  offerScan = true,
   onLogScan,
   needsGoals,
   onSetGoals,
 }: BodyAddMoreDataProps) {
-  const needsScan = scanCount < 2;
+  const needsScan = offerScan && scanCount < 2;
   if (!needsPhase && !needsScan && !needsGoals) return null;
 
   return (

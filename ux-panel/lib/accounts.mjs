@@ -156,7 +156,10 @@ export async function seedReturningUser(admin, userId, persona) {
         // Standing injuries the persona would have told onboarding about
         // (users.preferences.injuryAreas: shoulder, lower_back, knee, …), so a
         // returning-user journey doesn't read as "the app never asked".
-        preferences: { units: a.units, ...(a.injuryAreas?.length ? { injuryAreas: a.injuryAreas } : {}) },
+        // textSize: a persona who'd plausibly have enlarged the text (Frank,
+        // 60s, "text too small" every round) has it saved, as if he'd found
+        // the setting — the app applies it from preferences on load.
+        preferences: { units: a.units, ...(a.injuryAreas?.length ? { injuryAreas: a.injuryAreas } : {}), ...(a.textSize ? { textSize: a.textSize } : {}) },
       })
       .eq('id', userId),
     'update users',

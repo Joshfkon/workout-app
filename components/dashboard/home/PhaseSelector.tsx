@@ -1,5 +1,6 @@
 'use client';
 
+import { ProTag } from '@/components/subscription/ProTag';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -138,6 +139,7 @@ export function PhaseSelector({ phase, onPhaseChanged, offerPlanRebuild = true }
               </Button>
               <Button size="sm" onClick={() => router.push('/dashboard/mesocycle/new')}>
                 Rebuild plan
+                <ProTag feature="mesocycleBuilder" tone="onAccent" className="ml-2" />
               </Button>
             </div>
           </>

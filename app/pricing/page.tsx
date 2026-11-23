@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, Badge } from '@/components/ui';
 import { TIER_FEATURES } from '@/lib/stripe';
+import { planComparisonRows, planFeatureList } from '@/lib/subscription/planComparison';
 import { PublicAppShell } from '@/components/marketing/PublicAppShell';
 import { NativeAppRedirect } from '../_components/NativeAppRedirect';
 
@@ -89,12 +90,7 @@ export default function PublicPricingPage() {
               price="$0"
               period="forever"
               description="Get started with basic workout tracking"
-              features={[
-                'Manual workout logging',
-                'Exercise history',
-                'Basic progress tracking',
-                'Unlimited workouts per week',
-              ]}
+              features={planFeatureList('free')}
               cta="Get Started"
               ctaHref="/register"
             />
@@ -104,14 +100,7 @@ export default function PublicPricingPage() {
               price={billingPeriod === 'monthly' ? `$${proMonthly}` : `$${proYearly}`}
               period={billingPeriod === 'monthly' ? 'per month' : 'per year'}
               description="Unlock advanced features for serious lifters"
-              features={[
-                'Everything in Free',
-                'AI mesocycle builder',
-                'Smart weight suggestions',
-                'Advanced analytics',
-                'DEXA scan tracking',
-                'Priority support',
-              ]}
+              features={planFeatureList('pro')}
               cta="Start Free Trial"
               ctaHref="/register"
               isPopular={true}
@@ -122,14 +111,7 @@ export default function PublicPricingPage() {
               price={billingPeriod === 'monthly' ? `$${eliteMonthly}` : `$${eliteYearly}`}
               period={billingPeriod === 'monthly' ? 'per month' : 'per year'}
               description="Maximum optimization for competitive athletes"
-              features={[
-                'Everything in Pro',
-                'AI coaching calibration',
-                'Strength percentiles',
-                'Regional body composition',
-                'Plateau detection',
-                'Priority support',
-              ]}
+              features={planFeatureList('elite')}
               cta="Start Free Trial"
               ctaHref="/register"
             />
@@ -151,18 +133,10 @@ export default function PublicPricingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <FeatureRow feature="Manual workout logging" free={true} pro={true} elite={true} />
-                    <FeatureRow feature="Exercise history" free={true} pro={true} elite={true} />
-                    <FeatureRow feature="Basic progress tracking" free={true} pro={true} elite={true} />
-                    <FeatureRow feature="Workouts per week" free="Unlimited" pro="Unlimited" elite="Unlimited" />
-                    <FeatureRow feature="AI mesocycle builder" free={false} pro={true} elite={true} />
-                    <FeatureRow feature="Smart weight suggestions" free={false} pro={true} elite={true} />
-                    <FeatureRow feature="Advanced analytics" free={false} pro={true} elite={true} />
-                    <FeatureRow feature="DEXA scan tracking" free={false} pro={true} elite={true} />
-                    <FeatureRow feature="Coaching calibration" free={false} pro={false} elite={true} />
-                    <FeatureRow feature="Strength percentiles" free={false} pro={false} elite={true} />
-                    <FeatureRow feature="Regional body comp analysis" free={false} pro={false} elite={true} />
-                    <FeatureRow feature="Priority support" free={false} pro={true} elite={true} />
+                    {/* Straight from TIER_FEATURES (lib/subscription/planComparison). */}
+                    {planComparisonRows().map((row) => (
+                      <FeatureRow key={row.feature} feature={row.feature} free={row.free} pro={row.pro} elite={row.elite} />
+                    ))}
                   </tbody>
                 </table>
               </div>

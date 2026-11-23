@@ -6,12 +6,18 @@ jest.mock('next/navigation', () => ({
   usePathname: jest.fn(),
 }));
 
+let mockFoodOnly = false;
+jest.mock('@/hooks/useTrackingFocus', () => ({
+  useTrackingFocus: () => ({ foodOnly: mockFoodOnly, statedFood: mockFoodOnly, setLiftingOn: jest.fn() }),
+}));
+
 describe('Sidebar', () => {
   const { usePathname } = require('next/navigation');
   const mockOnSignOut = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFoodOnly = false;
   });
 
   it('shows mobile menu button on non-workout routes', () => {
@@ -43,5 +49,20 @@ describe('Sidebar', () => {
     const sidebar = container.querySelector('aside');
     expect(sidebar).toBeInTheDocument();
     expect(sidebar?.className).toContain('fixed');
+  });
+
+  it('labels AI coach as an Elite feature', () => {
+    usePathname.mockReturnValue('/dashboard');
+    render(<Sidebar onSignOut={mockOnSignOut} volumeGoalsMet={false} />);
+    const coach = screen.getByRole('link', { name: /AI coach/ });
+    expect(coach).toHaveTextContent('Elite');
+  });
+
+  it('swaps Train for Weight for a food-only user', () => {
+    usePathname.mockReturnValue('/dashboard');
+    mockFoodOnly = true;
+    render(<Sidebar onSignOut={mockOnSignOut} volumeGoalsMet={false} />);
+    expect(screen.queryByRole('link', { name: /^Train/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Weight/ })).toHaveAttribute('href', '/dashboard/nutrition/trends');
   });
 });

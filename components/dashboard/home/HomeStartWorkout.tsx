@@ -17,6 +17,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
 import { useLastRepeatableWorkout } from './FreestyleStartActions';
+import { ProTag } from '@/components/subscription/ProTag';
 import { RepeatWorkoutSheet, useRecentRepeatChoices } from '@/components/workout/RepeatWorkoutSheet';
 
 const SuggestedWorkoutSheet = dynamic(
@@ -92,9 +93,10 @@ export function HomeStartWorkout({
         <div className="text-body font-semibold text-ink">Lifting too?</div>
         <Link
           href="/dashboard/mesocycle/new"
-          className="text-subhead text-ink-2 hover:text-ink transition-colors"
+          className="inline-flex items-center gap-1.5 text-subhead text-ink-2 hover:text-ink transition-colors"
         >
           Or build a program
+          <ProTag feature="mesocycleBuilder" />
         </Link>
       </div>
       <button

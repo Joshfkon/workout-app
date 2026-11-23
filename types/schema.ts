@@ -311,6 +311,27 @@ export interface UserPreferences {
    * through hooks/useBeginnerMode (lib/beginnerMode resolves the default).
    */
   beginnerMode?: boolean;
+
+  /**
+   * Home's one-time "Text too small?" card was closed without picking a
+   * size (components/dashboard/home/TextSizePromptCard). Picking a size
+   * also retires it (textSize is then set).
+   */
+  textSizePromptDismissed?: boolean;
+
+  /**
+   * "I also lift weights" (Settings → Preferences). Only matters for someone
+   * who signed up for food tracking: true turns the lifting UI back on. Read
+   * it ONLY through hooks/useTrackingFocus (lib/onboarding/trackingFocus
+   * resolves it with the sign-up answer and workout history).
+   */
+  alsoLifts?: boolean;
+
+  /**
+   * When "I also lift weights" was last switched off (ISO). A workout
+   * completed after this turns lifting back on automatically.
+   */
+  liftingOffAt?: string | null;
 }
 
 /**

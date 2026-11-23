@@ -10,9 +10,12 @@ import {
   IconSalad,
   IconChartLine,
   IconDots,
+  IconScale,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
+import { useTrackingFocus } from '@/hooks/useTrackingFocus';
+import { isTabActive, primaryTabsFor } from './foodOnlyNav';
 
 interface NavItem {
   name: string;
@@ -21,6 +24,8 @@ interface NavItem {
   /** Match exactly (used for Home so subpages don't highlight it) */
   exact?: boolean;
   matchPaths?: string[];
+  /** Paths inside this section that another tab owns. */
+  excludePaths?: string[];
 }
 
 const navItems: NavItem[] = [
@@ -72,10 +77,7 @@ const navItems: NavItem[] = [
 
 /** Is `pathname` inside `item`'s section? */
 export function isNavItemActive(item: NavItem, pathname: string): boolean {
-  if (item.exact) return pathname === item.href;
-  return (item.matchPaths || [item.href]).some(
-    (path) => pathname === path || pathname.startsWith(path + '/')
-  );
+  return isTabActive(item, pathname);
 }
 
 /** Light haptic tick on tap (native only); loaded lazily to keep the nav light. */
@@ -93,6 +95,9 @@ interface BottomNavigationProps {
 export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationProps) {
   const pathname = usePathname() ?? '';
   const keyboardOpen = useKeyboardOpen();
+  // Food-only users get Weight where Train was (components/dashboard/foodOnlyNav).
+  const { foodOnly } = useTrackingFocus();
+  const items = primaryTabsFor(navItems, foodOnly, { icon: IconScale });
   // The tab the user just tapped, until its page arrives. Some tabs (Home)
   // render on the server first, so without this the old tab stays lit for a
   // second and the tap looks ignored.
@@ -137,7 +142,7 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
     )}
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-sep pb-safe-bottom lg:hidden">
       <div className="flex items-center h-16">
-        {navItems.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const isActive = pendingHref
             ? pendingHref === item.href

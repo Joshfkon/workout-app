@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { IconSparkles, IconInfoCircle, IconAlertTriangle } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
-import { effortTargetPhrase, plainRirText } from '@/lib/beginnerMode';
+import { effortTargetPhrase, plainWorkoutText } from '@/lib/beginnerMode';
+import { whyThisWeightSummary, type WhyThisWeight } from './whyThisWeight';
 
 /**
  * Live effort check for the CURRENTLY ENTERED weight × reps (the logger's
@@ -79,6 +80,12 @@ interface SuggestionBannerProps {
    * one-line reason moves to the top of the ⓘ sheet.
    */
   verdict?: string | null;
+  /**
+   * The inputs behind the suggestion (ExerciseCard buildSuggestionInfo).
+   * When present the strip carries a "Why this weight?" link and the sheet
+   * opens with a plain summary built from them.
+   */
+  why?: WhyThisWeight | null;
 }
 
 const RIR_EXPANSION = 'reps in reserve: how many more you could have done';
@@ -133,12 +140,14 @@ export function SuggestionBanner({
   effortCheck = null,
   setKey,
   verdict = null,
+  why = null,
 }: SuggestionBannerProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [warningActive, setWarningActive] = useState(false);
   // Beginner mode: the same numbers, effort in words only (no "RIR").
   const beginner = useBeginnerMode();
-  const plain = (text: string) => (beginner ? plainRirText(text) : text);
+  const plain = (text: string) => (beginner ? plainWorkoutText(text) : text);
+  const whySummary = whyThisWeightSummary(why, `${weightLabel} × ${repsLabel}`);
 
   const predictedRir = effortCheck?.predictedRir ?? null;
 
@@ -255,6 +264,16 @@ export function SuggestionBanner({
               {plain(source)}
             </span>
           ) : null}
+          {whySummary ? (
+            <button
+              type="button"
+              onClick={() => setShowInfo(true)}
+              data-testid="why-this-weight"
+              className="mt-0.5 inline-flex items-center text-caption font-medium text-action underline underline-offset-2"
+            >
+              Why this weight?
+            </button>
+          ) : null}
         </p>
         {effortCheck != null && (
           <p
@@ -286,15 +305,23 @@ export function SuggestionBanner({
         onClose={() => setShowInfo(false)}
         title="How this suggestion works"
       >
+        {whySummary ? (
+          <p
+            data-testid="why-this-weight-summary"
+            className="mb-3 rounded-lg bg-action/10 px-3 py-2 text-subhead text-ink"
+          >
+            {whySummary}
+          </p>
+        ) : null}
         <ul className="space-y-2.5">
           {(beginner
             ? [
                 ...(reason
                   ? [
-                      `${weightLabel} × ${repsLabel}${showRir ? `, ${effortTargetPhrase(rir)}` : ''} — ${plainRirText(reason)}.`,
+                      `${weightLabel} × ${repsLabel}${showRir ? `, ${effortTargetPhrase(rir)}` : ''} — ${plainWorkoutText(reason)}.`,
                     ]
                   : []),
-                ...explanation.map(plainRirText),
+                ...explanation.map(plainWorkoutText),
               ]
             : [
                 ...(reasonInSheet && reason
