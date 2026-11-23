@@ -245,6 +245,64 @@ node ux-panel/cleanup.mjs              # all panel accounts
 node ux-panel/cleanup.mjs --run=<id>
 ```
 
+## Pricing study (`--study=pricing`)
+
+Implements `PRICING_STUDY.md`: which monthly/annual/lifetime price and which
+package shape, compared **option against option**. It is not a revenue
+forecast, and the report says so on every page.
+
+```bash
+node ux-panel/pricing/capture-tour.mjs --base-url=http://localhost:3100   # local build + local Supabase
+node ux-panel/run.mjs --study=pricing --dry-run --fake-llm                # free: 10 personas, scripted answers
+node ux-panel/run.mjs --study=pricing --n=100 --model=claude-sonnet-5-5 --estimate
+node ux-panel/run.mjs --study=pricing --n=100 --seed=1 --model=claude-sonnet-5-5
+node ux-panel/run.mjs --study=pricing --n=100 --hands-on=15 --model=claude-sonnet-5-5 --base-url=http://localhost:3100
+node ux-panel/pricing/report.mjs ux-panel/runs/<id>                       # re-aggregate and re-render
+```
+
+- **Personas** (`personas/pricing.mjs`): N (default 100) drawn to the quota
+  table at the top of the file (segment, gender and age by segment, income,
+  experience, current app and spend), seeded (`--seed`), no `Math.random`.
+  Counts are fixed per stratum by largest remainder and shuffled onto
+  personas, so a 100-sample hits each quota to within rounding. Each persona
+  has the same shape as `personas.json` plus a `pricing` block: its quota
+  cells, what it pays today, a concrete typical week, and the features it
+  would touch.
+- **Stimulus**: survey personas don't browse. They read a six-screen tour of
+  the current build (`pricing/tour.mjs`: Home, a workout with the weight
+  reasoning, Eat, Progress, the program builder, Settings), as screenshots
+  when `pricing/tour/` has them, else as captions plus key visible text.
+  `capture-tour.mjs` makes one Pro-seeded synthetic account on the local DB,
+  captures the screens at 390×844, writes `tour/tour.json`, and deletes the
+  account. Recapture whenever the build changes.
+- **Questions** (`pricing/questions.mjs`), four calls per persona, each with
+  the competitor price list and HyperTrack's Free/Pro lists in a shared
+  cached system prompt (today's Pro price is left out, so it can't anchor the
+  answers): Van Westendorp thresholds (amounts parsed from the text, text
+  kept); Gabor-Granger at $2.99–$12.99 in a seeded random order per persona,
+  with the design stated openly; annual at 4×/6×/8× the persona's acceptable
+  monthly price and lifetime at $49.99/$79.99/$99.99; four package variants,
+  a pick, a feature ranking, and "the one thing that would make you pay".
+- **Scoring**: each would-buy answer is one short sentence (reasons apart)
+  scored by SSR against `pricing/anchors.mjs` (versioned, hashed per
+  question). The per-persona yes/no is the Yes/No/Maybe the answer opens
+  with, falling back to the sharp SSR score; the report shows how often SSR
+  agrees with the stated yes/no. Revenue uses the "yes" share, not the T = 1
+  take-rate, whose floor on "yes" is the same at every price and so always
+  favoured the highest one.
+- **`--hands-on=N`** picks a quota-balanced subset, runs it through the core
+  journeys and the week review as an ordinary panel run
+  (`run.mjs --persona-file=…`, output in `runs/<id>/hands-on/`), then asks the
+  same questions with a digest of their week. The report compares the
+  survey and hands-on orders for the same personas; where they disagree,
+  trust hands-on.
+- **Output**: `runs/<id>/pricing.json` and `runs/<id>/pricing-report.html`.
+
+Estimates printed by `--estimate` (Sonnet 5.5, not yet calibrated on a real
+run): survey of 100 ≈ $4.0 expected (≤ $8.4); with `--hands-on=15` ≈ $13.9
+(≤ $29). Every real run prints its estimate and asks before spending (or
+needs `--yes`).
+
 ## Checking the anchors against real people
 
 ```bash
