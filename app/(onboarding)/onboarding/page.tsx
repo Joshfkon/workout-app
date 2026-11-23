@@ -51,6 +51,11 @@ const BODY_FAT_OPTIONS = {
   ]
 };
 
+/** Typical adult body fat, used only when the user taps "Not sure". */
+function typicalBodyFat(sex: 'male' | 'female'): string {
+  return sex === 'female' ? '32' : '22';
+}
+
 export default function OnboardingBodyCompPage() {
   const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
@@ -640,7 +645,11 @@ export default function OnboardingBodyCompPage() {
                       role="radio"
                       aria-checked={checked}
                       data-testid={`sex-option-${option.value}`}
-                      onClick={() => setSex(option.value)}
+                      onClick={() => {
+                        setSex(option.value);
+                        // A "Not sure" estimate follows the sex it was based on.
+                        if (bfEstimated) setBodyFatPercent(typicalBodyFat(option.value));
+                      }}
                       className={`min-h-[44px] rounded-input border-2 text-body font-medium transition-colors ${
                         checked ? 'border-action bg-action/10 text-ink' : 'border-sep bg-fill/50 text-ink-2 hover:text-ink'
                       }`}
@@ -654,6 +663,19 @@ export default function OnboardingBodyCompPage() {
                 Used for body-fat references and strength comparisons.
               </p>
             </div>
+
+            {/* Asked up front with the basics: it drives the calorie target. */}
+            <Input
+              label="Age (optional)"
+              type="number"
+              inputMode="numeric"
+              value={ageDisplay}
+              onChange={(e) => setAgeDisplay(e.target.value)}
+              placeholder="30"
+              min={13}
+              max={100}
+              hint="Used to work out your daily calorie target."
+            />
             
             {units === 'lb' ? (
               <div>
@@ -711,18 +733,6 @@ export default function OnboardingBodyCompPage() {
               disabled={useDexa}
             />
 
-            <Input
-              label="Age (optional)"
-              type="number"
-              inputMode="numeric"
-              value={ageDisplay}
-              onChange={(e) => setAgeDisplay(e.target.value)}
-              placeholder="30"
-              min={13}
-              max={100}
-              hint="Used to set your daily calorie target."
-            />
-            
             <div>
               <p className="text-caption text-ink-2 mb-2" data-testid="body-fat-why">
                 Why we ask for body fat: it splits your weight into muscle and fat, so we can suggest a
@@ -744,11 +754,16 @@ export default function OnboardingBodyCompPage() {
                     max={60}
                     step={0.5}
                     disabled={useDexa}
+                    // A filled-in estimate must not look typed: muted italic
+                    // text and a dashed border until the user changes it.
+                    className={!useDexa && bfEstimated ? 'border-dashed italic text-ink-2' : undefined}
+                    aria-describedby={!useDexa && bfEstimated ? 'body-fat-estimate-note' : undefined}
+                    data-estimated={!useDexa && bfEstimated ? 'true' : undefined}
                     hint={
                       useDexa
                         ? 'Using DEXA scan data'
                         : bfEstimated
-                          ? `We put in ${bodyFatPercent}%, about average for ${sex === 'female' ? 'women' : 'men'}. It's only an estimate: change it here, or later in Settings.`
+                          ? undefined
                           : "Don't know it? Use the visual guide, or tap Not sure."
                     }
                   />
@@ -767,6 +782,19 @@ export default function OnboardingBodyCompPage() {
                   </Button>
                 )}
               </div>
+              {!useDexa && bfEstimated && (
+                <p
+                  id="body-fat-estimate-note"
+                  className="mt-1.5 text-subhead text-ink-2"
+                  data-testid="body-fat-estimate-note"
+                >
+                  <span className="mr-1.5 inline-block rounded-full bg-fill px-2 py-0.5 text-caption font-medium text-ink">
+                    Estimated
+                  </span>
+                  {bodyFatPercent}%, about average for {sex === 'female' ? 'women' : 'men'}. Change it if you
+                  know better.
+                </p>
+              )}
               {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && !sex && (
                 <p className="mt-2 text-caption text-ink-2" data-testid="body-fat-needs-sex">
                   Pick your sex above to use the visual guide or a typical estimate.
@@ -780,7 +808,7 @@ export default function OnboardingBodyCompPage() {
                   onClick={() => {
                     // Typical adult values; flagged so nothing downstream
                     // presents a verdict built on a guess.
-                    setBodyFatPercent(sex === 'female' ? '32' : '22');
+                    setBodyFatPercent(typicalBodyFat(sex));
                     setBfEstimated(true);
                     setShowBodyFatGuide(false);
                   }}
@@ -818,6 +846,7 @@ export default function OnboardingBodyCompPage() {
                             type="button"
                             onClick={() => {
                               setBodyFatPercent(String(option.value));
+                              setBfEstimated(false);
                               setShowBodyFatGuide(false);
                             }}
                             className={`p-2 rounded-lg text-center transition-all ${
@@ -854,6 +883,7 @@ export default function OnboardingBodyCompPage() {
                             type="button"
                             onClick={() => {
                               setBodyFatPercent(String(option.value));
+                              setBfEstimated(false);
                               setShowBodyFatGuide(false);
                             }}
                             className={`p-2 rounded-lg text-center transition-all ${
