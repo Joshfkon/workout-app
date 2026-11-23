@@ -31,11 +31,12 @@ import {
 } from '@/lib/nutrition/servingScaling';
 import { householdServingForSystemFood } from '@/lib/nutrition/householdServings';
 import {
-  foodKeyFor,
-  getLastUsedServing,
+  foodKeysFor,
+  getLastUsedServingForKeys,
   getRecentAmounts,
-  recordLastUsedServing,
+  recordLastUsedServingForKeys,
 } from '@/lib/nutrition/lastUsedServing';
+import { defaultPortion, typicalPortionGramsForSystemFood } from '@/lib/nutrition/portionDefaults';
 import {
   dedupeRecentFoods,
   filterRecentFoods,
@@ -580,7 +581,7 @@ export function AddFoodModal({
       const { model } = modelFromLoggedEntry(selectedRecent);
       return {
         model,
-        foodKey: foodKeyFor({ foodId: selectedRecent.food_id, name: selectedRecent.food_name }),
+        foodKeys: foodKeysFor({ foodId: selectedRecent.food_id, name: selectedRecent.food_name }),
         name: selectedRecent.food_name,
         subtitle: selectedRecent.serving_size || '1 serving',
         source: (selectedRecent.source ?? 'manual') as FoodSource,
@@ -590,7 +591,7 @@ export function AddFoodModal({
     if (scannedProduct) {
       return {
         model: buildScannedModel(scannedProduct),
-        foodKey: foodKeyFor({ barcode: scannedProduct.barcode, name: scannedProduct.name }),
+        foodKeys: foodKeysFor({ barcode: scannedProduct.barcode, name: scannedProduct.name }),
         name: scannedProduct.name,
         subtitle: `Base: ${scannedProduct.servingSize}`,
         source: 'nutritionix' as const,
@@ -600,7 +601,7 @@ export function AddFoodModal({
     if (selectedFood) {
       return {
         model: buildUsdaModel(selectedFood),
-        foodKey: foodKeyFor({ foodId: selectedFood.foodId, name: selectedFood.name }),
+        foodKeys: foodKeysFor({ foodId: selectedFood.foodId, name: selectedFood.name }),
         name: selectedFood.name,
         subtitle: selectedFood.servingSize,
         source: 'usda' as const,
@@ -610,7 +611,7 @@ export function AddFoodModal({
     if (selectedCustomFood) {
       return {
         model: buildCustomModel(selectedCustomFood),
-        foodKey: foodKeyFor({ id: selectedCustomFood.id, name: selectedCustomFood.food_name }),
+        foodKeys: foodKeysFor({ id: selectedCustomFood.id, name: selectedCustomFood.food_name }),
         name: selectedCustomFood.food_name,
         subtitle: selectedCustomFood.is_per_weight
           ? `Per ${selectedCustomFood.reference_amount}${selectedCustomFood.reference_unit || 'g'}`
@@ -621,7 +622,7 @@ export function AddFoodModal({
     if (selectedSystemFood) {
       return {
         model: buildSystemModel(selectedSystemFood),
-        foodKey: foodKeyFor({ id: selectedSystemFood.id, name: selectedSystemFood.name }),
+        foodKeys: foodKeysFor({ id: selectedSystemFood.id, name: selectedSystemFood.name }),
         name: selectedSystemFood.name,
         subtitle: `${selectedSystemFood.calories_per_100g} cal per 100 g`,
         source: 'manual' as const,
@@ -632,13 +633,17 @@ export function AddFoodModal({
 
   // Prefill the amount/unit from the last-used value for a food (falls back to
   // the model's default serving), and load the recent-amount quick-chips.
-  const primeAmountForFood = (model: FoodAmountModel, foodKey: string) => {
-    const lastUsed = getLastUsedServing(foodKey);
-    const unitExists = lastUsed && model.units.some((u) => u.id === lastUsed.unitId);
-    const unitId = unitExists ? lastUsed!.unitId : model.defaultUnitId;
-    const amount = unitExists ? lastUsed!.amount : model.defaultAmount;
-    setAmountValue({ amount: amount.toString(), unitId });
-    setRecentAmounts(getRecentAmounts(foodKey, unitId, 2));
+  // The order (last portion → the food's serving → a typical portion → the
+  // model) lives in lib/nutrition/portionDefaults.
+  const primeAmountForFood = (
+    model: FoodAmountModel,
+    foodKeys: string[],
+    opts: { typicalGrams?: number | null; fallback?: { amount: number; unitId: string } } = {}
+  ) => {
+    const lastUsed = getLastUsedServingForKeys(foodKeys);
+    const portion = defaultPortion(model, { lastUsed, ...opts });
+    setAmountValue({ amount: portion.amount.toString(), unitId: portion.unitId });
+    setRecentAmounts(getRecentAmounts(foodKeys[0], portion.unitId, 2));
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
@@ -666,7 +671,7 @@ export function AddFoodModal({
           barcode: result.product.barcode,
         };
         setScannedProduct(product);
-        primeAmountForFood(buildScannedModel(product), foodKeyFor({ barcode: product.barcode, name: product.name }));
+        primeAmountForFood(buildScannedModel(product), foodKeysFor({ barcode: product.barcode, name: product.name }));
         // Stay on barcode tab to show serving selector
       }
     } catch {
@@ -681,7 +686,7 @@ export function AddFoodModal({
     setSelectedCustomFood(null);
     setSelectedSystemFood(null);
     setSelectedRecent(null);
-    primeAmountForFood(buildUsdaModel(food), foodKeyFor({ foodId: food.foodId, name: food.name }));
+    primeAmountForFood(buildUsdaModel(food), foodKeysFor({ foodId: food.foodId, name: food.name }));
 
     // If the food has a foodId, fetch detailed info with serving options
     const hasServings = 'servings' in food && Array.isArray((food as FoodSearchResultWithServings).servings);
@@ -691,7 +696,7 @@ export function AddFoodModal({
         const result = await getFoodDetailsAction(food.foodId);
         if (result.food) {
           setSelectedFood(result.food);
-          primeAmountForFood(buildUsdaModel(result.food), foodKeyFor({ foodId: result.food.foodId, name: result.food.name }));
+          primeAmountForFood(buildUsdaModel(result.food), foodKeysFor({ foodId: result.food.foodId, name: result.food.name }));
         }
       } catch (err) {
         console.error('Error fetching food details:', err);
@@ -706,7 +711,7 @@ export function AddFoodModal({
     setSelectedFood(null);
     setSelectedSystemFood(null);
     setSelectedRecent(null);
-    primeAmountForFood(buildCustomModel(food), foodKeyFor({ id: food.id, name: food.food_name }));
+    primeAmountForFood(buildCustomModel(food), foodKeysFor({ id: food.id, name: food.food_name }));
   };
 
   const handleSelectSystemFood = (food: SystemFood) => {
@@ -714,7 +719,9 @@ export function AddFoodModal({
     setSelectedFood(null);
     setSelectedCustomFood(null);
     setSelectedRecent(null);
-    primeAmountForFood(buildSystemModel(food), foodKeyFor({ id: food.id, name: food.name }));
+    primeAmountForFood(buildSystemModel(food), foodKeysFor({ id: food.id, name: food.name }), {
+      typicalGrams: typicalPortionGramsForSystemFood(food),
+    });
   };
 
   // Tap a recent's row body → open the shared detail panel primed with the
@@ -725,13 +732,9 @@ export function AddFoodModal({
     setSelectedCustomFood(null);
     setSelectedSystemFood(null);
     const { model, defaultAmount, defaultUnitId } = modelFromLoggedEntry(entry);
-    const foodKey = foodKeyFor({ foodId: entry.food_id, name: entry.food_name });
-    const lastUsed = getLastUsedServing(foodKey);
-    const unitExists = lastUsed && model.units.some((u) => u.id === lastUsed.unitId);
-    const unitId = unitExists ? lastUsed!.unitId : defaultUnitId;
-    const amount = unitExists ? lastUsed!.amount : defaultAmount;
-    setAmountValue({ amount: amount.toString(), unitId });
-    setRecentAmounts(getRecentAmounts(foodKey, unitId, 2));
+    primeAmountForFood(model, foodKeysFor({ foodId: entry.food_id, name: entry.food_name }), {
+      fallback: { amount: defaultAmount, unitId: defaultUnitId },
+    });
   };
 
   // Re-log a logged snapshot as-is into the currently selected meal, keeping the
@@ -817,7 +820,7 @@ export function AddFoodModal({
         food_id: activeSelection.food_id,
         barcode: activeSelection.barcode,
       });
-      recordLastUsedServing(activeSelection.foodKey, amountNum, amountValue.unitId);
+      recordLastUsedServingForKeys(activeSelection.foodKeys, amountNum, amountValue.unitId);
       resetAndClose();
     } catch {
       setError('Failed to add food. Please try again.');
@@ -956,21 +959,27 @@ export function AddFoodModal({
       size="lg"
     >
       <div className="space-y-4">
-        {/* Meal Type Selector */}
-        <SegmentedControl
-          label="Meal"
-          value={mealType}
-          onChange={(v) => {
-            setMealType(v as MealType);
-            onMealTypeChange?.(v as MealType);
-          }}
-          options={[
-            { value: 'breakfast', label: 'Breakfast' },
-            { value: 'lunch', label: 'Lunch' },
-            { value: 'dinner', label: 'Dinner' },
-            { value: 'snack', label: 'Snack' },
-          ]}
-        />
+        {/* Target meal: said in words ("Adding to Dinner"), with the
+            segmented control right under it as the way to change it. The
+            control's own label is screen-reader only, so without this line
+            the meal a food lands in was easy to miss. */}
+        <div>
+          <p className="text-subhead text-ink-2 mb-1.5" data-testid="add-food-target-meal">
+            Adding to <span className="font-semibold text-ink">{mealLabel}</span>
+          </p>
+          <SegmentedControl
+            label="Meal to add to"
+            value={mealType}
+            onChange={(v) => {
+              setMealType(v as MealType);
+              onMealTypeChange?.(v as MealType);
+            }}
+            options={(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((m) => ({
+              value: m,
+              label: mealNames?.[m]?.trim() || MEAL_LABELS[m],
+            }))}
+          />
+        </div>
 
         {/* Tabs — flex-1 so all four (incl. Manual) fit the modal width on
             phones instead of overflowing off-screen. */}
@@ -1024,12 +1033,34 @@ export function AddFoodModal({
         {activeTab === 'search' && (
           <div className="space-y-4">
             {!hasSelection && (
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search your foods, common foods, and USDA..."
-                className="w-full"
-              />
+              <>
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search your foods, common foods, and USDA..."
+                  aria-label="Search foods"
+                  className="w-full"
+                  leftIcon={<IconSearch size={16} aria-hidden="true" />}
+                  rightIcon={
+                    // Scan lives in the search bar too, where people look for it.
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('barcode');
+                        clearSelection();
+                      }}
+                      aria-label="Scan a barcode"
+                      data-testid="search-scan-barcode"
+                      className="-mr-1 w-8 h-8 rounded-full flex items-center justify-center text-action hover:bg-action/15 transition-colors"
+                    >
+                      <IconScan size={18} aria-hidden="true" />
+                    </button>
+                  }
+                />
+                <p className="text-caption text-ink-2 -mt-2" data-testid="add-food-portion-hint">
+                  Tap a food to choose how much before it&apos;s added. + adds the portion shown.
+                </p>
+              </>
             )}
 
             {/* Selected food detail — one panel, one editor, every source */}

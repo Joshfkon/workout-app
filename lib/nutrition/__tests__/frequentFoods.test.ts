@@ -4,6 +4,7 @@ import {
   formatPortion,
   frequentFoodPortion,
   quickAddMessage,
+  addedToMealMessage,
   type FrequentFoodRow,
 } from '../frequentFoods';
 import type { FrequentFood } from '@/types/nutrition';
@@ -92,4 +93,14 @@ describe('formatPortion', () => {
 it('quickAddMessage names the food, amount and meal', () => {
   expect(quickAddMessage('Oatmeal', '1 cup', 'Lunch')).toBe('Added Oatmeal (1 cup) to Lunch');
   expect(quickAddMessage('Chicken', '200g', 'Dinner')).toBe('Added Chicken (200 g) to Dinner');
+});
+
+it('addedToMealMessage names the meal and where the day now stands', () => {
+  expect(addedToMealMessage('Dinner', { calories: 1640.4, protein: 120.2 }, { calories: 2400, protein: 180 })).toBe(
+    'Added to Dinner · 1,640 / 2,400 kcal · 120 / 180 g protein'
+  );
+  expect(addedToMealMessage('Snack', { calories: 300, protein: 12 })).toBe('Added to Snack · 300 kcal · 12 g protein');
+  expect(addedToMealMessage('Lunch', { calories: 900, protein: 40 }, { calories: null, protein: 150 })).toBe(
+    'Added to Lunch · 900 kcal · 40 / 150 g protein'
+  );
 });

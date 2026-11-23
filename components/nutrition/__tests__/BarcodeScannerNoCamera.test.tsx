@@ -24,7 +24,7 @@ jest.mock('@/lib/supabase/client', () => ({ createUntypedClient: jest.fn() }));
 jest.mock('@/services/openFoodFactsService', () => ({ lookupBarcode: jest.fn() }));
 jest.mock('@/lib/actions/nutrition', () => ({ lookupBarcodeUsdaAction: jest.fn() }));
 
-import { BarcodeScanner, classifyCameraError } from '../BarcodeScanner';
+import { BarcodeScanner, classifyCameraError, precheckWebCamera } from '../BarcodeScanner';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -46,7 +46,7 @@ describe('BarcodeScanner without a camera', () => {
     render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
 
     expect(
-      await screen.findByText('No camera here — type the barcode number instead')
+      await screen.findByText('No camera available here — type the barcode number instead')
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Barcode number')).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Look up barcode' })).toBeInTheDocument();
@@ -90,5 +90,63 @@ describe('BarcodeScanner with a camera', () => {
     await user.click(screen.getByRole('button', { name: 'Type the number' }));
     expect(screen.getByLabelText('Barcode number')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Type the number' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('starts the camera by default when the device lists one', async () => {
+    mockStart.mockReturnValue(new Promise(() => {}));
+    const original = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { enumerateDevices: () => Promise.resolve([{ kind: 'videoinput' }, { kind: 'audioinput' }]) },
+    });
+    try {
+      render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+      await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(1));
+      expect(screen.queryByTestId('barcode-manual-first')).not.toBeInTheDocument();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'mediaDevices', original);
+      else delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+    }
+  });
+});
+
+describe('precheckWebCamera', () => {
+  it('reports a missing camera only when devices are listed and none is video', async () => {
+    const nav = (devices: Array<{ kind: string }>) => ({
+      mediaDevices: { enumerateDevices: () => Promise.resolve(devices) },
+    });
+    expect(await precheckWebCamera(nav([{ kind: 'audioinput' }]))).toBe('missing');
+    expect(await precheckWebCamera(nav([{ kind: 'videoinput' }]))).toBeNull();
+    // An empty list (some browsers before permission) is not proof.
+    expect(await precheckWebCamera(nav([]))).toBeNull();
+    expect(await precheckWebCamera({})).toBeNull();
+    expect(await precheckWebCamera(undefined)).toBeNull();
+    expect(
+      await precheckWebCamera({ mediaDevices: { enumerateDevices: () => Promise.reject(new Error('nope')) } })
+    ).toBeNull();
+  });
+});
+
+describe('BarcodeScanner on a computer without a webcam', () => {
+  it('says so straight away and never asks for the camera', async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { enumerateDevices: () => Promise.resolve([{ kind: 'audioinput' }, { kind: 'audiooutput' }]) },
+    });
+    try {
+      render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+      expect(
+        await screen.findByText('No camera available here — type the barcode number instead')
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('barcode-camera-issue-detail')).toHaveTextContent(
+        'On a phone, Scan opens the camera.'
+      );
+      expect(screen.getByLabelText('Barcode number')).toBeInTheDocument();
+      expect(mockStart).not.toHaveBeenCalled();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'mediaDevices', original);
+      else delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+    }
   });
 });
