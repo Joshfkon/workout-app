@@ -69,6 +69,8 @@ import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
 import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
 import { ProgressPhotosHero } from '@/components/analytics/ProgressPhotosHero';
+import { CollapsibleSection } from '@/components/analytics/CollapsibleSection';
+import { LiftTrendsSkeleton, ProgressSummarySkeleton } from '@/components/analytics/RegionSkeletons';
 import { mergeSleepLogIntoWellness, type SleepLogRow } from './wellnessSleep';
 import { WeeklySetsCard } from '@/components/dashboard/home/WeeklySetsCard';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
@@ -1586,7 +1588,13 @@ function AnalyticsPageContent() {
         actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
       />
 
-      {progressSummary && <ProgressSummaryCard summary={progressSummary} />}
+      {progressSummary ? (
+        <ProgressSummaryCard summary={progressSummary} />
+      ) : (isBodyTrendLoading || (liftTrendsQuery.isPending && !liftTrendsSummary)) ? (
+        // Cold start only: the summary waits on weigh-ins and lift trends
+        // (separate fetches), so hold its place instead of leaving a gap.
+        <ProgressSummarySkeleton />
+      ) : null}
 
       {/* Tab Navigation */}
       <div className="flex rounded-[10px] bg-fill p-0.5" role="tablist" aria-label="Progress sections">
@@ -1647,25 +1655,27 @@ function AnalyticsPageContent() {
           {/* Progress photos right under the weight chart: the mirror check is
               the other thing people open Body for, so it doesn't sit below
               the measurement and proportions cards. */}
-          <ProgressPhotosHero
-            photos={progressPhotos}
-            photoUrls={photoUrls}
-            units={units}
-            weightUnit={weightUnit}
-            displayWeight={displayWeightString}
-            onCompare={() => setIsCompareOpen(true)}
-            onTimelapse={() => setIsTimelapseOpen(true)}
-            onAddPhoto={() => setIsAddPhotoOpen(true)}
-          />
+          <CollapsibleSection id="photos" title="Photos">
+            <ProgressPhotosHero
+              photos={progressPhotos}
+              photoUrls={photoUrls}
+              units={units}
+              weightUnit={weightUnit}
+              displayWeight={displayWeightString}
+              onCompare={() => setIsCompareOpen(true)}
+              onTimelapse={() => setIsTimelapseOpen(true)}
+              onAddPhoto={() => setIsAddPhotoOpen(true)}
+            />
+          </CollapsibleSection>
 
           {/* Phase verdict + banner only once a phase exists — with none,
               the set-one prompt is a row in "Add more data". Tapping either
               opens the phase editor. */}
           {currentPhase && (
-            <>
+            <CollapsibleSection id="phase" title="Phase">
               <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
               <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
-            </>
+            </CollapsibleSection>
           )}
 
           {/* Recommendations. Correctly signed, unit-aware, evidence-cited
@@ -1781,14 +1791,18 @@ function AnalyticsPageContent() {
           {!beginnerMode && <WeeklySetsCard rows={weeklyVolumeRows} />}
           {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
               First so ?section=lift-trends deep links land above the fold. */}
-          {liftTrendsSummary && (
+          {liftTrendsSummary ? (
             <LiftTrendsCard
               summary={liftTrendsSummary}
               units={units === 'lb' ? 'lb' : 'kg'}
               attentionNames={plateauAlerts.map((a) => a.exerciseName)}
               onSeeIdeas={() => setShowPlateauIdeas(true)}
             />
-          )}
+          ) : liftTrendsQuery.isPending ? (
+            // First-ever load (nothing cached): the lift rows' shape, not a
+            // blank gap or a full-page spinner.
+            <LiftTrendsSkeleton />
+          ) : null}
           {/* Plateau alerts (with their ideas) open from the summary's "See
               ideas"; without a lift-trend summary they stay inline. */}
           {plateauAlerts.length > 0 && !liftTrendsSummary && (
@@ -1824,7 +1838,7 @@ function AnalyticsPageContent() {
           </ListGroup>
 
           {strengthProfile ? (
-            <>
+            <CollapsibleSection id="strength-level" title="Strength level">
               {/* Overall Score — rendered exactly ONCE (was duplicated). */}
               <Card data-testid="strength-score-card">
                 <CardContent className="p-6">
@@ -1964,7 +1978,7 @@ function AnalyticsPageContent() {
                   </CardContent>
                 </Card>
               )}
-            </>
+            </CollapsibleSection>
           ) : (
             // Full card only when there's little or no strength data; with
             // lift history it's one optional row (percentile rankings).

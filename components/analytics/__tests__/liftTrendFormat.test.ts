@@ -1,6 +1,11 @@
+import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
+import { rirToRpe } from '@/types/schema';
 import {
+  EST_MAX_METHOD,
   earlyLiftChange,
+  estMaxExample,
   estMaxLabel,
+  exampleSetPoint,
   moreWorkouts,
   nextTrendHint,
   setLabel,
@@ -35,7 +40,10 @@ describe('liftTrendFormat', () => {
         { name: 'Lat Pulldown', sessions: 1, bestWeightKg: 55, bestReps: 10 },
         { name: 'Barbell Row', sessions: 2, bestWeightKg: 60, bestReps: 10 },
       ])
-    ).toBe('Log Barbell Row in 1 more workout to see its trend.');
+    ).toBe('Log Barbell Row once more to see its trend line.');
+    expect(nextTrendHint([{ name: 'Lat Pulldown', sessions: 1, bestWeightKg: 55, bestReps: 10 }])).toBe(
+      'Log Lat Pulldown 2 more times to see its trend line.'
+    );
     expect(nextTrendHint([])).toBeNull();
     expect(nextTrendHint(undefined)).toBeNull();
   });
@@ -55,5 +63,54 @@ describe('liftTrendFormat', () => {
     expect(earlyLiftChange({ ...lift, sessions: 1 }, 'kg')).toBeNull();
     // Summary persisted before first/latest were recorded.
     expect(earlyLiftChange({ name: 'Bench', sessions: 2, bestWeightKg: 60, bestReps: 8 }, 'kg')).toBeNull();
+  });
+
+  describe('est. max method (UX panel: "show which e1RM formula is used")', () => {
+    const LB = 0.45359237;
+    // The panel's set: 180 lbs × 10, logged at 2 reps in reserve (RIR chip
+    // → RPE 7.5, the canonical mapping the workout screen saves).
+    const w = 180 * LB;
+    const rpe = rirToRpe(2);
+    const e1rmKg = Math.round(estimateE1RMFromRpe(w, 10, rpe)!.value * 10) / 10;
+
+    it('names the formula and the reps-left rule', () => {
+      expect(EST_MAX_METHOD).toMatch(/Brzycki/);
+      expect(EST_MAX_METHOD).toMatch(/weight × 36 ÷ \(37 − reps to failure\)/);
+      expect(EST_MAX_METHOD).toMatch(/reps you had left/);
+      expect(EST_MAX_METHOD).toMatch(/Past 12 reps to failure it counts 12, and past 15 it makes no estimate/);
+    });
+
+    it("works the panel's 180 × 10 through: ~2 left ≈ 12 to failure → ~260 (the number is right)", () => {
+      // 180 × 36 / (37 − 12) = 259.2 lb → shown on the 2.5 lb grid as 260.
+      expect(e1rmKg / LB).toBeCloseTo(259.2, 0);
+      expect(estMaxExample({ e1rmKg, topSetWeightKg: w, topSetReps: 10, topSetRpe: rpe }, 'lb')).toBe(
+        'Your best set: 180 lbs × 10 with ~2 left ≈ 12 reps to failure → est. max 260.0 lbs.'
+      );
+    });
+
+    it('says when a set counts as taken to failure, and when the 12-rep cap applies', () => {
+      const fail = estimateE1RMFromRpe(w, 10, null)!.value;
+      expect(estMaxExample({ e1rmKg: fail, topSetWeightKg: w, topSetReps: 10, topSetRpe: 10 }, 'lb')).toBe(
+        'Your best set: 180 lbs × 10 taken to failure ≈ 10 reps to failure → est. max 240.0 lbs.'
+      );
+      const capped = estimateE1RMFromRpe(60, 12, rirToRpe(2))!.value;
+      expect(estMaxExample({ e1rmKg: capped, topSetWeightKg: 60, topSetReps: 12, topSetRpe: rirToRpe(2) }, 'kg', 'Your last best set')).toBe(
+        'Your last best set: 60 kg × 12 with ~2 left ≈ 14 reps to failure, counted as 12 → est. max 87.5 kg.'
+      );
+    });
+
+    it('never guesses reps left for a point persisted without its RPE, and needs a loaded set', () => {
+      expect(estMaxExample({ e1rmKg: 100, topSetWeightKg: 80, topSetReps: 8 }, 'kg')).toBe(
+        'Your best set: 80 kg × 8 → est. max 100.0 kg.'
+      );
+      expect(estMaxExample({ e1rmKg: 100, topSetWeightKg: 0, topSetReps: 8, topSetRpe: 8 }, 'kg')).toBeNull();
+      expect(estMaxExample(null, 'kg')).toBeNull();
+    });
+
+    it("picks the strongest of the lifts' latest sets for the example", () => {
+      const p = (e1rmKg: number) => ({ date: '2026-11-01', e1rmKg, topSetWeightKg: 50, topSetReps: 5 });
+      expect(exampleSetPoint([{ history: [p(200), p(90)] }, { history: [p(120)] }])?.e1rmKg).toBe(120);
+      expect(exampleSetPoint([])).toBeNull();
+    });
   });
 });

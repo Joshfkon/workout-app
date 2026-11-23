@@ -11,7 +11,12 @@
  * weight line alone, never a nudge to lift.
  */
 
-import type { EarlyLift, LiftTrend, LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import {
+  MIN_SESSIONS_FOR_TREND,
+  type EarlyLift,
+  type LiftTrend,
+  type LiftTrendsSummary,
+} from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { nextTrendHint, setLabel } from '@/components/analytics/liftTrendFormat';
 import {
   weighInsInWindow,
@@ -157,8 +162,10 @@ export function strengthSentence(summary: LiftTrendsSummary | null | undefined):
   const soFar = early
     ? ` So far, ${early.better} of your ${early.compared} lift${early.compared === 1 ? '' : 's'} ${early.compared === 1 ? (early.better === 1 ? 'beats' : "doesn't beat") : early.better === 1 ? 'beats' : 'beat'} ${early.compared === 1 ? 'its' : 'their'} first workout (heavier, or more reps).`
     : '';
-  const base = `Not enough lifting data for a strength trend yet.${soFar}`;
-  return hint ? `${base} ${hint}` : base;
+  // Name what is needed in the user's terms (the lift, how many more times),
+  // not "not enough data for a strength trend" (UX panel: vague, jargony).
+  const lead2 = hint ?? `Log the same lift in ${MIN_SESSIONS_FOR_TREND} workouts to see its trend line.`;
+  return `${lead2}${soFar}`;
 }
 
 /**

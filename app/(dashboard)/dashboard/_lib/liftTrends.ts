@@ -44,6 +44,11 @@ export interface LiftTrendPoint {
   topSetWeightKg: number;
   /** …and reps, as logged. */
   topSetReps: number;
+  /**
+   * …and its logged RPE (null = none logged, which the estimator counts as
+   * taken to failure). Absent on summaries persisted before it was carried.
+   */
+  topSetRpe?: number | null;
 }
 
 export interface LiftTrend {
@@ -562,6 +567,9 @@ export function computeLiftTrends(
         e1rmKg: Math.round(s.estimatedE1RM * 10) / 10,
         topSetWeightKg: s.topSetWeightKg,
         topSetReps: s.topSetReps,
+        // The snapshot stores a missing RPE as 10 — the same "0 left" the
+        // estimator assumed, so the explainer's arithmetic still matches.
+        topSetRpe: s.topSetRpe,
       })),
       lowConfidence,
       calibrationReason: lowConfidence ? calibrationReason : null,
