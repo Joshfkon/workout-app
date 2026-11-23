@@ -6,21 +6,39 @@
 export interface PWAContext {
   platform: 'ios' | 'android' | 'desktop' | 'unknown';
   browser: 'safari' | 'chrome' | 'firefox' | 'samsung' | 'edge' | 'other';
-  isStandalone: boolean;  // Already running as installed PWA
+  isStandalone: boolean;  // Already installed: a home-screen PWA, or the native app
+  /** Running inside the native iOS/Android app (Capacitor), not a browser. */
+  isNativeApp: boolean;
   canPromptInstall: boolean;  // Browser supports beforeinstallprompt
 }
 
 /**
  * Detects the current PWA context including platform, browser, and installation status
  */
+/**
+ * Inside the native app's webview. Capacitor injects `window.Capacitor`, so
+ * no import (and no Capacitor code in the web bundle) is needed to ask.
+ */
+export function isNativeAppRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform() === true;
+}
+
 export function getPWAContext(): PWAContext {
-  // Check if running in standalone mode (installed PWA)
+  // The native app IS the installed app: without this, the webview (which
+  // is not display-mode standalone) read as "not installed", and Settings,
+  // onboarding and the workout reminder told App Store users to add
+  // HyperTrack to their home screen.
+  const isNativeApp = isNativeAppRuntime();
+  // Check if running in standalone mode (installed PWA) or the native app
   const isStandalone =
-    typeof window !== 'undefined' && (
+    isNativeApp ||
+    (typeof window !== 'undefined' && (
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true ||
       document.referrer.includes('android-app://')
-    );
+    ));
 
   const userAgent = typeof navigator !== 'undefined'
     ? navigator.userAgent.toLowerCase()
@@ -73,6 +91,7 @@ export function getPWAContext(): PWAContext {
     platform,
     browser,
     isStandalone,
+    isNativeApp,
     canPromptInstall,
   };
 }
