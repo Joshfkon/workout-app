@@ -45,6 +45,7 @@ import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWatchBridge } from '@/hooks/useWatchBridge';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 
@@ -453,6 +454,8 @@ export default function WorkoutPage() {
     [preferences.injuryAreas]
   );
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
+  // Beginner mode: no weekly-volume strip (Settings → Preferences).
+  const beginnerMode = useBeginnerMode();
   const pauseSession = useWorkoutStore((state) => state.pauseSession);
   const resumeSession = useWorkoutStore((state) => state.resumeSession);
   const startWorkoutSession = useWorkoutStore((state) => state.startSession);
@@ -7434,8 +7437,10 @@ export default function WorkoutPage() {
           vs the MEV–MRV band, for the muscles this workout trains. Tapping a
           chip opens the full "What to train" volume + recovery sheet. Hidden
           on an empty workout, where the empty state's "Muscle readiness" and
-          "Sets this week" rows open the same sheet (show less up front). */}
-      {workoutBodyView !== 'empty' && (
+          "Sets this week" rows open the same sheet (show less up front).
+          Beginner mode hides it: MEV/MRV bands are noise in week one (the
+          same sheet stays one tap away in the header menu). */}
+      {workoutBodyView !== 'empty' && !beginnerMode && (
       <WorkoutVolumeStrip
         rows={weeklyVolumeRows}
         isLoading={weeklyVolumeLoading}
