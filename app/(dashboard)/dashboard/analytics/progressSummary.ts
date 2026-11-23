@@ -11,7 +11,7 @@
  * weight line alone, never a nudge to lift.
  */
 
-import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import type { EarlyLift, LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { nextTrendHint } from '@/components/analytics/liftTrendFormat';
 import {
   weighInsInWindow,
@@ -82,7 +82,34 @@ export function strengthSentence(summary: LiftTrendsSummary | null | undefined):
   const lifted = summary.lifts.length > 0 || summary.insufficientData > 0 || (summary.earlyLifts?.length ?? 0) > 0;
   if (!lifted) return null;
   const hint = nextTrendHint(summary.earlyLifts);
-  return hint ? `Not enough lifting data for a strength trend yet. ${hint}` : 'Not enough lifting data for a strength trend yet.';
+  // Say what the first workouts already show, so "no trend" isn't an empty
+  // answer (the panel compared first and latest sets by hand).
+  const early = earlyComparison(summary.earlyLifts);
+  const soFar = early
+    ? ` So far, ${early.better} of your ${early.compared} lift${early.compared === 1 ? '' : 's'} ${early.compared === 1 ? (early.better === 1 ? 'beats' : "doesn't beat") : early.better === 1 ? 'beats' : 'beat'} ${early.compared === 1 ? 'its' : 'their'} first workout (heavier, or more reps).`
+    : '';
+  const base = `Not enough lifting data for a strength trend yet.${soFar}`;
+  return hint ? `${base} ${hint}` : base;
+}
+
+/**
+ * Before any trend exists: how many lifts done twice or more beat their
+ * first workout's top set — heavier, or the same weight for more reps. A
+ * heavier-but-fewer-reps set counts as neither (no estimate is made here).
+ * Null when no lift has two comparable workouts.
+ */
+export function earlyComparison(lifts: readonly EarlyLift[] | undefined): { better: number; compared: number } | null {
+  let better = 0;
+  let compared = 0;
+  for (const l of lifts ?? []) {
+    const { firstWeightKg: fw, firstReps: fr, latestWeightKg: lw, latestReps: lr } = l;
+    if (l.sessions < 2 || fw == null || fr == null || lw == null || lr == null) continue;
+    compared += 1;
+    const sameLoad = Math.abs(lw - fw) < 0.01;
+    if (lw > fw + 0.01 && lr >= fr) better += 1;
+    else if (sameLoad && lr > fr) better += 1;
+  }
+  return compared > 0 ? { better, compared } : null;
 }
 
 /** Null when there is nothing to say on either side. */

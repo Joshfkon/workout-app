@@ -117,3 +117,26 @@ describe('buildProgressSummary', () => {
     expect(buildProgressSummary({ weighIns: [], liftTrends: trends(), units: 'lb', now: NOW })).toBeNull();
   });
 });
+
+describe('early comparison before a trend exists', () => {
+  const early = (over: Partial<import('@/app/(dashboard)/dashboard/_lib/liftTrends').EarlyLift>) => ({
+    name: 'Squat', sessions: 2, bestWeightKg: 60, bestReps: 8, firstWeightKg: 55, firstReps: 8, latestWeightKg: 60, latestReps: 8, ...over,
+  });
+
+  it('counts lifts that beat their first workout (heavier, or same weight for more reps)', () => {
+    const { earlyComparison } = jest.requireActual('../progressSummary');
+    expect(earlyComparison([
+      early({}),
+      early({ name: 'Bench', firstWeightKg: 40, latestWeightKg: 40, firstReps: 8, latestReps: 10 }),
+      early({ name: 'Row', firstWeightKg: 40, latestWeightKg: 45, firstReps: 10, latestReps: 7 }), // heavier, fewer reps: neither
+      early({ name: 'RDL', sessions: 1 }),
+    ])).toEqual({ better: 2, compared: 3 });
+    expect(earlyComparison([early({ sessions: 1 })])).toBeNull();
+  });
+
+  it('puts it in the no-trend strength sentence', () => {
+    const { strengthSentence } = jest.requireActual('../progressSummary');
+    const s = strengthSentence({ lifts: [], rising: 0, flat: 0, down: 0, rebuilding: 0, insufficientData: 2, windowDays: 84, earlyLifts: [early({}), early({ name: 'Bench', latestWeightKg: 50, firstWeightKg: 50, latestReps: 7, firstReps: 8 })] });
+    expect(s).toContain('So far, 1 of your 2 lifts beats their first workout (heavier, or more reps).');
+  });
+});
