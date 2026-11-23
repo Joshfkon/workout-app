@@ -19,11 +19,19 @@ import { parseLocalDate } from '@/lib/utils';
 
 interface TDEERegressionGraphProps {
   regressionAnalysis: RegressionAnalysis;
+  /** The user's weight unit. The analysis is in lb; it is converted for display. */
+  weightUnit?: 'lb' | 'kg';
 }
 
-export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphProps) {
+const LB_PER_KG = 2.20462;
+
+export function TDEERegressionGraph({ regressionAnalysis, weightUnit = 'lb' }: TDEERegressionGraphProps) {
   const { dataPoints, burnRatePerLb, estimatedTDEE, rSquared, standardError, currentWeight } =
     regressionAnalysis;
+  // lb -> display unit for weights and weight changes; burn rate is per unit
+  // of body weight, so it scales the other way.
+  const w = weightUnit === 'kg' ? 1 / LB_PER_KG : 1;
+  const burnRatePerUnit = weightUnit === 'kg' ? burnRatePerLb * LB_PER_KG : burnRatePerLb;
 
   // Transform data for scatter plot: calories consumed vs weight change
   const scatterData = useMemo(() => {
@@ -36,11 +44,13 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
         month: 'short',
         day: 'numeric',
       }),
-      // Convert actual change to lbs/day * 7 for weekly rate visualization
-      weeklyChange: point.actualChange * 7,
-      predictedWeeklyChange: point.predictedChange * 7,
+      actualChange: point.actualChange * w,
+      predictedChange: point.predictedChange * w,
+      // Weekly rate (display unit) for visualization
+      weeklyChange: point.actualChange * w * 7,
+      predictedWeeklyChange: point.predictedChange * w * 7,
     }));
-  }, [dataPoints]);
+  }, [dataPoints, w]);
 
   // Calculate range for chart axes
   const calorieRange = useMemo(() => {
@@ -52,14 +62,14 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
   }, [dataPoints]);
 
   const weightChangeRange = useMemo(() => {
-    const changes = dataPoints.map((d) => d.actualChange);
+    const changes = dataPoints.map((d) => d.actualChange * w);
     const min = Math.min(...changes);
     const max = Math.max(...changes);
     // Use smaller padding to make small weight changes more visible
-    // Minimum padding of 0.2 lbs instead of 0.5 to show subtle fluctuations
-    const padding = Math.max(Math.abs(max - min) * 0.2, 0.2);
+    // Minimum padding of 0.2 lb (0.1 kg) to show subtle fluctuations
+    const padding = Math.max(Math.abs(max - min) * 0.2, 0.2 * w);
     return [min - padding, max + padding];
-  }, [dataPoints]);
+  }, [dataPoints, w]);
 
   // Generate line data for the regression line
   const regressionLine = useMemo(() => {
@@ -73,7 +83,7 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
     return [
       {
         calories: calorieRange[0],
-        predictedChange: (calorieRange[0] - burnRatePerLb * avgWeight) / 3500,
+        predictedChange: ((calorieRange[0] - burnRatePerLb * avgWeight) / 3500) * w,
       },
       {
         calories: tdeePoint,
@@ -81,10 +91,10 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
       },
       {
         calories: calorieRange[1],
-        predictedChange: (calorieRange[1] - burnRatePerLb * avgWeight) / 3500,
+        predictedChange: ((calorieRange[1] - burnRatePerLb * avgWeight) / 3500) * w,
       },
     ];
-  }, [burnRatePerLb, calorieRange, dataPoints]);
+  }, [burnRatePerLb, calorieRange, dataPoints, w]);
 
   // Model fit quality
   const fitQuality = useMemo(() => {
@@ -100,7 +110,7 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-body flex items-center gap-2">
-              TDEE Regression Analysis
+              Daily burn from your data
               <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-medium bg-action/20 text-action">
                 {estimatedTDEE.toLocaleString()} cal/day
               </span>
@@ -147,7 +157,7 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
                 tick={{ fontSize: 10, fill: '#888' }}
                 tickFormatter={(value) => `${value > 0 ? '+' : ''}${value.toFixed(1)}`}
                 label={{
-                  value: 'Weight Change (lbs/day)',
+                  value: `Weight change (${weightUnit}/day)`,
                   angle: -90,
                   position: 'insideLeft',
                   fontSize: 10,
@@ -164,10 +174,10 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
                 }}
                 formatter={(value: number, name: string) => {
                   if (name === 'actualChange') {
-                    return [`${value > 0 ? '+' : ''}${value.toFixed(2)} lbs/day`, 'Actual'];
+                    return [`${value > 0 ? '+' : ''}${value.toFixed(2)} ${weightUnit}/day`, 'Actual'];
                   }
                   if (name === 'predictedChange') {
-                    return [`${value > 0 ? '+' : ''}${value.toFixed(2)} lbs/day`, 'Model'];
+                    return [`${value > 0 ? '+' : ''}${value.toFixed(2)} ${weightUnit}/day`, 'Model'];
                   }
                   return [value, name];
                 }}
@@ -194,7 +204,7 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
                 strokeWidth={2}
                 strokeDasharray="5 3"
                 label={{
-                  value: `TDEE: ${estimatedTDEE}`,
+                  value: `Daily burn: ${estimatedTDEE}`,
                   position: 'top',
                   fontSize: 10,
                   fill: '#22c55e',
@@ -229,19 +239,19 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
           <div className="text-center p-2 bg-fill/50 rounded-lg">
             <div className="text-caption text-ink-3">Burn rate</div>
             <div className="text-subhead font-semibold text-ink">
-              {burnRatePerLb.toFixed(1)} cal/lb
+              {burnRatePerUnit.toFixed(1)} cal/{weightUnit}
             </div>
           </div>
           <div className="text-center p-2 bg-fill/50 rounded-lg">
             <div className="text-caption text-ink-3">Current weight</div>
             <div className="text-subhead font-semibold text-ink">
-              {currentWeight.toFixed(1)} lbs
+              {(currentWeight * w).toFixed(1)} {weightUnit}
             </div>
           </div>
           <div className="text-center p-2 bg-fill/50 rounded-lg">
             <div className="text-caption text-ink-3">Std Error</div>
             <div className="text-subhead font-semibold text-ink">
-              ±{(standardError * 7).toFixed(1)} lbs/wk
+              ±{(standardError * 7 * w).toFixed(1)} {weightUnit}/wk
             </div>
           </div>
           <div className="text-center p-2 bg-fill/50 rounded-lg">
@@ -256,7 +266,7 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
             <span className="text-action font-medium">How to read this chart:</span> Each blue
             dot shows a day&apos;s calorie intake vs. the resulting weight change. The orange line
             is your personal model. Where it crosses zero (green dashed line) is your estimated
-            TDEE of <span className="text-status-ok font-semibold">{estimatedTDEE}</span> cal/day.
+            daily burn of <span className="text-status-ok font-semibold">{estimatedTDEE}</span> cal/day.
           </p>
         </div>
       </CardContent>

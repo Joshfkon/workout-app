@@ -78,6 +78,8 @@ interface BodyHubTrendsProps {
   phaseSpans?: PhaseBandSpan[];
   /** Opens weight logging — the "how to get a trend" action when < 2 weigh-ins. */
   onLogWeight?: () => void;
+  /** Food-only users: no FFMI view and no (FFMI-axis) Composition Map. */
+  hideFfmi?: boolean;
 }
 
 export type CompMetric = 'bodyFat' | 'leanMass' | 'ffmi' | 'map';
@@ -156,6 +158,7 @@ export function BodyHubTrends({
   initialMetric,
   phaseSpans,
   onLogWeight,
+  hideFfmi = false,
 }: BodyHubTrendsProps) {
   const [metric, setMetric] = useState<CompMetric>(initialMetric ?? 'bodyFat');
 
@@ -172,12 +175,12 @@ export function BodyHubTrends({
       { value: 'leanMass', label: 'Lean mass' },
     ];
     // Plain label first, the technical term kept in brackets.
-    if (heightCm) options.push({ value: 'ffmi', label: 'Muscle (FFMI)' });
-    if (heightCm && dexaCount >= MIN_SCANS_FOR_COMPOSITION_MAP) {
+    if (heightCm && !hideFfmi) options.push({ value: 'ffmi', label: 'Muscle (FFMI)' });
+    if (heightCm && !hideFfmi && dexaCount >= MIN_SCANS_FOR_COMPOSITION_MAP) {
       options.push({ value: 'map', label: 'Map' });
     }
     return options;
-  }, [heightCm, dexaCount]);
+  }, [heightCm, dexaCount, hideFfmi]);
 
   // A deep link may ask for a view that isn't available (no height / <2
   // scans) — fall back rather than rendering an orphaned state.

@@ -3,13 +3,14 @@
 import { mealFromAddParam } from '@/lib/nutrition/addFoodLink';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useHydrated } from '@/hooks/useHydrated';
+import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardContent, Button, PageSkeleton, SwipeableRow, ToastContainer, useToasts, EmptyState, Chip, ListGroup, ListRow } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, PageSkeleton, SwipeableRow, ToastContainer, useToasts, EmptyState, ListGroup, ListRow } from '@/components/ui';
 import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
@@ -45,6 +46,9 @@ import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
 import { FoodEmojiAvatar } from '@/components/nutrition/FoodEmoji';
 import { StickyMacroBar } from '@/components/nutrition/StickyMacroBar';
 import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
+import { QuickAddChips } from '@/components/nutrition/QuickAddChips';
+import { TargetBasisDisclosure } from '@/components/nutrition/TargetBasisDisclosure';
+import { describeTargetBasis } from '@/lib/nutrition/targetBasis';
 import { ShareNutritionText } from '@/components/nutrition/ShareNutritionText';
 import { useDailyNutritionSummary } from '@/hooks/useDailyNutritionSummary';
 import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
@@ -64,7 +68,7 @@ import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
 import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
 import { setMacroAutoUpdateEnabled } from '@/lib/actions/nutrition';
 import { customFoodFieldsFromScan } from '@/lib/nutrition/scannedCustomFood';
-import { addLoggedRowsToFrequentFoods, buildFrequentFoods, frequentFoodPortion, formatPortion, quickAddMessage } from '@/lib/nutrition/frequentFoods';
+import { addLoggedRowsToFrequentFoods, buildFrequentFoods, frequentFoodPortion, quickAddMessage } from '@/lib/nutrition/frequentFoods';
 import { addLocalDays } from '@/lib/date/localDay';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -92,6 +96,7 @@ import {
 } from 'recharts';
 import {
   IconBookmarkPlus,
+  IconCheck,
   IconChartLine,
   IconChevronLeft,
   IconChevronRight,
@@ -364,6 +369,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
 
   const { toasts, dismissToast, showSuccess, addToast } = useToasts();
+  // Food-only users (hooks/useTrackingFocus) get no FFMI in the projections.
+  const { foodOnly } = useTrackingFocus();
 
   // Rows a quick-add just created: briefly tinted + slid in inside their meal
   // (alongside the Undo toast), so a one-tap add is unmistakable.
@@ -1383,7 +1390,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       const tdeeResult = await onWeightLoggedRecalculateTDEE(getLocalDateString());
       if (tdeeResult.syncResult?.synced && tdeeResult.syncResult.newCalories) {
         setMacroUpdateNotification(
-          `Adaptive TDEE updated targets: ${tdeeResult.syncResult.newCalories} cal - ${tdeeResult.syncResult.message}`
+          `Targets updated from your measured daily burn: ${tdeeResult.syncResult.newCalories} cal - ${tdeeResult.syncResult.message}`
         );
         setTimeout(() => setMacroUpdateNotification(null), 6000);
       } else if (tdeeResult.syncResult?.message && tdeeResult.estimate) {
@@ -1520,6 +1527,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     } catch (e) {
       console.error('Failed to disable automatic target updates:', e);
     }
+    void queryClient.invalidateQueries({ queryKey: NUTRITION_GLOBAL_KEY });
   }
 
   function openAddFood(mealType: MealType, tab: AddFoodTab = 'search') {
@@ -1555,6 +1563,23 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         : nutritionTargets,
     [nutritionTargets, stepAdjustment?.adjustment]
   );
+  // "How this is set": the inputs behind the stored (base) calorie target.
+  // Only values that reproduce it — see lib/nutrition/targetBasis.
+  const macroSettings = globalQuery.data?.macroSettings;
+  const targetBasis = useMemo(() => {
+    if (macroSettings === undefined) return null; // not loaded / older cache
+    const latestLbs = userProfile.weightLbs;
+    const adaptive = tdeeData?.adaptiveEstimate;
+    return describeTargetBasis({
+      targets: nutritionTargets,
+      settings: macroSettings,
+      weightKg: latestLbs ? latestLbs / 2.20462 : null,
+      bodyFatPercent: userProfile.bodyFatPercent ?? null,
+      measuredBurnKcal: adaptive?.confidence === 'stable' ? adaptive.estimatedTDEE : null,
+      measuredWeightKg: tdeeData?.currentWeight ? tdeeData.currentWeight / 2.20462 : null,
+      units: weightUnit,
+    });
+  }, [macroSettings, nutritionTargets, userProfile.weightLbs, userProfile.bodyFatPercent, tdeeData, weightUnit]);
   const dailySummary = useDailyNutritionSummary(foodEntries, effectiveTargets);
   const dailyTotals = dailySummary.totals;
 
@@ -1923,6 +1948,14 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             </button>
           </p>
         )}
+        {!isDaySwitching && targetBasis && dailySummary.hasTargets && (
+          <TargetBasisDisclosure
+            basis={targetBasis}
+            onChangeTargets={() =>
+              targetBasis.source === 'manual' ? setShowTargetsModal(true) : setShowMacroCalculator(true)
+            }
+          />
+        )}
       </div>
 
       {/* Quick actions: Describe / Scan / Search / Meals */}
@@ -1935,44 +1968,17 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         onMeals={() => setShowSavedMeals(true)}
       />
 
-      {/* Frequent-food chips: one tap logs to the meal named above them */}
-      {frequentChips.length > 0 && (
-        <div>
-        <div className="mb-1.5 flex items-center gap-1.5 px-1 text-subhead text-ink-2">
-          <span id="quick-add-label">Quick add to</span>
-          <select
-            aria-labelledby="quick-add-label"
-            value={chipMealType}
-            onChange={(e) => setQuickMeal(e.target.value as MealType)}
-            className="rounded-md bg-transparent font-medium text-ink underline decoration-dotted underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-action"
-            data-testid="quick-add-meal"
-          >
-            {mealConfig.map((meal) => (
-              <option key={meal.type} value={meal.type}>{meal.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-          {frequentChips.map((food) => {
-            const portion = formatPortion(frequentFoodPortion(food).serving_size);
-            return (
-              <Chip
-                key={food.food_name}
-                onClick={() => handleQuickLogFrequent(food, chipMealType, chipMealLabel)}
-                title={`${toTitleCase(food.food_name)} · ${portion}`}
-                aria-label={`Log ${toTitleCase(food.food_name)}, ${portion}, to ${chipMealLabel}`}
-                icon={<IconPlus size={16} />}
-                className="max-w-[16rem]"
-                data-testid="quick-add-chip"
-              >
-                <span className="truncate">{toTitleCase(food.food_name)}</span>
-                <span className="flex-shrink-0 text-subhead text-ink-2" data-testid="quick-add-chip-portion">· {portion}</span>
-              </Chip>
-            );
-          })}
-        </div>
-        </div>
-      )}
+      {/* Recent-food chips: one tap logs to the meal named above them; the
+          chip itself confirms ("Added to Dinner") and the meal card lights up. */}
+      <QuickAddChips
+        foods={frequentChips}
+        mealType={chipMealType}
+        mealLabel={chipMealLabel}
+        meals={mealConfig}
+        onMealChange={setQuickMeal}
+        onAdd={(food) => handleQuickLogFrequent(food, chipMealType, chipMealLabel)}
+        formatName={toTitleCase}
+      />
 
       {/* Meal sections */}
       <div className="space-y-3">
@@ -1989,12 +1995,18 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           const yesterdayHasEntries = yesterdayEntries.some((e) => e.meal_type === meal.type);
           const hasEntries = meal.entries.length > 0;
           const hasMenuActions = hasEntries || yesterdayHasEntries;
+          // A quick add just landed here: outline the card and say so in its
+          // header, next to the count that just changed.
+          const mealJustAdded = meal.entries.some((e) => justAddedIds.has(e.id));
 
           return (
             <div
               key={meal.type}
               data-meal-section={meal.type}
-              className="rounded-card bg-card p-4 shadow-card"
+              data-just-added={mealJustAdded ? 'true' : undefined}
+              className={`rounded-card bg-card p-4 shadow-card transition-shadow ${
+                mealJustAdded ? 'ring-2 ring-status-ok/60' : ''
+              }`}
             >
               {/* Header: "{Meal}: {kcal} cals" + macro breakdown + overflow menu */}
               <div className="flex items-start justify-between gap-2">
@@ -2003,6 +2015,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                     {meal.label}
                     {hasEntries && (
                       <span className="text-subhead font-normal text-ink-2 tabular-nums"> · {mealCalories.toLocaleString()} kcal</span>
+                    )}
+                    {mealJustAdded && (
+                      <span className="ml-1.5 text-subhead font-medium text-status-ok" data-testid="meal-just-added">
+                        <IconCheck size={14} className="inline -mt-0.5" aria-hidden="true" /> Added
+                      </span>
                     )}
                   </h3>
                   <p className="text-subhead text-ink-2 mt-0.5 tabular-nums">
@@ -2183,7 +2200,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             <span className="block text-caption text-ink-2 truncate">
               {hasLoggedWeightToday
                 ? `Logged today: ${todayWeightDisplay} ${weightUnit}`
-                : 'Weigh in a few times a week to track your trend and keep your adaptive TDEE accurate'}
+                : 'Weigh in a few times a week to track your trend and keep your estimated daily burn accurate'}
             </span>
           </span>
         </span>
@@ -2205,7 +2222,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         <EmptyState
           icon={<IconScale size={28} aria-hidden="true" />}
           title="Start tracking your weight"
-          description="Log weigh-ins a few times a week to track your trend and keep your adaptive TDEE accurate. Consistent data helps us calculate your true maintenance calories."
+          description="Log weigh-ins a few times a week to track your trend and keep your estimated daily burn accurate. Consistent data helps us calculate your true maintenance calories."
           action={
             <Button variant="primary" onClick={() => setShowWeightLog(true)}>
               Log Your First Weigh-In
@@ -2412,6 +2429,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           }}
           onSetTarget={() => setShowMacroCalculator(true)}
           onReset={resetAndRecalculateTDEE}
+          weightUnit={weightUnit}
+          showFfmi={!foodOnly}
         />
       )}
 
@@ -2549,7 +2568,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
 
       <MacroCalculatorModal
         isOpen={showMacroCalculator}
-        onClose={() => setShowMacroCalculator(false)}
+        onClose={() => {
+          setShowMacroCalculator(false);
+          // The calculator saves macro_settings after the targets; refetch so
+          // "How this is set" reads the new inputs.
+          void queryClient.invalidateQueries({ queryKey: NUTRITION_GLOBAL_KEY });
+        }}
         onApply={handleSaveTargets}
         existingTargets={nutritionTargets ? {
           calories: nutritionTargets.calories || undefined,
@@ -2560,6 +2584,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         userStats={userProfile}
         workoutsPerWeek={userProfile.workoutsPerWeek || undefined}
         currentPhase={currentPhase ?? undefined}
+        weightUnit={weightUnit}
       />
 
       <EditFoodModal

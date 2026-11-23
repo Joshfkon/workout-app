@@ -19,7 +19,7 @@ const glance: BodyCompGlance = {
   ffmiRatePerMonth: 0.15,
 };
 
-function renderGrid(bodyComp: BodyCompGlance | null) {
+function renderGrid(bodyComp: BodyCompGlance | null, showFfmi?: boolean) {
   return render(
     <MetricTileGrid
       nutritionTotals={{ calories: 0, protein: 0, carbs: 0, fat: 0 }}
@@ -32,6 +32,7 @@ function renderGrid(bodyComp: BodyCompGlance | null) {
       weightRate={null}
       bodyComp={bodyComp}
       onLogWeight={() => {}}
+      showFfmi={showFfmi}
     />
   );
 }
@@ -54,6 +55,12 @@ describe('MetricTileGrid — Body comp tile', () => {
     expect(screen.getByText('↓')).toHaveClass('text-status-ok');
     expect(screen.getByText('↑')).toHaveClass('text-status-ok');
     expect(screen.getByText(/3 scans/)).toBeInTheDocument();
+  });
+
+  it('food-only (showFfmi=false): body fat stays, FFMI is hidden', () => {
+    renderGrid(glance, false);
+    expect(screen.getByText('18.2')).toBeInTheDocument();
+    expect(screen.queryByText(/FFMI/)).not.toBeInTheDocument();
   });
 
   it('flags rising body fat without hiding the direction', () => {

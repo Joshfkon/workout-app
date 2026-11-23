@@ -1512,6 +1512,7 @@ function AnalyticsPageContent() {
           : undefined
       }
       onLogWeight={() => setLogSegment('weight')}
+      hideFfmi={foodOnly}
       phaseSpans={trainingPhases.map((p) => ({
         phaseType: p.phaseType,
         startDay: p.startDay,
@@ -1711,7 +1712,8 @@ function AnalyticsPageContent() {
             activeTarget={activeTarget}
             activeMesocycle={activeMesocycle}
             currentFfmi={ffmiResult?.ffmi ?? null}
-            showFfmi={!foodOnly || ffmiResult?.ffmi != null}
+            // Food-only users never see FFMI (lifting jargon), even with a scan.
+            showFfmi={!foodOnly}
             experience={userProfile?.experience ?? null}
             heightCm={userProfile?.heightCm ?? null}
             displayUnit={units === 'kg' ? 'cm' : 'in'}
@@ -1758,6 +1760,7 @@ function AnalyticsPageContent() {
                 currentBodyFatPercent={latestScan?.bodyFatPercent}
                 currentFfmi={ffmiResult?.ffmi}
                 currentMeasurements={currentMeasurements}
+                showFfmi={!foodOnly}
               />
             </div>
           )}

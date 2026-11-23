@@ -1015,7 +1015,7 @@ export function calculateMacros(
   const lbm = getLeanMassLbs(stats);
   const pctBW = ((Math.abs(weeklyChangeKg) / stats.weightKg) * 100).toFixed(2);
 
-  let explanation = `TDEE: ${tdee} kcal/day. `;
+  let explanation = `Estimated daily burn: ${tdee} kcal/day. `;
   if (weeklyChangeKg < -0.05) {
     explanation += `Target loss: ${Math.abs(weeklyChangeLbs).toFixed(2)} lb/wk (${pctBW}% BW). `;
   } else if (weeklyChangeKg > 0.05) {
