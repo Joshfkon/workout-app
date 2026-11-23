@@ -366,7 +366,8 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
           <p className="text-subhead text-ink-2 mt-1 mb-4">
             Start a workout and add exercises as you go, or have HyperTrack build you a program.
           </p>
-          <div className="flex gap-2">
+          {/* Large text: two half-width buttons wrap their labels, so stack. */}
+          <div className="flex gap-2 large-text:flex-col">
             <StartWorkoutButton className="flex-1" />
             <Link
               href="/dashboard/mesocycle/new"

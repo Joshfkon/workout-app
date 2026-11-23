@@ -297,6 +297,20 @@ export interface UserPreferences {
    * Managed by hooks/useTheme.ts (localStorage cache + server sync).
    */
   theme?: 'dark' | 'light' | 'system';
+
+  /**
+   * Text size step (lib/textSize). Unset = 'default'. Managed by
+   * hooks/useTextSize.ts (localStorage cache + server sync).
+   */
+  textSize?: 'default' | 'large' | 'larger';
+
+  /**
+   * Beginner mode: plainer workout screen (no weekly-volume strip, effort in
+   * words, fewer advanced pills). Display only; never changes a number the
+   * engine computes. Unset = on for novices, off otherwise. Read it ONLY
+   * through hooks/useBeginnerMode (lib/beginnerMode resolves the default).
+   */
+  beginnerMode?: boolean;
 }
 
 /**

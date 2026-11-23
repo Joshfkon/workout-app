@@ -101,7 +101,8 @@ export function FreestyleStartActions({ userId }: { userId: string | null }) {
 
   return (
     <>
-      <div className="mt-2.5 flex gap-2.5">
+      {/* Large text: stacked, so "Repeat <workout>" isn't cut short. */}
+      <div className="mt-2.5 flex gap-2.5 large-text:flex-col">
         {last && (
           <button
             type="button"

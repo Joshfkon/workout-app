@@ -3,6 +3,7 @@ import "./globals.css";
 import { SplashProvider } from "@/components/providers/SplashProvider";
 import { NativeAppBehavior } from "@/components/providers/NativeAppBehavior";
 import { ServiceWorkerRegistration } from "@/components/providers/ServiceWorkerRegistration";
+import { TEXT_SIZE_BOOT_SCRIPT, TEXT_SIZE_CSS } from "@/lib/textSize";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -80,6 +81,12 @@ export default function RootLayout({
             __html: `(function(){try{var t=localStorage.getItem('theme');var light=t==='light'||(t==='system'&&window.matchMedia('(prefers-color-scheme: light)').matches);document.documentElement.setAttribute('data-theme',light?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
           }}
         />
+        {/* Text size (lib/textSize): same pre-paint pattern as the theme. The
+            saved size is stamped as data-text-size before first paint, and
+            the root font-size rules for it are in the critical CSS below, so
+            a Large/Larger user never sees small text first. Kept in sync
+            with hooks/useTextSize.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_BOOT_SCRIPT }} />
         {/* DNS prefetch for Supabase - loaded dynamically */}
         <link rel="dns-prefetch" href="https://*.supabase.co" />
 
@@ -97,6 +104,8 @@ export default function RootLayout({
             --font-inter: ${systemFontStack};
             --font-mono: ${monoFontStack};
           }
+          /* Text size steps: the root font size every rem token scales from. */
+          ${TEXT_SIZE_CSS}
           /* CRITICAL: Absolute fallback to prevent white screen - !important overrides everything */
           html {
             background-color: #0b0b0d !important;

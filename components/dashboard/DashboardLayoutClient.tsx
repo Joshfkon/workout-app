@@ -12,6 +12,7 @@ import { BottomNavigation } from './BottomNavigation';
 import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
 import { ThemeToggleCompact } from '@/components/settings/ThemeToggle';
+import { TextSizeSync } from '@/hooks/useTextSize';
 // Direct file import, NOT the '@/components/workout' barrel: the barrel
 // re-exports ExerciseCard / SessionSummary and friends, which would ride into
 // the dashboard shell's bundle on every route.
@@ -102,6 +103,8 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
     // AI tap (never on load) — see components/ai/AiConsentGate.
     <AiConsentProvider>
     <div className="min-h-screen bg-canvas overflow-x-clip">
+      {/* Picks up a text size saved on another device (users.preferences). */}
+      <TextSizeSync />
       <Sidebar onSignOut={handleSignOut} volumeGoalsMet={volumeGoalsMet} />
 
       {/* Main content */}
