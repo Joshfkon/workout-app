@@ -18,7 +18,7 @@ import { formatWeight, getLocalDateString, muscleDisplayName } from '@/lib/utils
 import { describeSupabaseError } from '@/lib/errors';
 import { describeMesocycleInsertFailure } from '../_lib/mesocycleErrors';
 import { createMesocycle } from '@/lib/training/createMesocycle';
-import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
+import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay, Split } from '@/types/schema';
 import { TrainingScheduleSelector, MesocycleLengthGuidance } from '@/components/mesocycle';
 import {
   buildTrainingSchedule,
@@ -41,6 +41,7 @@ import {
   BUILDER_HISTORY_DAYS,
   builderDefaultsFromHistory,
   priorityVolumeAdjustments,
+  plannedVolumeWithBands,
   type BuilderHistoryDefaults,
   type MusclePriorityRow,
 } from '@/lib/training/builderDefaults';
@@ -49,6 +50,9 @@ import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schem
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 import { IconAlertTriangle, IconBolt, IconBulb, IconCalendar, IconGauge, IconHeartBroken, IconMoon, IconTrendingDown } from '@tabler/icons-react';
+
+/** Days a split's rotation needs so no day is dropped (Bro Split: one per body part). */
+const SPLIT_MIN_DAYS: Record<string, number> = { 'Bro Split': 5, 'Upper/Lower': 4 };
 
 export default function NewMesocyclePage() {
   useDocumentTitle('New Mesocycle');
@@ -94,11 +98,16 @@ export default function NewMesocyclePage() {
   
   // Manual overrides
   const [splitType, setSplitType] = useState('Upper/Lower');
+  // Once the lifter picks a split, recommendations stop overwriting it.
+  const [splitTouched, setSplitTouched] = useState(false);
   const [totalWeeks, setTotalWeeks] = useState(6);
   // What the lifter has been doing (prefills the schedule) and Settings →
   // Muscle priorities (feed the volume step) — lib/training/builderDefaults.
   const [historyDefaults, setHistoryDefaults] = useState<BuilderHistoryDefaults | null>(null);
   const [priorityAdjustments, setPriorityAdjustments] = useState<VolumeAdjustmentInput[]>([]);
+  /** The builder split matching recent training, if it reads as one. */
+  const historySplit: Split | null =
+    historyDefaults?.splitKind === 'body_part' ? 'Bro Split' : historyDefaults?.splitKind === 'ppl' ? 'PPL' : null;
 
   // Preferred workout days
   const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
@@ -406,7 +415,11 @@ export default function NewMesocyclePage() {
         plannedSessionsPerWeek
       );
       setRecommendation(rec);
-      setSplitType(rec.splitType);
+      // The split in use: the lifter's pick, else the one their recent
+      // training shows, else the recommendation. The preview below and the
+      // generated plan both follow it.
+      const activeSplit = (splitTouched ? splitType : historySplit ?? rec.splitType) as Split;
+      if (!splitTouched) setSplitType(activeSplit);
       // Enhanced athletes default to one extra accumulation week before
       // deload (suggested default only — the user can still change it).
       // Default inside the range the length guidance below recommends (it
@@ -418,7 +431,7 @@ export default function NewMesocyclePage() {
       
       // Generate workout templates
       const templates = generateWorkoutTemplates(
-        rec.splitType,
+        activeSplit,
         rec.volumePerMuscle,
         latestDexa?.leanMassKg || null,
         userExperience
@@ -427,7 +440,7 @@ export default function NewMesocyclePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode]);
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, splitTouched, historySplit, splitType]);
 
   // Generate the full program. Kept separate from the effect above because it
   // also depends on the chosen block length: that effect RESETS totalWeeks to
@@ -447,12 +460,12 @@ export default function NewMesocyclePage() {
       }
 
       // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
-      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay, totalWeeks, priorityAdjustments);
+      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay, totalWeeks, priorityAdjustments, splitType as Split);
       setFullProgram(program);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks, priorityAdjustments]);
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks, priorityAdjustments, splitType]);
 
   // Generate default name
   useEffect(() => {
@@ -500,7 +513,7 @@ export default function NewMesocyclePage() {
         {
           userId: user.id,
           name,
-          splitType,
+          splitType: fullProgram?.split ?? splitType,
           // days_per_week counts SESSIONS per week (7 days x 2/day = 14).
           daysPerWeek: plannedSessionsPerWeek,
           sessionsPerDay: effectiveSessionsPerDay,
@@ -1049,9 +1062,27 @@ export default function NewMesocyclePage() {
             <Select
               label="Training split"
               value={splitType}
-              onChange={(e) => setSplitType(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSplitType(next);
+                setSplitTouched(true);
+                // A body-part split is five days; squeezed into four, the
+                // generator dropped a day (legs). Give it its days.
+                const needs = SPLIT_MIN_DAYS[next] ?? 0;
+                if (scheduleMode === 'fixed_days' && daysPerWeek < needs) setDaysPerWeek(needs);
+              }}
               options={splitOptions}
-              hint={useAiRecommendation && recommendation ? `Recommended: ${recommendation.splitType}` : undefined}
+              hint={
+                splitTouched
+                  ? SPLIT_MIN_DAYS[splitType] && daysPerWeek === SPLIT_MIN_DAYS[splitType] && splitType === 'Bro Split'
+                    ? 'Set to 5 days — one per body part.'
+                    : undefined
+                  : historySplit && splitType === historySplit
+                    ? 'Matches your recent training.'
+                    : useAiRecommendation && recommendation
+                      ? `Recommended for ${plannedSessionsPerWeek} sessions a week: ${recommendation.splitType}. Pick another if you prefer — the plan follows your choice.`
+                      : undefined
+              }
             />
 
             <Slider
@@ -1125,7 +1156,7 @@ export default function NewMesocyclePage() {
               </div>
               <div className="flex justify-between py-2 border-b border-sep">
                 <span className="text-ink-2">Split</span>
-                <span className="text-ink font-medium">{splitType}</span>
+                <span className="text-ink font-medium">{fullProgram?.split ?? splitType}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-sep">
                 <span className="text-ink-2">Frequency</span>
@@ -1467,15 +1498,18 @@ export default function NewMesocyclePage() {
             {/* Weekly Volume Preview */}
             {recommendation && (
               <div className="p-4 bg-fill/50 rounded-lg">
-                <p className="text-subhead font-medium text-ink-2 mb-3">Weekly Volume (sets)</p>
-                <div className="grid grid-cols-5 gap-2 text-center text-caption">
-                  {Object.entries(recommendation.volumePerMuscle).slice(0, 10).map(([muscle, sets]) => (
-                    <div key={muscle} className="p-2 bg-card/50 rounded">
-                      <p className="text-ink-3 truncate">{muscleDisplayName(muscle)}</p>
-                      <p className="text-ink font-mono font-medium">{sets}</p>
-                    </div>
+                <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle</p>
+                <p className="text-caption text-ink-3 mb-3">Planned sets at peak week vs each muscle&apos;s MEV–MRV range.</p>
+                <ul className="grid grid-cols-1 gap-1.5 text-subhead sm:grid-cols-2" data-testid="builder-volume-bands">
+                  {plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' }).map(({ muscle, sets, mev, mrv }) => (
+                    <li key={muscle} className="flex items-baseline justify-between rounded bg-card/50 px-2 py-1.5">
+                      <span className="text-ink">{muscleDisplayName(muscle)}</span>
+                      <span className="tabular-nums text-ink-2">
+                        <span className={`font-semibold ${sets < mev ? 'text-status-warn' : sets > mrv ? 'text-status-bad' : 'text-ink'}`}>{sets}</span> · MEV {mev} · MRV {mrv}
+                      </span>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
 
@@ -1483,8 +1517,21 @@ export default function NewMesocyclePage() {
             {workoutTemplates.length > 0 && (
               <div>
                 <p className="text-subhead font-medium text-ink-2 mb-3">Workout structure</p>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {workoutTemplates.map((template, i) => (
+                <div className="flex gap-2 overflow-x-auto pb-2" data-testid="builder-structure">
+                  {/* The generated plan's own sessions — what Create saves. The
+                      older template preview ignored the chosen split (a Bro
+                      Split previewed as Upper/Lower). */}
+                  {fullProgram && fullProgram.sessions.length > 0
+                    ? fullProgram.sessions.map((session, i) => (
+                        <div key={i} className="shrink-0 p-3 bg-fill/50 rounded-lg min-w-[140px]">
+                          <p className="font-medium text-ink text-subhead">{session.day}</p>
+                          <p className="text-caption text-ink-3 mt-1">
+                            {session.exercises.length} exercises · {session.totalSets} sets
+                          </p>
+                          <p className="text-caption text-ink-2 mt-1">{session.focus}</p>
+                        </div>
+                      ))
+                    : workoutTemplates.map((template, i) => (
                     <div key={i} className="shrink-0 p-3 bg-fill/50 rounded-lg min-w-[140px]">
                       <p className="font-medium text-ink text-subhead">{template.dayName}</p>
                       <p className="text-caption text-ink-3 mt-1">

@@ -1,4 +1,5 @@
-import { builderDefaultsFromHistory, priorityVolumeAdjustments } from '@/lib/training/builderDefaults';
+import { builderDefaultsFromHistory, priorityVolumeAdjustments, plannedVolumeWithBands } from '@/lib/training/builderDefaults';
+import { getEffectiveBand } from '@/services/volumeBands';
 import type { StandardMuscleGroup } from '@/types/schema';
 
 const day = (...m: StandardMuscleGroup[]) => m;
@@ -49,5 +50,19 @@ describe('priorityVolumeAdjustments', () => {
       { muscleGroup: 'quads', volumeMultiplier: 0.95, reason: 'dominant' },
       { muscleGroup: 'calves', volumeMultiplier: 0.9, reason: 'dominant' },
     ]);
+  });
+});
+
+describe('plannedVolumeWithBands', () => {
+  it('pairs each planned coarse muscle with its MEV–MRV band, skipping unplanned and non-coarse keys', () => {
+    const rows = plannedVolumeWithBands({ chest: { sets: 20 }, hamstrings: 12, quads: { sets: 0 }, lateral_delts: { sets: 8 } });
+    expect(rows.map((r) => r.muscle)).toEqual(['chest', 'hamstrings']);
+    expect(rows[0]).toEqual({ muscle: 'chest', sets: 20, ...getEffectiveBand('chest') });
+  });
+
+  it('uses the enhanced recovery profile the generator used', () => {
+    const [row] = plannedVolumeWithBands({ shoulders: 35 }, { recoveryProfile: 'enhanced' });
+    expect(row.mrv).toBe(getEffectiveBand('shoulders', { recoveryProfile: 'enhanced' }).mrv);
+    expect(row.mrv).toBeGreaterThan(getEffectiveBand('shoulders').mrv);
   });
 });
