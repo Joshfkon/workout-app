@@ -161,3 +161,50 @@ export function beginnerPickReason(reason: string, muscle: StandardMuscleGroup |
   if (/near weekly max/.test(reason)) return `${name}: light technique work only`;
   return plainMuscleNamesIn(reason);
 }
+
+/**
+ * plainRirText plus the other workout-screen jargon a first-week lifter
+ * meets in engine-written lines: e1RM / 1RM, AMRAP, RPE, MEV / MRV.
+ * Wording only — every number in the line is kept as written.
+ */
+export function plainWorkoutText(text: string): string {
+  return plainRirText(text)
+    .replace(/\s*\(AMRAP\)/g, '')
+    .replace(/\bAMRAP\b/g, 'as many reps as you can')
+    .replace(/\bEst\.?\s*1-rep max\s*\(e1RM\)/gi, 'Estimated max')
+    .replace(/\bestimated 1RM\b/gi, 'estimated max')
+    .replace(/\best\.\s*1RM\b/gi, 'estimated max')
+    .replace(/\be1RM\b/gi, 'estimated max')
+    .replace(/\b1RM\b/g, 'one-rep max')
+    .replace(/\bRPE (\d+(?:\.\d+)?)/g, (_m, n: string) => `effort ${n}/10`)
+    .replace(/\bRPE\b/g, 'effort')
+    .replace(/\s*\((?:MEV|MRV|MAV)\)/g, '')
+    .replace(/\bMEV\b/g, 'minimum')
+    .replace(/\bMRV\b/g, 'weekly maximum')
+    .replace(/\bMAV\b/g, 'best range');
+}
+
+/**
+ * Beginner mode's effort question: three plain answers instead of the five
+ * numbered chips. Each answer logs an EXISTING chip value, so the engine and
+ * the rirSource rules see exactly what a five-chip tap would produce:
+ *   - "That was hard"      → 1 (the "hard" chip)
+ *   - "A couple more"      → 2 (the "good" chip; literally two left)
+ *   - "Could do lots more" → 4 (the "4+ / cruise" chip)
+ * 0 ("maxed") and 3 ("easy") are not offered: a first-week lifter rarely
+ * reaches true failure and can't tell 3 from 4. A preset value (the target,
+ * or a sensor estimate) of 0 or 3 is still logged exactly as-is while
+ * untouched — only the highlight rounds it to the nearest answer.
+ */
+export const BEGINNER_EFFORT_CHOICES: ReadonlyArray<{ rir: 1 | 2 | 4; label: string }> = [
+  { rir: 1, label: 'That was hard' },
+  { rir: 2, label: 'A couple more' },
+  { rir: 4, label: 'Could do lots more' },
+];
+
+/** Which beginner answer a 0–4 chip value shows as selected. */
+export function beginnerEffortChoiceFor(rir: number): 1 | 2 | 4 {
+  if (rir <= 1) return 1;
+  if (rir >= 4) return 4;
+  return 2;
+}
