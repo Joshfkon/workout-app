@@ -62,14 +62,14 @@ beforeEach(() => {
 });
 
 describe('weight food — editable amount at add time', () => {
-  it('re-previews 100g → 150g as 117 cal and logs "150g" with scaled macros', async () => {
+  it('re-previews 85g → 150g as 117 cal and logs "150g" with scaled macros', async () => {
     const user = userEvent.setup();
     const onAdd = renderAdd();
 
     await user.click(screen.getByText('Peas'));
 
-    // Defaults to the food's 100g serving = 78 cal
-    expect(screen.getByTestId('add-food-preview-calories')).toHaveTextContent('78');
+    // Defaults to a typical vegetable portion (85 g = 66 cal), not 100 g
+    expect(screen.getByTestId('add-food-preview-calories')).toHaveTextContent('66');
 
     const amount = screen.getByTestId('add-food-amount');
     await user.clear(amount);
@@ -408,11 +408,11 @@ describe('household serving default (people think in whole eggs, not grams)', ()
     );
   });
 
-  it('keeps grams for foods people weigh (no household serving)', async () => {
+  it('keeps grams for foods people weigh, at a typical portion rather than 100 g', async () => {
     const user = userEvent.setup();
     renderAdd();
     await user.click(screen.getByText('Peas'));
-    expect(screen.getByTestId('add-food-amount')).toHaveValue(100);
+    expect(screen.getByTestId('add-food-amount')).toHaveValue(85);
     expect(screen.getByTestId('add-food-unit')).toHaveValue('g');
   });
 });

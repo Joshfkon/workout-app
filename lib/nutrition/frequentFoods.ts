@@ -163,3 +163,24 @@ function pluralServing(s: string): string {
 export function quickAddMessage(foodName: string, servingSize: string | null | undefined, mealLabel: string): string {
   return `Added ${foodName} (${formatPortion(servingSize)}) to ${mealLabel}`;
 }
+
+/**
+ * Toast after adding a food from the add sheet, with the day's running
+ * totals so the add is visible against the goal:
+ * "Added to Dinner · 1,640 / 2,400 kcal · 120 / 180 g protein".
+ * Without a target the totals stand alone ("1,640 kcal · 120 g protein").
+ */
+export function addedToMealMessage(
+  mealLabel: string,
+  totals: { calories: number; protein: number },
+  targets: { calories?: number | null; protein?: number | null } = {}
+): string {
+  const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
+  const kcal = targets.calories && targets.calories > 0
+    ? `${fmt(totals.calories)} / ${fmt(targets.calories)} kcal`
+    : `${fmt(totals.calories)} kcal`;
+  const protein = targets.protein && targets.protein > 0
+    ? `${fmt(totals.protein)} / ${fmt(targets.protein)} g protein`
+    : `${fmt(totals.protein)} g protein`;
+  return `Added to ${mealLabel} · ${kcal} · ${protein}`;
+}
