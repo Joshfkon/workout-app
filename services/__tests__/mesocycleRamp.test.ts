@@ -9,6 +9,8 @@ import {
   generateFullMesocycleWithFatigue,
   creditedSetsByGroup,
   FATIGUE_GATE_RIR,
+  sessionMuscleCeiling,
+  MAX_SETS_PER_MUSCLE_PER_SESSION,
 } from '@/services/sessionBuilderWithFatigue';
 import {
   buildPeriodizationPlan,
@@ -161,4 +163,34 @@ describe('effectiveTrainingAge', () => {
     expect(reasons('intermediate')).not.toContain('under a year of training ×0.85');
     expect(reasons('advanced')).not.toContain('under a year of training ×0.85');
   });
+});
+
+describe('the ramp adds sets you can see (UX panel round 19: "only RIR changes")', () => {
+  it('a linear block opens at 75% of the weekly target and reaches 100% in its last accumulation week', () => {
+    const p = profile('advanced', 'bulk', effectiveTrainingAge(0, 'advanced'));
+    const plan = buildPeriodizationPlan(p, calculateRecoveryFactors(p), 5);
+    expect(plan.model).toBe('linear');
+    const training = plan.weeklyProgression.slice(0, plan.mesocycleWeeks - 1);
+    expect(training[0].volumeModifier).toBeCloseTo(0.75);
+    expect(training[training.length - 1].volumeModifier).toBeCloseTo(1);
+  });
+
+  it('the per-session muscle ceiling scales with the week, full at the peak', () => {
+    expect(sessionMuscleCeiling(1)).toBe(MAX_SETS_PER_MUSCLE_PER_SESSION);
+    expect(sessionMuscleCeiling(0.75)).toBe(9);
+    expect(sessionMuscleCeiling(0)).toBeGreaterThanOrEqual(2);
+  });
+
+  for (const [split, days] of [['Bro Split', 5], ['PPL', 6], ['Upper/Lower', 4]] as [Split, number][]) {
+    it(`advanced bulk ${split} ×${days}, 75 min: most muscles gain sets from week 1 to the peak`, () => {
+      const p = profile('advanced', 'bulk', effectiveTrainingAge(0, 'advanced'));
+      const weeks = generateFullMesocycleWithFatigue(days, p, 75, [], [], 1, 5, [], split).mesocycleWeeks!;
+      const training = weeks.filter((w) => !w.isDeload);
+      const first = creditedSetsByGroup(training[0].sessions);
+      const peak = creditedSetsByGroup(training[training.length - 1].sessions);
+      const muscles = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'glutes', 'triceps', 'biceps'] as const;
+      const grew = muscles.filter((m) => (peak[m] ?? 0) > (first[m] ?? 0));
+      expect(grew.length).toBeGreaterThanOrEqual(6);
+    });
+  }
 });

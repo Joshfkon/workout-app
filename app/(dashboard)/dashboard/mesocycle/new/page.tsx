@@ -124,6 +124,15 @@ export default function NewMesocyclePage() {
   const [userId, setUserId] = useState<string | null>(null);
   // Settings → Muscle priorities, editable from the review step.
   const [showPriorityEditor, setShowPriorityEditor] = useState(false);
+  /** Saved priorities (from either editor) → this plan's volume adjustments. */
+  const applySavedPriorities = (saved: { muscleGroup: string; priority: number }[]) =>
+    setPriorityAdjustments(
+      priorityVolumeAdjustments(
+        saved
+          .filter((p) => p.priority !== 3)
+          .map((p) => ({ muscle_group: p.muscleGroup, priority: p.priority }) as MusclePriorityRow)
+      )
+    );
   // Week table: groups whose heads (side delts…) are listed under them.
   const [showAllHeads, setShowAllHeads] = useState(false);
   const [useAiRecommendation, setUseAiRecommendation] = useState(true);
@@ -1154,12 +1163,30 @@ export default function NewMesocyclePage() {
                   </p>
                 ) : (
                   <p className="text-ink-2">
-                    Bringing up a lagging muscle, or one head like side delts? Mark it high priority in{' '}
-                    <a href="/dashboard/settings" className="font-semibold text-action">Settings → Training → Muscle priorities</a>{' '}
-                    and this plan gives it extra weekly sets.
+                    Bringing up a lagging muscle, or one head like side delts? Mark it high priority and this plan
+                    gives it extra weekly sets.
                   </p>
                 );
               })()}
+              {/* Edit here, not via a trip to Settings that left the builder
+                  (UX panel: "I can't prioritize lagging muscles"). Same
+                  editor and table as Settings → Muscle priorities. */}
+              {userId ? (
+                <button
+                  type="button"
+                  className="mt-2 font-semibold text-action"
+                  onClick={() => setShowPriorityEditor((v) => !v)}
+                  aria-expanded={showPriorityEditor}
+                  data-testid="builder-customize-priorities"
+                >
+                  {showPriorityEditor ? 'Done with priorities' : 'Prioritize muscles'}
+                </button>
+              ) : null}
+              {showPriorityEditor && userId && (
+                <div className="mt-3" data-testid="builder-customize-priority-editor">
+                  <MusclePrioritySettings userId={userId} onSave={applySavedPriorities} />
+                </div>
+              )}
             </div>
 
             <Input
@@ -1781,7 +1808,8 @@ export default function NewMesocyclePage() {
                               {planWeeks.map((w) => {
                                 const sets = Math.round(w.sets[muscle] ?? 0);
                                 // A deload sits under MEV by design; flag training weeks only.
-                                const low = !w.isDeload && isAtOrBelowMev(sets, mev);
+                                // Week 1 opening AT MEV is the plan (the ramp climbs from there); only a training week under MEV is flagged.
+                                const low = !w.isDeload && sets < mev;
                                 return (
                                   <td key={w.weekNumber} className={`text-right py-0.5 px-1 ${low ? 'text-status-warn font-semibold' : 'text-ink-2'}`}>
                                     {sets}
@@ -1809,32 +1837,21 @@ export default function NewMesocyclePage() {
                   );
                 })()}
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-caption">
-                  <span className="text-ink-3">Amber: at or below MEV. Heads count indirect work at half.</span>
+                  <span className="text-ink-3">Amber: below MEV. Week 1 opens near MEV and adds sets each week. Heads count indirect work at half.</span>
                   <span className="flex gap-3">
                     <button type="button" className="font-semibold text-action" onClick={() => setShowAllHeads((v) => !v)} data-testid="builder-toggle-heads">
                       {showAllHeads ? 'Fewer heads' : 'All heads'}
                     </button>
                     {userId && (
                       <button type="button" className="font-semibold text-action" onClick={() => setShowPriorityEditor((v) => !v)} data-testid="builder-edit-priorities">
-                        {showPriorityEditor ? 'Close priorities' : 'Set head priorities'}
+                        {showPriorityEditor ? 'Close priorities' : 'Prioritize muscles or heads'}
                       </button>
                     )}
                   </span>
                 </div>
                 {showPriorityEditor && userId && (
                   <div className="mt-3" data-testid="builder-priority-editor">
-                    <MusclePrioritySettings
-                      userId={userId}
-                      onSave={(saved) =>
-                        setPriorityAdjustments(
-                          priorityVolumeAdjustments(
-                            saved
-                              .filter((p) => p.priority !== 3)
-                              .map((p) => ({ muscle_group: p.muscleGroup, priority: p.priority }) as MusclePriorityRow)
-                          )
-                        )
-                      }
-                    />
+                    <MusclePrioritySettings userId={userId} onSave={applySavedPriorities} />
                   </div>
                 )}
               </div>

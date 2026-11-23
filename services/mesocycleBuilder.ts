@@ -783,6 +783,13 @@ export function buildPeriodizationPlan(
  */
 export const ENHANCED_VOLUME_RAMP_BONUS = 0.1;
 
+/** Week-1 share of the plan's weekly sets in a linear block; the last
+ *  accumulation week reaches 100%. A 4-week block steps 75 / 83 / 92 / 100%,
+ *  about one or two sets per muscle per week. */
+export const LINEAR_RAMP_START = 0.75;
+/** Same for daily-undulating blocks, which already vary load within a week. */
+export const DUP_RAMP_START = 0.8;
+
 /**
  * Build week-by-week progression targets
  */
@@ -799,13 +806,18 @@ function buildWeeklyProgression(
 
   switch (model) {
     case 'linear':
-      // Simple linear ramp
+      // Linear ramp: volume starts near the low end of the productive range
+      // and climbs to the plan's full weekly sets in the last accumulation
+      // week (RP-style MEV → MRV). The old 92% → 100% ramp rounded to the
+      // same set counts every week, so the block read as "only RIR changes"
+      // (UX panel round 19).
       for (let i = 1; i <= trainingWeeks; i++) {
         const progress = i / trainingWeeks;
+        const climb = trainingWeeks > 1 ? (i - 1) / (trainingWeeks - 1) : 1;
         weeks.push({
           week: i,
           intensityModifier: 0.85 + (progress * 0.15),  // 85% -> 100%
-          volumeModifier: 0.9 + (progress * (0.1 + rampBonus)), // 90% -> 100% (110% enhanced)
+          volumeModifier: LINEAR_RAMP_START + (climb * (1 - LINEAR_RAMP_START + rampBonus)), // 75% -> 100% (110% enhanced)
           rpeTarget: { min: 6 + Math.floor(progress * 2), max: 7 + Math.floor(progress * 2) },
           focus: progress < 0.5 ? 'Technique and base building' : 'Progressive overload'
         });
@@ -816,10 +828,11 @@ function buildWeeklyProgression(
       // Volume waves within weeks, overall progression across mesocycle
       for (let i = 1; i <= trainingWeeks; i++) {
         const progress = i / trainingWeeks;
+        const climb = trainingWeeks > 1 ? (i - 1) / (trainingWeeks - 1) : 1;
         weeks.push({
           week: i,
           intensityModifier: 0.9 + (progress * 0.1),
-          volumeModifier: 0.85 + (progress * (0.15 + rampBonus)),
+          volumeModifier: DUP_RAMP_START + (climb * (1 - DUP_RAMP_START + rampBonus)), // 80% -> 100%
           rpeTarget: { min: 7, max: 9 },
           focus: `DUP Week ${i}: Rotate hypertrophy/strength/power daily`
         });

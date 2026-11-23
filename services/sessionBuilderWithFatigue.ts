@@ -134,6 +134,18 @@ function estimateExerciseTime(
 export const MAX_SETS_PER_MUSCLE_PER_SESSION = 12;
 
 /**
+ * The per-muscle per-session ceiling for a week of the block. It scales with
+ * the week's place in the ramp like the session's capacity does: a muscle
+ * trained once a week (Bro Split chest) reached the full 12-set ceiling from
+ * week 1, so its sets were identical every week while the block claimed to
+ * climb (UX panel round 19). The peak week gets the full ceiling.
+ */
+export function sessionMuscleCeiling(capacityScale: number = 1): number {
+  const scale = Math.min(1, Math.max(0, capacityScale));
+  return Math.max(MIN_SETS_PER_PLANNED_MUSCLE, Math.round(MAX_SETS_PER_MUSCLE_PER_SESSION * scale));
+}
+
+/**
  * The effort (RIR) the per-session fatigue budget is checked at, every week
  * of the block. The budget is a ceiling on how much work one session holds;
  * checked at each week's own RIR it tightened as the block pushed RIR down
@@ -680,7 +692,7 @@ export function buildDetailedSessionWithFatigue(
     if (recoveryScale < 1) {
       setsThisSession = Math.max(1, Math.round(setsThisSession * recoveryScale));
     }
-    plans.push({ muscle, request: Math.min(MAX_SETS_PER_MUSCLE_PER_SESSION, setsThisSession), readiness });
+    plans.push({ muscle, request: Math.min(sessionMuscleCeiling(capacityScale), setsThisSession), readiness });
   }
 
   // Pass 2: share the session's time between them, so a muscle listed last
@@ -934,7 +946,7 @@ export function buildDUPSession(
     // modifier only reached the trim targets before, so DUP weeks never
     // actually ramped).
     setsThisSession = Math.max(1, Math.round(setsThisSession * volumeModifiers[dupDayType] * weekVolumeModifier));
-    plans.push({ muscle, request: Math.min(MAX_SETS_PER_MUSCLE_PER_SESSION, setsThisSession), readiness });
+    plans.push({ muscle, request: Math.min(sessionMuscleCeiling(capacityScale), setsThisSession), readiness });
   }
   const allotted = fairShareSessionSets(
     plans.map((p) => p.request),
