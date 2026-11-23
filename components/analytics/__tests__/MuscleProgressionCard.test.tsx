@@ -140,3 +140,12 @@ describe('muscleProgressionSubtitle', () => {
     expect(text).toMatch(/average of its lifts/);
   });
 });
+
+describe('flatBehindDisplay', () => {
+  const { flatBehindDisplay } = jest.requireActual('../MuscleProgressionCard');
+  it('a flat group behind pace reads "Holding · below pace"; a slow riser keeps the normal label', () => {
+    expect(flatBehindDisplay({ pace: 'behind', avgWeeklyChangePct: 0 })).toEqual({ label: 'Holding · below pace', tone: 'warning' });
+    expect(flatBehindDisplay({ pace: 'behind', avgWeeklyChangePct: 0.08 })).toBeNull();
+    expect(flatBehindDisplay({ pace: 'on_track', avgWeeklyChangePct: 0 })).toBeNull();
+  });
+});

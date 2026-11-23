@@ -196,7 +196,12 @@ export function describeTargetBasis(input: TargetBasisInput): TargetBasis | null
 /** Lines for the disclosure, in display order. */
 export function targetBasisLines(basis: TargetBasis): string[] {
   const lines: string[] = [];
-  if (basis.source === 'manual') lines.push('You entered these targets yourself.');
+  if (basis.source === 'manual') {
+    lines.push('You entered these targets yourself.');
+    // UX panel: a bulking lifter didn't find that targets can be set from a
+    // weekly rate (lean / moderate / aggressive bulk or cut, as % of body weight).
+    lines.push('To set them from a weekly rate of gain or loss instead (e.g. a lean bulk, about +0.25% of body weight a week), use Change targets.');
+  }
   if (basis.dailyBurnKcal) {
     const from =
       basis.burnFrom === 'measured'

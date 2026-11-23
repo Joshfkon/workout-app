@@ -56,7 +56,7 @@ function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { best: string | nu
 
 /** Plain explanation of "est. max", shown once where the term first appears. */
 export const EST_MAX_EXPLAINER =
-  'Est. max = the heaviest single rep your recent sets suggest you could lift.';
+  'Est. max = the heaviest single rep your recent sets suggest you could lift. It counts the reps you had left, so it reads higher than a plain reps-to-max calculator.';
 
 /**
  * How "%/wk" is worked out — an advanced lifter saw every lift "+2%/wk" and

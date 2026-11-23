@@ -132,6 +132,14 @@ export function muscleProgressionSubtitle(
  * /dashboard/analytics?tab=strength&section=muscle-progression (the Train
  * page's Progression card deep-links here).
  */
+
+/** Behind pace with a ~0 rate: "Holding · below pace" (pure; exported for tests). */
+export function flatBehindDisplay(group: { pace: string; avgWeeklyChangePct: number }): { label: string; tone: 'warning' } | null {
+  return group.pace === 'behind' && Math.abs(group.avgWeeklyChangePct) < 0.05
+    ? { label: 'Holding · below pace', tone: 'warning' }
+    : null;
+}
+
 export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays }: MuscleProgressionCardProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -168,7 +176,9 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays 
       <ul className="divide-y divide-sep">
         {activeGroups.map((group) => {
           const isOpen = expanded.has(group.muscleGroup);
-          const display = getPaceDisplay(group.pace);
+          // A flat group "behind" the expected gain reads as a contradiction
+          // next to rising lifts elsewhere; say what it is (UX panel).
+          const display = flatBehindDisplay(group) ?? getPaceDisplay(group.pace);
           return (
             <li key={group.muscleGroup}>
               <button

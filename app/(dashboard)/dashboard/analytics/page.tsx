@@ -70,6 +70,9 @@ import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
 import { ProgressPhotosHero } from '@/components/analytics/ProgressPhotosHero';
 import { mergeSleepLogIntoWellness, type SleepLogRow } from './wellnessSleep';
+import { WeeklySetsCard } from '@/components/dashboard/home/WeeklySetsCard';
+import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
@@ -265,6 +268,8 @@ async function fetchAllRowsNewestFirst(
 }
 
 function AnalyticsPageContent() {
+  const { rows: weeklyVolumeRows } = useWeeklyVolume();
+  const beginnerMode = useBeginnerMode();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
@@ -1769,6 +1774,11 @@ function AnalyticsPageContent() {
 
       {activeTab === 'strength' && (
         <div className="space-y-6">
+          {/* Weekly sets per muscle vs MEV–MRV, where an advanced lifter looks
+              for it (UX panel: "no weekly sets per muscle against MEV/MRV in
+              analytics"). Same rows as Home, the workout strip and the Sets
+              per week page. Beginner mode keeps it out, as everywhere. */}
+          {!beginnerMode && <WeeklySetsCard rows={weeklyVolumeRows} />}
           {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
               First so ?section=lift-trends deep links land above the fold. */}
           {liftTrendsSummary && (
