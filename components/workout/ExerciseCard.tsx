@@ -5042,8 +5042,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                 >
                   <span>
                     {beginner
-                      ? 'Last set: do as many reps as you can with good form.'
-                      : 'Last set: as many reps as you can (AMRAP) — it calibrates your effort ratings.'}
+                      ? 'Last set: do as many reps as you can with good form. Skip to do a normal set.'
+                      // Says why reps and effort come pre-set to failure (UX panel: "the 0
+                      // reps-in-reserve preset and the AMRAP note are unexplained").
+                      : 'Last set: go until you can\'t do another clean rep, so effort is preset to 0 left. It checks how well you judge reps left. Skip to do a normal set.'}
                   </span>
                   <span className="flex flex-shrink-0 gap-3">
                     {onAmrapAccept && (

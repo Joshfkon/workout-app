@@ -3354,7 +3354,7 @@ describe('ExerciseCard round 10: AMRAP note, why-this-weight, beginner wording',
       <ExerciseCard {...lastSetProps} onAmrapAccept={onAmrapAccept} onAmrapDismiss={onAmrapDismiss} />
     );
     expect(screen.getByTestId('amrap-note')).toHaveTextContent(
-      'Last set: as many reps as you can (AMRAP) — it calibrates your effort ratings.'
+      "Last set: go until you can't do another clean rep, so effort is preset to 0 left. It checks how well you judge reps left. Skip to do a normal set."
     );
     await user.click(screen.getByTestId('amrap-note-ok'));
     expect(onAmrapAccept).toHaveBeenCalledTimes(1);
@@ -3379,7 +3379,7 @@ describe('ExerciseCard round 10: AMRAP note, why-this-weight, beginner wording',
       />
     );
     expect(screen.getByTestId('amrap-note')).toHaveTextContent(
-      'Last set: do as many reps as you can with good form.'
+      'Last set: do as many reps as you can with good form. Skip to do a normal set.'
     );
     // Expanded history: "Estimated max", not "Estimated 1RM".
     await user.click(screen.getByText(/last session/i));

@@ -154,17 +154,12 @@ describe('beginner mode jargon guard', () => {
   });
 
   it('PR popup copy: no e1RM', () => {
-    const copy = prCelebrationCopy(
-      { type: 'e1rm', value: 100, improvement: 3 } as never,
-      (kg) => `${kg} kg`,
-      { beginner: true }
-    );
+    const pr = { type: 'e1rm', value: 100, improvement: 3, previous: 97 } as const;
+    const copy = prCelebrationCopy(pr, (kg) => `${kg} kg`, { beginner: true, set: { weightKg: 75, repCount: 10 } });
     expect(`${copy.title} ${copy.detail}`).not.toMatch(JARGON);
-    expect(copy.detail).toBe('Your estimated max is up: 100 kg · +3%');
-    // Off: unchanged.
-    expect(prCelebrationCopy({ type: 'e1rm', value: 100, improvement: 3 } as never, (kg) => `${kg} kg`).detail).toBe(
-      'Est. 1-rep max (e1RM) 100 kg · +3%'
-    );
+    expect(copy.detail).toBe('75 kg × 10 → estimated max 100 kg (was 97 kg)');
+    // Off: the term rides along.
+    expect(prCelebrationCopy(pr, (kg) => `${kg} kg`).detail).toBe('est. 1-rep max (e1RM) 100 kg (was 97 kg)');
   });
 
   it('plainWorkoutText keeps every number', () => {

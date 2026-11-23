@@ -193,8 +193,25 @@ export function deriveWorkoutLabel(primaryMuscles: string[]): string {
   if (muscles.includes('quads') && muscles.includes('hamstrings')) return 'Lower Body';
   if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) return 'Push';
   if (muscles.includes('back') && muscles.includes('biceps')) return 'Pull';
+  // Three or more muscles: name the region. A joined list ("Lateral Delts &
+  // Biceps & Traps") truncates in the header to "Lateral Delts…", which read
+  // as the exercise name above an Upright Row card (UX panel).
+  if (muscles.length >= 3) {
+    const lower = muscles.filter((m) => LOWER_BODY_MUSCLES.has(m)).length;
+    const core = muscles.filter((m) => CORE_MUSCLES.has(m)).length;
+    const upper = muscles.length - lower - core;
+    if (upper > 0 && lower > 0) return 'Full Body';
+    if (lower > 0) return 'Lower Body';
+    if (upper > 0) return 'Upper Body';
+  }
   return muscles.map(formatMuscleName).join(' & ');
 }
+
+const LOWER_BODY_MUSCLES = new Set([
+  'quads', 'hamstrings', 'glutes', 'glute_med', 'adductors', 'abductors',
+  'calves', 'gastrocnemius', 'soleus', 'hip_flexors', 'legs',
+]);
+const CORE_MUSCLES = new Set(['abs', 'obliques', 'erectors', 'core', 'lower_back']);
 
 export function formatDuration(seconds: number): string {
   // Handle negative, NaN, or invalid values

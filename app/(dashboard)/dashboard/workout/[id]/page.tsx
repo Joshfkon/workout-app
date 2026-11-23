@@ -3704,6 +3704,9 @@ export default function WorkoutPage() {
         });
         if (pr) {
           const unitLabel = preferences.units === 'lb' ? 'lbs' : 'kg';
+          // The set that earned it (rep exercises only: e1RM never fires
+          // for duration sets, whose reps field holds seconds).
+          const prSetReps = getSetReps(data, currentBlock.exercise);
           const fmtKg = (kg: number) => {
             const v = convertWeightForDisplay(kg, preferences.units, 1);
             return `${Number.isInteger(v) ? v.toFixed(0) : v} ${unitLabel}`;
@@ -3711,7 +3714,10 @@ export default function WorkoutPage() {
           setPrCelebration({
             id: setId,
             exerciseName: currentBlock.exercise.name,
-            ...prCelebrationCopy(pr, fmtKg, { beginner: beginnerMode }),
+            ...prCelebrationCopy(pr, fmtKg, {
+              beginner: beginnerMode,
+              set: prSetReps !== null ? { weightKg: data.weightKg, repCount: prSetReps } : undefined,
+            }),
           });
         }
       });
