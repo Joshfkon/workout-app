@@ -28,8 +28,8 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
     /dashboard
       /analytics       # Analytics and progress charts
       /body-composition # Body comp tracking (DEXA, measurements)
-      /discover        # Discover shared workouts
-      /feed            # Social activity feed
+      /discover        # Discover shared workouts (HIDDEN — see Social Features)
+      /feed            # Social activity feed (HIDDEN — see Social Features)
       /glossary        # Training terminology
       /history         # Workout history
       /learn           # Educational content (exercise science, RPE, etc.)
@@ -52,7 +52,7 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
   /nutrition           # Nutrition (MacroCalculator, BarcodeScanner, TDEEDashboard)
   /providers           # React providers (ServiceWorker, NativeAppBehavior, SplashProvider)
   /settings            # Settings components (ImportExport, GymEquipment, MusclePriority)
-  /social              # Social features
+  /social              # Social features (HIDDEN in the app — see Social Features)
     /feed              # Activity feed (ReactionBar, CommentSection)
     /follow            # Follow system
     /leaderboards      # Leaderboard tables and rankings
@@ -96,7 +96,8 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
   /training            # Training logic (coachingService, exercise-safety, programEngine)
   /utils               # Utility modules (pwa-detection)
   errors.ts            # Error handling utilities
-  social.ts            # Social features utilities
+  social.ts            # Social features utilities (hidden feature)
+  socialFeatures.ts    # SOCIAL_FEATURES_ENABLED flag + hidden-route redirects
   stripe.ts            # Stripe integration
   subscription.ts      # Subscription utilities
   utils.ts             # Common utilities (weight conversion, date formatting)
@@ -447,10 +448,28 @@ await user.click(screen.getByRole('button'));
 5. Add coverage threshold in `jest.config.js`
 
 ### Working with Social Features
-1. Check `/components/social` for UI components
-2. Use hooks: `useFollow`, `useReactions`, `useComments`, `useActivityFeed`
-3. Types are in `types/social.ts`
-4. See `docs/SOCIAL_FEATURES_*.md` for detailed documentation
+**The community features are HIDDEN** (`SOCIAL_FEATURES_ENABLED = false` in
+`lib/socialFeatures.ts`): activity feed, discover/shared workouts, public
+profiles, follows, user search, leaderboards, comments and reactions. Users
+sharing content with each other brings in App Store Guideline 1.2 (report,
+block, filter, moderation), so the app ships without it.
+
+- The code, tables, migrations and data are all kept. Don't drop social tables
+  or delete the code without a separate decision.
+- `lib/supabase/middleware.ts` redirects every route in
+  `SOCIAL_ROUTE_PREFIXES` to `/dashboard` (and `/onboarding/profile` to the
+  next onboarding step), so typed URLs and `hypertrack://` deep links can't
+  reach them. A new social route must be added to that list.
+- Entry points (More page, Sidebar, the workout page's share-to-feed button,
+  onboarding's username step) check `SOCIAL_FEATURES_ENABLED`. Don't add a
+  new link to a social screen without the same check.
+- Not social, and kept: "Copy summary" on the session summary (the OS share
+  sheet, nothing posted in-app) and the strength percentiles (static
+  strength-standard tables, not other users' data).
+- To restore: set the flag to `true` — after adding Guideline 1.2 tooling.
+- Components live in `/components/social`, hooks `useFollow`, `useReactions`,
+  `useComments`, `useActivityFeed`, types in `types/social.ts`, and history in
+  `docs/SOCIAL_FEATURES_*.md`.
 
 ## Environment Variables
 

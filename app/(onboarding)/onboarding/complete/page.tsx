@@ -21,6 +21,7 @@ import {
 } from '@/services/coachingEngine';
 import { kgToLbs, roundToIncrement } from '@/lib/utils';
 import { generateAnonymousUsername } from '@/lib/social';
+import { SOCIAL_FEATURES_ENABLED, ONBOARDING_AFTER_PROFILE_ROUTE } from '@/lib/socialFeatures';
 import type { WeightUnit } from '@/types/schema';
 
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
@@ -229,6 +230,15 @@ function CompleteContent() {
           }
         }
       }
+    }
+
+    if (!SOCIAL_FEATURES_ENABLED) {
+      // The public-profile (username) step is hidden with the social
+      // features: record it as passed so a resumed onboarding doesn't route
+      // back to it, and go straight to the step after it.
+      if (user) await updateOnboardingStep(supabase, user.id, 'profile');
+      router.push(`${ONBOARDING_AFTER_PROFILE_ROUTE}?session=${sessionId}`);
+      return;
     }
 
     // Redirect to profile setup step to let user customize their profile

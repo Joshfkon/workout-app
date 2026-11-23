@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { CookieOptions } from '@supabase/ssr';
 import { isSessionCookieValid, hasAuthTokenCookie, isOAuthClientSessionCookie } from './sessionCookie';
 import { isRetryableAuthError } from './authState';
+import { hiddenSocialRedirect } from '@/lib/socialFeatures';
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -51,6 +52,17 @@ export async function updateSession(request: NextRequest) {
     return new NextResponse('This sign-in is read-only and cannot be used in the app.', {
       status: 403,
     });
+  }
+
+  // Social features are hidden (lib/socialFeatures.ts): their routes are
+  // unreachable however they're opened — typed URL, hypertrack:// deep link,
+  // an old notification or a stale link. Onboarding's `?session=` is kept.
+  const socialRedirect = hiddenSocialRedirect(pathname);
+  if (socialRedirect) {
+    const url = request.nextUrl.clone();
+    url.pathname = socialRedirect;
+    if (socialRedirect === '/dashboard') url.search = '';
+    return NextResponse.redirect(url);
   }
 
   // Fast path: public routes don't need any auth check

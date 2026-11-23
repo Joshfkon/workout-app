@@ -6,6 +6,7 @@ import { ListGroup, ListRow } from '@/components/ui/ListRow';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
 import { ProTag } from '@/components/subscription/ProTag';
 import type { Feature } from '@/lib/subscription';
+import { SOCIAL_FEATURES_ENABLED } from '@/lib/socialFeatures';
 import {
   IconUsers,
   IconUser,
@@ -27,6 +28,8 @@ interface MoreLink {
   icon: TablerIcon;
   /** Paid feature the page opens (labelled with ProTag; gating unchanged). */
   feature?: Feature;
+  /** Community feature — hidden while SOCIAL_FEATURES_ENABLED is false. */
+  social?: boolean;
 }
 
 interface MoreSection {
@@ -41,7 +44,7 @@ const moreSections: MoreSection[] = [
   {
     title: 'You',
     links: [
-      { name: 'Profile', href: '/dashboard/profile', icon: IconUser },
+      { name: 'Profile', href: '/dashboard/profile', icon: IconUser, social: true },
       { name: 'Blood pressure', href: '/dashboard/blood-pressure', icon: IconHeartbeat },
     ],
   },
@@ -55,9 +58,9 @@ const moreSections: MoreSection[] = [
   {
     title: 'Community',
     links: [
-      { name: 'Social feed', href: '/dashboard/feed', icon: IconUsers },
-      { name: 'Discover workouts', href: '/dashboard/discover', icon: IconCompass },
-      { name: 'Leaderboards', href: '/dashboard/leaderboards', icon: IconTrophy },
+      { name: 'Social feed', href: '/dashboard/feed', icon: IconUsers, social: true },
+      { name: 'Discover workouts', href: '/dashboard/discover', icon: IconCompass, social: true },
+      { name: 'Leaderboards', href: '/dashboard/leaderboards', icon: IconTrophy, social: true },
     ],
   },
   {
@@ -77,13 +80,21 @@ const moreSections: MoreSection[] = [
   },
 ];
 
+// Sections with their social links dropped (and any section left empty).
+const visibleSections: MoreSection[] = moreSections
+  .map((section) => ({
+    ...section,
+    links: section.links.filter((link) => SOCIAL_FEATURES_ENABLED || !link.social),
+  }))
+  .filter((section) => section.links.length > 0);
+
 export default function MorePage() {
   useDocumentTitle('More');
   return (
     <div className="space-y-6 animate-fade-in">
       <h1 className="text-large-title text-ink">More</h1>
 
-      {moreSections.map((section) => (
+      {visibleSections.map((section) => (
         <ListGroup key={section.title} title={section.title}>
           {section.links.map((link) => {
             const Icon = link.icon;
