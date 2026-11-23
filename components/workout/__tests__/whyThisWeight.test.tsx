@@ -72,7 +72,9 @@ describe('SuggestionBanner "Why this weight?"', () => {
     );
     const link = screen.getByTestId('why-this-weight');
     expect(link).toHaveTextContent('Why this weight?');
-    expect(screen.getByTestId('pro-tag')).toHaveTextContent('Pro');
+    // Not tagged Pro: smart weight suggestions aren't gated (only the
+    // mesocycle builder and AI coach are), so the label would be false.
+    expect(screen.queryByTestId('pro-tag')).toBeNull();
     await user.click(link);
     const sheet = screen.getByRole('dialog');
     expect(screen.getByTestId('why-this-weight-summary')).toHaveTextContent(

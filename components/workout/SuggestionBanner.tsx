@@ -88,22 +88,6 @@ interface SuggestionBannerProps {
   why?: WhyThisWeight | null;
 }
 
-/**
- * Tiny "Pro" marker: smart weight suggestions are a Pro feature
- * (lib/stripe.ts TIER_FEATURES.pro).
- * TODO: swap for the shared components/subscription/ProTag once it lands.
- */
-export function ProTag() {
-  return (
-    <span
-      data-testid="pro-tag"
-      className="ml-1 rounded px-1 py-px text-[10px] font-semibold uppercase leading-none tracking-wide bg-action/15 text-action align-middle"
-    >
-      Pro
-    </span>
-  );
-}
-
 const RIR_EXPANSION = 'reps in reserve: how many more you could have done';
 const RIR_DEFINITION_LINE =
   'RIR = reps in reserve: how many more reps you could have done. 0 = maxed, 1 = hard, 2 = good, 3 = easy, 4+ = cruise.';
@@ -288,7 +272,6 @@ export function SuggestionBanner({
               className="mt-0.5 inline-flex items-center text-caption font-medium text-action underline underline-offset-2"
             >
               Why this weight?
-              <ProTag />
             </button>
           ) : null}
         </p>

@@ -110,12 +110,6 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 type="button"
               >
                 Why this weight?
-                <span
-                  class="ml-1 rounded px-1 py-px text-[10px] font-semibold uppercase leading-none tracking-wide bg-action/15 text-action align-middle"
-                  data-testid="pro-tag"
-                >
-                  Pro
-                </span>
               </button>
             </p>
           </div>
