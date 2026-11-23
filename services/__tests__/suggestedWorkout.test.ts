@@ -776,3 +776,22 @@ describe('order line (why this exercise first)', () => {
     expect(suggestedOrderLine({ order: undefined, exercises: [{}, {}] })).toBeNull();
   });
 });
+
+describe('session order: big compound lifts first', () => {
+  it('a small-muscle compound (upright row) goes after the bench press even when its muscle is furthest behind', () => {
+    const plan = build({
+      muscles: [
+        makeMuscle('lateral_delts', { weeklySets: 0, targetSets: 14 }),
+        makeMuscle('triceps', { weeklySets: 0, targetSets: 12 }),
+        makeMuscle('chest_upper', { weeklySets: 0, targetSets: 10 }),
+      ],
+      exercises: [
+        makeExercise({ id: 'upright', name: 'Upright Row', primaryMuscle: 'lateral_delts' }),
+        makeExercise({ id: 'pushdown', name: 'Triceps Pushdown', primaryMuscle: 'triceps', mechanic: 'isolation' }),
+        makeExercise({ id: 'bench', name: 'Barbell Bench Press', primaryMuscle: 'chest_upper' }),
+      ],
+    });
+    expect(plan.exercises.map((e) => e.exerciseId)).toEqual(['bench', 'upright', 'pushdown']);
+    expect(plan.order).toBe('compounds_first');
+  });
+});

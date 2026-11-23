@@ -25,6 +25,37 @@ describe('pickWhyLine', () => {
     );
   });
 
+  it('with the last session\'s best set, shows it so the progression is visible', () => {
+    const now = new Date(2026, 10, 23, 9, 0);
+    expect(
+      pickWhyLine({
+        isRecent: true,
+        lastDoneAt: new Date(2026, 10, 16, 18, 0),
+        lastTopSet: { weightKg: 83.91, repCount: 10 },
+        muscleLabel: 'Chest',
+        rec: null,
+        units: 'lb',
+        now,
+      })
+    ).toBe('Last time (Mon, Nov 16): best set 185 lbs × 10. Today’s target builds on it.');
+    expect(
+      pickWhyLine({ isRecent: true, lastDoneAt: new Date(2026, 10, 22, 18, 0), lastTopSet: { weightKg: 60, repCount: 8 }, muscleLabel: 'Chest', rec: null, units: 'kg', now })
+    ).toBe('Last time (yesterday): best set 60 kg × 8. Today’s target builds on it.');
+  });
+
+  it('topWorkingSet: heaviest working set, warmups skipped, none for duration lifts', () => {
+    const { topWorkingSet } = jest.requireActual('../SuggestedWorkoutSheet');
+    const sets = [
+      { weight_kg: 100, reps: 5, is_warmup: true },
+      { weight_kg: 80, reps: 10 },
+      { weight_kg: 80, reps: 11 },
+      { weight_kg: 75, reps: 12, set_type: 'normal' },
+    ];
+    expect(topWorkingSet(sets, { exerciseType: null })).toEqual({ weightKg: 80, repCount: 11 });
+    expect(topWorkingSet(sets, { exerciseType: 'duration_based' })).toBeNull();
+    expect(topWorkingSet([], null)).toBeNull();
+  });
+
   it('a new lift names what its starting weight is estimated from', () => {
     expect(pickWhyLine({ isRecent: false, muscleLabel: 'Side Delts', rec: rec({ transferFrom: 'Barbell Bench Press' }), units: 'lb' })).toMatch(
       /^New to you — a top side delts pick for your equipment\. Starts at ~6\d(\.\d)? lbs?, estimated from your Barbell Bench Press\.$/

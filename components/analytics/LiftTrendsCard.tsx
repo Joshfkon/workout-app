@@ -59,6 +59,15 @@ export const EST_MAX_EXPLAINER =
   'Est. max = the heaviest single rep your recent sets suggest you could lift.';
 
 /**
+ * How "%/wk" is worked out — an advanced lifter saw every lift "+2%/wk" and
+ * couldn't tell whether it came from est. max, rep PRs or something else, so
+ * didn't trust any of it (UX panel).
+ */
+export function rateExplainer(weeks: number): string {
+  return `%/wk = a straight line through the est. max of your best set in each workout over the last ${weeks} weeks, as a share of today's est. max.`;
+}
+
+/**
  * Strength tab front door (design system "Progress · Strength"): a summary
  * card ("3 of 5 lifts rising" + segmented bar + an attention line that opens
  * plateau ideas), then one row per lift with its trend line and status. A row
@@ -100,6 +109,11 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
         {summary.lifts.length > 0 && (
           <p className="mt-0.5 text-caption text-ink-2" data-testid="est-max-explainer">
             {EST_MAX_EXPLAINER}
+          </p>
+        )}
+        {summary.lifts.length > 0 && (
+          <p className="mt-0.5 text-caption text-ink-2" data-testid="rate-explainer">
+            {rateExplainer(weeks)}
           </p>
         )}
         {confident + rebuilding > 0 && (
