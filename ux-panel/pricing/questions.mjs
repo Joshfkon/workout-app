@@ -47,10 +47,10 @@ export const RANKABLE_FEATURES = [...PRO_FEATURES, AI_FOOD, CHECK_INS];
  * it. V3 is the food-only tier at a lower price. Edit prices here.
  */
 export const PACKAGES = [
-  { id: 'V1', name: 'Pro (today)', price: 9.99, features: PRO_FEATURES, adds: null },
-  { id: 'V2', name: 'Pro + AI food logging', price: 9.99, features: [...PRO_FEATURES, AI_FOOD], adds: AI_FOOD },
-  { id: 'V3', name: 'Food plan', price: 4.99, features: [AI_FOOD, 'Nutrition trends and custom macro targets', 'No training features beyond Free'], adds: 'Food-only tier at a lower price' },
-  { id: 'V4', name: 'Pro + weekly check-ins', price: 9.99, features: [...PRO_FEATURES, CHECK_INS], adds: CHECK_INS },
+  { id: 'V1', name: 'Pro (today)', price: 4.99, features: PRO_FEATURES, adds: null },
+  { id: 'V2', name: 'Pro + AI food logging', price: 4.99, features: [...PRO_FEATURES, AI_FOOD], adds: AI_FOOD },
+  { id: 'V3', name: 'Food plan', price: 2.99, features: [AI_FOOD, 'Nutrition trends and custom macro targets', 'No training features beyond Free'], adds: 'Food-only tier at a lower price' },
+  { id: 'V4', name: 'Pro + weekly check-ins', price: 4.99, features: [...PRO_FEATURES, CHECK_INS], adds: CHECK_INS },
 ];
 
 /** Labels the "one thing that would make you pay" answer is matched against. */
