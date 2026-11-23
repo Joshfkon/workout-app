@@ -23,7 +23,7 @@ interface QuickAddChipsProps {
 
 /**
  * Eat's one-tap row of the user's recent foods. The header says what the
- * row is and where a tap goes ("Recent foods — tap to add to Dinner"); a
+ * row is and where a tap goes ("Foods you log most — tap to add to Dinner"); a
  * tapped chip turns into "✓ Added" for a moment, so the confirmation is
  * where the finger is (the Undo toast still announces it via role=status).
  */
@@ -63,7 +63,7 @@ export function QuickAddChips({
   return (
     <div data-testid="quick-add-row">
       <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 px-1 text-subhead text-ink-2">
-        <span id="quick-add-label">Recent foods — tap to add to</span>
+        <span id="quick-add-label">Foods you log most — tap to add to</span>
         <select
           aria-labelledby="quick-add-label"
           value={mealType}

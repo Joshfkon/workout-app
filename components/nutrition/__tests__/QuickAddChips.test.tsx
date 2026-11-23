@@ -53,10 +53,10 @@ describe('QuickAddChips', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('labels the row as recent foods and names the meal a tap adds to', () => {
+  it('labels the row as the foods you log most and names the meal a tap adds to', () => {
     renderChips();
-    expect(screen.getByText('Recent foods — tap to add to')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /recent foods — tap to add to/i })).toHaveValue('dinner');
+    expect(screen.getByText('Foods you log most — tap to add to')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /foods you log most — tap to add to/i })).toHaveValue('dinner');
     expect(screen.getByRole('button', { name: 'Log Greek yogurt, 170 g, to Dinner' })).toBeInTheDocument();
   });
 
