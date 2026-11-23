@@ -16,6 +16,7 @@
  *    passed in is already range-scoped).
  */
 
+import { parseLocalDay } from '@/lib/date/localDay';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
@@ -363,7 +364,10 @@ export function WellnessTrendsCard({
                         stroke="#9ca3af"
                         tick={{ fill: '#9ca3af', fontSize: 10 }}
                         tickFormatter={(value) => {
-                          const date = new Date(value);
+                          // YYYY-MM-DD is a LOCAL day: new Date('2026-11-22')
+                          // is UTC midnight, which in the Americas labels
+                          // every point a day early.
+                          const date = parseLocalDay(String(value));
                           return `${date.getMonth() + 1}/${date.getDate()}`;
                         }}
                       />
@@ -382,7 +386,7 @@ export function WellnessTrendsCard({
                           borderRadius: '8px',
                         }}
                         labelFormatter={(value) => {
-                          const date = new Date(value);
+                          const date = parseLocalDay(String(value));
                           return date.toLocaleDateString('en-US', {
                             weekday: 'short',
                             month: 'short',
