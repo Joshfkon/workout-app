@@ -250,9 +250,19 @@ async function settle(page) {
 async function act(page, name, input) {
   const loc = (ref) => page.locator(`aria-ref=${ref}`);
   switch (name) {
-    case 'tap':
+    case 'tap': {
+      // A page-sized container (e.g. the document root, e1) is not a control:
+      // clicking its centre hits whatever happens to be there, usually
+      // nothing, and the persona then reports "my tap didn't register" as an
+      // app bug. Refuse it and say why, so the next turn picks the control.
+      const box = await loc(input.ref).boundingBox({ timeout: 3000 }).catch(() => null);
+      const vp = page.viewportSize();
+      if (box && vp && box.height >= vp.height * 0.9 && box.width >= vp.width * 0.9) {
+        throw new Error(`${input.ref} is the whole page, not a button — tap the control's own ref from the list`);
+      }
       await loc(input.ref).click({ timeout: 5000 });
       break;
+    }
     case 'type':
       await loc(input.ref).fill(input.text, { timeout: 5000 });
       if (input.submit) await loc(input.ref).press('Enter');
