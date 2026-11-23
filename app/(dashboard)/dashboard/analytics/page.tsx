@@ -86,6 +86,7 @@ import { buildProgressSummary } from './progressSummary';
 import { ProgressSummaryCard } from './ProgressSummaryCard';
 import { now as clockNow } from '@/lib/clock';
 import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
+import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { listOutbox } from '@/lib/offline/setOutbox';
 import {
   rangeStartLocalDay,
@@ -371,8 +372,12 @@ function AnalyticsPageContent() {
   // the default is locked for this mount so a background refetch never
   // flips the tab under the user.
   const bodyOrFoodLogged = useBodyOrFoodLogged().data;
+  // Food-only users (hooks/useTrackingFocus) are treated as non-lifters
+  // here: Body first, Strength last, no FFMI / body-scan / strength prompts.
+  const { foodOnly } = useTrackingFocus();
+  const liftedForTabs = foodOnly ? false : hasRecentLifting(liftTrendsQuery.data);
   const dataDefaultTab = resolveDefaultProgressTab({
-    hasRecentLifting: hasRecentLifting(liftTrendsQuery.data),
+    hasRecentLifting: liftedForTabs,
     hasBodyOrFoodData:
       bodyWeightHistory.length > 0 ? true : bodyOrFoodLogged ?? undefined,
   });
@@ -1521,7 +1526,7 @@ function AnalyticsPageContent() {
     wellness: 'Wellness',
   };
   // A non-lifter (food / weigh-in only) gets Body first, Strength last.
-  const tabs = orderProgressTabs(hasRecentLifting(liftTrendsQuery.data)).map((id) => ({
+  const tabs = orderProgressTabs(liftedForTabs).map((id) => ({
     id: id as TabType,
     label: TAB_LABELS[id],
   }));
@@ -1706,6 +1711,7 @@ function AnalyticsPageContent() {
             activeTarget={activeTarget}
             activeMesocycle={activeMesocycle}
             currentFfmi={ffmiResult?.ffmi ?? null}
+            showFfmi={!foodOnly || ffmiResult?.ffmi != null}
             experience={userProfile?.experience ?? null}
             heightCm={userProfile?.heightCm ?? null}
             displayUnit={units === 'kg' ? 'cm' : 'in'}
@@ -1729,6 +1735,7 @@ function AnalyticsPageContent() {
             needsPhase={!currentPhase}
             phaseHref="/dashboard/phases"
             scanCount={scans.length}
+            offerScan={!foodOnly}
             onLogScan={() => setLogSegment('dexa')}
             needsGoals={!activeTarget && !showGoalsEditor}
             onSetGoals={openGoalsEditor}

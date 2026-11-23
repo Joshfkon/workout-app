@@ -66,4 +66,10 @@ describe('BodyAddMoreData', () => {
       '/dashboard/phases'
     );
   });
+
+  it('never offers a body scan when offerScan is false (food-only users)', () => {
+    renderRow({ offerScan: false });
+    expect(screen.queryByText('Log a body scan (DEXA)')).not.toBeInTheDocument();
+    expect(screen.getByText('Set a goal phase')).toBeInTheDocument();
+  });
 });

@@ -69,6 +69,7 @@ import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
 import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCard';
+import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { heroOffersWorkoutStart, todayHeroVariant } from '@/components/dashboard/home/TodayHeroCard';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
@@ -304,6 +305,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
   const hasInitialData = !!initialData;
   const router = useRouter();
+  // Food-only (said "food tracking", never lifted here): no workout entries.
+  const { foodOnly } = useTrackingFocus();
   const supabase = createUntypedClient();
 
   const [isLoading, setIsLoading] = useState(!hasInitialData);
@@ -1618,7 +1621,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           meal, "done" or nothing, this resumes an unfinished workout or
           opens the start options. Food-focused users get it as a compact
           row below the logging chips instead. */}
-      {!foodFocus && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
+      {!foodFocus && !foodOnly && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
 
       {/* 2. Today: Eat · Recovery · This week (depth one tap away) */}
       <TodayCard
@@ -1650,7 +1653,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
       />
 
-      {foodFocus && <HomeStartWorkout userId={userId} compact />}
+      {/* Food-only users (hooks/useTrackingFocus) get no workout entry at
+          all; "I also lift weights" in Settings brings it back. */}
+      {foodFocus && !foodOnly && <HomeStartWorkout userId={userId} compact />}
 
       {/* Today sheet: the tiles, Apple Health and weekly-set detail that used
           to stack on Home, one tap from the Today card. */}
