@@ -3,6 +3,7 @@ import {
   MuscleProgressionCard,
   buildingSummaryText,
   cappedRateText,
+  muscleProgressionSubtitle,
 } from '../MuscleProgressionCard';
 import {
   MIN_SESSIONS_FOR_INSIGHT,
@@ -124,5 +125,18 @@ describe('MuscleProgressionCard', () => {
 
   it('pluralises the capped note for several muscles', () => {
     expect(cappedRateText(['Chest', 'Back'])).toMatch(/^Chest, Back rates were capped/);
+  });
+});
+
+describe('muscleProgressionSubtitle', () => {
+  it('names the window and says a muscle is the average of its lifts', () => {
+    expect(muscleProgressionSubtitle('bulk', 0.15, 84)).toBe(
+      "How fast each muscle's lifts are getting stronger over the last 12 weeks, vs the ~0.15% a week expected at your level. A muscle's rate is the average of its lifts, weighted by sets. Tap a muscle to see each lift."
+    );
+  });
+  it('keeps the goal wording on a cut and omits the window when unknown', () => {
+    const text = muscleProgressionSubtitle('cut', 0);
+    expect(text).toMatch(/^How fast each muscle's lifts are getting stronger\. You're eating less/);
+    expect(text).toMatch(/average of its lifts/);
   });
 });

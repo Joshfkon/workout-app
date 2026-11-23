@@ -37,7 +37,7 @@ import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 type TransferCandidate = Awaited<ReturnType<typeof fetchTransferCandidates>>[number];
 import {
   buildSuggestedWorkout,
-  detectSplitDay,
+  detectSplit,
   maxExercisesForDuration,
   suggestedOrderLine,
   type SuggestedOrderRule,
@@ -351,8 +351,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const [planOrder, setPlanOrder] = useState<SuggestedOrderRule | undefined>(undefined);
   // Loaded with the plan data so each pick can preview its starting weight.
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
-  // Recent sessions' exercise ids, most recent first — for the push/pull/legs
-  // rotation check (detectSplitDay).
+  // Recent completed sessions' exercise ids, most recent first — for the
+  // split check (detectSplit: push/pull/legs or a body-part split).
   const [recentSessionExerciseIds, setRecentSessionExerciseIds] = useState<string[][]>([]);
   const [profile, setProfile] = useState<SheetProfile | null>(null);
   /** Legacy locationless blocklist — baseline when the user has no locations. */
@@ -620,7 +620,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         exerciseType: ex.exercise_type,
       })),
       recentExerciseIds,
-      splitDay: detectSplitDay(
+      split: detectSplit(
         recentSessionExerciseIds.map((ids) =>
           ids.flatMap((id) => {
             const primary = exerciseById.get(id)?.primary_muscle;

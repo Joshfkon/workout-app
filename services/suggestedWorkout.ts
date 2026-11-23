@@ -113,8 +113,14 @@ export interface BuildSuggestedWorkoutInput {
    * The day the user's push/pull/legs rotation is up to (detectSplitDay).
    * When set, only that day's muscles (plus neutral core work) are picked,
    * as long as one of them is under target; otherwise the split is ignored.
+   * Shorthand for `split: { kind: 'ppl', day }`; `split` wins when both are set.
    */
   splitDay?: SplitDay | null;
+  /**
+   * The split the user is following and the day it is up to (detectSplit):
+   * push/pull/legs or a body-part split. Followed exactly like `splitDay`.
+   */
+  split?: DetectedSplit | null;
 }
 
 export interface SuggestedWorkoutPick {
@@ -140,6 +146,8 @@ export interface SuggestedWorkoutPlan {
   isLightSession: boolean;
   /** Set when the plan follows the user's push/pull/legs rotation. */
   splitDay?: SplitDay;
+  /** Set when the plan follows any detected split (PPL or body-part). */
+  split?: DetectedSplit;
   /**
    * Which rule put the picks in this order (copy metadata for
    * suggestedOrderLine; the order itself is decided below):
@@ -171,62 +179,160 @@ export function suggestedOrderLine(
 }
 
 // ============================================================
-// Push / pull / legs
+// Splits: push / pull / legs and body-part
 // ============================================================
 
+/** The split shapes the suggestion can recognise and follow. */
+export type SplitKind = 'ppl' | 'body_part';
+
+/** A push/pull/legs day. */
 export type SplitDay = 'push' | 'pull' | 'legs';
 
-/**
- * Which split day a muscle belongs to. Muscles left out (core, erectors,
- * rotator cuff) are neutral: they don't decide a session's day and can be
- * trained on any of them.
- */
-const SPLIT_OF: Partial<Record<StandardMuscleGroup, SplitDay>> = {
-  chest_upper: 'push',
-  chest_lower: 'push',
-  front_delts: 'push',
-  lateral_delts: 'push',
-  triceps: 'push',
-  triceps_long: 'push',
-  triceps_lat_med: 'push',
-  rear_delts: 'pull',
-  lats: 'pull',
-  upper_back: 'pull',
-  traps: 'pull',
-  upper_traps: 'pull',
-  mid_lower_traps: 'pull',
-  biceps: 'pull',
-  forearms: 'pull',
-  quads: 'legs',
-  hamstrings: 'legs',
-  glutes: 'legs',
-  glute_med: 'legs',
-  adductors: 'legs',
-  calves: 'legs',
-  gastrocnemius: 'legs',
-  soleus: 'legs',
+/** A bodybuilding body-part split day ("bro split"). */
+export type BodyPartDay = 'chest' | 'back' | 'legs' | 'shoulders' | 'arms';
+
+/** The days of each split kind. */
+export interface SplitDaysByKind {
+  ppl: SplitDay;
+  body_part: BodyPartDay;
+}
+
+/** A detected split and the day it is up to. */
+export type DetectedSplit = {
+  [K in SplitKind]: { kind: K; day: SplitDaysByKind[K] };
+}[SplitKind];
+
+/** Every day of each split, in its usual order. */
+export const SPLIT_DAYS: { readonly [K in SplitKind]: readonly SplitDaysByKind[K][] } = {
+  ppl: ['push', 'pull', 'legs'],
+  body_part: ['chest', 'back', 'legs', 'shoulders', 'arms'],
 };
 
-export function splitDayOfMuscle(muscle: StandardMuscleGroup): SplitDay | null {
-  return SPLIT_OF[muscle] ?? null;
+/**
+ * Which split day a muscle belongs to, per split kind. Muscles left out
+ * (core, erectors, rotator cuff) are neutral: they don't decide a session's
+ * day and can be trained on any of them.
+ */
+const SPLIT_OF: { readonly [K in SplitKind]: Partial<Record<StandardMuscleGroup, SplitDaysByKind[K]>> } = {
+  ppl: {
+    chest_upper: 'push',
+    chest_lower: 'push',
+    front_delts: 'push',
+    lateral_delts: 'push',
+    triceps: 'push',
+    triceps_long: 'push',
+    triceps_lat_med: 'push',
+    rear_delts: 'pull',
+    lats: 'pull',
+    upper_back: 'pull',
+    traps: 'pull',
+    upper_traps: 'pull',
+    mid_lower_traps: 'pull',
+    biceps: 'pull',
+    forearms: 'pull',
+    quads: 'legs',
+    hamstrings: 'legs',
+    glutes: 'legs',
+    glute_med: 'legs',
+    adductors: 'legs',
+    calves: 'legs',
+    gastrocnemius: 'legs',
+    soleus: 'legs',
+  },
+  body_part: {
+    chest_upper: 'chest',
+    chest_lower: 'chest',
+    lats: 'back',
+    upper_back: 'back',
+    traps: 'back',
+    upper_traps: 'back',
+    mid_lower_traps: 'back',
+    front_delts: 'shoulders',
+    lateral_delts: 'shoulders',
+    rear_delts: 'shoulders',
+    biceps: 'arms',
+    triceps: 'arms',
+    triceps_long: 'arms',
+    triceps_lat_med: 'arms',
+    forearms: 'arms',
+    quads: 'legs',
+    hamstrings: 'legs',
+    glutes: 'legs',
+    glute_med: 'legs',
+    adductors: 'legs',
+    calves: 'legs',
+    gastrocnemius: 'legs',
+    soleus: 'legs',
+  },
+};
+
+/** The day a muscle belongs to in a split (push/pull/legs unless `kind` says otherwise). */
+export function splitDayOfMuscle(muscle: StandardMuscleGroup): SplitDay | null;
+export function splitDayOfMuscle<K extends SplitKind>(
+  muscle: StandardMuscleGroup,
+  kind: K
+): SplitDaysByKind[K] | null;
+export function splitDayOfMuscle(
+  muscle: StandardMuscleGroup,
+  kind: SplitKind = 'ppl'
+): SplitDaysByKind[SplitKind] | null {
+  return SPLIT_OF[kind][muscle] ?? null;
 }
 
 /** Share of a session's non-neutral exercises that must fall on one day for it to count as that day. */
 const SPLIT_DAY_SHARE = 0.75;
 
-/** A session's split day from its exercises' primary muscles, or null for a mixed session. */
-export function classifySessionDay(muscles: StandardMuscleGroup[]): SplitDay | null {
-  const counts: Record<SplitDay, number> = { push: 0, pull: 0, legs: 0 };
+/**
+ * A session's split day from its exercises' primary muscles, or null for a
+ * mixed session. Push/pull/legs unless `kind` says otherwise.
+ */
+export function classifySessionDay(muscles: StandardMuscleGroup[]): SplitDay | null;
+export function classifySessionDay<K extends SplitKind>(
+  muscles: StandardMuscleGroup[],
+  kind: K
+): SplitDaysByKind[K] | null;
+export function classifySessionDay(
+  muscles: StandardMuscleGroup[],
+  kind: SplitKind = 'ppl'
+): SplitDaysByKind[SplitKind] | null {
+  const counts = new Map<string, number>();
   let total = 0;
   for (const m of muscles) {
-    const d = splitDayOfMuscle(m);
+    const d = SPLIT_OF[kind][m];
     if (!d) continue;
-    counts[d] += 1;
+    counts.set(d, (counts.get(d) ?? 0) + 1);
     total += 1;
   }
   if (total === 0) return null;
-  const best = (Object.keys(counts) as SplitDay[]).reduce((a, b) => (counts[b] > counts[a] ? b : a));
-  return counts[best] / total >= SPLIT_DAY_SHARE ? best : null;
+  // First listed day wins a tie (the tie can't reach the share anyway).
+  let best: SplitDaysByKind[SplitKind] | null = null;
+  let bestCount = 0;
+  for (const d of SPLIT_DAYS[kind]) {
+    const c = counts.get(d) ?? 0;
+    if (c > bestCount) {
+      best = d;
+      bestCount = c;
+    }
+  }
+  return best && bestCount / total >= SPLIT_DAY_SHARE ? best : null;
+}
+
+/**
+ * The next day of a split, read from the user's own recent sessions (most
+ * recent first). Only a clear signature counts: the last N sessions (N = the
+ * split's day count) are each one day of the split, all different. The next
+ * day is the one done longest ago.
+ */
+function detectNextDay<K extends SplitKind>(
+  sessions: StandardMuscleGroup[][],
+  kind: K
+): SplitDaysByKind[K] | null {
+  const n = SPLIT_DAYS[kind].length;
+  if (sessions.length < n) return null;
+  const days = sessions.slice(0, n).map((m) => classifySessionDay(m, kind));
+  if (days.some((d) => d === null)) return null;
+  if (new Set(days).size !== n) return null;
+  return days[n - 1];
 }
 
 /**
@@ -238,14 +344,45 @@ export function classifySessionDay(muscles: StandardMuscleGroup[]): SplitDay | n
  * the suggestion stays recovery-driven.
  */
 export function detectSplitDay(sessions: StandardMuscleGroup[][]): SplitDay | null {
-  if (sessions.length < 3) return null;
-  const days = sessions.slice(0, 3).map(classifySessionDay);
-  if (days.some((d) => d === null)) return null;
-  if (new Set(days).size !== 3) return null;
-  return days[2];
+  return detectNextDay(sessions, 'ppl');
 }
 
-const SPLIT_LABEL: Record<SplitDay, string> = { push: 'Push', pull: 'Pull', legs: 'Legs' };
+/**
+ * The split the user follows and its next day, from completed sessions
+ * (most recent first, each the primary muscles of its exercises).
+ *
+ * A body-part split is checked first: its last five sessions are a chest,
+ * back, legs, shoulders and arms day, each dominated by that one region. It
+ * must win over push/pull/legs because three of its days in a row (chest,
+ * back, legs) also read as push, pull, legs. A real PPL history never reads
+ * as body-part: a push day mixes chest, shoulders and triceps, so no single
+ * region dominates it. Otherwise push/pull/legs as detectSplitDay; null when
+ * neither signature is clear.
+ */
+export function detectSplit(sessions: StandardMuscleGroup[][]): DetectedSplit | null {
+  const bodyPart = detectNextDay(sessions, 'body_part');
+  if (bodyPart) return { kind: 'body_part', day: bodyPart };
+  const ppl = detectNextDay(sessions, 'ppl');
+  if (ppl) return { kind: 'ppl', day: ppl };
+  return null;
+}
+
+const SPLIT_DAY_LABEL: { readonly [K in SplitKind]: Record<SplitDaysByKind[K], string> } = {
+  ppl: { push: 'Push', pull: 'Pull', legs: 'Legs' },
+  body_part: { chest: 'Chest', back: 'Back', legs: 'Legs', shoulders: 'Shoulders', arms: 'Arms' },
+};
+
+/** How the focus line names each split. */
+const SPLIT_NAME: Record<SplitKind, string> = {
+  ppl: 'push/pull/legs rotation',
+  body_part: 'body-part split',
+};
+
+/** "Shoulders day, next in your body-part split." */
+export function splitFocusLead(split: DetectedSplit): string {
+  const label = (SPLIT_DAY_LABEL[split.kind] as Record<string, string>)[split.day];
+  return `${label} day, next in your ${SPLIT_NAME[split.kind]}.`;
+}
 
 // ============================================================
 // Internals
@@ -649,16 +786,18 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
   });
 
   const allRanked = rankMuscles(input.muscles, injuredMuscles);
-  // Follow the user's push/pull/legs rotation when one of today's muscles is
-  // under target; core/neutral work may join any day.
-  const splitDay = input.splitDay ?? null;
-  const dayRanked = splitDay
+  // Follow the user's split (push/pull/legs or body-part) when one of
+  // today's muscles is under target; core/neutral work may join any day.
+  const split: DetectedSplit | null =
+    input.split ?? (input.splitDay ? { kind: 'ppl', day: input.splitDay } : null);
+  const dayOf = (m: StandardMuscleGroup) => (split ? splitDayOfMuscle(m, split.kind) : null);
+  const dayRanked = split
     ? allRanked.filter((m) => {
-        const d = splitDayOfMuscle(m.muscle);
-        return d === splitDay || d === null;
+        const d = dayOf(m.muscle);
+        return d === split.day || d === null;
       })
     : allRanked;
-  const followSplit = !!splitDay && dayRanked.some((m) => splitDayOfMuscle(m.muscle) === splitDay);
+  const followSplit = !!split && dayRanked.some((m) => dayOf(m.muscle) === split.day);
   const ranked = followSplit ? dayRanked : allRanked;
   if (ranked.length === 0) {
     // No recovery/volume data (or nothing trainable) — balanced full body.
@@ -745,11 +884,11 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
   const focus = buildFocus(topMuscles.filter((m) => pickedMuscles.has(m.muscle)));
   return {
     exercises: orderCompoundsFirst(picks, exerciseById),
-    focus: followSplit && splitDay
-      ? `${SPLIT_LABEL[splitDay]} day, next in your push/pull/legs rotation. ${focus}`
-      : focus,
+    focus: followSplit && split ? `${splitFocusLead(split)} ${focus}` : focus,
     isLightSession: false,
     order: 'compounds_first',
-    ...(followSplit && splitDay ? { splitDay } : {}),
+    ...(followSplit && split
+      ? { split, ...(split.kind === 'ppl' ? { splitDay: split.day } : {}) }
+      : {}),
   };
 }
