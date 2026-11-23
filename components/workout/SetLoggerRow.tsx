@@ -119,6 +119,41 @@ interface SetLoggerRowProps {
    * a lifter who can't see the card still knows what the tap logs.
    */
   stickyLabel?: string;
+  /**
+   * The suggestion's one-line reason and prediction, repeated on the pinned
+   * bar (UX panel: a lifter who logs every set from the bar never scrolls to
+   * the card's strip, so he never saw why the weight was picked). `why` is
+   * the same text the strip's "Why:" line shows; `expect` is the strip's
+   * forecast, shown only while the entered weight is still the one it was
+   * made for.
+   */
+  stickyHint?: StickyHint | null;
+}
+
+export interface StickyHint {
+  /** The strip's reason line (set-change or source line), already plain-worded. */
+  why?: string | null;
+  /** Predicted reps at `atWeight` (the suggested load, as the field shows it). */
+  expect?: { repCount: number; atWeight: string } | null;
+}
+
+/**
+ * The pinned bar's hint line: "Why: … · Expect ~9 reps". The forecast is
+ * dropped once the lifter types a different weight — it was made for the
+ * suggested load, not the entered one. Null when there is nothing to say.
+ */
+export function stickyHintText(
+  hint: StickyHint | null | undefined,
+  enteredWeight: string
+): { why: string | null; expect: string | null } | null {
+  if (!hint) return null;
+  const why = hint.why?.trim() || null;
+  const sameWeight =
+    hint.expect != null &&
+    Number.isFinite(parseFloat(enteredWeight)) &&
+    Math.abs(parseFloat(enteredWeight) - parseFloat(hint.expect.atWeight)) < 0.001;
+  const expect = sameWeight && hint.expect ? `Expect ~${hint.expect.repCount} reps` : null;
+  return why || expect ? { why, expect } : null;
 }
 
 /**
@@ -225,6 +260,7 @@ export function SetLoggerRow({
   onPlateCalculatorOpen,
   sensorRirPrefill = null,
   stickyLabel,
+  stickyHint = null,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [rirTouched, setRirTouched] = useState(false);
@@ -457,6 +493,7 @@ export function SetLoggerRow({
   const stickySummary = `${stickyWeightText} × ${reps || '0'}${isDurationBased ? 's' : ' reps'} · ${
     RIR_CHIP_TEXT[selectedRir]
   } left`;
+  const stickyHintLine = stickyHintText(stickyHint, weight);
   const stickyBar = (
     <div
       data-testid="sticky-log-set"
@@ -469,6 +506,24 @@ export function SetLoggerRow({
         <span className="block truncate text-subhead font-semibold tabular-nums text-ink">
           {stickySummary}
         </span>
+        {/* Why + forecast: wraps to two lines rather than truncating, so the
+            reason survives 390 px and the larger text sizes. */}
+        {stickyHintLine ? (
+          <span data-testid="sticky-log-hint" className="mt-0.5 line-clamp-2 text-caption text-ink">
+            {stickyHintLine.why ? (
+              <>
+                <span className="font-semibold text-action">Why: </span>
+                <span data-testid="sticky-log-why">{stickyHintLine.why}</span>
+              </>
+            ) : null}
+            {stickyHintLine.why && stickyHintLine.expect ? <span className="text-ink-2"> · </span> : null}
+            {stickyHintLine.expect ? (
+              <span data-testid="sticky-log-expect" className="text-ink-2">
+                {stickyHintLine.expect}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
       </div>
       <button
         type="button"

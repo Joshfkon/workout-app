@@ -65,7 +65,7 @@ import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
 import { SegmentedControl } from './SegmentedControl';
-import { SetLoggerRow, clampToChip } from './SetLoggerRow';
+import { SetLoggerRow, clampToChip, type StickyHint } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
 import {
@@ -83,10 +83,12 @@ import {
   setChangeLine,
   emptyBarStartLine,
   isEmptyBarLoad,
+  withoutUnbackedHistoryClaims,
   type SetChangeCause,
   type WhyThisWeight,
 } from './whyThisWeight';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { injuryNoteFromReason } from '@/services/suggestedWorkout';
 import { plainWorkoutText } from '@/lib/beginnerMode';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
@@ -3376,18 +3378,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Beginner mode keeps the line: there the engine's reason lives in the
     // ⓘ sheet, so dropping the source would leave the prefill unexplained.
     const source = reasonNamesSource && !beginner ? '' : sourceLine;
-    return {
-      weight,
-      reps: String(reps),
-      repsLabel,
-      reason,
-      explanation,
-      showRir,
-      role,
-      source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
-      sourceKind,
-      why,
-    };
+    // "Last session" / "last time" only with a completed logged set on this
+    // lift to point at (previousSets = completed sessions' working sets).
+    return withoutUnbackedHistoryClaims(
+      {
+        weight,
+        reps: String(reps),
+        repsLabel,
+        reason,
+        explanation,
+        showRir,
+        role,
+        source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
+        sourceKind,
+        why,
+      },
+      previousSets.length > 0
+    );
   };
 
   // The MOST RECENT completed set's next-set call (services/
@@ -3553,6 +3560,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Press ("45 lbs x 8, x 8, x 10 @ 3 RIR" for a 45/45/40/40 session).
   // Bodyweight sets with a recorded breakdown read "BW+25 lbs × 14" so the
   // added load is visible instead of the blended effective number.
+  const injuryNote = injuryNoteFromReason(block.suggestionReason);
+
   const lastSessionMeta = (() => {
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
@@ -3872,6 +3881,15 @@ export const ExerciseCard = memo(function ExerciseCard({
           )}
         </button>
 
+        {/* Why this lift, for the user's injury areas (set by the suggested
+            workout sheet on the block's suggestion_reason): "For your
+            shoulder: picked instead of Overhead Press". */}
+        {injuryNote && (
+          <p className="mt-1 text-caption text-ink-2" data-testid="exercise-injury-note">
+            {injuryNote}
+          </p>
+        )}
+
         {/* Session tonnage — logged volume so far, plus the projection if all
             remaining programmed sets are finished at their suggested/typed
             numbers. Shown once a set is logged: before that a "planned total"
@@ -4140,8 +4158,12 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {warmupDecision?.kind === 'targeted_ramp'
                   ? 'Ramp set'
                   : warmupDecision?.kind === 'partial_protocol'
-                    ? 'Warmup (shortened)'
-                    : 'Warmup protocol'}
+                    ? beginner
+                      ? 'Warm-up sets (shortened)'
+                      : 'Warmup (shortened)'
+                    : beginner
+                      ? 'Warm-up sets'
+                      : 'Warmup protocol'}
               </span>
               <span className="text-caption text-ink-2">
                 ({completedWarmups.size}/{warmupRows.rows.length})
@@ -5149,6 +5171,25 @@ export const ExerciseCard = memo(function ExerciseCard({
                 })()
               : null;
 
+          // What the strip says, computed once so the pinned "Log set" bar
+          // repeats the SAME reason line and forecast (a lifter logging from
+          // the bar never sees the card's strip).
+          const stripVerdict =
+            suggestion.sourceKind === 'set_change' && !latestMotion?.verdictShort && !latestCall?.heldByVelocity
+              ? null
+              : bannerVerdict;
+          const stripSource = latestCall?.heldByVelocity
+            ? 'Holding: bar speed says your last set was harder than logged'
+            : suggestion.source;
+          const stickyWhyRaw = stripSource || stripVerdict || null;
+          const stickyHint: StickyHint = {
+            why: stickyWhyRaw ? (beginner ? plainWorkoutText(stickyWhyRaw) : stickyWhyRaw) : null,
+            expect:
+              expectedReps != null && !latestCall?.heldByVelocity
+                ? { repCount: expectedReps, atWeight: suggestion.weight }
+                : null,
+          };
+
           return (
             <div className="space-y-2 pt-1">
               {firstSetGuideTourId && completedSets.length === 0 && (
@@ -5189,22 +5230,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                 // went ("… (harder than target) → back to 135 lbs"); the
                 // logged-effort verdict would repeat it. A motion verdict is
                 // different evidence and stays.
-                verdict={
-                  suggestion.sourceKind === 'set_change' && !latestMotion?.verdictShort && !latestCall?.heldByVelocity
-                    ? null
-                    : bannerVerdict
-                }
+                verdict={stripVerdict}
                 // Same value the logger presets its chip to (0–4), so the
                 // strip's "@ N RIR" and the preset chip always agree.
                 rir={clampToChip(loggerTargetRir)}
                 showRir={suggestion.showRir}
                 roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
                 reason={suggestion.reason}
-                source={
-                  latestCall?.heldByVelocity
-                    ? 'Holding: bar speed says your last set was harder than logged'
-                    : suggestion.source
-                }
+                source={stripSource}
                 explanation={suggestion.explanation}
                 // The velocity hold swaps the numbers for the coach's call, so
                 // the engine's "why" would describe numbers no longer shown.
@@ -5262,6 +5295,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 userBodyweightKg={userBodyweightKg}
                 onLog={completeLoggedSet}
                 stickyLabel={exercise.name}
+                stickyHint={stickyHint}
                 sensorRirPrefill={
                   motionRepPrefill?.rir != null
                     ? { nonce: motionRepPrefill.nonce, rir: motionRepPrefill.rir }

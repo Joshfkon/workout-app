@@ -25,7 +25,7 @@
  * fetches happen on mount.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconArrowsExchange, IconLoader2, IconPlus, IconX } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -40,6 +40,9 @@ import {
   detectSplit,
   maxExercisesForDuration,
   suggestedOrderLine,
+  injuryAreasPhrase,
+  injuryPickLine,
+  injuryPlanLine,
   type SuggestedOrderRule,
 } from '@/services/suggestedWorkout';
 import {
@@ -67,7 +70,11 @@ import {
 import { getOrCreateTodaySession } from '@/app/(dashboard)/dashboard/workout/_lib/adhocSession';
 import { markGymChosen } from '@/lib/geo/gymChoice';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
-import { exerciseSafetyForAreas, parseStandingInjuryAreas } from '@/lib/training/standingInjuries';
+import {
+  exerciseSafetyForAreas,
+  parseStandingInjuryAreas,
+  STANDING_INJURY_OPTIONS,
+} from '@/lib/training/standingInjuries';
 import type { PositionStress } from '@/services/exerciseService';
 import { now as clockNow } from '@/lib/clock';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
@@ -286,6 +293,16 @@ export function pickWhyLine(args: {
   return basis ? `${lead} Starts at ~${w}, estimated from ${basis}.` : `${lead} Starts at ~${w} (an estimate).`;
 }
 
+type StartStage = 'creating' | 'opening';
+
+/**
+ * The Start button's copy while starting: which step it is on, not a bare
+ * "Starting..." (UX panel round 19: the wait read as a stall).
+ */
+export function startStageLabel(stage: StartStage): string {
+  return stage === 'opening' ? 'Opening your workout…' : 'Setting up your workout…';
+}
+
 interface SuggestedWorkoutSheetProps {
   isOpen: boolean;
   onClose: () => void;
@@ -399,6 +416,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [aiPlan, setAiPlan] = useState<SubstitutedWorkoutPlan | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  /** Where the start is (button copy): building the session, then opening it. */
+  const [startStage, setStartStage] = useState<StartStage>('creating');
   // One-tap start from Home: cleared by the first start or any user edit.
   const [autoStartPending, setAutoStartPending] = useState(autoStart);
   const [error, setError] = useState<string | null>(null);
@@ -610,6 +629,18 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   // recovery/volume/exercise/location data is in, sized to fit the time and
   // substituted to fit the selected location's equipment.
   const exerciseById = useMemo(() => new Map(exercises.map((ex) => [ex.id, ex])), [exercises]);
+  // "your shoulder" — the standing injury areas the plan was checked against
+  // (same parse the plan effect feeds exerciseSafetyForAreas). Null = none.
+  const injuryAreas = useMemo(
+    () =>
+      injuryAreasPhrase(
+        parseStandingInjuryAreas(profile?.preferences?.injuryAreas).map(
+          (id) => STANDING_INJURY_OPTIONS.find((o) => o.id === id)?.label ?? id
+        )
+      ),
+    [profile]
+  );
+  const exerciseNameOf = useCallback((id: string) => exerciseById.get(id)?.name, [exerciseById]);
 
   useEffect(() => {
     if (!aiRequested || recoveryLoading || volumeLoading || isLoadingData || !blocklistsReady)
@@ -849,6 +880,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   const handleStart = async () => {
     if (!aiPlan || aiPlan.exercises.length === 0 || isStarting) return;
     setIsStarting(true);
+    setStartStage('creating');
     setError(null);
     try {
       // Only bounce to /login when the persisted session is genuinely absent.
@@ -860,17 +892,27 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
         return;
       }
 
+      // Cross-exercise strength summary for cold-start weight estimation:
+      // never-trained exercises (incl. first-time substitutes) seed from a
+      // related exercise's logged e1RM before profile heuristics. Fetched
+      // alongside the session (independent reads) instead of after it: the
+      // panel sat on "Starting…" through each await in turn.
+      const transferCandidatesPromise = fetchTransferCandidates(userId, supabase);
       const { sessionId, isNewSession } = await getOrCreateTodaySession(
         supabase,
         userId,
         'ai_suggested',
         selectedLocationId
       );
-
-      // Cross-exercise strength summary for cold-start weight estimation:
-      // never-trained exercises (incl. first-time substitutes) seed from a
-      // related exercise's logged e1RM before profile heuristics.
-      const transferCandidates = await fetchTransferCandidates(userId, supabase);
+      // Start loading the workout screen while the blocks are written, so
+      // the push below lands on a route that is already on its way.
+      const destination = `/dashboard/workout/${sessionId}?fromCreate=true`;
+      try {
+        router.prefetch(destination);
+      } catch {
+        // Prefetch is an optimisation only.
+      }
+      const transferCandidates = await transferCandidatesPromise;
 
       let order = 1;
       if (!isNewSession) {
@@ -919,6 +961,11 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
           })`;
           if (lowConfidenceSeed) reason += ' · weight seeded from strength data (low confidence)';
         }
+        // The injury line rides into the workout on the block, last, so the
+        // card can say why this lift was chosen for the user's shoulder/knee
+        // (services/suggestedWorkout injuryNoteFromReason reads it back).
+        const injuryLine = injuryPickLine(pick.injury, pick.exerciseId, injuryAreas, exerciseNameOf);
+        if (injuryLine) reason += ` · ${injuryLine}`;
 
         let warmupSets: WarmupSet[] = [];
         if (isNewSession && blocks.length === 0) {
@@ -970,7 +1017,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
       }
 
       if (locationChosen) markGymChosen(sessionId);
-      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
+      setStartStage('opening');
+      router.push(destination);
     } catch (err) {
       console.error('Failed to start suggested workout:', err);
       setError('Failed to start workout. Please try again.');
@@ -1210,6 +1258,16 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
               </p>
             ) : null;
           })()}
+          {(() => {
+            // Did the injury areas shape the picks? Said either way, so
+            // "does it account for my shoulder?" always has an answer.
+            const line = aiPlan.exercises.length > 0 ? injuryPlanLine(aiPlan.exercises, injuryAreas) : null;
+            return line ? (
+              <p className="text-caption text-ink-2" data-testid="suggested-workout-injury">
+                {line}
+              </p>
+            ) : null;
+          })()}
           {aiPlan.isLightSession && aiPlan.exercises.length > 0 && (
             <p className="text-caption text-status-warn">
               {beginner
@@ -1284,6 +1342,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
                       <span className="block text-caption text-ink-3" data-testid="suggested-pick-reason">
                         {beginner ? beginnerPickReason(pick.reason, pick.muscle) : pick.reason}
                       </span>
+                      {(() => {
+                        const injuryLine = injuryPickLine(pick.injury, pick.exerciseId, injuryAreas, exerciseNameOf);
+                        return injuryLine ? (
+                          <span className="block text-caption text-ink-2" data-testid="suggested-pick-injury">
+                            {injuryLine}
+                          </span>
+                        ) : null;
+                      })()}
                       {sub && (
                         <button
                           onClick={() =>
@@ -1361,7 +1427,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
               className="w-full py-2.5 rounded-lg bg-action text-on-action text-subhead font-medium hover:bg-action transition-colors disabled:opacity-60"
             >
               {isStarting
-                ? 'Starting...'
+                ? startStageLabel(startStage)
                 : `Start workout (${aiPlan.exercises.length} ${
                     aiPlan.exercises.length === 1 ? 'exercise' : 'exercises'
                   })`}

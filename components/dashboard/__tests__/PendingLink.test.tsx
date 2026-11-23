@@ -49,6 +49,25 @@ describe('PendingLink', () => {
     expect(link).toHaveTextContent('Loading');
   });
 
+  // UX panel round 19: personas re-tapped while the first navigation was
+  // still loading; the repeat must not restart (or double) it.
+  it('swallows a second tap while the first is still loading', () => {
+    const onClick = jest.fn();
+    render(
+      <PendingLink href="/dashboard/settings" data-testid="link" onClick={onClick}>
+        Settings
+      </PendingLink>
+    );
+    const link = screen.getByTestId('link');
+    expect(fireEvent.click(link)).toBe(false); // first tap: Link navigates (mock prevents in jsdom)
+    expect(onClick).toHaveBeenCalledTimes(1);
+    const second = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(link).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('is not pending when the link points at the current page', () => {
     mockPath = '/dashboard/settings';
     render(
@@ -68,5 +87,16 @@ describe('Home gear', () => {
     expect(gear).toHaveClass('h-11', 'w-11');
     fireEvent.click(gear);
     expect(gear).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('says it is opening Settings in words while the page loads', () => {
+    render(<GlanceHeader greeting="Good morning" todayLabel="Mon, Nov 23" />);
+    expect(screen.queryByTestId('home-settings-opening')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('home-settings'));
+    const label = screen.getByTestId('home-settings-opening');
+    expect(label).toHaveTextContent('Opening Settings…');
+    expect(label).toHaveAttribute('role', 'status');
+    // Absolutely placed: the header does not shift under the finger.
+    expect(label).toHaveClass('absolute');
   });
 });

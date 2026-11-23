@@ -245,6 +245,15 @@ async function windowAroundViewport(page, snapshot) {
 async function settle(page) {
   await page.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(700);
+  // A link tap whose destination is still loading (PendingLink marks it
+  // data-pending) is a navigation in flight, not a finished screen. A person
+  // watches the spinner for the second it takes; the persona instead got a
+  // snapshot of the old screen, re-tapped, and the click failed on a ref the
+  // arriving page had already replaced (round 19: "Settings gear needs two
+  // taps" — the first tap had worked every time). Wait it out, bounded.
+  await page
+    .waitForFunction(() => !document.querySelector('[data-pending="true"]'), null, { timeout: 8000 })
+    .catch(() => {});
 }
 
 async function act(page, name, input) {

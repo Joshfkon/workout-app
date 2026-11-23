@@ -133,7 +133,26 @@ export interface SuggestedWorkoutPick {
   repRange: [number, number];
   /** Target RIR, never below the exercise's joint-stress RIR floor. */
   targetRir: number;
+  /**
+   * How the standing-injury safety check (avoid / caution ids) shaped THIS
+   * pick, for the "why this exercise" copy. Absent when it made no
+   * difference. Metadata only: the pick itself is decided exactly as before.
+   */
+  injury?: PickInjuryNote;
 }
+
+/**
+ * - 'instead_of': without the injury check, this muscle's top-ranked lift
+ *   would have been `insteadOfId` (rated avoid or caution for the user's
+ *   injury areas); the pick is the best-ranked safer one.
+ * - 'caution': the pick itself is rated caution (no safe alternative ranked
+ *   ahead of it).
+ * `pickedId` ties the note to the exercise it was written for, so a later
+ * swap in the sheet never inherits it.
+ */
+export type PickInjuryNote =
+  | { kind: 'instead_of'; pickedId: string; insteadOfId: string }
+  | { kind: 'caution'; pickedId: string };
 
 export interface SuggestedWorkoutPlan {
   exercises: SuggestedWorkoutPick[];
@@ -572,6 +591,92 @@ function candidatesForMuscle(
     );
 }
 
+/**
+ * What the injury check changed for one pick (PickInjuryNote). The
+ * counterfactual is the SAME ranking (candidatesForMuscle) over the same
+ * equipment-usable library with the avoid / caution ids ignored — no new
+ * rule, only "what would have been first without it".
+ */
+function injuryNoteFor(
+  picked: SuggestedExerciseInput,
+  muscle: StandardMuscleGroup,
+  ctx: {
+    unfilteredExercises: SuggestedExerciseInput[];
+    recentIds: Set<string>;
+    stapleIds: Set<string>;
+    avoidIds: ReadonlySet<string>;
+    cautionIds: ReadonlySet<string>;
+    pickedIds: ReadonlySet<string>;
+  }
+): PickInjuryNote | undefined {
+  if (ctx.avoidIds.size === 0 && ctx.cautionIds.size === 0) return undefined;
+  const top = candidatesForMuscle(muscle, ctx.unfilteredExercises, ctx.recentIds, ctx.stapleIds).find(
+    (ex) => ex.id === picked.id || !ctx.pickedIds.has(ex.id)
+  );
+  if (top && top.id !== picked.id && (ctx.avoidIds.has(top.id) || ctx.cautionIds.has(top.id))) {
+    return { kind: 'instead_of', pickedId: picked.id, insteadOfId: top.id };
+  }
+  if (ctx.cautionIds.has(picked.id)) return { kind: 'caution', pickedId: picked.id };
+  return undefined;
+}
+
+/** "your shoulder", "your shoulder and knee", "your shoulder, knee and hip". */
+export function injuryAreasPhrase(labels: readonly string[]): string | null {
+  const names = labels.map((l) => l.trim().toLowerCase()).filter(Boolean);
+  if (names.length === 0) return null;
+  const joined =
+    names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `your ${joined}`;
+}
+
+/**
+ * One pick's injury line, from its PickInjuryNote: "For your shoulder:
+ * picked instead of Overhead Press" / "For your shoulder: go light, stop if
+ * it hurts". Null when the note does not belong to this pick (swapped since)
+ * or there are no areas to name.
+ */
+export function injuryPickLine(
+  note: PickInjuryNote | undefined,
+  pickExerciseId: string,
+  areas: string | null,
+  nameOf: (exerciseId: string) => string | undefined
+): string | null {
+  if (!note || !areas || note.pickedId !== pickExerciseId) return null;
+  if (note.kind === 'caution') return `For ${areas}: go light, stop if it hurts`;
+  const name = nameOf(note.insteadOfId);
+  return name ? `For ${areas}: picked instead of ${name}` : `For ${areas}: picked a safer option`;
+}
+
+/**
+ * The sheet's plan-level injury line: did the user's injury areas shape
+ * today's picks? Says so either way, so "does it account for my shoulder?"
+ * always has an answer. Null with no injury areas.
+ */
+export function injuryPlanLine(
+  picks: readonly Pick<SuggestedWorkoutPick, 'exerciseId' | 'injury'>[],
+  areas: string | null
+): string | null {
+  if (!areas) return null;
+  const swapped = picks.filter((p) => p.injury?.kind === 'instead_of' && p.injury.pickedId === p.exerciseId).length;
+  const careful = picks.filter((p) => p.injury?.kind === 'caution' && p.injury.pickedId === p.exerciseId).length;
+  const parts: string[] = [];
+  if (swapped > 0) parts.push(`${swapped} lift${swapped === 1 ? '' : 's'} swapped for one easier on it`);
+  if (careful > 0) parts.push(`${careful} to take carefully`);
+  return parts.length > 0
+    ? `Planned around ${areas}: lifts that strain it are left out — ${parts.join(', ')}.`
+    : `Planned around ${areas}: lifts that strain it are left out, and none of today’s picks needed changing.`;
+}
+
+/**
+ * The injury line the sheet stored on a started block's suggestion_reason
+ * (" · For your shoulder: …"), for the workout card. Null when there is none.
+ */
+export function injuryNoteFromReason(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  const m = reason.match(/(?:^|\s·\s)(For your [^:·]+:[^·]+?)(?=\s·\s|$)/);
+  return m ? m[1].trim() : null;
+}
+
 /** Set counts can be fractional (a set credited to two muscles counts half). */
 function fmtSets(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
@@ -633,7 +738,8 @@ function buildLightSession(
   recentIds: Set<string>,
   stapleIds: Set<string>,
   exerciseById: Map<string, SuggestedExerciseInput>,
-  cautionIds: ReadonlySet<string> = EMPTY_IDS
+  cautionIds: ReadonlySet<string> = EMPTY_IDS,
+  injuryCtx?: (pickedIds: ReadonlySet<string>) => Parameters<typeof injuryNoteFor>[2]
 ): SuggestedWorkoutPlan {
   const picks: SuggestedWorkoutPick[] = [];
   const pickedIds = new Set<string>();
@@ -644,6 +750,7 @@ function buildLightSession(
       (ex) => !pickedIds.has(ex.id)
     );
     if (!next) continue;
+    const injury = injuryCtx ? injuryNoteFor(next, muscle.muscle, injuryCtx(pickedIds)) : undefined;
     pickedIds.add(next.id);
     picks.push({
       exerciseId: next.id,
@@ -652,6 +759,7 @@ function buildLightSession(
       sets: Math.min(MIN_PICK_SETS, Math.floor(muscle.headroom)),
       repRange: repRangeFor(next),
       targetRir: targetRirFor(next, LIGHT_SESSION_RIR),
+      ...(injury ? { injury } : {}),
     });
   }
 
@@ -731,6 +839,7 @@ function buildFullBodyFallback(
         sets,
         repRange: repRangeFor(next),
         targetRir: targetRirFor(next, next.defaultRir ?? 2),
+        ...(cautionIds.has(next.id) ? { injury: { kind: 'caution' as const, pickedId: next.id } } : {}),
       });
       added = true;
     }
@@ -780,6 +889,30 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
   );
   const exerciseById = new Map(usableExercises.map((ex) => [ex.id, ex]));
   const recentIds = new Set(input.recentExerciseIds);
+  // The same library without the standing-injury filter: only to say which
+  // lift a pick replaced (injuryNoteFor). Never picked from.
+  const unfilteredExercises =
+    avoidIds.size === 0 && cautionIds.size === 0
+      ? usableExercises
+      : filterExercisesByEquipment(input.exercises, input.unavailableEquipmentIds ?? []).filter(
+          (ex) => !ex.primaryMuscle || !isMuscleExcludedByInjury(ex.primaryMuscle, injuredMuscles)
+        );
+  // Staples over that same library: a staple ranking taken from the filtered
+  // library would promote the safe pick and hide what it replaced.
+  const unfilteredStapleIds =
+    unfilteredExercises === usableExercises
+      ? stapleIds
+      : computeStapleExerciseIds(
+          unfilteredExercises.map((ex) => ({ id: ex.id, muscle: ex.primaryMuscle, tier: ex.tier }))
+        );
+  const injuryCtx = (pickedIds: ReadonlySet<string>) => ({
+    unfilteredExercises,
+    recentIds,
+    stapleIds: unfilteredStapleIds,
+    avoidIds,
+    cautionIds,
+    pickedIds,
+  });
 
   // Live per-muscle MRV headroom, consumed as picks accumulate.
   const headroomByMuscle = new Map<StandardMuscleGroup, number>();
@@ -816,7 +949,7 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
 
   // Every under-target muscle out of MRV headroom → technique day, not volume.
   if (ranked.every((m) => m.headroom < MIN_PICK_SETS)) {
-    return buildLightSession(ranked, usableExercises, recentIds, stapleIds, exerciseById, cautionIds);
+    return buildLightSession(ranked, usableExercises, recentIds, stapleIds, exerciseById, cautionIds, injuryCtx);
   }
 
   // Top muscles are the best-ranked ones the library can actually train; a
@@ -845,6 +978,7 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
     const sets = Math.min(baseSets, Math.floor(headroom));
     if (sets < MIN_PICK_SETS) return false;
 
+    const injury = injuryNoteFor(next, muscle.muscle, injuryCtx(pickedIds));
     pickedIds.add(next.id);
     headroomByMuscle.set(muscle.muscle, headroom - sets);
     picks.push({
@@ -854,6 +988,7 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
       sets,
       repRange: repRangeFor(next),
       targetRir: targetRirFor(next, next.defaultRir ?? 2),
+      ...(injury ? { injury } : {}),
     });
     return true;
   };

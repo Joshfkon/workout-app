@@ -58,6 +58,13 @@ export function PendingLink({
         }
       }}
       onClick={(e: MouseEvent<HTMLAnchorElement>) => {
+        // A second tap while the first is still loading is swallowed: the
+        // navigation is already on its way, and restarting it only delays it
+        // (UX panel round 19: personas re-tapped the gear mid-navigation).
+        if (pending) {
+          e.preventDefault();
+          return;
+        }
         onClick?.(e);
         if (!e.defaultPrevented && pathname !== href) setPending(true);
       }}

@@ -10,7 +10,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockPush = jest.fn();
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
+const mockPrefetch = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush, prefetch: mockPrefetch }) }));
 
 /** Chainable, awaitable stand-in for a Supabase query builder. */
 function query(result: { data: unknown; error?: unknown }) {
@@ -39,14 +40,15 @@ const EXERCISES = [
   ...e,
 }));
 
-const mockInsert = jest.fn(() => Promise.resolve({ error: null }));
+const mockInsert = jest.fn((_rows: unknown) => Promise.resolve({ error: null }));
+let mockUsersRow: Record<string, unknown> = { weight_kg: null, height_cm: null };
 /** Rows the usage query (exercise_blocks ⋈ workout_sessions) returns. */
 let mockUsage: unknown[] = [];
 jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
     from: (table: string) => {
       if (table === 'exercises') return query({ data: EXERCISES });
-      if (table === 'users') return query({ data: { weight_kg: null, height_cm: null } });
+      if (table === 'users') return query({ data: mockUsersRow });
       if (table === 'exercise_blocks') {
         const q = query({ data: mockUsage });
         (q as Record<string, unknown>).insert = mockInsert;
@@ -254,5 +256,80 @@ describe('SuggestedWorkoutSheet: why this order, and when you last did it', () =
     const whys = screen.getAllByTestId('suggested-pick-why').map((el) => el.textContent);
     expect(whys[0]).toBe('You did this on Tue, Nov 17 — weights start from your last sets.');
     expect(whys[1]).toMatch(/^New to you/);
+  });
+});
+
+describe('SuggestedWorkoutSheet: injury areas and the start wait (round 19)', () => {
+  afterEach(() => {
+    mockPlanOverride = null;
+    mockUsersRow = { weight_kg: null, height_cm: null };
+  });
+
+  const injuryPlan = {
+    focus: 'Legs and back are recovered and under target.',
+    isLightSession: false,
+    exercises: [
+      {
+        exerciseId: 'ex-1',
+        muscle: 'quads',
+        reason: 'under target',
+        sets: 3,
+        repRange: [8, 12],
+        targetRir: 2,
+        injury: { kind: 'instead_of', pickedId: 'ex-1', insteadOfId: 'ex-2' },
+      },
+      { exerciseId: 'ex-2', muscle: 'lats', reason: 'under target', sets: 3, repRange: [8, 12], targetRir: 2 },
+    ],
+  };
+
+  it('says plainly how the injury areas shaped the picks, per pick and overall', async () => {
+    mockUsersRow = { weight_kg: null, height_cm: null, preferences: { injuryAreas: ['shoulder'] } };
+    mockPlanOverride = injuryPlan;
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
+    await waitFor(() =>
+      expect(screen.getByTestId('suggested-workout-injury')).toHaveTextContent(
+        'Planned around your shoulder: lifts that strain it are left out — 1 lift swapped for one easier on it.'
+      )
+    );
+    const notes = screen.getAllByTestId('suggested-pick-injury');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toHaveTextContent('For your shoulder: picked instead of Lat Pulldown');
+  });
+
+  it('carries the injury line onto the started block for the workout card', async () => {
+    mockUsersRow = { weight_kg: null, height_cm: null, preferences: { injuryAreas: ['shoulder'] } };
+    mockPlanOverride = injuryPlan;
+    const user = userEvent.setup();
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await screen.findByTestId('suggested-workout-injury');
+    await user.click(screen.getByRole('button', { name: 'Start workout (2 exercises)' }));
+    await waitFor(() => expect(mockInsert).toHaveBeenCalledTimes(1));
+    const rows = mockInsert.mock.calls[0][0] as { suggestion_reason: string }[];
+    expect(rows[0].suggestion_reason).toBe('under target · For your shoulder: picked instead of Lat Pulldown');
+    expect(rows[1].suggestion_reason).toBe('under target');
+  });
+
+  it('says nothing about injuries without injury areas', async () => {
+    mockPlanOverride = injuryPlan;
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
+    expect(screen.queryByTestId('suggested-workout-injury')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('suggested-pick-injury')).not.toBeInTheDocument();
+  });
+
+  it('shows which step the start is on and preloads the workout screen', async () => {
+    let releaseSession: (v: { sessionId: string; isNewSession: boolean }) => void = () => {};
+    mockGetOrCreate.mockImplementationOnce(
+      () => new Promise((resolve) => (releaseSession = resolve as typeof releaseSession))
+    );
+    const user = userEvent.setup();
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await user.click(await screen.findByRole('button', { name: 'Start workout (2 exercises)' }));
+    expect(await screen.findByRole('button', { name: 'Setting up your workout…' })).toBeDisabled();
+    releaseSession({ sessionId: 'sess-9', isNewSession: true });
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard/workout/sess-9?fromCreate=true'));
+    expect(mockPrefetch).toHaveBeenCalledWith('/dashboard/workout/sess-9?fromCreate=true');
+    expect(screen.getByRole('button', { name: 'Opening your workout…' })).toBeDisabled();
   });
 });
