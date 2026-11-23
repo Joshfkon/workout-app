@@ -95,6 +95,14 @@ export interface SetFeedback {
    * lifter's own pick. Dropped whenever the RIR is edited.
    */
   rirSource?: 'sensor';
+  /**
+   * What the app expected for this set when it was logged: reps at the
+   * suggested load (components/workout/setPrediction). Display only — the
+   * "You did 9 ✓" line and the accuracy tally; never read by the engine.
+   * Absent when the set had no forecast (first time on a lift, timed,
+   * ramp, rep-total) or predates the feature.
+   */
+  prediction?: { repCount: number; weightKg: number };
 }
 
 /** Type of progression applied to an exercise */

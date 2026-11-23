@@ -1,8 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { IconGauge, IconSettings } from '@tabler/icons-react';
+import { IconGauge, IconLoader2, IconSettings } from '@tabler/icons-react';
+import { PendingLink } from '@/components/dashboard/PendingLink';
 
 interface GlanceHeaderProps {
   /** Time-based greeting ("Good morning" etc.), computed client-side by the caller. */
@@ -72,14 +72,24 @@ export function GlanceHeader({
             {readinessScore}
           </button>
         )}
-        <Link
+        {/* 44px hit area (was 36: a tap just off the icon missed), a
+            pressed state, and a spinner from the tap until Settings arrives
+            — the panel read the silent wait as a missed first tap. */}
+        <PendingLink
           href="/dashboard/settings"
           aria-label="Settings"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-fill active:bg-fill"
+          className="-m-1 flex h-11 w-11 items-center justify-center rounded-full text-ink-2 transition-[background-color,transform] hover:bg-fill active:scale-95 active:bg-fill"
+          pendingClassName="bg-fill text-ink"
           data-testid="home-settings"
         >
-          <IconSettings size={22} aria-hidden="true" />
-        </Link>
+          {(pending) =>
+            pending ? (
+              <IconLoader2 size={22} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <IconSettings size={22} aria-hidden="true" />
+            )
+          }
+        </PendingLink>
       </div>
     </div>
   );

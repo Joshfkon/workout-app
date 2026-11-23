@@ -193,16 +193,18 @@ describe('SuggestedWorkoutSheet: beginner mode wording', () => {
     useUserStore.setState({ user: null });
   });
 
-  it('uses plain muscle names and "behind this week" instead of weekly sets', async () => {
+  it('uses plain muscle names and plain weekly wording instead of weekly sets', async () => {
     setBeginner(true);
     render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
     await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
     expect(screen.getByTestId('suggested-workout-focus')).toHaveTextContent(
-      'Today: front thighs and back (lats) — rested, and behind this week.'
+      'Today: front thighs and back (lats) — rested, and they’ve had the least work this week.'
     );
     const reasons = screen.getAllByTestId('suggested-pick-reason').map((el) => el.textContent);
-    expect(reasons).toEqual(['Front thighs: behind this week', 'Back (lats): behind this week']);
+    expect(reasons).toEqual(['Front thighs: needs more work this week', 'Back (lats): needs more work this week']);
     expect(document.body).not.toHaveTextContent(/weekly sets/);
+    // Panel round 18: "behind this week" and "short of failure" read as jargon.
+    expect(document.body).not.toHaveTextContent(/behind this week|short of failure/);
   });
 
   it('keeps the existing wording when beginner mode is off', async () => {

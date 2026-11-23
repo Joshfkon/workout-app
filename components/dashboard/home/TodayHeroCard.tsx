@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { IconSparkles } from '@tabler/icons-react';
 import { FirstTimeHint } from '@/components/ui';
 import { StartWorkoutButton } from './StartWorkoutButton';
+import { StartTodaysWorkoutButton } from './StartTodaysWorkoutButton';
 
 /** Summary of today's workout session shown on the dashboard. */
 export interface TodaysWorkout {
@@ -365,11 +366,14 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
           <div className="text-caption font-semibold mb-0.5 text-action">Next up</div>
           <div className="text-title text-ink">Ready to train?</div>
           <p className="text-subhead text-ink-2 mt-1 mb-4">
-            Start a workout and add exercises as you go, or have HyperTrack build you a program.
+            Start today’s recommended workout in one tap, start empty and add exercises as you go, or
+            have HyperTrack build you a program.
           </p>
+          {/* One tap to a recommended workout (no "Start → Suggest → Start"). */}
+          <StartTodaysWorkoutButton className="mb-2" />
           {/* Large text: two half-width buttons wrap their labels, so stack. */}
           <div className="flex gap-2 large-text:flex-col">
-            <StartWorkoutButton className="flex-1" />
+            <StartWorkoutButton className="flex-1" label="Start empty" secondary />
             <Link
               href="/dashboard/mesocycle/new"
               className="flex flex-1 min-h-[50px] items-center justify-center gap-2 rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110"

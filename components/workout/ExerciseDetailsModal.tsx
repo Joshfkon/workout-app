@@ -51,6 +51,11 @@ interface ExerciseDetailsModalProps {
   exercise: Exercise | null;
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Open on this tab instead of the history-based default. The workout
+   * card's "How to do it" link opens on About (form cues, demo video).
+   */
+  initialTab?: ExerciseDetailTab;
   unit?: 'kg' | 'lb';
   /**
    * Workout-context chips (only meaningful when opened from an active
@@ -209,6 +214,7 @@ export function ExerciseDetailsModal({
   exercise,
   isOpen,
   onClose,
+  initialTab,
   unit = 'kg',
   positionLabel,
   setCountLabel,
@@ -296,12 +302,14 @@ export function ExerciseDetailsModal({
   // exercise is a lookup (History), a new one is a learning moment (About).
   useEffect(() => {
     if (!isOpen || activeTab !== null) return;
-    if (sessions !== undefined) {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    } else if (sessions !== undefined) {
       setActiveTab(resolveDefaultTab(sessions.length));
     } else if (historyQuery.isError) {
       setActiveTab('about');
     }
-  }, [isOpen, activeTab, sessions, historyQuery.isError]);
+  }, [isOpen, activeTab, initialTab, sessions, historyQuery.isError]);
 
   if (!isOpen || !exercise) return null;
 

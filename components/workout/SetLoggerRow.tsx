@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import {
   IconBarbell,
   IconMinus,
+  IconPencil,
   IconPlus,
   IconMessagePlus,
   IconPlayerPlayFilled,
@@ -531,10 +532,19 @@ export function SetLoggerRow({
         aria-label={`${ariaLabel}: ${displayText}${unitText ? ` ${unitText}` : ''}. Tap to type`}
         className="w-full min-w-0 min-h-[56px] flex flex-col items-center justify-center leading-tight"
       >
-        <span className="text-title font-bold tabular-nums text-ink whitespace-nowrap">{displayText}</span>
-        {unitText && (
-          <span className="text-caption text-ink-2">{unitText}</span>
-        )}
+        {/* Visible "you can type here" affordance: a dashed underline on
+            the number and a pencil by the unit (the panel's beginners didn't
+            know the prefilled numbers were theirs to change). */}
+        <span
+          data-testid={`logger-${field}-value`}
+          className="text-title font-bold tabular-nums text-ink whitespace-nowrap underline decoration-dashed decoration-ink-3 decoration-1 underline-offset-4"
+        >
+          {displayText}
+        </span>
+        <span className="inline-flex items-center gap-0.5 text-caption text-ink-2">
+          {unitText}
+          <IconPencil size={11} aria-hidden="true" data-testid={`logger-${field}-edit-hint`} />
+        </span>
       </button>
     );
   };

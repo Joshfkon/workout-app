@@ -660,6 +660,9 @@ export default function WorkoutPage() {
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [isFirstWorkout, setIsFirstWorkout] = useState(false);
+  // The user whose first-ever working set this session holds (no completed
+  // workout yet): keys the shown-once FirstSetGuide. Null = no guide.
+  const [firstSetGuideUserId, setFirstSetGuideUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [blocks, setBlocks] = useState<ExerciseBlockWithExercise[]>([]);
@@ -956,6 +959,9 @@ export default function WorkoutPage() {
   
   // State for exercise details modal
   const [selectedExerciseForDetails, setSelectedExerciseForDetails] = useState<Exercise | null>(null);
+  // 'about' when opened from the card's "How to do it" link (form guide);
+  // undefined = the modal's own history-based default tab.
+  const [detailsInitialTab, setDetailsInitialTab] = useState<'about' | undefined>(undefined);
   
   // Cancel workout modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -1929,6 +1935,7 @@ export default function WorkoutPage() {
         }
 
         setIsFirstWorkout(completedWorkoutsCount === 0);
+        setFirstSetGuideUserId(completedWorkoutsCount === 0 ? sessionData.user_id ?? null : null);
 
         // Coach message will be generated after exercise histories are loaded
         // to provide accurate weight suggestions based on user's training history
@@ -7176,7 +7183,10 @@ export default function WorkoutPage() {
       key: 'info',
       label: 'Exercise info',
       icon: <IconInfoCircle size={16} className="text-ink-2" stroke={2} />,
-      onSelect: () => setSelectedExerciseForDetails(block.exercise),
+      onSelect: () => {
+        setDetailsInitialTab(undefined);
+        setSelectedExerciseForDetails(block.exercise);
+      },
     });
 
     const inCluster = block.supersetGroupId !== null;
@@ -8023,7 +8033,21 @@ export default function WorkoutPage() {
                     lastWorkoutSleep={sleepByExerciseId[block.exerciseId] ?? null}
                     sleepLoggingActive={sleepLoggingActive}
                     previousSets={exerciseHistories[block.exerciseId]?.lastWorkoutSets ?? []}
-                    onExerciseNameClick={() => setSelectedExerciseForDetails(block.exercise)}
+                    onExerciseNameClick={() => {
+                      setDetailsInitialTab(undefined);
+                      setSelectedExerciseForDetails(block.exercise);
+                    }}
+                    firstSetGuideTourId={
+                      isCurrent &&
+                      firstSetGuideUserId &&
+                      !completedSets.some((s) => s.setType === 'normal')
+                        ? `first-set-guide:${firstSetGuideUserId}`
+                        : null
+                    }
+                    onHowToClick={() => {
+                      setDetailsInitialTab('about');
+                      setSelectedExerciseForDetails(block.exercise);
+                    }}
                     adjustedRir={
                       (() => {
                         const adjusted = calibrationEngineRef.current.getAdjustedRIR(block.exercise.name, block.targetRir);
@@ -9067,6 +9091,7 @@ export default function WorkoutPage() {
           <ExerciseDetailsModal
             exercise={selectedExerciseForDetails}
             isOpen={!!selectedExerciseForDetails}
+            initialTab={detailsInitialTab}
             onClose={() => setSelectedExerciseForDetails(null)}
             unit={preferences.units}
             positionLabel={detailsPositionLabel}

@@ -58,7 +58,7 @@ import { lightHaptic } from '@/lib/integrations/notifications';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
-import { IconActivity, IconAlertTriangle, IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
+import { IconActivity, IconAlertTriangle, IconBarbell, IconBone, IconBook, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { StabilizerWarningBanner, type StabilizerWarningView } from './StabilizerWarningBanner';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -68,7 +68,24 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow, clampToChip } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
-import { whyThisWeightLine, type WhyThisWeight } from './whyThisWeight';
+import {
+  accuracyLine,
+  expectLine,
+  expectedRepsFromLabel,
+  nextTimeLine,
+  predictionAccuracy,
+  predictionOutcome,
+  type SetPrediction,
+} from './setPrediction';
+import { FirstSetGuide } from './FirstSetGuide';
+import {
+  whyThisWeightLine,
+  setChangeLine,
+  emptyBarStartLine,
+  isEmptyBarLoad,
+  type SetChangeCause,
+  type WhyThisWeight,
+} from './whyThisWeight';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { plainWorkoutText } from '@/lib/beginnerMode';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
@@ -325,6 +342,14 @@ interface ExerciseCardProps {
   showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
   currentInjuries?: TemporaryInjury[];  // Current injuries to filter swap suggestions
   onExerciseNameClick?: () => void;  // Callback when exercise name is clicked
+  /** Opens the exercise's form guide (info view, About tab): the "How to do it" link. */
+  onHowToClick?: () => void;
+  /**
+   * Shown-once first-set walkthrough (FirstSetGuide), keyed per user. The
+   * page passes it to the active card only while the user has never logged
+   * a working set; null/absent = no guide.
+   */
+  firstSetGuideTourId?: string | null;
   // Rest timer state for inline display
   showRestTimer?: boolean;
   timerSeconds?: number;
@@ -552,6 +577,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   sets,
   onSetComplete,
   onExerciseNameClick,
+  onHowToClick,
+  firstSetGuideTourId = null,
   onSetEdit,
   onSetDelete,
   onSetFeedbackUpdate,
@@ -2306,13 +2333,16 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     try {
       // Complete the set immediately (rest timer starts in parent)
+      // What the strip expected for this set (predict, then score). Only a
+      // normal set carries it; the score compares at the predicted load.
+      const prediction = data.setType === 'normal' ? activePredictionRef.current : null;
       await onSetComplete({
         weightKg: data.weightKg,
         reps: data.reps,
         rpe: data.rpe,
         note: data.note,
         setType: data.setType,
-        feedback: data.feedback,
+        feedback: prediction ? { ...data.feedback, prediction } : data.feedback,
         bodyweightData: data.bodyweightData,
       });
     } catch (error) {
@@ -2539,12 +2569,22 @@ export const ExerciseCard = memo(function ExerciseCard({
      * branch below took. Named here, never re-derived (whyThisWeight.ts).
      */
     why: WhyThisWeight | null;
+    /**
+     * 'set_change' when `source` explains a load that moved since the
+     * just-logged set — that line already carries the effort read, so the
+     * strip drops the separate logged-effort verdict.
+     */
+    sourceKind: 'set_change' | null;
   } => {
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
     let sourceLine = '';
     let why: WhyThisWeight | null = null;
+    // Within-session load change (set N → N+1): what the just-logged set
+    // showed, as the engine's own branch read it. Null = no e1RM-path
+    // recommendation from a logged set (rep-total, session start).
+    let setChange: { cause: SetChangeCause | null; lastRir: number | null } | null = null;
     const progressionPhrase = (p: string | undefined) =>
       p === 'add_load' ? 'one step up' : p === 'add_rep' ? 'one more rep' : 'same again';
 
@@ -2723,6 +2763,27 @@ export const ExerciseCard = memo(function ExerciseCard({
       } else {
       const rec = recommendNext(lastSetData);
       weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
+      {
+        const loggedEffort = lastCompleted.feedback?.repsInTank != null || lastCompleted.rpe != null;
+        const fatigueDrop =
+          rec.rangeFloorLoadDrop || rec.provenance?.source === 'range_floor';
+        setChange = {
+          lastRir: loggedEffort ? resolveLastRir(lastSetData, effectiveTargetRir) : null,
+          cause: fatigueDrop
+            ? 'fatigue'
+            : rec.trigger === 'below_rep_min'
+              ? 'reps_under'
+              : rec.trigger === 'rep_overshoot'
+                ? 'reps_over'
+                : loggedEffort
+                  ? rec.effortVsTarget === 'harder'
+                    ? 'harder'
+                    : rec.effortVsTarget === 'easier'
+                      ? 'easier'
+                      : 'on_target'
+                  : null,
+        };
+      }
       reps = rec.reps;
       if (isAmrap && lastCompleted.rpe) {
         reps = Math.max(amrapReps(lastSetData), reps);
@@ -3271,11 +3332,50 @@ export const ExerciseCard = memo(function ExerciseCard({
     const whyLine = why?.rule === 'start_guess' ? null : whyThisWeightLine(why);
     if (whyLine) sourceLine = whyLine;
 
+    // First time on a barbell lift and the guess is the empty bar (a
+    // beginner's usual prefill): say why that's right and what to do next.
+    if (
+      why?.rule === 'start_guess' &&
+      !isDurationBased &&
+      weight &&
+      isEmptyBarLoad(inputWeightToKg(parseFloat(weight), unit), deriveEquipmentClass(exercise))
+    ) {
+      sourceLine = emptyBarStartLine(reps);
+    }
+
+    // A load that MOVES between sets today names the set that moved it, on
+    // the strip: "Set 1 was 140 lbs × 9 at 1 left (harder than target) →
+    // back to 135 lbs". Without it a position-matched set 2 read "Last time
+    // 135 × 10 → same weight" under a set 1 of 140 — the drop was silent.
+    // Pain and deload lines keep priority (they say why on their own).
+    let sourceKind: 'set_change' | null = null;
+    if (setChange && lastCompleted && weight && why?.rule !== 'pain' && why?.rule !== 'deload') {
+      const lastShown = suggestionWeight(lastCompleted.weightKg, lastCompleted.weightKg);
+      const nextShown = parseFloat(weight);
+      if (Number.isFinite(nextShown) && Math.abs(nextShown - lastShown) > 0.001) {
+        const sameShown = (kg: number) => kg > 0 && Math.abs(suggestionWeight(kg, kg) - nextShown) < 0.001;
+        sourceLine = setChangeLine({
+          setNo: completedSets.length,
+          lastSet: `${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${amountLabel(lastCompleted)}`,
+          lastRir: setChange.lastRir,
+          cause: setChange.cause,
+          direction: nextShown < lastShown ? 'down' : 'up',
+          back:
+            completedSets.slice(0, -1).some((s) => sameShown(s.weightKg)) ||
+            previousSets.some((s) => sameShown(s.weightKg)),
+          next: `${weight} ${weightLabel}`,
+        });
+        sourceKind = 'set_change';
+      }
+    }
+
     // The reason often already says where the number came from ("set 1 last
     // session hit the rep ceiling (77 lbs × 10) — one increment up"); a
     // "From your last session: …" line under it would repeat it.
     const reasonNamesSource = /^From your last/.test(sourceLine) && /\blast (session|set)\b/i.test(reason);
-    const source = reasonNamesSource ? '' : sourceLine;
+    // Beginner mode keeps the line: there the engine's reason lives in the
+    // ⓘ sheet, so dropping the source would leave the prefill unexplained.
+    const source = reasonNamesSource && !beginner ? '' : sourceLine;
     return {
       weight,
       reps: String(reps),
@@ -3285,6 +3385,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       showRir,
       role,
       source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
+      sourceKind,
       why,
     };
   };
@@ -3361,6 +3462,37 @@ export const ExerciseCard = memo(function ExerciseCard({
   // A velocity hold must not leave the engine's heavier load in an
   // untouched weight field under a banner that says "hold".
   const heldLoadKg = latestCall?.heldByVelocity && pendingSetsCount > 0 ? latestCall.weightKg : null;
+
+  // Predict, then score (setPrediction): the just-logged set against what the
+  // strip expected, and how often the expectation held on this lift today.
+  // The prediction rode on the set's feedback when it was logged.
+  const lastPredictionOutcome = lastCompletedSet
+    ? predictionOutcome({
+        prediction: lastCompletedSet.feedback?.prediction,
+        loggedReps: getSetReps(lastCompletedSet, exercise) ?? 0,
+        loggedWeightKg: lastCompletedSet.weightKg,
+        hasNextSet: pendingSetsCount > 0,
+      })
+    : null;
+  const predictionScoreLine = lastPredictionOutcome
+    ? [
+        `Set ${completedSets.length}: ${lastPredictionOutcome.text}`,
+        accuracyLine(
+          predictionAccuracy(
+            completedSets.map((s) => ({
+              prediction: s.feedback?.prediction,
+              loggedReps: getSetReps(s, exercise) ?? 0,
+              loggedWeightKg: s.weightKg,
+            }))
+          ),
+          'today'
+        ),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
+  // Written each render by the active-set block below; read when the set is logged.
+  const activePredictionRef = useRef<SetPrediction | null>(null);
   useEffect(() => {
     if (heldLoadKg === null || manualEditsRef.current.get(0)?.weight) return;
     const shown = String(suggestionWeight(heldLoadKg));
@@ -4969,8 +5101,79 @@ export const ExerciseCard = memo(function ExerciseCard({
             return upTo != null && upTo >= asked + 2 ? `${asked}–${upTo}` : suggestion.repsLabel;
           })();
 
+          // Predict: the reps the strip shows as landing on the target
+          // effort at the suggested load (bannerRepsLabel — the engine's
+          // curve), said as an expectation. No forecast on a first-time
+          // guess, a ramp, a timed / rep-total / bodyweight / AMRAP set, or
+          // under a velocity hold (the numbers shown are the coach's).
+          const shownWeight = parseFloat(suggestion.weight);
+          const forecastable =
+            !isDurationBased &&
+            !repTotalMode &&
+            !isBodyweightExercise &&
+            suggestion.role === 'working' &&
+            shownWeight > 0 &&
+            !latestCall?.heldByVelocity;
+          const expectedReps =
+            forecastable &&
+            !activeIsAmrap &&
+            suggestion.showRir &&
+            !effortBasisIsColdStartOnly({ hasLoggedSetToday: completedSets.length > 0, lastSessionE1RM })
+              ? expectedRepsFromLabel(bannerRepsLabel)
+              : null;
+          activePredictionRef.current =
+            expectedReps != null ? { repCount: expectedReps, weightKg: inputWeightToKg(shownWeight, unit) } : null;
+          const expectText = expectedReps != null ? expectLine(expectedReps, bannerWeight) : null;
+
+          // What happens next: the engine's own next-session answer if this
+          // set reaches the top of the range at the target effort.
+          const nextTimeText =
+            forecastable && !isDeloadSession
+              ? (() => {
+                  const top = block.targetRepRange[1];
+                  const rec = recommendSessionStart({
+                    prevWeightKg: inputWeightToKg(shownWeight, unit),
+                    prevReps: top,
+                    prevRir: effectiveTargetRir,
+                    targetRepRange: block.targetRepRange,
+                    targetRir: effectiveTargetRir,
+                    minIncrementKg: exercise.minWeightIncrementKg,
+                    availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+                  });
+                  return nextTimeLine({
+                    weight: shownWeight,
+                    topReps: top,
+                    nextWeight: suggestionWeight(rec.weightKg),
+                    unitLabel: weightLabel,
+                  });
+                })()
+              : null;
+
           return (
             <div className="space-y-2 pt-1">
+              {firstSetGuideTourId && completedSets.length === 0 && (
+                <FirstSetGuide
+                  tourId={firstSetGuideTourId}
+                  source={suggestion.source || null}
+                  nextTime={nextTimeText}
+                  topReps={block.targetRepRange[1]}
+                />
+              )}
+              {/* Form guide: for a beginner, or any lift with no history
+                  here — the panel's beginners found no form guidance. */}
+              {onHowToClick && (beginner || previousSets.length === 0) && (
+                <div className="-mb-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onHowToClick}
+                    data-testid="exercise-how-to"
+                    className="-my-2 inline-flex min-h-[44px] items-center gap-1 px-1 text-subhead font-semibold text-action active:opacity-70"
+                  >
+                    <IconBook size={15} aria-hidden="true" />
+                    How to do it
+                  </button>
+                </div>
+              )}
               <SuggestionBanner
                 weightLabel={
                   latestCall?.heldByVelocity
@@ -4982,7 +5185,15 @@ export const ExerciseCard = memo(function ExerciseCard({
                     ? latestCall.repsLabel
                     : `${bannerRepsLabel || '—'}${isDurationBased ? 's' : ''}`
                 }
-                verdict={bannerVerdict}
+                // A set-change source line already says how the last set
+                // went ("… (harder than target) → back to 135 lbs"); the
+                // logged-effort verdict would repeat it. A motion verdict is
+                // different evidence and stays.
+                verdict={
+                  suggestion.sourceKind === 'set_change' && !latestMotion?.verdictShort && !latestCall?.heldByVelocity
+                    ? null
+                    : bannerVerdict
+                }
                 // Same value the logger presets its chip to (0–4), so the
                 // strip's "@ N RIR" and the preset chip always agree.
                 rir={clampToChip(loggerTargetRir)}
@@ -5000,6 +5211,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                 why={latestCall?.heldByVelocity ? null : suggestion.why}
                 effortCheck={effortCheck}
                 setKey={activeSetNumber}
+                expect={expectText}
+                score={predictionScoreLine}
+                nextTime={nextTimeText}
               />
               {/* Always mounted at a fixed one-line height: the note is
                   cleared on every weight/reps keystroke and re-issued by the
@@ -5133,6 +5347,14 @@ export const ExerciseCard = memo(function ExerciseCard({
             </div>
           );
         })()}
+
+        {/* The last set's score once nothing is pending (the strip that
+            carries it mid-exercise is gone). */}
+        {pendingSetsCount === 0 && predictionScoreLine && (
+          <p className="px-1 pt-1 text-caption text-ink-2" data-testid="set-prediction-score">
+            {predictionScoreLine}
+          </p>
+        )}
 
         {/* Pending sets: muted single-line targets */}
         {Array.from({ length: pendingSetsCount }).map((_, i) => {
@@ -5924,6 +6146,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.motionLatest?.verdictShort === nextProps.motionLatest?.verdictShort &&
     prevProps.motionLatest?.effort?.zone === nextProps.motionLatest?.effort?.zone &&
     prevProps.motionLatest?.effort?.disagreement === nextProps.motionLatest?.effort?.disagreement &&
-    prevProps.renderMotionSheet === nextProps.renderMotionSheet
+    prevProps.renderMotionSheet === nextProps.renderMotionSheet &&
+    prevProps.firstSetGuideTourId === nextProps.firstSetGuideTourId
   );
 });

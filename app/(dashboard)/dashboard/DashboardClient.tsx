@@ -72,6 +72,7 @@ import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCa
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { useLiveHeroWorkout } from '@/hooks/useLiveHeroWorkout';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { beginnerPickReason, plainWorkoutText } from '@/lib/beginnerMode';
 import { WeeklySetsCard } from '@/components/dashboard/home/WeeklySetsCard';
 import { heroOffersWorkoutStart, todayHeroVariant } from '@/components/dashboard/home/TodayHeroCard';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
@@ -644,10 +645,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // One coach sentence for the hero: prefer the first block progression/adjustment
   // reason ("+1 set chest — recovering well"), else fall back to the muscle focus list.
   const coachLine = useMemo(() => {
-    const reason = heroBlocks
-      .map((b) => b.suggestionReason?.trim())
-      .find((r): r is string => !!r && r.length > 0);
-    if (reason) return reason;
+    const first = heroBlocks.find((b) => !!b.suggestionReason?.trim());
+    const reason = first?.suggestionReason?.trim();
+    // Beginner mode: the stored reason is engine copy ("Side Delts: 2 of 10
+    // weekly sets done", "@ 2 RIR"); same facts, everyday words.
+    if (reason) {
+      return beginnerMode
+        ? beginnerPickReason(plainWorkoutText(reason), first?.primaryMuscle ?? '')
+        : reason;
+    }
 
     const muscleNames: string[] = [];
     for (const block of heroBlocks) {
@@ -660,7 +666,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     const source = muscleNames.length > 0 ? muscleNames : (heroScheduled?.muscles ?? []);
     if (source.length > 0) return `Focus today: ${source.slice(0, 4).join(', ')}`;
     return null;
-  }, [heroBlocks, heroScheduled]);
+  }, [heroBlocks, heroScheduled, beginnerMode]);
 
   // Recovery note for the hero meta line ("all target muscles recovered" /
   // "lats still recovering"), comparing today's target muscles against the
@@ -1588,18 +1594,24 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Greeting (client-only — see clientNow above — to avoid SSR hydration mismatch) */}
-      {clientNow && (
-        <GlanceHeader
-          greeting={greeting}
-          todayLabel={todayLabel}
-          weekContext={weekContext}
-          sessionsLabel={sessionsLabel}
-          readinessScore={checkInStatus === 'done' ? checkInReadiness : null}
-          onReadinessClick={userId ? () => setActiveModal('checkin') : undefined}
-          phaseChip={<PhaseSelector phase={currentPhase} onPhaseChanged={handlePhaseChanged} offerPlanRebuild={!isFreestyle} />}
-        />
-      )}
+      {/* Greeting and date are client-only (see clientNow above — avoids an
+          SSR hydration mismatch), but the header itself renders from the
+          first paint with blank placeholders: mounting it late pushed the
+          whole page down and the Settings gear appeared under a moving
+          finger, so the panel's first tap on it missed. */}
+      <GlanceHeader
+        greeting={clientNow ? greeting : '\u00a0'}
+        todayLabel={clientNow ? todayLabel : '\u00a0'}
+        weekContext={clientNow ? weekContext : null}
+        sessionsLabel={clientNow ? sessionsLabel : null}
+        readinessScore={clientNow && checkInStatus === 'done' ? checkInReadiness : null}
+        onReadinessClick={userId ? () => setActiveModal('checkin') : undefined}
+        phaseChip={
+          clientNow ? (
+            <PhaseSelector phase={currentPhase} onPhaseChanged={handlePhaseChanged} offerPlanRebuild={!isFreestyle} />
+          ) : undefined
+        }
+      />
 
       {/* One-time "Text too small?" for accounts that never saw onboarding's
           text size step. Renders nothing once a size is picked or closed. */}
