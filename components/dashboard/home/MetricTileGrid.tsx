@@ -62,6 +62,8 @@ interface MetricTileGridProps {
   phase?: PacingPhase;
   /** User's eating window; defaults to 07:00–21:00 inside the engine. */
   eatingWindow?: EatingWindow;
+  /** False hides the FFMI line on the Body comp tile (food-only users). */
+  showFfmi?: boolean;
 }
 
 /**
@@ -125,6 +127,7 @@ export function MetricTileGrid({
   onLogWeight,
   phase = 'maintenance',
   eatingWindow,
+  showFfmi = true,
 }: MetricTileGridProps) {
   // Show the tile when anything was classified OR lifts are accruing history
   // (a brand-new program should read "rebuilding", not vanish).
@@ -326,12 +329,14 @@ export function MetricTileGrid({
                     {bfArrow.icon}
                   </span>
                 </div>
-                <div className="text-subhead text-ink mt-1.5">
-                  FFMI {bodyComp.ffmi.toFixed(1)}
-                  <span className={`ml-1 ${ffmiArrow.color}`} aria-hidden="true">
-                    {ffmiArrow.icon}
-                  </span>
-                </div>
+                {showFfmi && (
+                  <div className="text-subhead text-ink mt-1.5" data-testid="body-comp-ffmi">
+                    FFMI {bodyComp.ffmi.toFixed(1)}
+                    <span className={`ml-1 ${ffmiArrow.color}`} aria-hidden="true">
+                      {ffmiArrow.icon}
+                    </span>
+                  </div>
+                )}
                 <div className="text-caption text-ink-2 mt-1.5">
                   DEXA-anchored · {bodyComp.scanCount} scans
                 </div>

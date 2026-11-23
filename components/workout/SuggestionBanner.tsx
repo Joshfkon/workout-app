@@ -175,6 +175,17 @@ export function SuggestionBanner({
 
   const showWarning = warningActive && effortCheck != null;
 
+  const whyLink = (
+    <button
+      type="button"
+      onClick={() => setShowInfo(true)}
+      data-testid="why-this-weight"
+      className="inline whitespace-nowrap text-caption font-medium text-action underline underline-offset-2"
+    >
+      Why this weight?
+    </button>
+  );
+
   // One "why" line on the strip, not two: the plain source line ("From your
   // last session: 100 × 10 → +5 lbs", "Starting guess — …") already says
   // where the number came from, and the engine's terser reason usually says
@@ -256,23 +267,21 @@ export function SuggestionBanner({
             </span>
           ) : null}
           {reason && !reasonInSheet ? <span> — {reason}</span> : null}
+          {/* The one-line reason sits on the strip (no tap needed); the
+              "Why this weight?" link rides the end of that line, so a short
+              reason and its link share one row at phone width. */}
           {source ? (
-            <span
-              data-testid="suggestion-source"
-              className="block mt-0.5 text-caption leading-snug text-ink-2"
-            >
-              {plain(source)}
+            <span className="block mt-0.5 text-caption leading-snug text-ink-2">
+              <span data-testid="suggestion-source">{plain(source)}</span>
+              {whySummary ? (
+                <>
+                  {' '}
+                  {whyLink}
+                </>
+              ) : null}
             </span>
-          ) : null}
-          {whySummary ? (
-            <button
-              type="button"
-              onClick={() => setShowInfo(true)}
-              data-testid="why-this-weight"
-              className="mt-0.5 inline-flex items-center text-caption font-medium text-action underline underline-offset-2"
-            >
-              Why this weight?
-            </button>
+          ) : whySummary ? (
+            <span className="block mt-0.5">{whyLink}</span>
           ) : null}
         </p>
         {effortCheck != null && (

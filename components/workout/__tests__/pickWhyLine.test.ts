@@ -11,6 +11,20 @@ describe('pickWhyLine', () => {
     );
   });
 
+  it('names the local day it was last done, so "recently" is checkable', () => {
+    const now = new Date(2026, 10, 23, 9, 0); // Mon, Nov 23 2026, local
+    const line = (at: Date) =>
+      pickWhyLine({ isRecent: true, lastDoneAt: at, muscleLabel: 'Chest', rec: null, units: 'lb', now });
+    expect(line(new Date(2026, 10, 17, 18, 30))).toBe(
+      'You did this on Tue, Nov 17 — weights start from your last sets.'
+    );
+    expect(line(new Date(2026, 10, 22, 23, 50))).toBe('You did this yesterday — weights start from your last sets.');
+    expect(line(new Date(2026, 10, 23, 6, 0))).toBe('You did this today — weights start from your last sets.');
+    expect(line(new Date(2025, 11, 30, 12, 0))).toBe(
+      'You did this on Tue, Dec 30, 2025 — weights start from your last sets.'
+    );
+  });
+
   it('a new lift names what its starting weight is estimated from', () => {
     expect(pickWhyLine({ isRecent: false, muscleLabel: 'Side Delts', rec: rec({ transferFrom: 'Barbell Bench Press' }), units: 'lb' })).toMatch(
       /^New to you — a top side delts pick for your equipment\. Starts at ~6\d(\.\d)? lbs?, estimated from your Barbell Bench Press\.$/

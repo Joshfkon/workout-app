@@ -15,6 +15,8 @@ interface BodyTargetsProps {
   currentBodyFatPercent?: number;
   currentFfmi?: number;
   currentMeasurements?: MeasurementTargets;
+  /** False hides the FFMI target and its progress (food-only users). */
+  showFfmi?: boolean;
 }
 
 interface TargetFormData {
@@ -67,6 +69,7 @@ export function BodyTargets({
   currentBodyFatPercent,
   currentFfmi,
   currentMeasurements,
+  showFfmi = true,
 }: BodyTargetsProps) {
   const [activeTarget, setActiveTarget] = useState<BodyCompositionTarget | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -439,7 +442,7 @@ export function BodyTargets({
                 </div>
               )}
 
-              {progress.ffmi && (
+              {showFfmi && progress.ffmi && (
                 <div className="p-3 bg-fill/50 rounded-lg">
                   <p className="text-caption text-ink-3 mb-1">Muscle score (FFMI)</p>
                   <p className={`text-headline font-medium ${getProgressColor(progress.ffmi.progress)}`}>
@@ -506,7 +509,9 @@ export function BodyTargets({
           <div className="text-center py-6">
             <p className="text-ink-2 text-subhead mb-2">No goals set yet</p>
             <p className="text-caption text-ink-3 mb-3">
-              Set target weight, body fat, muscle-to-height score (FFMI), or measurements to track progress
+              {showFfmi
+                ? 'Set target weight, body fat, muscle-to-height score (FFMI), or measurements to track progress'
+                : 'Set target weight, body fat or measurements to track progress'}
             </p>
             <Button variant="outline" size="sm" onClick={startEditing}>
               Set goals
@@ -559,6 +564,7 @@ export function BodyTargets({
                 })}
               />
             </div>
+            {showFfmi && (
             <div>
               <label className="block text-subhead text-ink-2 mb-1">Target muscle-to-height score (FFMI)</label>
               <Input
@@ -572,6 +578,7 @@ export function BodyTargets({
                 })}
               />
             </div>
+            )}
           </div>
 
           {/* Target date */}

@@ -39,6 +39,8 @@ import {
   buildSuggestedWorkout,
   detectSplitDay,
   maxExercisesForDuration,
+  suggestedOrderLine,
+  type SuggestedOrderRule,
 } from '@/services/suggestedWorkout';
 import {
   applyLocationSubstitutions,
@@ -73,7 +75,8 @@ import { BottomSheet } from '@/components/workout/BottomSheet';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, resolveMuscleToStandard } from '@/types/schema';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { beginnerMuscleName, beginnerPickReason, beginnerSuggestedFocus } from '@/lib/beginnerMode';
-import { formatWeight } from '@/lib/utils';
+import { formatDate, formatWeight } from '@/lib/utils';
+import { localDaysBetween } from '@/lib/date/localDay';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
 import { formatTargetRange } from '@/services/shared/setModality';
 
@@ -199,17 +202,42 @@ const START_BASIS: Record<string, string> = {
 };
 
 /**
+ * When a lift was last done, on the viewer's local calendar: "today",
+ * "yesterday", else "on Mon, Nov 17" (with the year only when it differs).
+ */
+export function lastDoneLabel(at: Date, now: Date): string {
+  const days = localDaysBetween(at, now);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `on ${formatDate(at, {
+    weekday: 'short',
+    year: at.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  })}`;
+}
+
+/**
  * Why this lift, and where its first weight comes from — the panel's
  * "no explanation why it picked Upright Row or 65 lbs".
  */
 export function pickWhyLine(args: {
   isRecent: boolean;
+  /**
+   * When the lift was last done in a COMPLETED session (the sheet's usage
+   * query, started_at). Named in the line so "recently" is checkable.
+   */
+  lastDoneAt?: Date | null;
   muscleLabel: string;
   rec: Pick<WorkingWeightRecommendation, 'recommendedWeight' | 'confidence' | 'transferFrom' | 'estimateSource'> | null;
   units: 'kg' | 'lb';
+  /** "Now" for today/yesterday; defaults to lib/clock. */
+  now?: Date;
 }): string {
-  const { isRecent, muscleLabel, rec, units } = args;
-  if (isRecent) return 'You’ve done this recently — weights start from your last sets.';
+  const { isRecent, lastDoneAt, muscleLabel, rec, units } = args;
+  if (isRecent) {
+    return lastDoneAt
+      ? `You did this ${lastDoneLabel(lastDoneAt, args.now ?? clockNow())} — weights start from your last sets.`
+      : 'You’ve done this recently — weights start from your last sets.';
+  }
   const lead = `New to you — a top ${muscleLabel.toLowerCase()} pick for your equipment.`;
   if (!rec || rec.confidence === 'find_working_weight' || !(rec.recommendedWeight > 0)) {
     return `${lead} You’ll find your starting weight on the first set.`;
@@ -276,6 +304,11 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [exercises, setExercises] = useState<SheetExercise[]>([]);
   const [recentExerciseIds, setRecentExerciseIds] = useState<string[]>([]);
+  // When each exercise was last done in a COMPLETED session (epoch ms), so a
+  // pick's "You did this …" line names a real day.
+  const [lastCompletedAt, setLastCompletedAt] = useState<Map<string, number>>(() => new Map());
+  // The rule the plan builder ordered the picks by (suggestedOrderLine).
+  const [planOrder, setPlanOrder] = useState<SuggestedOrderRule | undefined>(undefined);
   // Loaded with the plan data so each pick can preview its starting weight.
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
   // Recent sessions' exercise ids, most recent first — for the push/pull/legs
@@ -385,16 +418,20 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         // Completed sessions only: a started-but-abandoned suggestion has its
         // blocks before any set is logged and must not advance the rotation.
         const bySession = new Map<string, string[]>();
+        const completedAt = new Map<string, number>();
         for (const block of (usageRes.data ?? []) as {
           exercise_id: string;
           workout_sessions: { started_at: string; state?: string | null };
         }[]) {
           if (block.workout_sessions.state !== 'completed') continue;
+          const at = new Date(block.workout_sessions.started_at).getTime();
+          if (at > (completedAt.get(block.exercise_id) ?? 0)) completedAt.set(block.exercise_id, at);
           const key = block.workout_sessions.started_at;
           const ids = bySession.get(key) ?? [];
           ids.push(block.exercise_id);
           bySession.set(key, ids);
         }
+        setLastCompletedAt(completedAt);
         setRecentSessionExerciseIds(
           Array.from(bySession.entries())
             .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
@@ -572,6 +609,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
     setAiRequested(false);
     setSwapOptionsFor(null);
+    setPlanOrder(plan.order);
     setAiPlan(enforced);
   }, [
     aiRequested,
@@ -1060,6 +1098,18 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           <p className="text-subhead text-ink-2" data-testid="suggested-workout-focus">
             {beginner ? beginnerSuggestedFocus(aiPlan.focus) : aiPlan.focus}
           </p>
+          {(() => {
+            // Why the list is in this order, from the builder's own rule.
+            const orderLine = suggestedOrderLine(
+              { order: planOrder, exercises: aiPlan.exercises },
+              { beginner }
+            );
+            return orderLine ? (
+              <p className="text-caption text-ink-2" data-testid="suggested-workout-order">
+                {orderLine}
+              </p>
+            ) : null;
+          })()}
           {aiPlan.isLightSession && aiPlan.exercises.length > 0 && (
             <p className="text-caption text-status-warn">
               {beginner
@@ -1117,6 +1167,9 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                       <span className="block text-caption text-ink-2" data-testid="suggested-pick-why">
                         {pickWhyLine({
                           isRecent: recentExerciseIds.includes(exercise.id),
+                          lastDoneAt: lastCompletedAt.has(exercise.id)
+                            ? new Date(lastCompletedAt.get(exercise.id)!)
+                            : null,
                           muscleLabel: muscleName(pick.muscle),
                           rec: (() => {
                             const r = estimatePickStart(exercise, pick, profile, transferCandidates);

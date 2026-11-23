@@ -40,13 +40,15 @@ const EXERCISES = [
 }));
 
 const mockInsert = jest.fn(() => Promise.resolve({ error: null }));
+/** Rows the usage query (exercise_blocks ⋈ workout_sessions) returns. */
+let mockUsage: unknown[] = [];
 jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
     from: (table: string) => {
       if (table === 'exercises') return query({ data: EXERCISES });
       if (table === 'users') return query({ data: { weight_kg: null, height_cm: null } });
       if (table === 'exercise_blocks') {
-        const q = query({ data: [] });
+        const q = query({ data: mockUsage });
         (q as Record<string, unknown>).insert = mockInsert;
         return q;
       }
@@ -113,6 +115,7 @@ jest.mock('@/services/suggestedWorkout', () => {
 
 import { SuggestedWorkoutSheet, AI_DURATION_STORAGE_KEY } from '../SuggestedWorkoutSheet';
 import { useUserStore } from '@/stores/userStore';
+import { resetClock, setClock } from '@/lib/clock';
 import type { User } from '@/types/schema';
 
 beforeEach(() => {
@@ -207,5 +210,47 @@ describe('SuggestedWorkoutSheet: beginner mode wording', () => {
     render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
     await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
     expect(screen.getAllByTestId('suggested-pick-reason')[0]).toHaveTextContent('Quads: 2 of 10 weekly sets done');
+  });
+});
+
+describe('SuggestedWorkoutSheet: why this order, and when you last did it', () => {
+  const NOW = new Date(2026, 10, 23, 9, 0); // Mon, Nov 23 2026, local
+  beforeEach(() => {
+    setClock({ now: () => new Date(NOW), today: () => '2026-11-23' });
+    mockPlanOverride = {
+      focus: 'Today: quads and lats — rested, and furthest behind on this week’s sets.',
+      isLightSession: false,
+      order: 'compounds_first',
+      exercises: [
+        { exerciseId: 'ex-1', muscle: 'quads', reason: 'Quads: 2 of 10 weekly sets done', sets: 3, repRange: [8, 12], targetRir: 2 },
+        { exerciseId: 'ex-2', muscle: 'lats', reason: 'Lats: 0 of 8 weekly sets done', sets: 3, repRange: [8, 12], targetRir: 2 },
+      ],
+    };
+    mockUsage = [
+      // Completed on Tue, Nov 17; an abandoned start later doesn't count as "did".
+      { exercise_id: 'ex-1', workout_sessions: { started_at: new Date(2026, 10, 17, 18, 0).toISOString(), state: 'completed' } },
+      { exercise_id: 'ex-1', workout_sessions: { started_at: new Date(2026, 10, 21, 18, 0).toISOString(), state: 'in_progress' } },
+    ];
+  });
+  afterEach(() => {
+    resetClock();
+    mockPlanOverride = null;
+    mockUsage = [];
+  });
+
+  it('says why the list is in this order, from the plan’s own rule', async () => {
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
+    expect(screen.getByTestId('suggested-workout-order')).toHaveTextContent(
+      'Order: big compound lifts first, then smaller ones. Within each, rested muscles furthest behind this week go first.'
+    );
+  });
+
+  it('a recent lift names the day it was done', async () => {
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await screen.findByRole('button', { name: 'Start workout (2 exercises)' });
+    const whys = screen.getAllByTestId('suggested-pick-why').map((el) => el.textContent);
+    expect(whys[0]).toBe('You did this on Tue, Nov 17 — weights start from your last sets.');
+    expect(whys[1]).toMatch(/^New to you/);
   });
 });

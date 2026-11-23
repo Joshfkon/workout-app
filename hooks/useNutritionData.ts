@@ -25,6 +25,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { getAdaptiveTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { unitsFromUserPreferences } from '@/lib/nutrition/formulaProfile';
+import type { TargetBasisSettings } from '@/lib/nutrition/targetBasis';
 import type {
   FoodLogEntry,
   WeightLogEntry,
@@ -123,6 +124,11 @@ export interface NutritionGlobalBundle {
   proteinRaw: Array<{ protein?: number; logged_at: string }>;
   trainingSetsRaw: any[];
   tdee: TDEEData | null;
+  /**
+   * The macro calculator's saved inputs (feeds Eat's "How this is set").
+   * Older persisted caches predate this field: treat undefined as unknown.
+   */
+  macroSettings?: TargetBasisSettings | null;
 }
 
 async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
@@ -153,6 +159,7 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
     volumeProfileResult,
     proteinResult,
     trainingSetsResult,
+    macroSettingsResult,
   ] = await Promise.all([
     supabase.from('nutrition_targets').select('*').eq('user_id', userId).maybeSingle(),
     supabase
@@ -210,6 +217,7 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
       .eq('workout_sessions.user_id', userId)
       .eq('workout_sessions.state', 'completed')
       .gte('workout_sessions.completed_at', thirtyDaysAgo.toISOString()),
+    supabase.from('macro_settings').select('*').eq('user_id', userId).maybeSingle(),
   ]);
 
   // Supabase queries don't throw — they resolve with { data: null, error }.
@@ -274,6 +282,9 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
     proteinRaw: (proteinResult.data ?? []) as NutritionGlobalBundle['proteinRaw'],
     trainingSetsRaw: (trainingSetsResult.data ?? []) as any[],
     tdee,
+    macroSettings: macroSettingsResult.error
+      ? undefined
+      : ((macroSettingsResult.data ?? null) as TargetBasisSettings | null),
   };
 }
 

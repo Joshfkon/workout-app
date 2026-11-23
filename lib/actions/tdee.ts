@@ -817,7 +817,7 @@ export async function resetAndRecalculateTDEE(): Promise<{
       oldEstimate,
       newEstimate: null,
       weightDataSummary,
-      message: 'Failed to recalculate TDEE - not enough data or error occurred',
+      message: 'Could not recalculate your daily burn - not enough data or an error occurred',
     };
   }
 
@@ -843,12 +843,12 @@ export async function resetAndRecalculateTDEE(): Promise<{
   };
 
   // Build comparison message
-  let message = 'TDEE recalculated successfully with corrected weight validation.';
+  let message = 'Daily burn recalculated with corrected weight validation.';
   if (oldEstimate && newEstimate) {
     const tdeeDiff = newEstimate.tdee - oldEstimate.tdee;
     const weightDiff = newEstimate.currentWeight - oldEstimate.currentWeight;
     if (Math.abs(tdeeDiff) > 50 || Math.abs(weightDiff) > 5) {
-      message += ` Significant change detected: TDEE ${tdeeDiff > 0 ? '+' : ''}${tdeeDiff} cal/day, Weight ${weightDiff > 0 ? '+' : ''}${weightDiff.toFixed(1)} lbs.`;
+      message += ` Significant change detected: daily burn ${tdeeDiff > 0 ? '+' : ''}${tdeeDiff} cal/day, Weight ${weightDiff > 0 ? '+' : ''}${weightDiff.toFixed(1)} lbs.`;
       if (Math.abs(weightDiff) > 50) {
         message += ' Large weight difference suggests previous unit conversion bug was affecting your data.';
       }
