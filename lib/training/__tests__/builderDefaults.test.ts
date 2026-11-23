@@ -1,4 +1,4 @@
-import { builderDefaultsFromHistory, priorityVolumeAdjustments, plannedVolumeWithBands } from '@/lib/training/builderDefaults';
+import { builderDefaultsFromHistory, priorityVolumeAdjustments, plannedVolumeWithBands, deliveredSetsAtPeak, isUnderDelivered } from '@/lib/training/builderDefaults';
 import { getEffectiveBand } from '@/services/volumeBands';
 import type { StandardMuscleGroup } from '@/types/schema';
 
@@ -64,5 +64,26 @@ describe('plannedVolumeWithBands', () => {
     const [row] = plannedVolumeWithBands({ shoulders: 35 }, { recoveryProfile: 'enhanced' });
     expect(row.mrv).toBe(getEffectiveBand('shoulders', { recoveryProfile: 'enhanced' }).mrv);
     expect(row.mrv).toBeGreaterThan(getEffectiveBand('shoulders').mrv);
+  });
+});
+
+describe('deliveredSetsAtPeak', () => {
+  const ex = (primaryMuscle: string, sets: number) => ({ exercise: { primaryMuscle }, sets });
+  it('sums the peak (highest-volume, non-deload) week by coarse muscle, mapping fine muscles up', () => {
+    const program = {
+      mesocycleWeeks: [
+        { isDeload: false, volumeModifier: 0.8, sessions: [{ exercises: [ex('chest', 6)] }] },
+        { isDeload: false, volumeModifier: 1.0, sessions: [{ exercises: [ex('chest', 9), ex('lateral_delts', 4)] }, { exercises: [ex('shoulders', 3), ex('chest_upper', 2)] }] },
+        { isDeload: true, volumeModifier: 0.5, sessions: [{ exercises: [ex('chest', 20)] }] },
+      ],
+    };
+    expect(deliveredSetsAtPeak(program)).toEqual({ chest: 11, shoulders: 7 });
+    expect(deliveredSetsAtPeak(null)).toEqual({});
+  });
+
+  it('flags a target the sessions clearly can not fit', () => {
+    expect(isUnderDelivered(17, 9)).toBe(true);
+    expect(isUnderDelivered(17, 16)).toBe(false);
+    expect(isUnderDelivered(17, undefined)).toBe(false);
   });
 });

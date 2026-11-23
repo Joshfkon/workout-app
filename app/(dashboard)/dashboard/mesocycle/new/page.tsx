@@ -42,6 +42,8 @@ import {
   builderDefaultsFromHistory,
   priorityVolumeAdjustments,
   plannedVolumeWithBands,
+  deliveredSetsAtPeak,
+  isUnderDelivered,
   type BuilderHistoryDefaults,
   type MusclePriorityRow,
 } from '@/lib/training/builderDefaults';
@@ -971,7 +973,16 @@ export default function NewMesocyclePage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant="info">{fullProgram.split}</Badge>
-                  <span className="text-subhead text-ink-2">{recommendation?.splitReason}</span>
+                  <span className="text-subhead text-ink-2">
+                    {/* The reason must describe the split on the badge; the
+                        older recommendation's text described its own pick
+                        (a Bro Split badge with an Arnold-split blurb). */}
+                    {fullProgram.split === recommendation?.splitType
+                      ? recommendation?.splitReason
+                      : historySplit === fullProgram.split
+                        ? 'Matches your recent training.'
+                        : 'Your choice of split.'}
+                  </span>
                 </div>
                 {fullProgram.programNotes.length > 0 && (
                   <div className="pt-2 border-t border-sep space-y-1">
@@ -1498,18 +1509,43 @@ export default function NewMesocyclePage() {
             {/* Weekly Volume Preview */}
             {recommendation && (
               <div className="p-4 bg-fill/50 rounded-lg">
-                <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle</p>
-                <p className="text-caption text-ink-3 mb-3">Planned sets at peak week vs each muscle&apos;s MEV–MRV range.</p>
-                <ul className="grid grid-cols-1 gap-1.5 text-subhead sm:grid-cols-2" data-testid="builder-volume-bands">
-                  {plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' }).map(({ muscle, sets, mev, mrv }) => (
-                    <li key={muscle} className="flex items-baseline justify-between rounded bg-card/50 px-2 py-1.5">
-                      <span className="text-ink">{muscleDisplayName(muscle)}</span>
-                      <span className="tabular-nums text-ink-2">
-                        <span className={`font-semibold ${sets < mev ? 'text-status-warn' : sets > mrv ? 'text-status-bad' : 'text-ink'}`}>{sets}</span> · MEV {mev} · MRV {mrv}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                {(() => {
+                  const rows = plannedVolumeWithBands(fullProgram?.volumePerMuscle ?? recommendation.volumePerMuscle, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
+                  const delivered = deliveredSetsAtPeak(fullProgram);
+                  const hasDelivered = Object.keys(delivered).length > 0;
+                  const short = rows.filter((r) => isUnderDelivered(r.sets, delivered[r.muscle]));
+                  return (
+                    <>
+                      <p className="text-subhead font-medium text-ink-2 mb-1">Weekly sets per muscle (peak week)</p>
+                      <p className="text-caption text-ink-3 mb-3">
+                        {hasDelivered
+                          ? 'Sets your sessions contain at peak week, against the plan’s target and each muscle’s MEV–MRV range.'
+                          : 'Planned sets at peak week vs each muscle’s MEV–MRV range.'}
+                      </p>
+                      {short.length > 0 && (
+                        <p className="mb-3 rounded bg-status-warn/10 px-2 py-1.5 text-subhead text-ink" data-testid="builder-volume-short">
+                          {sessionDurationMinutes}-minute sessions fit fewer sets than planned for {short.length === 1 ? '1 muscle' : `${short.length} muscles`}
+                          {' '}(e.g. {muscleDisplayName(short[0].muscle)} {delivered[short[0].muscle]} of {short[0].sets}).
+                          {' '}Longer sessions or a second day for those muscles closes the gap.
+                        </p>
+                      )}
+                      <ul className="grid grid-cols-1 gap-1.5 text-subhead sm:grid-cols-2" data-testid="builder-volume-bands">
+                        {rows.map(({ muscle, sets, mev, mrv }) => {
+                          const done = hasDelivered ? delivered[muscle] ?? 0 : sets;
+                          return (
+                            <li key={muscle} className="flex items-baseline justify-between rounded bg-card/50 px-2 py-1.5">
+                              <span className="text-ink">{muscleDisplayName(muscle)}</span>
+                              <span className="tabular-nums text-ink-2">
+                                <span className={`font-semibold ${done < mev ? 'text-status-warn' : done > mrv ? 'text-status-bad' : 'text-ink'}`}>{done}</span>
+                                {hasDelivered && done !== sets && <> of {sets}</>} · MEV {mev} · MRV {mrv}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  );
+                })()}
               </div>
             )}
 

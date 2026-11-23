@@ -85,3 +85,58 @@ export function plannedVolumeWithBands(
   return out;
 }
 
+
+
+/** Standard (fine) muscle → the coarse group the volume bands use. */
+const FINE_TO_COARSE: Record<string, CoarseMuscle> = {
+  chest_upper: 'chest', chest_lower: 'chest',
+  front_delts: 'shoulders', lateral_delts: 'shoulders', rear_delts: 'shoulders', rotator_cuff: 'shoulders',
+  lats: 'back', upper_back: 'back',
+  triceps_long: 'triceps', triceps_lat_med: 'triceps',
+  upper_traps: 'traps', mid_lower_traps: 'traps',
+  gastrocnemius: 'calves', soleus: 'calves',
+  glute_med: 'glutes', obliques: 'abs',
+};
+
+function coarseOf(muscle: string): CoarseMuscle | null {
+  const m = muscle.toLowerCase();
+  if ((COARSE_MUSCLES as readonly string[]).includes(m)) return m as CoarseMuscle;
+  return FINE_TO_COARSE[m] ?? null;
+}
+
+/** The weeks/sessions shape the builder reads (FullProgramRecommendation). */
+interface ProgramWeeks {
+  mesocycleWeeks?: {
+    isDeload: boolean;
+    volumeModifier: number;
+    sessions: { exercises: { exercise: { primaryMuscle: string }; sets: number }[] }[];
+  }[];
+}
+
+/**
+ * Direct working sets per coarse muscle that the PEAK week's sessions
+ * actually contain (the last non-deload week with the highest volume). The
+ * weekly target is what the plan aims for; a session is also bounded by its
+ * time, exercise count and fatigue budget, so with one day per muscle the
+ * days held far fewer sets than the table promised (chest 9 vs 17 — UX
+ * panel: "the volume table contradicts the workout structure"). Pure.
+ */
+export function deliveredSetsAtPeak(program: ProgramWeeks | null | undefined): Partial<Record<CoarseMuscle, number>> {
+  const weeks = (program?.mesocycleWeeks ?? []).filter((w) => !w.isDeload);
+  if (weeks.length === 0) return {};
+  const peak = weeks.reduce((best, w) => (w.volumeModifier >= best.volumeModifier ? w : best), weeks[0]);
+  const out: Partial<Record<CoarseMuscle, number>> = {};
+  for (const session of peak.sessions) {
+    for (const ex of session.exercises) {
+      const coarse = coarseOf(ex.exercise.primaryMuscle);
+      if (!coarse) continue;
+      out[coarse] = (out[coarse] ?? 0) + ex.sets;
+    }
+  }
+  return out;
+}
+
+/** A planned muscle whose sessions fit clearly fewer sets than its target. */
+export function isUnderDelivered(target: number, delivered: number | undefined): boolean {
+  return delivered !== undefined && target > 0 && delivered < target * 0.85;
+}
