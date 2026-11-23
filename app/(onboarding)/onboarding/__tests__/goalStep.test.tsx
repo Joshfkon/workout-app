@@ -413,10 +413,83 @@ describe('Onboarding body fat', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Female' }));
     await user.click(screen.getByTestId('body-fat-not-sure'));
-    expect(screen.getByLabelText('Body fat %')).toHaveValue(32);
-    expect(
-      screen.getByText(/We put in 32%, about average for women\. It's only an estimate: change it here, or later in Settings\./)
-    ).toBeInTheDocument();
+    const field = screen.getByLabelText('Body fat %');
+    expect(field).toHaveValue(32);
+    // The filled value is marked as an estimate, not left looking typed.
+    const note = screen.getByTestId('body-fat-estimate-note');
+    expect(note).toHaveTextContent(/^Estimated\s*32%, about average for women\. Change it if you know better\.$/);
+    expect(field).toHaveAttribute('data-estimated', 'true');
+    expect(field).toHaveAttribute('aria-describedby', 'body-fat-estimate-note');
+    expect(field.className).toMatch(/italic/);
+    expect(field.className).toMatch(/border-dashed/);
+    // The reason line stays.
+    expect(screen.getByTestId('body-fat-why')).toBeInTheDocument();
+  });
+
+  it('follows a sex change, and drops the estimate mark once the user types a value', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    await user.click(screen.getByTestId('units-continue'));
+    await user.click(await screen.findByRole('radio', { name: 'Female' }));
+    await user.click(screen.getByTestId('body-fat-not-sure'));
+
+    await user.click(screen.getByRole('radio', { name: 'Male' }));
+    expect(screen.getByLabelText('Body fat %')).toHaveValue(22);
+    expect(screen.getByTestId('body-fat-estimate-note')).toHaveTextContent(/22%, about average for men\./);
+
+    await user.clear(screen.getByLabelText('Body fat %'));
+    await user.type(screen.getByLabelText('Body fat %'), '18');
+    expect(screen.queryByTestId('body-fat-estimate-note')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Body fat %')).not.toHaveAttribute('data-estimated');
+    expect(screen.getByLabelText('Body fat %').className).not.toMatch(/italic/);
+  });
+
+  it('drops the estimate mark when a level is picked from the visual guide', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    await user.click(screen.getByTestId('units-continue'));
+    await user.click(await screen.findByRole('radio', { name: 'Female' }));
+    await user.click(screen.getByTestId('body-fat-not-sure'));
+    await user.click(screen.getByRole('button', { name: 'Visual guide' }));
+    await user.click(screen.getByRole('button', { name: /^25%/ }));
+
+    expect(screen.getByLabelText('Body fat %')).toHaveValue(25);
+    expect(screen.queryByTestId('body-fat-estimate-note')).not.toBeInTheDocument();
+  });
+});
+
+describe('Onboarding body composition: age', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userUpdates.length = 0;
+    stepWrites.length = 0;
+    mockStoredInjuryAreas = [];
+    mockStoredUnits = 'kg';
+    usersRow = { goal: 'maintenance', onboarding_step: 'units', onboarding_completed: false };
+  });
+
+  it('asks for age with the basics, before body fat, and says why', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    await user.click(screen.getByTestId('units-continue'));
+    const age = await screen.findByLabelText('Age (optional)');
+    const sex = screen.getByRole('radio', { name: 'Female' });
+
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(sex, age)).toBe(true);
+    expect(follows(age, screen.getByLabelText('Weight (kg)'))).toBe(true);
+    expect(follows(age, screen.getByTestId('body-fat-why'))).toBe(true);
+    expect(follows(age, screen.getByLabelText('Body fat %'))).toBe(true);
+    expect(screen.getByText('Used to work out your daily calorie target.')).toBeInTheDocument();
+  });
+
+  it('saves the age typed here through the one users update', async () => {
+    usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
+    const user = await reachGoalStep('15', '34');
+    await user.click(screen.getByTestId('goal-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(userUpdates.filter((u) => 'age' in u)).toEqual([expect.objectContaining({ age: 34 })]);
   });
 });
 
