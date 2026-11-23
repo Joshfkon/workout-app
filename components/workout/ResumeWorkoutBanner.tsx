@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { WORKOUT_QUERY_PREFIX } from '@/hooks/useLiveHeroWorkout';
 import { useRouter, usePathname } from 'next/navigation';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { useIsOverlayOpen } from '@/hooks/useOverlayRegistry';
@@ -46,6 +48,7 @@ function readRestRemaining(): number | null {
 
 export function ResumeWorkoutBanner() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -144,6 +147,10 @@ export function ResumeWorkoutBanner() {
       // Only clear local state after successful DB cleanup
       clearPersistedRestTimer();
       endSession();
+      // Home's "Resume workout" and its hero card read live session state
+      // under ['workout', …]; without this they kept offering the discarded
+      // workout until a reload.
+      void queryClient.invalidateQueries({ queryKey: [WORKOUT_QUERY_PREFIX] });
       setShowDiscardConfirm(false);
     } catch (err) {
       console.error('Failed to discard workout:', err);

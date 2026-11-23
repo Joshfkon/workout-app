@@ -9,7 +9,16 @@
  * screen while any Modal/BottomSheet is open.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+
+// The banner refreshes Home's workout queries after a discard, so it needs
+// the query provider the dashboard shell gives it.
+const render = (ui: React.ReactElement) => {
+  const client = new QueryClient();
+  return rtlRender(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+};
 import { BottomSheet } from '../BottomSheet';
 import { ResumeWorkoutBanner } from '../ResumeWorkoutBanner';
 import { resetOverlayRegistry } from '@/lib/ui/overlayRegistry';

@@ -6205,6 +6205,8 @@ export default function WorkoutPage() {
       // workout must not leave a rest countdown (or its notification) behind.
       restTimer.dismiss();
       endWorkoutSession();
+      // Home's resume button and hero re-read live state (useLiveHeroWorkout).
+      void queryClient.invalidateQueries({ queryKey: ['workout'] });
       router.push('/dashboard');
     } catch (err) {
       console.error('Failed to cancel workout:', err);

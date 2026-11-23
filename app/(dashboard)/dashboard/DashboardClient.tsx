@@ -70,6 +70,7 @@ import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStar
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
 import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCard';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
+import { useLiveHeroWorkout } from '@/hooks/useLiveHeroWorkout';
 import { heroOffersWorkoutStart, todayHeroVariant } from '@/components/dashboard/home/TodayHeroCard';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
@@ -336,7 +337,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   );
   const isFreestyle = trainingStyle === 'freestyle';
   const planMesocycle = isFreestyle ? null : activeMesocycle;
-  const heroWorkout = isFreestyle ? freestyleTodaysWorkout : todaysWorkout;
+  const heroWorkout = useLiveHeroWorkout(isFreestyle ? freestyleTodaysWorkout : todaysWorkout);
   const heroScheduled = isFreestyle ? null : scheduledWorkout;
   const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>(initialData?.nutritionTotals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 });
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(initialData?.nutritionTargets ?? null);
