@@ -174,6 +174,7 @@ import {
 import { exerciseRequiresUnavailableEquipment } from '@/services/equipmentFilter';
 import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
+import { SOCIAL_FEATURES_ENABLED } from '@/lib/socialFeatures';
 import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
 import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } from '@/services/rpeCalibration';
 import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPolicy';
@@ -6862,19 +6863,23 @@ export default function WorkoutPage() {
               <Button variant="outline" onClick={() => router.push('/dashboard/history')}>
                 ← Back to History
               </Button>
-              <Button variant="outline" onClick={() => setShowShareModal(true)}>
-                Share workout
-              </Button>
+              {SOCIAL_FEATURES_ENABLED && (
+                <Button variant="outline" onClick={() => setShowShareModal(true)}>
+                  Share workout
+                </Button>
+              )}
             </>
           ) : (
-            <Button variant="outline" onClick={() => setShowShareModal(true)}>
-              Post to your feed
-            </Button>
+            SOCIAL_FEATURES_ENABLED && (
+              <Button variant="outline" onClick={() => setShowShareModal(true)}>
+                Post to your feed
+              </Button>
+            )
           )}
         </div>
         
-        {/* Share Workout Modal */}
-        <ShareWorkoutModal
+        {/* Share Workout Modal (community sharing — hidden with the social features) */}
+        {SOCIAL_FEATURES_ENABLED && <ShareWorkoutModal
           workoutSessionId={sessionId}
           isOpen={showShareModal}
           onClose={() => setShowShareModal(false)}
@@ -6882,7 +6887,7 @@ export default function WorkoutPage() {
             setShowShareModal(false);
             // Optionally show success message or refresh
           }}
-        />
+        />}
 
         {/* B1: offer to count a matching ad-hoc workout toward the mesocycle */}
         <ConfirmModal

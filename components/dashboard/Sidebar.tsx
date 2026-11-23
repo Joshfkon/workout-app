@@ -25,6 +25,7 @@ import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { isTabActive, primaryTabsFor } from './foodOnlyNav';
 import { ProTag } from '@/components/subscription/ProTag';
 import type { Feature } from '@/lib/subscription';
+import { SOCIAL_FEATURES_ENABLED } from '@/lib/socialFeatures';
 
 interface SidebarNavItem {
   name: string;
@@ -55,7 +56,9 @@ const primaryNavigation: SidebarNavItem[] = [
 // Secondary links — the "More" section
 const moreNavigation: SidebarNavItem[] = [
   { name: 'Blood pressure', href: '/dashboard/blood-pressure', icon: IconHeartbeat },
-  { name: 'Social feed', href: '/dashboard/feed', icon: IconUsers },
+  ...(SOCIAL_FEATURES_ENABLED
+    ? [{ name: 'Social feed', href: '/dashboard/feed', icon: IconUsers }]
+    : []),
   { name: 'AI coach', href: '/dashboard/ai-coach', icon: IconSparkles, feature: 'ai-coaching' },
   { name: 'Settings', href: '/dashboard/settings', icon: IconSettings },
   { name: 'Science', href: '/dashboard/science', icon: IconFlask },

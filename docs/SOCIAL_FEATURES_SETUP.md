@@ -1,5 +1,10 @@
 # Social Features Setup Guide
 
+> **Hidden in the app (2026-11).** The community features are switched off
+> with `SOCIAL_FEATURES_ENABLED = false` in `lib/socialFeatures.ts` to keep App
+> Store review clear of Guideline 1.2 (user-generated content). Code, tables
+> and data are kept; see the Social Features section of `CLAUDE.md`.
+
 The feed page requires several database migrations to be run in your Supabase database. These migrations create the tables and policies needed for social features.
 
 ## Required Migrations (Run in Order)

@@ -1,5 +1,10 @@
 # Social Features Implementation Status
 
+> **Hidden in the app (2026-11).** The community features are switched off
+> with `SOCIAL_FEATURES_ENABLED = false` in `lib/socialFeatures.ts` to keep App
+> Store review clear of Guideline 1.2 (user-generated content). Code, tables
+> and data are kept; see the Social Features section of `CLAUDE.md`.
+
 > **Last Updated**: 2025-12-26
 > **Current Phase**: Phase 4 In Progress - Workout Sharing
 

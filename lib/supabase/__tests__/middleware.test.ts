@@ -34,6 +34,39 @@ describe('updateSession', () => {
     }
   });
 
+  describe('hidden social features', () => {
+    it('redirects every social route to /dashboard, dropping the query', async () => {
+      for (const path of [
+        '/dashboard/feed',
+        '/dashboard/discover',
+        '/dashboard/discover/abc-123',
+        '/dashboard/leaderboards',
+        '/dashboard/profile',
+        '/dashboard/profile/someone/followers',
+        '/dashboard/search?q=bob',
+      ]) {
+        const response = await updateSession(new NextRequest(`https://example.test${path}`));
+        expect(response.status).toBe(307);
+        expect(response.headers.get('location')).toBe('https://example.test/dashboard');
+      }
+    });
+
+    it('skips the onboarding username step, keeping the session param', async () => {
+      const response = await updateSession(
+        new NextRequest('https://example.test/onboarding/profile?session=s1')
+      );
+      expect(response.status).toBe(307);
+      expect(response.headers.get('location')).toBe('https://example.test/onboarding/enhanced?session=s1');
+    });
+
+    it('leaves look-alike routes alone', async () => {
+      for (const path of ['/dashboard/feedback', '/dashboard/profiles', '/dashboard/settings']) {
+        const response = await updateSession(new NextRequest(`https://example.test${path}`));
+        expect(response.headers.get('location')).not.toBe('https://example.test/dashboard');
+      }
+    });
+  });
+
   describe('Claude connector (MCP)', () => {
     const jwt = (payload: object) =>
       `h.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;

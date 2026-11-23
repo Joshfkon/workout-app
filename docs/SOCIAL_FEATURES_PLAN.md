@@ -1,5 +1,10 @@
 # Social Features Implementation Plan
 
+> **Hidden in the app (2026-11).** The community features are switched off
+> with `SOCIAL_FEATURES_ENABLED = false` in `lib/socialFeatures.ts` to keep App
+> Store review clear of Guideline 1.2 (user-generated content). Code, tables
+> and data are kept; see the Social Features section of `CLAUDE.md`.
+
 > **Status**: Phase 5 Complete - Ready for Phase 6
 > **Last Updated**: 2025-12-28
 > **Current Sprint**: Sprint 6 - Notifications (Ready)

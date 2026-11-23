@@ -408,8 +408,8 @@ export default function InjuryPreventionArticle() {
 
       <ArticleCTA
         title="Have an injury?"
-        body="Log it in your profile and we'll automatically adjust your workouts."
-        href="/dashboard/profile"
+        body="Log it in Settings → Training and we'll automatically adjust your workouts."
+        href="/dashboard/settings"
         label="Manage injuries"
       />
 
