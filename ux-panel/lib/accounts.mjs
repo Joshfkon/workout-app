@@ -142,6 +142,12 @@ const HISTORY = {
   // Five sessions a week (a body-part split), daily weigh-ins and food.
   high: { workouts: 15, spanDays: 21, weighIns: 20, foodDays: 7 },
   'food-only': { workouts: 0, spanDays: 21, weighIns: 7, foodDays: 7 },
+  // Trained regularly, then stopped: the lifting log ends `liftsEndDaysAgo`
+  // back (a layoff), while weigh-ins and food are recent (he's back now).
+  // Frank's story is "two years off after a shoulder injury"; seeding his
+  // lifts up to last week made the app reasonably prefill his pre-injury
+  // 180 lb, which he read as ignoring the layoff.
+  returning: { workouts: 8, spanDays: 28, weighIns: 4, foodDays: 2, liftsEndDaysAgo: 730 },
 };
 
 /**
@@ -237,7 +243,7 @@ export async function seedReturningUser(admin, userId, persona) {
   const LIFT_SPREAD = [1.4, 0.7, 1.0, 0, 1.2, 0.5];
   const progressRate = (order) => baseRate * LIFT_SPREAD[order % LIFT_SPREAD.length];
   for (let w = 0; w < h.workouts; w++) {
-    const offset = -Math.round(h.spanDays - (w * h.spanDays) / h.workouts);
+    const offset = -Math.round(h.spanDays - (w * h.spanDays) / h.workouts) - (h.liftsEndDaysAgo ?? 0);
     const date = day(offset);
     date.setHours(7, 0, 0, 0);
     const start = new Date(date);

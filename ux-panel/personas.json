@@ -60,7 +60,7 @@
       "patience": 4,
       "techComfort": 2,
       "previousApps": "Paper logbook",
-      "account": { "goal": "maintenance", "experience": "intermediate", "units": "lb", "sex": "male", "weightKg": 91, "heightCm": 183, "birthYear": 1968, "history": "light", "injuryAreas": ["shoulder"], "textSize": "larger" }
+      "account": { "goal": "maintenance", "experience": "intermediate", "units": "lb", "sex": "male", "weightKg": 91, "heightCm": 183, "birthYear": 1968, "history": "returning", "injuryAreas": ["shoulder"], "textSize": "larger" }
     },
     {
       "id": "offseason-bodybuilder-vince",
