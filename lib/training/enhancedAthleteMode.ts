@@ -20,6 +20,7 @@
 // keeps its old generated_with_enhanced_mode tag.
 // ============================================================
 
+import { effectiveTrainingAge } from '@/services/mesocycleBuilder';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   DexaRegionalData,
@@ -176,7 +177,7 @@ export async function regenerateRemainingWeeksForEnhancedMode(
     goal: ((userProfile?.goal || userData?.goal) as Goal) || 'maintenance',
     sleepQuality: (userData?.sleep_quality as Rating) || 3,
     stressLevel: (userData?.stress_level as Rating) || 3,
-    trainingAge: userData?.training_age_years || 1,
+    trainingAge: effectiveTrainingAge(userData?.training_age_years ?? null, ((userData?.experience || userProfile?.experience) as Experience) || 'intermediate'),
     availableEquipment:
       (userData?.available_equipment as Equipment[]) ||
       ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'],
