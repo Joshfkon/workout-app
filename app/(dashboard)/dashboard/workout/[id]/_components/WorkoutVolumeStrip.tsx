@@ -260,7 +260,8 @@ export function WorkoutVolumeStrip({
             className="px-0.5 mb-1.5 text-caption text-ink-3"
             data-testid="workout-volume-strip-legend"
           >
-            eff = sets that count, weighted by how hard they were · unrated = no effort logged ·
+            counted = sets that count toward growth, weighted by how hard they were · no effort = sets
+            logged without an effort rating, so not counted yet ·
             low–high = useful weekly sets, from the minimum that grows muscle (MEV) to the most you
             recover from (MRV)
           </p>
@@ -311,7 +312,7 @@ export function WorkoutVolumeStrip({
                           below with its unit — never "16.6/17", which reads as
                           current/target. */}
                       {formatEffectiveVolume(row.effectiveSets)}
-                      <span className="text-caption font-normal text-ink-3"> eff</span>
+                      <span className="text-caption font-normal text-ink-3"> counted</span>
                     </span>
                     <span className="block text-caption tabular-nums text-ink-3">
                       of {row.sets} sets
@@ -320,7 +321,7 @@ export function WorkoutVolumeStrip({
                           is the other half of that rule: never an effective
                           value silently computed over a subset. */}
                       {row.unratedSets > 0 && (
-                        <span className="text-status-warn"> · {formatEffectiveVolume(row.unratedSets)} unrated</span>
+                        <span className="text-status-warn"> · {formatEffectiveVolume(row.unratedSets)} no effort</span>
                       )}
                     </span>
                   </>
@@ -421,12 +422,12 @@ export function WorkoutVolumeStrip({
               <span className="text-ink-3">After today’s plan:</span>
               <span className="flex items-baseline gap-1 tabular-nums">
                 {inRangeCount > 0 && (
-                  <span className="text-ink-2">{inRangeCount} in range</span>
+                  <span className="text-ink-2">{inRangeCount} on target</span>
                 )}
                 {underCount > 0 && (
                   <span className="text-ink-2">
                     {inRangeCount > 0 && '· '}
-                    {underCount} under
+                    {underCount} below target
                   </span>
                 )}
                 {overCount > 0 && (
@@ -438,7 +439,7 @@ export function WorkoutVolumeStrip({
                 {lockedCount > 0 && (
                   <span className="text-status-bad">
                     {(inRangeCount > 0 || underCount > 0 || overCount > 0) && '· '}
-                    {lockedCount} locked under
+                    {lockedCount} short this week
                   </span>
                 )}
               </span>

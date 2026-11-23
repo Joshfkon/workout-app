@@ -34,13 +34,16 @@ describe('Onboarding benchmarks page', () => {
     expect(screen.queryByTestId('benchmark-time-estimate')).not.toBeInTheDocument();
     expect(screen.queryByText(/68 min/)).not.toBeInTheDocument();
     expect(screen.getAllByText('Recommended').length).toBeGreaterThan(0);
+    // No per-lift minutes on the cards: the only time shown is the total, later.
+    expect(screen.queryByText(/min\b/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Pick lifts to test/ })).toBeDisabled();
   });
 
   it('says what the tests are for and what skipping does, with skip first', () => {
     render(<BenchmarksPage />);
-    expect(screen.getByTestId('benchmarks-purpose')).toHaveTextContent(
-      /starting weights we suggest.*Skip them and suggestions start from estimates that sharpen as you log/
+    expect(screen.getByTestId('benchmarks-purpose')).toHaveTextContent(/starting weights we suggest/);
+    expect(screen.getByTestId('benchmarks-skip-cost')).toHaveTextContent(
+      'Your first weight suggestions will be estimates; they sharpen after a workout or two.'
     );
     const skip = screen.getByTestId('skip-benchmarks');
     const start = screen.getByRole('button', { name: /Pick lifts to test/ });
@@ -57,7 +60,9 @@ describe('Onboarding benchmarks page', () => {
 
     const estimate = screen.getByTestId('benchmark-time-estimate');
     expect(estimate).toHaveTextContent('1 lift selected');
-    expect(estimate).toHaveTextContent('17 min');
+    expect(estimate).toHaveTextContent('~17 min');
+    // Still no per-card minutes once a lift is picked.
+    expect(screen.getAllByText(/min\b/)).toHaveLength(1);
     expect(screen.getByRole('button', { name: /Start Testing \(1 lift\)/ })).toBeEnabled();
   });
 

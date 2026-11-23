@@ -29,27 +29,29 @@ interface LiftTrendsCardProps {
 }
 
 /**
- * A row's two facts, kept as separate pieces so each can wrap onto its own
- * line at phone width instead of being ellipsized ("+3.0…").
+ * A row's facts: the real set first (what lifters compare, "185 lbs × 8"),
+ * then the estimate and the weekly change. Separate pieces so each wraps at
+ * phone width instead of running under the trend line.
  */
-function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { max: string; change: string } {
-  // Labelled as an estimate, with the set it came from ("Est. max 225 lbs
-  // (from 185 lbs × 8)") so it never reads as weight actually lifted.
+function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { best: string | null; max: string; change: string } {
   const latest = lift.history[lift.history.length - 1];
-  const max = estMaxLabel(
-    lift.currentE1RMKg,
-    latest ? { weightKg: latest.topSetWeightKg, reps: latest.topSetReps } : null,
-    units
-  );
+  // Modality-safe: lift trends skip duration_based exercises (liftTrends.ts).
+  const best =
+    latest && latest.topSetWeightKg > 0 && latest.topSetReps > 0
+      ? `Latest best set ${setLabel(latest.topSetWeightKg, latest.topSetReps, units)}`
+      : null;
+  // The set is on its own line, so the estimate is just labelled as one.
+  const max = estMaxLabel(lift.currentE1RMKg, null, units).replace(/^Est\. max/, 'est. max');
   // A calibrating lift shows NO rate — a fitted slope over a program boundary
   // or an equipment change is noise with a decimal point.
   if (lift.lowConfidence) {
     return {
+      best,
       max,
       change: lift.calibrationReason === 'equipment_change' ? 'equipment changed — rebuilding' : 'new program — rebuilding',
     };
   }
-  return { max, change: signedPct(lift.weeklyChangePct) };
+  return { best, max, change: signedPct(lift.weeklyChangePct) };
 }
 
 /** Plain explanation of "est. max", shown once where the term first appears. */
@@ -189,14 +191,23 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
                       </span>
                     )}
                   </span>
-                  {/* Max and weekly change are separate pieces that wrap
-                      onto their own lines when the row is narrow. */}
-                  <span className="flex flex-wrap gap-x-1.5 text-subhead text-ink-2 tabular-nums">
-                    <span className="whitespace-nowrap">{subtitleParts(lift, units).max}</span>
-                    <span className="whitespace-nowrap" data-testid="lift-trend-change">
-                      {subtitleParts(lift, units).change}
-                    </span>
-                  </span>
+                  {(() => {
+                    const parts = subtitleParts(lift, units);
+                    return (
+                      <>
+                        {parts.best && (
+                          <span className="block break-words text-subhead text-ink tabular-nums" data-testid="lift-best-set">
+                            {parts.best}
+                          </span>
+                        )}
+                        <span className="flex flex-wrap gap-x-1.5 text-caption text-ink-2 tabular-nums">
+                          <span>{parts.max}</span>
+                          <span aria-hidden="true">·</span>
+                          <span data-testid="lift-trend-change">{parts.change}</span>
+                        </span>
+                      </>
+                    );
+                  })()}
                 </span>
                 <Sparkline values={lift.history.map((h) => h.e1rmKg)} colorClassName={status.stroke} />
                 <span className={`w-[76px] flex-shrink-0 rounded-full py-1 text-center text-caption font-semibold ${status.pill}`}>

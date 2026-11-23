@@ -91,6 +91,23 @@ const LIFTS = [
   { name: 'Romanian Deadlift', base: 0.9 },
 ];
 
+/**
+ * Which lifts a seeded session trains. Default: two alternating mixed days.
+ * `account.split: 'ppl'` (a persona who says they run push/pull/legs) gets a
+ * real rotation, ending so the next day is push — otherwise the app's split
+ * detection has nothing true to read.
+ */
+const PPL_DAYS = [
+  ['Barbell Bench Press', 'Dumbbell Bench Press'],
+  ['Barbell Row', 'Lat Pulldown'],
+  ['Barbell Back Squat', 'Romanian Deadlift'],
+].map((names) => names.map((n) => LIFTS.find((l) => l.name === n)));
+
+export function liftsForSession(split, w) {
+  if (split === 'ppl') return PPL_DAYS[w % 3];
+  return w % 2 === 0 ? LIFTS.slice(0, 3) : LIFTS.slice(3, 6);
+}
+
 const FOODS = [
   { food_name: 'Greek yogurt, plain', serving_size: '170 g', calories: 100, protein: 17, carbs: 6, fat: 0.7, meal_type: 'breakfast' },
   { food_name: 'Oatmeal with banana', serving_size: '1 bowl', calories: 310, protein: 9, carbs: 58, fat: 5, meal_type: 'breakfast' },
@@ -179,7 +196,7 @@ export async function seedReturningUser(admin, userId, persona) {
         .select('id'),
       'workout_sessions',
     );
-    const lifts = w % 2 === 0 ? LIFTS.slice(0, 3) : LIFTS.slice(3, 6);
+    const lifts = liftsForSession(a.split, w);
     for (const [order, lift] of lifts.entries()) {
       const exerciseId = byName[lift.name];
       if (!exerciseId) continue;
@@ -191,9 +208,9 @@ export async function seedReturningUser(admin, userId, persona) {
         'exercise_blocks',
       );
       // Realistic progression: ~1.5% per time this lift is trained (each lift
-      // comes round every other session), rounded to plate steps. A flat
+      // comes round every other session, every third on a PPL split), rounded to plate steps. A flat
       // +2.5 kg per session read as an implausible +10%/week on light lifts.
-      const timesTrained = Math.floor(w / 2);
+      const timesTrained = Math.floor(w / (a.split === 'ppl' ? 3 : 2));
       const load = Math.max(5, Math.round((a.weightKg * lift.base * strength * (1 + 0.015 * timesTrained)) / 2.5) * 2.5);
       const sets = [10, 9, 8].map((reps, i) => ({
         exercise_block_id: block.id,

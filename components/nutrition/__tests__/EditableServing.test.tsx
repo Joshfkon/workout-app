@@ -77,7 +77,7 @@ describe('weight food — editable amount at add time', () => {
 
     expect(screen.getByTestId('add-food-preview-calories')).toHaveTextContent('117');
 
-    await user.click(screen.getByRole('button', { name: /add to log/i }));
+    await user.click(screen.getByRole('button', { name: /^add to/i }));
 
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith(
@@ -114,7 +114,7 @@ describe('last-used amount prefills the next add of the same food', () => {
     const amount = screen.getByTestId('add-food-amount');
     await user.clear(amount);
     await user.type(amount, '150');
-    await user.click(screen.getByRole('button', { name: /add to log/i }));
+    await user.click(screen.getByRole('button', { name: /^add to/i }));
 
     // Back on the list; pick the same food again — it should prefill 150.
     await user.click(screen.getByText('Peas'));
@@ -386,7 +386,7 @@ describe('household serving default (people think in whole eggs, not grams)', ()
     const amount = screen.getByTestId('add-food-amount');
     await user.clear(amount);
     await user.type(amount, '2');
-    await user.click(screen.getByRole('button', { name: /add to log/i }));
+    await user.click(screen.getByRole('button', { name: /^add to/i }));
 
     // Same numbers the grams path gives for 100 g of the per-100g row.
     const byWeight = computeServing(

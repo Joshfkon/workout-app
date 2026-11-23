@@ -161,7 +161,7 @@ describe('WorkoutVolumeStrip', () => {
     const info = screen.getByRole('button', { name: 'What these numbers mean' });
     await user.click(info);
     expect(info).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByTestId('workout-volume-strip-legend')).toHaveTextContent(/eff = sets that count/);
+    expect(screen.getByTestId('workout-volume-strip-legend')).toHaveTextContent(/counted = sets that count/);
 
     await user.click(info);
     expect(screen.queryByTestId('workout-volume-strip-legend')).not.toBeInTheDocument();
@@ -278,10 +278,10 @@ describe('WorkoutVolumeStrip', () => {
 
     const digest = screen.getByTestId('workout-volume-projection-summary');
     expect(digest).toHaveTextContent('After today’s plan:');
-    expect(digest).toHaveTextContent('2 in range');
-    expect(digest).toHaveTextContent('1 under');
+    expect(digest).toHaveTextContent('2 on target');
+    expect(digest).toHaveTextContent('1 below target');
     expect(digest).toHaveTextContent('1 over max');
-    expect(digest).toHaveTextContent('1 locked under');
+    expect(digest).toHaveTextContent('1 short this week');
   });
 
   it('hides the projection line while loading and when no session muscles exist', () => {

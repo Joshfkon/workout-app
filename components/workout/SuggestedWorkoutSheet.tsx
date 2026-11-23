@@ -35,6 +35,7 @@ import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import {
   buildSuggestedWorkout,
+  detectSplitDay,
   maxExercisesForDuration,
 } from '@/services/suggestedWorkout';
 import {
@@ -67,7 +68,7 @@ import type { PositionStress } from '@/services/exerciseService';
 import { now as clockNow } from '@/lib/clock';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
-import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
+import { STANDARD_MUSCLE_DISPLAY_NAMES, resolveMuscleToStandard } from '@/types/schema';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
 import { formatTargetRange } from '@/services/shared/setModality';
 
@@ -180,6 +181,9 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [exercises, setExercises] = useState<SheetExercise[]>([]);
   const [recentExerciseIds, setRecentExerciseIds] = useState<string[]>([]);
+  // Recent sessions' exercise ids, most recent first — for the push/pull/legs
+  // rotation check (detectSplitDay).
+  const [recentSessionExerciseIds, setRecentSessionExerciseIds] = useState<string[][]>([]);
   const [profile, setProfile] = useState<SheetProfile | null>(null);
   /** Legacy locationless blocklist — baseline when the user has no locations. */
   const [unavailableEquipmentIds, setUnavailableEquipmentIds] = useState<string[]>([]);
@@ -238,7 +242,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             .order('name'),
           supabase
             .from('exercise_blocks')
-            .select('exercise_id, workout_sessions!inner(user_id, started_at)')
+            .select('exercise_id, workout_sessions!inner(user_id, started_at, state)')
             .eq('workout_sessions.user_id', userId)
             .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString()),
           supabase
@@ -278,6 +282,25 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           const at = new Date(block.workout_sessions.started_at).getTime();
           if (at > (lastDone.get(block.exercise_id) ?? 0)) lastDone.set(block.exercise_id, at);
         });
+        // Group blocks into sessions (by start time), most recent first.
+        // Completed sessions only: a started-but-abandoned suggestion has its
+        // blocks before any set is logged and must not advance the rotation.
+        const bySession = new Map<string, string[]>();
+        for (const block of (usageRes.data ?? []) as {
+          exercise_id: string;
+          workout_sessions: { started_at: string; state?: string | null };
+        }[]) {
+          if (block.workout_sessions.state !== 'completed') continue;
+          const key = block.workout_sessions.started_at;
+          const ids = bySession.get(key) ?? [];
+          ids.push(block.exercise_id);
+          bySession.set(key, ids);
+        }
+        setRecentSessionExerciseIds(
+          Array.from(bySession.entries())
+            .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
+            .map(([, ids]) => ids)
+        );
         setRecentExerciseIds(
           Array.from(lastDone.entries())
             .sort(
@@ -364,6 +387,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   // Picking a duration sets aiRequested; the plan is computed here once
   // recovery/volume/exercise/location data is in, sized to fit the time and
   // substituted to fit the selected location's equipment.
+  const exerciseById = useMemo(() => new Map(exercises.map((ex) => [ex.id, ex])), [exercises]);
+
   useEffect(() => {
     if (!aiRequested || recoveryLoading || volumeLoading || isLoadingData || !blocklistsReady)
       return;
@@ -408,6 +433,15 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         exerciseType: ex.exercise_type,
       })),
       recentExerciseIds,
+      splitDay: detectSplitDay(
+        recentSessionExerciseIds.map((ids) =>
+          ids.flatMap((id) => {
+            const primary = exerciseById.get(id)?.primary_muscle;
+            const standard = primary ? resolveMuscleToStandard(primary)[0] : undefined;
+            return standard ? [standard] : [];
+          })
+        )
+      ),
       maxExercises: maxExercisesForDuration(aiDuration),
       sessionMinutes: aiDuration,
       injuredMuscles: profile?.injury_history ?? [],
@@ -450,13 +484,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
     volumeData,
     exercises,
     recentExerciseIds,
+    recentSessionExerciseIds,
+    exerciseById,
     profile,
     baselineUnavailable,
     selectedUnavailable,
     aiDuration,
   ]);
 
-  const exerciseById = useMemo(() => new Map(exercises.map((ex) => [ex.id, ex])), [exercises]);
 
   const openDurationPicker = () => {
     setShowDurationPicker(true);
