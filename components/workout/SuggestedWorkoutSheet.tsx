@@ -74,7 +74,7 @@ import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, resolveMuscleToStandard } from '@/types/schema';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
-import { beginnerMuscleName, beginnerPickReason, beginnerSuggestedFocus } from '@/lib/beginnerMode';
+import { beginnerEffortTarget, beginnerMuscleName, beginnerPickReason, beginnerSuggestedFocus } from '@/lib/beginnerMode';
 import { convertWeightForDisplay, formatDate, formatWeight } from '@/lib/utils';
 import { localDaysBetween } from '@/lib/date/localDay';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
@@ -289,6 +289,13 @@ export function pickWhyLine(args: {
 interface SuggestedWorkoutSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Home's one-tap "Start today's workout": start the plan as soon as it is
+   * built, without waiting for the Start button. Any change the user makes
+   * in the sheet first (duration, location, a swap or removal) cancels it
+   * and leaves the normal preview.
+   */
+  autoStart?: boolean;
 }
 
 /** Duration choices for the AI suggested workout ("How much time do you have?"). */
@@ -320,13 +327,27 @@ function rememberDuration(mins: number) {
   }
 }
 
-/** The target effort in plain words ("stop 2 reps short of failure"), no RIR jargon. */
-function rirTargetLabel(rir: number): string {
+/**
+ * The target effort in words, no RIR jargon. Beginner mode drops "failure"
+ * too (panel: "stop 2 reps short of failure" read as jargon to a new lifter).
+ */
+export function rirTargetLabel(rir: number, beginner = false): string {
+  if (beginner) return beginnerEffortTarget(rir);
   if (rir <= 0) return 'to failure';
   return `stop ${rir} rep${rir === 1 ? '' : 's'} short of failure`;
 }
 
-export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheetProps) {
+/**
+ * Whether a pick may say "Last time …" / "You did this …": only when the
+ * lift was in a COMPLETED session. Recency alone (the 90-day usage list) also
+ * counted planned and abandoned sessions — a new user's seeded or unstarted
+ * plan made the sheet claim they had done a Romanian Deadlift.
+ */
+export function hasCompletedLift(exerciseId: string, lastCompletedAt: ReadonlyMap<string, number>): boolean {
+  return lastCompletedAt.has(exerciseId);
+}
+
+export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: SuggestedWorkoutSheetProps) {
   const router = useRouter();
   const supabase = createUntypedClient();
 
@@ -378,6 +399,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [aiPlan, setAiPlan] = useState<SubstitutedWorkoutPlan | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  // One-tap start from Home: cleared by the first start or any user edit.
+  const [autoStartPending, setAutoStartPending] = useState(autoStart);
   const [error, setError] = useState<string | null>(null);
   /** Pick whose swap options (revert / choose other) are expanded. */
   const [swapOptionsFor, setSwapOptionsFor] = useState<string | null>(null);
@@ -450,6 +473,18 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             workout_sessions: { started_at: string };
           }[]
         ).forEach((block) => {
+          // Only lifts actually done: a completed session, or an unfinished
+          // one with a logged working set. A planned / seeded / abandoned
+          // session's blocks are not "recent" — the plan builder and the
+          // pick lines would treat a never-done lift as familiar.
+          const b = block as {
+            set_logs?: { is_warmup?: boolean | null; set_type?: string | null }[] | null;
+            workout_sessions: { state?: string | null };
+          };
+          const performed =
+            b.workout_sessions.state === 'completed' ||
+            (b.set_logs ?? []).some((l) => !l.is_warmup && l.set_type !== 'warmup');
+          if (!performed) return;
           counts.set(block.exercise_id, (counts.get(block.exercise_id) || 0) + 1);
           const at = new Date(block.workout_sessions.started_at).getTime();
           if (at > (lastDone.get(block.exercise_id) ?? 0)) lastDone.set(block.exercise_id, at);
@@ -682,11 +717,13 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
 
   const openDurationPicker = () => {
+    setAutoStartPending(false);
     setShowDurationPicker(true);
     setAiPlan(null);
   };
 
   const handleRemovePick = (exerciseId: string) => {
+    setAutoStartPending(false);
     setAiPlan((plan) =>
       plan
         ? { ...plan, exercises: plan.exercises.filter((p) => p.exerciseId !== exerciseId) }
@@ -697,6 +734,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   // Switching locations re-runs the plan build (and its substitution pass)
   // so the preview and est. set counts update immediately.
   const handleSelectLocation = (locationId: string) => {
+    setAutoStartPending(false);
     if (locationId === selectedLocationId) return;
     setSelectedLocationId(locationId);
     setLocationChosen(true);
@@ -704,6 +742,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   };
 
   const openAddLocation = () => {
+    setAutoStartPending(false);
     setNewLocationName('');
     setNewLocationPreset(null);
     setNewDumbbellMax('');
@@ -763,6 +802,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
   /** Swap a substituted pick to another exercise (or back to the original). */
   const handleChooseSwap = (pick: SubstitutedPick, chosenExerciseId: string) => {
+    setAutoStartPending(false);
     setSwapOptionsFor(null);
     setAiPlan((plan) => {
       if (!plan || !pick.substitution) return plan;
@@ -938,6 +978,15 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
     }
   };
 
+  // One-tap start: the plan is built on mount; start it the moment it exists.
+  // An empty plan keeps the sheet open on its "nothing to suggest" note.
+  useEffect(() => {
+    if (!autoStartPending || !aiPlan) return;
+    setAutoStartPending(false);
+    if (aiPlan.exercises.length > 0) void handleStart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStartPending, aiPlan]);
+
   // "Where are you training?" chip row. With a single profile the chip is
   // preselected and costs no interaction — the row stays visible so the
   // feature is discoverable. The + chip opens the inline add-location form
@@ -1101,7 +1150,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             data-testid="suggested-workout-building"
           >
             <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
-            Building a ~{aiDuration}-minute workout...
+            {autoStartPending ? `Building and starting today’s ~${aiDuration}-minute workout…` : `Building a ~${aiDuration}-minute workout...`}
           </p>
         </div>
       )}
@@ -1213,11 +1262,11 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                           exerciseType: exercise.exercise_type,
                         })}
                         {exercise.exercise_type === 'duration_based' ? '' : ' reps'} ·{' '}
-                        {rirTargetLabel(pick.targetRir)}
+                        {rirTargetLabel(pick.targetRir, beginner)}
                       </span>
                       <span className="block text-caption text-ink-2" data-testid="suggested-pick-why">
                         {pickWhyLine({
-                          isRecent: recentExerciseIds.includes(exercise.id),
+                          isRecent: hasCompletedLift(exercise.id, lastCompletedAt),
                           lastDoneAt: lastCompletedAt.has(exercise.id)
                             ? new Date(lastCompletedAt.get(exercise.id)!)
                             : null,

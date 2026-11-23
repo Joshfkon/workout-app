@@ -44,6 +44,7 @@ import {
   IconChevronRight,
   IconHistory,
   IconListDetails,
+  IconLoader2,
   IconTemplate,
   IconTrendingUp,
 } from '@tabler/icons-react';
@@ -84,6 +85,7 @@ import {
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { SessionExerciseList } from '@/components/mesocycle';
 import { CardioTracker } from '@/components/dashboard/CardioTracker';
+import { PendingLink } from '@/components/dashboard/PendingLink';
 import { NonGymActivityLogger } from '@/components/dashboard/NonGymActivityLogger';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
@@ -144,6 +146,9 @@ interface InProgressBlockRow {
   id: string;
   set_logs: { id: string; is_warmup: boolean | null }[] | null;
 }
+
+/** Per-device cache of the last fetched training style (see TrainPage). */
+const TRAIN_STYLE_KEY = 'hypertrack:train-style';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -224,6 +229,18 @@ export default function TrainPage() {
   // For the self-contained cardio quick-log card.
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Last-seen training style (per-device convenience): a freestyle user's
+  // page used to render the plan card's "Loading..." and then drop it, so
+  // everything below — the start options and "Plan a training block" —
+  // jumped up under the finger. The fetch below still decides.
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TRAIN_STYLE_KEY) === 'freestyle') setIsFreestyle(true);
+    } catch {
+      // Blocked storage: no cached style, same as a first visit.
+    }
+  }, []);
+
   useEffect(() => {
     async function fetchAll() {
       try {
@@ -269,6 +286,11 @@ export default function TrainPage() {
         ]);
         const freestyle = styleRes?.style === 'freestyle';
         setIsFreestyle(freestyle);
+        try {
+          window.localStorage.setItem(TRAIN_STYLE_KEY, freestyle ? 'freestyle' : 'plan');
+        } catch {
+          // Convenience only.
+        }
 
         const ipRow = inProgressRes.data?.[0];
         if (ipRow) {
@@ -752,11 +774,16 @@ export default function TrainPage() {
           looked here (and in Templates) for a program builder, found none and
           gave up. A quiet row keeps it one tap away without leading the page. */}
       {isFreestyle && (
-        <Link
+        // PendingLink: pressed state + a spinner from the tap until the
+        // planner arrives (the panel's first tap here read as missed).
+        <PendingLink
           href="/dashboard/mesocycle/new"
-          className="flex items-center gap-3 rounded-card bg-card p-4 shadow-card transition-colors hover:bg-fill/70"
+          className="flex items-center gap-3 rounded-card bg-card p-4 shadow-card transition-[background-color,transform] hover:bg-fill/70 active:scale-[0.99] active:bg-fill"
+          pendingClassName="bg-fill"
           data-testid="train-plan-block"
         >
+          {(pending) => (
+          <>
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2 text-body font-semibold text-ink">
               Plan a training block
@@ -766,8 +793,14 @@ export default function TrainPage() {
               A multi-week mesocycle: sets ramp toward your MRV, then a deload.
             </span>
           </span>
-          <IconChevronRight size={18} className="flex-shrink-0 text-ink-3" aria-hidden="true" />
-        </Link>
+          {pending ? (
+            <IconLoader2 size={18} className="flex-shrink-0 animate-spin text-action" aria-hidden="true" />
+          ) : (
+            <IconChevronRight size={18} className="flex-shrink-0 text-ink-3" aria-hidden="true" />
+          )}
+          </>
+          )}
+        </PendingLink>
       )}
 
       {/* Week stats: sets · sessions · volume status */}

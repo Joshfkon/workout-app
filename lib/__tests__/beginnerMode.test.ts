@@ -65,10 +65,10 @@ describe('suggested-workout wording', () => {
 
   it('turns weekly-set accounting into "behind this week"', () => {
     expect(beginnerPickReason('Side Delts: 2 of 10 weekly sets done', 'lateral_delts')).toBe(
-      'Side shoulders: behind this week'
+      'Side shoulders: needs more work this week'
     );
     expect(beginnerPickReason('Glute Med: 0 of 6 weekly sets done, almost recovered', 'glute_med')).toBe(
-      'Side glutes: behind this week, almost recovered'
+      'Side glutes: needs more work this week, almost rested'
     );
     expect(beginnerPickReason('Quads — near weekly max, light technique work only', 'quads')).toBe(
       'Front thighs: light technique work only'
@@ -77,7 +77,7 @@ describe('suggested-workout wording', () => {
 
   it('rewrites the focus line', () => {
     expect(beginnerSuggestedFocus('Today: side delts and glute med — rested, and furthest behind on this week’s sets.')).toBe(
-      'Today: side shoulders and side glutes — rested, and behind this week.'
+      'Today: side shoulders and side glutes — rested, and they’ve had the least work this week.'
     );
     expect(
       beginnerSuggestedFocus(

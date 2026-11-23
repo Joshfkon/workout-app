@@ -36,10 +36,11 @@ jest.mock('@/components/workout/BottomSheet', () => ({
     isOpen ? <div>{children}</div> : null,
 }));
 jest.mock('@/components/workout/SuggestedWorkoutSheet', () => ({
-  SuggestedWorkoutSheet: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div>Suggestion sheet</div> : null),
+  SuggestedWorkoutSheet: ({ isOpen, autoStart }: { isOpen: boolean; autoStart?: boolean }) =>
+    isOpen ? <div>{autoStart ? 'Suggestion sheet (auto-start)' : 'Suggestion sheet'}</div> : null,
 }));
 jest.mock('next/dynamic', () => () =>
-  function DynamicSheet(props: { isOpen: boolean; onClose: () => void }) {
+  function DynamicSheet(props: { isOpen: boolean; onClose: () => void; autoStart?: boolean }) {
     return jest.requireMock('@/components/workout/SuggestedWorkoutSheet').SuggestedWorkoutSheet(props);
   }
 );
@@ -83,10 +84,17 @@ describe('HomeStartWorkout', () => {
     expect(screen.queryByRole('button', { name: /start workout/i })).not.toBeInTheDocument();
   });
 
+  it('starts today’s recommended workout in one tap (auto-start sheet)', async () => {
+    const user = userEvent.setup();
+    renderIt();
+    await user.click(await screen.findByRole('button', { name: 'Start today’s workout' }));
+    expect(screen.getByText('Suggestion sheet (auto-start)')).toBeInTheDocument();
+  });
+
   it('opens the shared start options when nothing is in progress', async () => {
     const user = userEvent.setup();
     renderIt();
-    await user.click(screen.getByRole('button', { name: /start workout/i }));
+    await user.click(screen.getByRole('button', { name: /other ways to start/i }));
     expect(screen.getByText('Start empty workout')).toBeInTheDocument();
     expect(screen.getByText('AI-suggested workout')).toBeInTheDocument();
     // No completed workout yet: repeat is disabled.
@@ -97,7 +105,7 @@ describe('HomeStartWorkout', () => {
     const user = userEvent.setup();
     mockRows = { completed: [doneSession] };
     renderIt();
-    await user.click(screen.getByRole('button', { name: /start workout/i }));
+    await user.click(screen.getByRole('button', { name: /other ways to start/i }));
     await waitFor(() => expect(screen.getByText('Same exercises, fresh targets')).toBeInTheDocument());
     await user.click(screen.getByText('Repeat previous workout'));
     expect(await screen.findByTestId('repeat-workout-sheet')).toBeInTheDocument();
@@ -107,7 +115,7 @@ describe('HomeStartWorkout', () => {
   it('opens the AI suggestion sheet from the options', async () => {
     const user = userEvent.setup();
     renderIt();
-    await user.click(screen.getByRole('button', { name: /start workout/i }));
+    await user.click(screen.getByRole('button', { name: /other ways to start/i }));
     await user.click(screen.getByText('AI-suggested workout'));
     expect(screen.getByText('Suggestion sheet')).toBeInTheDocument();
   });

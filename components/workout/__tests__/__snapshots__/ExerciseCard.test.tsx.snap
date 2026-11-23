@@ -66,42 +66,54 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           <div
             class="flex-1 min-w-0 grid"
           >
-            <p
+            <div
               aria-hidden="false"
               aria-live="polite"
-              class="col-start-1 row-start-1 text-caption leading-snug text-action "
+              class="col-start-1 row-start-1 "
+              data-testid="suggestion-strip"
             >
-              <span
-                class="font-medium"
-              >
-                60 kg
-                 × 
-                8–12
-                 @ 2 
-                <abbr
-                  class="no-underline"
-                  title="reps in reserve: how many more you could have done"
-                >
-                  RIR
-                </abbr>
-                <span
-                  class="sr-only"
-                >
-                   (
-                  reps in reserve: how many more you could have done
-                  )
-                </span>
-                <span
-                  class="font-normal"
-                  data-testid="suggestion-rir-plain"
-                >
-                   (stop 2 reps short of failure)
-                </span>
-              </span>
-              <span
-                class="block mt-0.5 text-caption leading-snug text-ink-2"
+              <p
+                class="text-subhead leading-snug text-ink"
+                data-testid="suggestion-numbers"
               >
                 <span
+                  class="font-semibold"
+                >
+                  60 kg
+                   × 
+                  8–12
+                   @ 2 
+                  <abbr
+                    class="no-underline"
+                    title="reps in reserve: how many more you could have done"
+                  >
+                    RIR
+                  </abbr>
+                  <span
+                    class="sr-only"
+                  >
+                     (
+                    reps in reserve: how many more you could have done
+                    )
+                  </span>
+                  <span
+                    class="font-normal text-caption text-ink-2"
+                    data-testid="suggestion-rir-plain"
+                  >
+                     (stop 2 reps short of failure)
+                  </span>
+                </span>
+              </p>
+              <p
+                class="mt-1 text-caption leading-snug text-ink"
+              >
+                <span
+                  class="font-semibold text-action"
+                >
+                  Why: 
+                </span>
+                <span
+                  class="font-medium"
                   data-testid="suggestion-source"
                 >
                   First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust
@@ -114,8 +126,14 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 >
                   Why this weight?
                 </button>
-              </span>
-            </p>
+              </p>
+              <p
+                class="mt-0.5 text-caption leading-snug text-ink-2"
+                data-testid="set-next-time"
+              >
+                Hit 60 kg × 12 next time → 62.5 kg
+              </p>
+            </div>
           </div>
           <button
             aria-label="How this suggestion works"
@@ -194,14 +212,36 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 type="button"
               >
                 <span
-                  class="text-title font-bold tabular-nums text-ink whitespace-nowrap"
+                  class="text-title font-bold tabular-nums text-ink whitespace-nowrap underline decoration-dashed decoration-ink-3 decoration-1 underline-offset-4"
+                  data-testid="logger-weight-value"
                 >
                   60
                 </span>
                 <span
-                  class="text-caption text-ink-2"
+                  class="inline-flex items-center gap-0.5 text-caption text-ink-2"
                 >
                   kg
+                  <svg
+                    aria-hidden="true"
+                    class="tabler-icon tabler-icon-pencil "
+                    data-testid="logger-weight-edit-hint"
+                    fill="none"
+                    height="11"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="11"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"
+                    />
+                    <path
+                      d="M13.5 6.5l4 4"
+                    />
+                  </svg>
                 </span>
               </button>
               <button
@@ -261,14 +301,36 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 type="button"
               >
                 <span
-                  class="text-title font-bold tabular-nums text-ink whitespace-nowrap"
+                  class="text-title font-bold tabular-nums text-ink whitespace-nowrap underline decoration-dashed decoration-ink-3 decoration-1 underline-offset-4"
+                  data-testid="logger-reps-value"
                 >
                   10
                 </span>
                 <span
-                  class="text-caption text-ink-2"
+                  class="inline-flex items-center gap-0.5 text-caption text-ink-2"
                 >
                   reps
+                  <svg
+                    aria-hidden="true"
+                    class="tabler-icon tabler-icon-pencil "
+                    data-testid="logger-reps-edit-hint"
+                    fill="none"
+                    height="11"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="11"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"
+                    />
+                    <path
+                      d="M13.5 6.5l4 4"
+                    />
+                  </svg>
                 </span>
               </button>
               <button
