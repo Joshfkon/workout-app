@@ -36,6 +36,16 @@ import {
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
+import { now as clockNow } from '@/lib/clock';
+import {
+  BUILDER_HISTORY_DAYS,
+  builderDefaultsFromHistory,
+  priorityVolumeAdjustments,
+  type BuilderHistoryDefaults,
+  type MusclePriorityRow,
+} from '@/lib/training/builderDefaults';
+import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
+import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 import { IconAlertTriangle, IconBolt, IconBulb, IconCalendar, IconGauge, IconHeartBroken, IconMoon, IconTrendingDown } from '@tabler/icons-react';
@@ -85,6 +95,10 @@ export default function NewMesocyclePage() {
   // Manual overrides
   const [splitType, setSplitType] = useState('Upper/Lower');
   const [totalWeeks, setTotalWeeks] = useState(6);
+  // What the lifter has been doing (prefills the schedule) and Settings →
+  // Muscle priorities (feed the volume step) — lib/training/builderDefaults.
+  const [historyDefaults, setHistoryDefaults] = useState<BuilderHistoryDefaults | null>(null);
+  const [priorityAdjustments, setPriorityAdjustments] = useState<VolumeAdjustmentInput[]>([]);
 
   // Preferred workout days
   const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
@@ -321,6 +335,39 @@ export default function NewMesocyclePage() {
           .eq('user_id', user.id);
 
         setIsFirstMesocycle(count === 0);
+
+        // Muscle priorities from Settings — the generator never saw them.
+        const { data: priorityRows } = await supabase
+          .from('user_muscle_priorities')
+          .select('muscle_group, priority')
+          .eq('user_id', user.id);
+        setPriorityAdjustments(priorityVolumeAdjustments((priorityRows ?? []) as MusclePriorityRow[]));
+
+        // Recent training → schedule defaults (sessions a week, split).
+        const since = clockNow();
+        since.setDate(since.getDate() - BUILDER_HISTORY_DAYS);
+        const { data: recent } = await supabase
+          .from('workout_sessions')
+          .select('completed_at, exercise_blocks(exercises(primary_muscle))')
+          .eq('user_id', user.id)
+          .eq('state', 'completed')
+          .gte('completed_at', since.toISOString())
+          .order('completed_at', { ascending: true });
+        const sessions: StandardMuscleGroup[][] = ((recent ?? []) as { exercise_blocks?: { exercises?: { primary_muscle?: string | null } | null }[] | null }[]).map(
+          (s) =>
+            (s.exercise_blocks ?? []).flatMap((b) => {
+              const primary = b.exercises?.primary_muscle;
+              const std = primary ? resolveMuscleToStandard(primary)[0] : undefined;
+              return std ? [std] : [];
+            })
+        );
+        const firstAt = (recent ?? [])[0] as { completed_at?: string } | undefined;
+        const spanDays = firstAt?.completed_at
+          ? Math.ceil((clockNow().getTime() - new Date(firstAt.completed_at).getTime()) / 86_400_000)
+          : BUILDER_HISTORY_DAYS;
+        const defaults = builderDefaultsFromHistory(sessions, spanDays);
+        setHistoryDefaults(defaults);
+        if (defaults.daysPerWeek) setDaysPerWeek(defaults.daysPerWeek);
       }
     }
 
@@ -362,7 +409,12 @@ export default function NewMesocyclePage() {
       setSplitType(rec.splitType);
       // Enhanced athletes default to one extra accumulation week before
       // deload (suggested default only — the user can still change it).
-      setTotalWeeks(Math.min(8, rec.totalWeeks + (enhancedAthleteMode ? 1 : 0)));
+      // Default inside the range the length guidance below recommends (it
+      // counts the recovery profile's deload rhythm); defaulting to 8 weeks
+      // and then warning "8 weeks is on the longer side" contradicted itself.
+      const suggested = Math.min(8, rec.totalWeeks + (enhancedAthleteMode ? 1 : 0));
+      const range = evaluateMesocycleLength(suggested, userGoal, userExperience, calculateRecoveryFactors(extendedProfile)).recommendedRange;
+      setTotalWeeks(Math.min(range.max, Math.max(range.min, suggested)));
       
       // Generate workout templates
       const templates = generateWorkoutTemplates(
@@ -395,12 +447,12 @@ export default function NewMesocyclePage() {
       }
 
       // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
-      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay, totalWeeks);
+      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay, totalWeeks, priorityAdjustments);
       setFullProgram(program);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks]);
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks, priorityAdjustments]);
 
   // Generate default name
   useEffect(() => {
@@ -547,7 +599,7 @@ export default function NewMesocyclePage() {
       </div>
 
       {/* First-time mesocycle creation hint */}
-      {step === 1 && isFirstMesocycle && showBeginnerTips && (
+      {step === 1 && isFirstMesocycle && showBeginnerTips && userExperience !== 'advanced' && (
         <InlineHint id="first-mesocycle-intro">
           <div>
             <p className="font-medium mb-1">Creating your first training program!</p>
@@ -665,6 +717,11 @@ export default function NewMesocyclePage() {
             <div className="text-center mb-6">
               <h2 className="text-headline font-semibold text-ink">How often can you train?</h2>
               <p className="text-subhead text-ink-2">We&apos;ll recommend the best split for your schedule</p>
+              {historyDefaults?.summary && (
+                <p className="mt-1 text-subhead text-ink" data-testid="builder-history-summary">
+                  {historyDefaults.summary} Days below start from that.
+                </p>
+              )}
             </div>
 
             {scheduleMode === 'fixed_days' ? (
@@ -960,6 +1017,26 @@ export default function NewMesocyclePage() {
             <div className="text-center mb-6">
               <h2 className="text-headline font-semibold text-ink">Customize your plan</h2>
               <p className="text-subhead text-ink-2">Fine-tune the AI recommendations</p>
+            </div>
+
+            {/* Priority muscles (Settings → Training → Muscle priorities) now
+                feed the volume step; say which, or where to set them. */}
+            <div className="rounded-lg bg-fill/50 p-3 text-subhead" data-testid="builder-priorities">
+              {(() => {
+                const up = priorityAdjustments.filter((a) => a.reason === 'user_priority');
+                return up.length > 0 ? (
+                  <p className="text-ink">
+                    <span className="font-semibold">Priority muscles:</span>{' '}
+                    {up.map((a) => muscleDisplayName(a.muscleGroup)).join(', ')} get extra weekly sets (+10–20%).
+                  </p>
+                ) : (
+                  <p className="text-ink-2">
+                    Bringing up a lagging muscle? Mark it high priority in{' '}
+                    <a href="/dashboard/settings" className="font-semibold text-action">Settings → Training → Muscle priorities</a>{' '}
+                    and this plan gives it extra weekly sets.
+                  </p>
+                );
+              })()}
             </div>
 
             <Input
