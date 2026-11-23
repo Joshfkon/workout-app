@@ -18,6 +18,31 @@
 
 import { formatDuration } from '@/lib/utils';
 import { InfoTooltip } from '@/components/ui';
+import { TOOLTIP_CONTENT } from '@/types/education';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+
+/**
+ * The rest tooltip in beginner words: the standard copy explains the
+ * extension against the "RIR target".
+ */
+const BEGINNER_REST_TOOLTIP = {
+  ...TOOLTIP_CONTENT.REST_PERIODS,
+  longExplanation:
+    'Longer rest (2+ minutes) lets you do more good reps on your next set. The timer starts from this exercise’s planned rest and adds time after a set that was very hard. It never cuts your rest short after an easy set.',
+};
+
+/**
+ * One-line explanation for the first rest of a session: "Rest about 3 min
+ * between sets. −15s / +15s to change." Rounded to the half minute
+ * (under a minute, to 5 s); the countdown itself shows the exact time.
+ */
+export function restIntroText(totalSeconds: number): string {
+  const amount =
+    totalSeconds < 60
+      ? `${Math.max(5, Math.round(totalSeconds / 5) * 5)} sec`
+      : `${(Math.round(totalSeconds / 30) / 2).toString()} min`;
+  return `Rest about ${amount} between sets. −15s / +15s to change.`;
+}
 
 export interface RestTimerProps {
   /** Remaining seconds. */
@@ -40,6 +65,11 @@ export interface RestTimerProps {
   adjustmentNote?: string | null;
   /** Tap anywhere outside the buttons (e.g. scroll back to current exercise). */
   onBarTap?: () => void;
+  /**
+   * Show the one-line "what is this timer" explanation (the page sets it for
+   * the first rest of a session only). Text from restIntroText.
+   */
+  showIntro?: boolean;
 }
 
 export function RestTimer({
@@ -52,7 +82,9 @@ export function RestTimer({
   nextLabel,
   adjustmentNote,
   onBarTap,
+  showIntro = false,
 }: RestTimerProps) {
+  const beginner = useBeginnerMode();
   const elapsedFraction =
     initialSeconds > 0 ? Math.min(1, Math.max(0, (initialSeconds - seconds) / initialSeconds)) : 0;
 
@@ -77,7 +109,11 @@ export function RestTimer({
           {/* Why-this-rest rationale — stop propagation so opening the
               tooltip doesn't also trigger the card's scroll-to-exercise tap */}
           <span onClick={(e) => e.stopPropagation()}>
-            <InfoTooltip term="REST_PERIODS" position="top" />
+            {beginner ? (
+              <InfoTooltip content={BEGINNER_REST_TOOLTIP} position="top" />
+            ) : (
+              <InfoTooltip term="REST_PERIODS" position="top" />
+            )}
           </span>
         </span>
         <span
@@ -90,6 +126,11 @@ export function RestTimer({
         {!isFinished && adjustmentNote && (
           <span className="block truncate text-caption text-status-warn" data-testid="rest-adjustment-note">
             {adjustmentNote}
+          </span>
+        )}
+        {!isFinished && showIntro && initialSeconds > 0 && (
+          <span className="block text-caption leading-snug text-ink-2" data-testid="rest-intro-note">
+            {restIntroText(initialSeconds)}
           </span>
         )}
       </div>

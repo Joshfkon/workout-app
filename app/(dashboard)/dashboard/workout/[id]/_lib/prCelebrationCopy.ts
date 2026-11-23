@@ -7,14 +7,19 @@ import type { LivePr } from '@/services/livePrDetector';
  */
 export function prCelebrationCopy(
   pr: LivePr,
-  fmtKg: (kg: number) => string
+  fmtKg: (kg: number) => string,
+  options: { beginner?: boolean } = {}
 ): { title: string; detail: string } {
   const pct = pr.improvement > 0 ? ` · +${pr.improvement}%` : '';
   switch (pr.type) {
     case 'e1rm':
       return {
         title: 'New strength record',
-        detail: `Est. 1-rep max (e1RM) ${fmtKg(pr.value)}${pct}`,
+        // Beginner mode drops the term entirely: "estimated max" is the
+        // whole idea, the abbreviation adds nothing for a first-week lifter.
+        detail: options.beginner
+          ? `Your estimated max is up: ${fmtKg(pr.value)}${pct}`
+          : `Est. 1-rep max (e1RM) ${fmtKg(pr.value)}${pct}`,
       };
     case 'weight':
       return { title: 'New weight record', detail: `Heaviest yet: ${fmtKg(pr.value)}${pct}` };

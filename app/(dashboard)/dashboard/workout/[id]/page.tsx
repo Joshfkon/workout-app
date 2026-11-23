@@ -38,7 +38,6 @@ import {
   IconMapPin,
   IconMessageCircle,
   IconRefresh,
-  IconTarget,
   IconX,
 } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
@@ -185,7 +184,7 @@ import { buildPerformanceSnapshots, buildProgressionHealthSessions, collectEquip
 import type { ProgressionHealthSession } from '@/services/progressionHealth';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
-import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
+import { CalibrationResultNote } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import {
   estimateWorkoutDuration,
@@ -486,8 +485,11 @@ export default function WorkoutPage() {
   // from observed training history (see services/plannedFrequency).
   const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
 
-  // Toast notifications for errors
-  const { toasts, dismissToast, showError, showSuccess, showInfo, addToast } = useToasts();
+  // Toast notifications. One at a time on the workout screen (UX panel:
+  // stacked toasts and bars covered the logger): a new toast replaces the
+  // current one, an error is never replaced by a non-error. The Undo toast's
+  // action rides its own item, so a replaced toast can't run a stale Undo.
+  const { toasts, dismissToast, showError, showSuccess, showInfo, addToast } = useToasts({ mode: 'single' });
 
   // Live PR celebration (confetti overlay) — set when a just-logged set beats
   // the exercise's record (services/livePrDetector), cleared on dismiss.
@@ -982,6 +984,9 @@ export default function WorkoutPage() {
   // Sanity check and calibration state
   const [sanityCheckResult, setSanityCheckResult] = useState<SanityCheckResult | null>(null);
   const [calibrationResult, setCalibrationResult] = useState<CalibrationResult | null>(null);
+  // Which block the calibration note sits under (the block whose last set
+  // produced it).
+  const [calibrationBlockId, setCalibrationBlockId] = useState<string | null>(null);
   const [calibrationEngine, setCalibrationEngine] = useState(() => new RPECalibrationEngine());
   // Enhanced Athlete Mode (users.enhanced_athlete_mode): raises the sandbagging
   // threshold and drives the connective-tissue cap note on exercise cards.
@@ -1360,6 +1365,35 @@ export default function WorkoutPage() {
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
+
+  // First rest of the session carries a one-line "what is this timer" note
+  // (RestTimer showIntro) — for everyone, not only beginner mode: the length
+  // varies by exercise and the −15s / +15s controls are this app's own, so
+  // anyone new to it meets the same question; after the first rest it never
+  // shows again this session. Remembered per session id across reloads.
+  const restIntroKey = `ht:rest-intro-seen:${sessionId}`;
+  const [restIntro, setRestIntro] = useState<'pending' | 'showing' | 'done'>(() => {
+    try {
+      return typeof window !== 'undefined' && window.sessionStorage.getItem(restIntroKey)
+        ? 'done'
+        : 'pending';
+    } catch {
+      return 'pending';
+    }
+  });
+  const restBarShown = showRestTimer && !pendingDropset;
+  useEffect(() => {
+    if (restBarShown && restIntro === 'pending') {
+      setRestIntro('showing');
+      try {
+        window.sessionStorage.setItem(restIntroKey, '1');
+      } catch {
+        // Storage unavailable: the note may show again after a reload — harmless.
+      }
+    } else if (!restBarShown && restIntro === 'showing') {
+      setRestIntro('done');
+    }
+  }, [restBarShown, restIntro, restIntroKey]);
 
   // Capture Stop (manual or the safety auto-stop): prefill reps (and the
   // RIR chip, when the capture supports an estimate) and start the rest
@@ -2400,6 +2434,20 @@ export default function WorkoutPage() {
     }
     initCalibration();
   }, [sessionId]);
+
+  // The inline AMRAP note's two answers (ExerciseCard amrapPrompt). Stable
+  // identities: the memoized card does not compare callbacks.
+  const amrapSuggestionRef = useRef(amrapSuggestion);
+  amrapSuggestionRef.current = amrapSuggestion;
+  const handleAmrapAccept = useCallback(() => {
+    const suggestion = amrapSuggestionRef.current;
+    if (!suggestion) return;
+    // Track that user accepted AMRAP for this block (persists for RPE prefill).
+    // The set completion handler detects RPE >= 9.5 and marks it as AMRAP.
+    setAmrapAcceptedBlockId(suggestion.blockId);
+    setAmrapSuggestion(null);
+  }, []);
+  const handleAmrapDismiss = useCallback(() => setAmrapSuggestion(null), []);
 
   // Check for AMRAP suggestions when current block or set number changes
   useEffect(() => {
@@ -3663,7 +3711,7 @@ export default function WorkoutPage() {
           setPrCelebration({
             id: setId,
             exerciseName: currentBlock.exercise.name,
-            ...prCelebrationCopy(pr, fmtKg),
+            ...prCelebrationCopy(pr, fmtKg, { beginner: beginnerMode }),
           });
         }
       });
@@ -3831,6 +3879,7 @@ export default function WorkoutPage() {
 
             if (calibResult) {
               setCalibrationResult(calibResult);
+              setCalibrationBlockId(currentBlock.id);
 
               const calibWithMeta = {
                 ...calibResult,
@@ -7287,7 +7336,12 @@ export default function WorkoutPage() {
   // Any bottom-anchored chrome present → reserve room below the in-flow action
   // bar so the fixed stack never covers it. The toast can stack on top of the
   // timer, so when it's showing reserve the taller amount.
-  const bottomPad = sanityCheckResult ? 'pb-56' : restBarVisible ? 'pb-32' : 'pb-8';
+  // One toast at a time: the sanity-check toast waits while a regular toast
+  // (e.g. "Set 3 logged · Undo") is up, so it never stacks on top of it and
+  // the Undo stays reachable; it shows once that toast is gone.
+  const sanityToastVisible = !!sanityCheckResult && toasts.length === 0;
+  const bottomPad =
+    sanityToastVisible || toasts.length > 0 ? 'pb-56' : restBarVisible ? 'pb-32' : 'pb-8';
 
   return (
     <div className={`max-w-2xl mx-auto space-y-6 ${bottomPad}`}>
@@ -7983,6 +8037,9 @@ export default function WorkoutPage() {
                       (amrapSuggestion?.blockId === block.id && amrapSuggestion?.setNumber === (completedSets.filter(s => s.exerciseBlockId === block.id && s.setType === 'normal').length + 1)) ||
                       amrapAcceptedBlockId === block.id
                     }
+                    amrapPrompt={amrapSuggestion?.blockId === block.id}
+                    onAmrapAccept={handleAmrapAccept}
+                    onAmrapDismiss={handleAmrapDismiss}
                     warmupDecision={
                       // Per-dimension warmup readiness (services/warmupEngine).
                       // Replaces the old isMuscleWarmedUp gate that silently
@@ -8055,51 +8112,19 @@ export default function WorkoutPage() {
 
                   {/* Rest timer renders as a fixed bottom bar at page level (P0-5) */}
 
-                  {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
-                  {amrapSuggestion && amrapSuggestion.blockId === block.id && (
-                    <Card className="p-4 bg-action/20 border-action/30">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          <div className="w-8 h-8 rounded-full bg-action/20 flex items-center justify-center">
-                            <IconTarget className="h-4 w-4 text-action" stroke={1.75} aria-hidden="true" />
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-subhead font-semibold text-ink mb-1">
-                            AMRAP set suggestion
-                          </h3>
-                          <p className="text-caption text-ink-2 mb-3">
-                            This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>.
-                            Push to failure (RPE 9.5+) to calibrate your RPE perception.
-                            This helps us adjust your future RIR prescriptions.
-                          </p>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => {
-                                // Track that user accepted AMRAP for this block (persists for RPE prefill)
-                                setAmrapAcceptedBlockId(amrapSuggestion.blockId);
-                                // The user will complete the set normally, but we'll track it as AMRAP
-                                // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
-                                setAmrapSuggestion(null);
-                              }}
-                              className="text-caption"
-                            >
-                              Got it - I&apos;ll push hard
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setAmrapSuggestion(null)}
-                              className="text-caption"
-                            >
-                              Dismiss
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
+                  {/* The AMRAP ask is a quiet one-line note under the active
+                      set's logger now (ExerciseCard amrapPrompt), not a card. */}
+
+                  {/* AMRAP calibration result — quiet note, not a modal.
+                      Beginner mode skips it: it reads in effort-rating jargon
+                      and changes nothing they do next (the result is still
+                      recorded and in the session summary). */}
+                  {calibrationResult && calibrationBlockId === block.id && !beginnerMode && (
+                    <CalibrationResultNote
+                      result={calibrationResult}
+                      enhancedAthleteMode={enhancedAthleteModeActive}
+                      onDismiss={() => setCalibrationResult(null)}
+                    />
                   )}
 
                     {/* Exercise complete actions - only show for current exercise */}
@@ -8342,7 +8367,12 @@ export default function WorkoutPage() {
             keyboardOpen ? 'hidden' : ''
           }`}
         >
-          {sanityCheckResult && (
+          {/* The workout's one toast rides this stack too (above the rest
+              timer and the pinned Log set) instead of floating over them. */}
+          {!keyboardOpen && (
+            <ToastContainer toasts={toasts} onDismiss={dismissToast} anchor="inline" />
+          )}
+          {sanityToastVisible && sanityCheckResult && (
             <SanityCheckToast
               layout="inline"
               check={sanityCheckResult}
@@ -8375,6 +8405,7 @@ export default function WorkoutPage() {
                     : undefined
               }
               adjustmentNote={restAdjustmentNote}
+              showIntro={restIntro === 'showing'}
               onBarTap={() => {
                 document
                   .getElementById(`exercise-${currentBlockIndex}`)
@@ -9040,18 +9071,8 @@ export default function WorkoutPage() {
           chrome stack above (so it stacks over the rest timer instead of
           overlapping it), not as its own independent fixed layer here. */}
 
-      {/* Calibration Result Card (modal overlay) */}
-      {calibrationResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="max-w-md w-full">
-            <CalibrationResultCard
-              result={calibrationResult}
-              enhancedAthleteMode={enhancedAthleteModeActive}
-              onDismiss={() => setCalibrationResult(null)}
-            />
-          </div>
-        </div>
-      )}
+      {/* AMRAP calibration result: a quiet note under its exercise now
+          (CalibrationResultNote), not a full-screen modal. */}
 
       {/* Save as template (header ⋮): rows are derived only while the sheet is
           open, from the non-skipped blocks in workout order — logged working
@@ -9067,8 +9088,9 @@ export default function WorkoutPage() {
         onSaved={({ name }) => showSuccess(`Saved "${name}" to your templates`)}
       />
 
-      {/* Toast Container for notifications */}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      {/* Toasts live in the bottom chrome stack above; while the keyboard
+          hides that stack they fall back to the usual viewport layer. */}
+      {keyboardOpen && <ToastContainer toasts={toasts} onDismiss={dismissToast} />}
 
       {/* PR celebration overlay — confetti + badge when a set beats the record.
           z-[90]: above modals, below toasts so the Undo toast stays tappable. */}

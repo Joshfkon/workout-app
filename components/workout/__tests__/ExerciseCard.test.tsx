@@ -3313,3 +3313,116 @@ describe('ExerciseCard — motion capture integration', () => {
     expect(screen.queryByTestId('set-motion-cue-1')).not.toBeInTheDocument();
   });
 });
+
+describe('ExerciseCard round 10: AMRAP note, why-this-weight, beginner wording', () => {
+  const JARGON = /\bRIR\b|e1RM|\bMEV\b|\bMRV\b|AMRAP/i;
+  const history = {
+    lastWorkoutDate: '2024-01-10',
+    lastWorkoutSets: [
+      { weightKg: 100, reps: 10, rpe: 8 },
+      { weightKg: 100, reps: 9, rpe: 9 },
+    ],
+    estimatedE1RM: 125,
+    personalRecord: { weightKg: 120, reps: 1, e1rm: 120, date: '2023-12-15' },
+    totalSessions: 24,
+  };
+  const lastSetProps = {
+    exercise: createMockExercise(),
+    block: createMockBlock({ targetSets: 1 }),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    isAmrapSuggested: true,
+    amrapPrompt: true,
+  };
+  const asBeginner = () =>
+    useUserStore.setState({
+      user: {
+        id: 'u1',
+        experience: 'novice',
+        preferences: { units: 'kg', beginnerMode: true },
+        volumeLandmarks: {},
+      } as unknown as import('@/types/schema').User,
+    });
+  afterEach(() => useUserStore.setState({ user: null }));
+
+  it('shows the AMRAP ask as a quiet inline note with OK / Skip', async () => {
+    const user = userEvent.setup();
+    const onAmrapAccept = jest.fn();
+    const onAmrapDismiss = jest.fn();
+    render(
+      <ExerciseCard {...lastSetProps} onAmrapAccept={onAmrapAccept} onAmrapDismiss={onAmrapDismiss} />
+    );
+    expect(screen.getByTestId('amrap-note')).toHaveTextContent(
+      'Last set: as many reps as you can (AMRAP) — it calibrates your effort ratings.'
+    );
+    await user.click(screen.getByTestId('amrap-note-ok'));
+    expect(onAmrapAccept).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId('amrap-note-skip'));
+    expect(onAmrapDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no AMRAP note unless the page asks for it', () => {
+    render(<ExerciseCard {...lastSetProps} amrapPrompt={false} />);
+    expect(screen.queryByTestId('amrap-note')).not.toBeInTheDocument();
+  });
+
+  it('beginner mode: the active card, its sheet and history carry no jargon', async () => {
+    asBeginner();
+    const user = userEvent.setup();
+    const { container } = render(
+      <ExerciseCard
+        {...lastSetProps}
+        exerciseHistory={history}
+        onAmrapAccept={jest.fn()}
+        onAmrapDismiss={jest.fn()}
+      />
+    );
+    expect(screen.getByTestId('amrap-note')).toHaveTextContent(
+      'Last set: do as many reps as you can with good form.'
+    );
+    // Expanded history: "Estimated max", not "Estimated 1RM".
+    await user.click(screen.getByText(/last session/i));
+    expect(container).toHaveTextContent('Estimated max');
+    expect(container.textContent).not.toMatch(JARGON);
+
+    await user.click(screen.getByRole('button', { name: 'How this suggestion works' }));
+    const sheet = screen.getByRole('dialog');
+    expect(sheet.textContent).not.toMatch(JARGON);
+    expect(sheet.textContent).not.toMatch(/1RM/);
+  });
+
+  it('offers "Why this weight?" with a plain summary of the suggestion', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        exercise={createMockExercise()}
+        block={createMockBlock()}
+        sets={[]}
+        unit="kg"
+        isActive={true}
+        exerciseHistory={history}
+      />
+    );
+    await user.click(screen.getByTestId('why-this-weight'));
+    const summary = screen.getByTestId('why-this-weight-summary');
+    expect(summary).toHaveTextContent(/^Based on your recent sets on this lift → \d+(\.\d+)? kg × 8–12\.$/);
+  });
+
+  it('within a session, "Why this weight?" names the last set and its logged effort', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        exercise={createMockExercise()}
+        block={createMockBlock()}
+        sets={[createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 })]}
+        unit="kg"
+        isActive={true}
+      />
+    );
+    await user.click(screen.getByTestId('why-this-weight'));
+    const summary = screen.getByTestId('why-this-weight-summary');
+    expect(summary).toHaveTextContent(/^Your last set: 100 kg × 10, 2 reps left → /);
+    expect(summary.textContent).not.toMatch(JARGON);
+  });
+});

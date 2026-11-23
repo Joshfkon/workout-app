@@ -144,3 +144,34 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
 });
 
 CalibrationResultCard.displayName = 'CalibrationResultCard';
+
+/**
+ * The same result as a quiet one-line note under the exercise, for the
+ * active-workout screen: the full-screen card interrupted the session right
+ * after the last set (UX panel). Same numbers and the same confidence-gated
+ * verdict copy; the full breakdown is in the session summary.
+ */
+export const CalibrationResultNote = memo(function CalibrationResultNote({
+  result,
+  enhancedAthleteMode,
+  onDismiss,
+}: Omit<CalibrationResultCardProps, 'onLearnMore'>) {
+  const verdict = getCalibrationVerdict(result, enhancedAthleteMode);
+  return (
+    <div
+      role="status"
+      data-testid="calibration-note"
+      className="flex items-start justify-between gap-2 px-1 text-caption text-ink-2"
+    >
+      <span>
+        Effort check: predicted {result.predictedMaxReps.toFixed(0)} reps, you did{' '}
+        {result.actualMaxReps}. {verdict.message}
+      </span>
+      <button type="button" onClick={onDismiss} className="flex-shrink-0 font-medium text-action">
+        OK
+      </button>
+    </div>
+  );
+});
+
+CalibrationResultNote.displayName = 'CalibrationResultNote';

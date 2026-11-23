@@ -66,7 +66,9 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow, clampToChip } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
+import type { WhyThisWeight } from './whyThisWeight';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
+import { plainWorkoutText } from '@/lib/beginnerMode';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
 import { velocityTargetFit, type VelocityTargetFit } from '@/services/shared/motion/setSummary';
@@ -377,6 +379,14 @@ interface ExerciseCardProps {
   onRepRangeChange?: (range: [number, number]) => void;
   // AMRAP suggestion - indicates this is the last set and user should push to failure
   isAmrapSuggested?: boolean;  // If true, pre-fill RPE with 9.5 as a target
+  /**
+   * Show the quiet one-line "last set: as many reps as you can" note under
+   * the active set's logger (replaces the page's loud AMRAP card). OK keeps
+   * the AMRAP prefill for the set; Skip drops the suggestion.
+   */
+  amrapPrompt?: boolean;
+  onAmrapAccept?: () => void;
+  onAmrapDismiss?: () => void;
   // Plate calculator
   onPlateCalculatorOpen?: (initialWeightKg?: number) => void;  // Callback to open plate calculator modal
   // Per-set write status (P0-2): drives the saved/saving/queued glyph on
@@ -594,6 +604,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   userGoal,
   onRepRangeChange,
   isAmrapSuggested = false,
+  amrapPrompt = false,
+  onAmrapAccept,
+  onAmrapDismiss,
   onPlateCalculatorOpen,
   onActiveSuggestionChange,
   enhancedAthleteMode = false,
@@ -2500,11 +2513,18 @@ export const ExerciseCard = memo(function ExerciseCard({
      * branch below that produced the prescription — never a second opinion.
      */
     source: string;
+    /**
+     * The inputs behind the numbers for the "Why this weight?" summary:
+     * the reference set as logged, its logged effort, and the rule the
+     * branch below took. Named here, never re-derived (whyThisWeight.ts).
+     */
+    why: WhyThisWeight | null;
   } => {
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
     let sourceLine = '';
+    let why: WhyThisWeight | null = null;
     const progressionPhrase = (p: string | undefined) =>
       p === 'add_load' ? 'one step up' : p === 'add_rep' ? 'one more rep' : 'same again';
 
@@ -2714,6 +2734,25 @@ export const ExerciseCard = memo(function ExerciseCard({
                   ? 'lighter to stay in range'
                   : progressionPhrase(pm.progression);
         sourceLine = `From your last session: ${prevDesc} → ${pmAction}`;
+        why = {
+          ref: 'last_session',
+          refSet: prevDesc,
+          refRir: pm.prevRir ?? null,
+          rule:
+            source === 'load_lever'
+              ? 'load_lever'
+              : source === 'rep_resolve'
+                ? 'reps_to_beat'
+                : source === 'session_capacity_cap' || source === 'monotonicity_floor'
+                  ? 'capped'
+                  : source === 'range_floor'
+                    ? 'lighter_for_range'
+                    : pm.progression === 'add_load'
+                      ? 'add_load'
+                      : pm.progression === 'add_rep'
+                        ? 'add_rep'
+                        : 'hold',
+        };
         if (source === 'load_lever') {
           reason = `beating set ${setNo} from last session (${prevDesc}) — more reps can't top it at that load, so up one increment`;
           explanation.push(
@@ -2816,6 +2855,30 @@ export const ExerciseCard = memo(function ExerciseCard({
                 ? 'load down'
                 : 'same weight';
         sourceLine = `From your last set: ${lastDesc} → ${action}`;
+        const loggedEffort = lastCompleted.feedback?.repsInTank != null || lastCompleted.rpe != null;
+        why = {
+          ref: 'last_set',
+          refSet: lastDesc,
+          refRir: loggedEffort ? resolveLastRir(lastSetData, effectiveTargetRir) : null,
+          rule: rec.noMeaningfulChange
+            ? 'hold'
+            : rec.rangeFloorLoadDrop
+              ? 'lighter_for_range'
+              : rec.rationale === 'increase_load'
+                ? 'load_up'
+                : rec.rationale === 'reduce_load'
+                  ? 'load_down'
+                  : 'hold',
+          because: rec.noMeaningfulChange || rec.rangeFloorLoadDrop
+            ? null
+            : rec.rationale === 'increase_load'
+              ? rec.trigger === 'rep_overshoot' ? 'reps_over' : 'easier'
+              : rec.rationale === 'reduce_load'
+                ? rec.trigger === 'below_rep_min' ? 'reps_under' : 'harder'
+                : loggedEffort && rec.effortVsTarget !== 'easier' && rec.effortVsTarget !== 'harder'
+                  ? 'matched'
+                  : null,
+        };
         explanation.push(
           `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
         );
@@ -2921,6 +2984,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         const pct = Math.round(RAMP_LOAD_FRACTION * 100);
         reason = `ramp set — ~${pct}% of today's top working set`;
         sourceLine = `Warm-up: ~${pct}% of today's top set`;
+        why = { ref: null, rule: 'warmup', pct };
         explanation.push(
           `This is a ramp/feeder set (~${pct}% of today's top working set), so there's no RIR target and it isn't counted as junk volume.`
         );
@@ -2953,6 +3017,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           binder === 'bump_gate'
             ? 'From your recent sets on this lift — held until you top the rep range'
             : 'From your recent sets on this lift';
+        why = { ref: null, rule: binder === 'bump_gate' ? 'held_until_top' : 'from_recent' };
         reason = holdNote
           ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM ${holdNote}`
           : `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM`;
@@ -2998,6 +3063,18 @@ export const ExerciseCard = memo(function ExerciseCard({
         sourceLine = gridRoundedUp
           ? `From your last session: ${prevDesc} → rounded up to the nearest plate, same reps`
           : `From your last session: ${prevDesc} → ${progressionPhrase(pm.progression)}`;
+        why = {
+          ref: 'last_session',
+          refSet: prevDesc,
+          refRir: pm.prevRir ?? null,
+          rule: gridRoundedUp
+            ? 'rounded_up'
+            : pm.progression === 'add_rep'
+              ? 'add_rep'
+              : pm.progression === 'add_load'
+                ? 'add_load'
+                : 'hold',
+        };
         reason = gridRoundedUp
           ? `matching set ${setNo} from last session (${prevDesc}) — rounded up to the nearest plate, so same reps`
           : pm.progression === 'add_rep'
@@ -3030,6 +3107,27 @@ export const ExerciseCard = memo(function ExerciseCard({
               ? 'load down'
               : 'same again';
         sourceLine = `From your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${amountLabel(prevSet)} → ${seedAction}`;
+        why = {
+          ref: 'last_session',
+          refSet: `${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${amountLabel(prevSet)}`,
+          refRir: prevRir,
+          rule:
+            seed.trigger === 'top_range_reserve'
+              ? 'add_load'
+              : seedAction === 'load up'
+                ? 'load_up'
+                : seedAction === 'load down'
+                  ? 'load_down'
+                  : 'hold',
+          because:
+            seed.trigger === 'rep_overshoot'
+              ? 'reps_over'
+              : seed.trigger === 'below_rep_min'
+                ? 'reps_under'
+                : seed.trigger === 'rir_deficit'
+                  ? 'harder'
+                  : null,
+        };
         if (seed.trigger === 'rep_overshoot') {
           reason = `${prevSet.reps} reps over ${rangeLabel} target last session — ${seedUp}`;
         } else if (seed.trigger === 'top_range_reserve') {
@@ -3061,8 +3159,10 @@ export const ExerciseCard = memo(function ExerciseCard({
         sourceLine = basis
           ? `First time on this lift — starting guess from ${basis}; ${coldStartPickLine}`
           : `First time on this lift — starting guess; ${coldStartPickLine}`;
+        why = { ref: null, rule: 'start_guess', basis };
       } else if (weight) {
         sourceLine = `First time on this lift — starting guess; ${coldStartPickLine}`;
+        why = { ref: null, rule: 'start_guess', basis: 'your training profile' };
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else if (isDurationBased) {
@@ -3113,6 +3213,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     if (isDeloadSession) {
       reason = 'deload — reduced load this session';
       sourceLine = 'Deload: lighter on purpose so you recover';
+      why = { ref: null, rule: 'deload' };
       explanation.unshift(
         'Deload session: keeping the load easy to shed fatigue. This session is held out of PRs, e1RM trends and next session’s weight suggestion.'
       );
@@ -3135,6 +3236,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
       reason = `easing off — you flagged ${partLabel} pain here`;
       sourceLine = `Eased off ~10% because you flagged ${partLabel} pain`;
+      why = { ref: null, rule: 'pain' };
       explanation.unshift(
         `You stopped a set for ${partLabel} pain, so the load is backed off ~10% instead of progressing. If it still hurts, swap to a variation (⋯ menu → Swap).`
       );
@@ -3154,6 +3256,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       showRir,
       role,
       source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
+      why,
     };
   };
 
@@ -3572,7 +3675,9 @@ export const ExerciseCard = memo(function ExerciseCard({
               <span
                 className="rounded-full px-2.5 py-1 text-caption font-medium leading-none flex-shrink-0 bg-status-ok-tint text-status-ok"
                 data-testid="load-increase-pill"
-                title={`Reps have exceeded the ${loadIncreaseFlag.repMax}-rep range ceiling with ≥2 RIR in ${loadIncreaseFlag.sessions} consecutive sessions (up to ${loadIncreaseFlag.worstReps} reps). The load is too light for this range — increase it.`}
+                title={beginner
+                  ? `Your reps have gone past the top of the ${loadIncreaseFlag.repMax}-rep range in ${loadIncreaseFlag.sessions} sessions in a row with reps to spare. The weight is too light for this range — add some.`
+                  : `Reps have exceeded the ${loadIncreaseFlag.repMax}-rep range ceiling with ≥2 RIR in ${loadIncreaseFlag.sessions} consecutive sessions (up to ${loadIncreaseFlag.worstReps} reps). The load is too light for this range — increase it.`}
               >
                 ▲ Increase load
               </span>
@@ -3722,7 +3827,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </p>
               ) : exerciseHistory.estimatedE1RM > 0 && (
                 <p className="text-caption text-ink-2">
-                  Estimated 1RM{' '}
+                  {beginner ? 'Estimated max' : 'Estimated 1RM'}{' '}
                   <span className="text-ink">
                     {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
                   </span>
@@ -4849,6 +4954,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : suggestion.source
                 }
                 explanation={suggestion.explanation}
+                // The velocity hold swaps the numbers for the coach's call, so
+                // the engine's "why" would describe numbers no longer shown.
+                why={latestCall?.heldByVelocity ? null : suggestion.why}
                 effortCheck={effortCheck}
                 setKey={activeSetNumber}
               />
@@ -4915,6 +5023,43 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : undefined
                 }
               />
+              {activeIsAmrap && amrapPrompt && (
+                // Quiet inline note, not a card: the last set's ask, with
+                // its reason in plain words. Same choices as before — OK
+                // keeps the AMRAP prefill, Skip drops it.
+                <div
+                  className="flex items-center justify-between gap-2 px-1 text-caption text-ink-2"
+                  data-testid="amrap-note"
+                >
+                  <span>
+                    {beginner
+                      ? 'Last set: do as many reps as you can with good form.'
+                      : 'Last set: as many reps as you can (AMRAP) — it calibrates your effort ratings.'}
+                  </span>
+                  <span className="flex flex-shrink-0 gap-3">
+                    {onAmrapAccept && (
+                      <button
+                        type="button"
+                        onClick={onAmrapAccept}
+                        className="font-medium text-action"
+                        data-testid="amrap-note-ok"
+                      >
+                        OK
+                      </button>
+                    )}
+                    {onAmrapDismiss && (
+                      <button
+                        type="button"
+                        onClick={onAmrapDismiss}
+                        className="text-ink-2 hover:text-ink"
+                        data-testid="amrap-note-skip"
+                      >
+                        Skip
+                      </button>
+                    )}
+                  </span>
+                </div>
+              )}
               {sensorRepOffer !== null && (
                 <div
                   className="flex items-center justify-between gap-2 px-1 text-caption text-ink"
@@ -5518,7 +5663,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               {plateau.suggestions.map((suggestion, i) => (
                 <li key={i} className="flex items-start gap-2 text-subhead text-ink">
                   <span className="mt-1.5 w-1 h-1 rounded-full bg-status-warn flex-shrink-0" aria-hidden="true" />
-                  {suggestion}
+                  {beginner ? plainWorkoutText(suggestion) : suggestion}
                 </li>
               ))}
             </ul>
@@ -5702,6 +5847,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.currentLocationId === nextProps.currentLocationId &&
     prevProps.userGoal === nextProps.userGoal &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
+    prevProps.amrapPrompt === nextProps.amrapPrompt &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
     prevProps.enhancedAthleteMode === nextProps.enhancedAthleteMode &&
     prevProps.isDeloadSession === nextProps.isDeloadSession &&

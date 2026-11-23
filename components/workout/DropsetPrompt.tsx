@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { formatWeight, inputWeightToKg } from '@/lib/utils';
 import type { WeightUnit } from '@/types/schema';
+import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 
 // Standard plate weights in lbs and kg
 const PLATES_LB = [45, 35, 25, 10, 5, 2.5];
@@ -74,6 +75,7 @@ export function DropsetPrompt({
   onComplete,
   onCancel,
 }: DropsetPromptProps) {
+  const beginner = useBeginnerMode();
   // Calculate target drop weight (reduce by dropPercentage)
   const targetWeight = parentWeight * (1 - dropPercentage);
   const displayTargetWeight = unit === 'lb'
@@ -213,7 +215,7 @@ export function DropsetPrompt({
                 />
               </div>
               <div className="flex-1">
-                <label className="text-caption text-ink-2 block mb-1">RPE</label>
+                <label className="text-caption text-ink-2 block mb-1">{beginner ? 'Effort /10' : 'RPE'}</label>
                 <input
                   type="number"
                   value={rpe}

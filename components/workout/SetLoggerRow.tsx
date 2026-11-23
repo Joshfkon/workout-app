@@ -35,7 +35,12 @@ import { buildSetLogData, maxRepsFor, weightStepForDisplay } from '@/lib/workout
 import { stepLoad, type LoadGrid } from '@/lib/workout/loadableWeight';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
-import { effortLeftPhrase, plainRirText } from '@/lib/beginnerMode';
+import {
+  BEGINNER_EFFORT_CHOICES,
+  beginnerEffortChoiceFor,
+  effortLeftPhrase,
+  plainWorkoutText,
+} from '@/lib/beginnerMode';
 
 type WeightMode = 'bodyweight' | 'weighted' | 'assisted';
 
@@ -804,13 +809,15 @@ export function SetLoggerRow({
       {/* Row 2: effort chips (labeled, full-width) + set type + feedback sheet
           trigger. Asked in plain words; "RIR" stays in the accessible names. */}
       <p className="pl-1 text-caption text-ink-2" id={`effort-q-${setNumber}`}>
-        How many more could you have done?
+        {beginner ? 'How did that set feel?' : 'How many more could you have done?'}
         {!rirTouched && !rirFromSensor && (
           // The chip starts on the target effort so logging stays one tap; say
           // so, or an untouched chip reads as an answer the lifter never gave.
           <span className="text-ink-3" data-testid="rir-preset-note">
             {' '}
-            Preset to your target ({RIR_CHIP_TEXT[clampToChip(targetRir)]}) — tap to change.
+            {beginner
+              ? 'Set to today’s target — tap if it felt different.'
+              : `Preset to your target (${RIR_CHIP_TEXT[clampToChip(targetRir)]}) — tap to change.`}
           </span>
         )}
       </p>
@@ -819,7 +826,34 @@ export function SetLoggerRow({
         role="group"
         aria-labelledby={`effort-q-${setNumber}`}
       >
-        {RIR_CHIPS.map((chip) => (
+        {/* Beginner mode: three plain answers, each logging an existing chip
+            value (lib/beginnerMode BEGINNER_EFFORT_CHOICES). Untouched, the
+            preset value logs exactly as on the five chips — the highlight
+            only rounds it to the nearest answer. */}
+        {beginner && BEGINNER_EFFORT_CHOICES.map((choice) => {
+          const isSelected = beginnerEffortChoiceFor(selectedRir) === choice.rir;
+          return (
+            <button
+              key={choice.rir}
+              type="button"
+              onClick={() => {
+                setSelectedRir(choice.rir);
+                setRirTouched(true);
+                setRirFromSensor(false);
+                setSensorRirOffer(null);
+              }}
+              disabled={disabled}
+              aria-pressed={isSelected}
+              data-testid={`beginner-effort-${choice.rir}`}
+              className={`${SELECTOR_CHIP_BASE} px-1 text-center ${
+                isSelected ? SELECTOR_CHIP_SELECTED : SELECTOR_CHIP_IDLE
+              }`}
+            >
+              <span className="text-caption font-semibold leading-tight">{choice.label}</span>
+            </button>
+          );
+        })}
+        {!beginner && RIR_CHIPS.map((chip) => (
           <button
             key={chip}
             type="button"
@@ -1036,7 +1070,9 @@ export function SetLoggerRow({
       >
         <div className="space-y-3">
           <p className="text-subhead text-ink-2">
-            Mark advanced training techniques so they don&apos;t contaminate progression estimates.
+            {beginner
+              ? 'Most sets are Normal. Only pick another if you did it on purpose.'
+              : 'Mark advanced training techniques so they don\'t contaminate progression estimates.'}
           </p>
           {(['normal', 'rest_pause', 'myorep', 'dropset'] as const).map((type) => {
             const labels: Record<typeof type, { name: string; desc: string }> = {
@@ -1101,7 +1137,7 @@ export function SetLoggerRow({
           }`}
         >
           <ul className="space-y-2.5" data-testid="predicted-rir-reasoning">
-            {(beginner ? effortCheck.reasoning.map(plainRirText) : effortCheck.reasoning).map((line, i) => (
+            {(beginner ? effortCheck.reasoning.map(plainWorkoutText) : effortCheck.reasoning).map((line, i) => (
               <li key={i} className="flex items-start gap-2 text-subhead text-ink">
                 <span
                   className="mt-1.5 w-1 h-1 rounded-full bg-action flex-shrink-0"
