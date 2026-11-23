@@ -1726,7 +1726,7 @@ function AnalyticsPageContent() {
               "Log measurements" button (unified sheet); corrections/deletes
               happen inline in the card's per-entry editor. */}
           <MeasurementTrendCard
-            tapeUnit={units === 'lb' ? 'in' : 'cm'}
+            tapeUnit={preferences?.lengthUnits ?? (units === 'lb' ? 'in' : 'cm')}
             refreshKey={bodyRefreshKey}
             onDataChanged={() => setBodyRefreshKey((k) => k + 1)}
           />
@@ -1743,7 +1743,7 @@ function AnalyticsPageContent() {
             showFfmi={!foodOnly}
             experience={userProfile?.experience ?? null}
             heightCm={userProfile?.heightCm ?? null}
-            displayUnit={units === 'kg' ? 'cm' : 'in'}
+            displayUnit={preferences?.lengthUnits ?? (units === 'kg' ? 'cm' : 'in')}
             weightUnit={units === 'kg' ? 'kg' : 'lb'}
             weightHistory={weightHistory}
           />
@@ -1769,7 +1769,7 @@ function AnalyticsPageContent() {
             <div id="body-targets" className="scroll-mt-4">
               <BodyTargets
                 userId={userId}
-                unit={units === 'lb' ? 'in' : 'cm'}
+                unit={preferences?.lengthUnits ?? (units === 'lb' ? 'in' : 'cm')}
                 weightUnit={units}
                 currentWeightKg={latestScan?.weightKg}
                 currentBodyFatPercent={latestScan?.bodyFatPercent}

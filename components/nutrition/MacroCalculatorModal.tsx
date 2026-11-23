@@ -22,6 +22,7 @@ import {
   type CardioModality,
 } from '@/lib/nutrition/macroCalculator';
 import { saveMacroSettings, getMacroSettings } from '@/lib/actions/nutrition';
+import { useLengthUnit } from '@/hooks/useLengthUnit';
 
 /** Round kg->lbs conversion artifacts (e.g. 171.078511999999) for display. */
 const formatLbs = (lbs: number) => (Math.round(lbs * 10) / 10).toString();
@@ -93,6 +94,14 @@ export function MacroCalculatorModal({
   );
   const [heightFeet, setHeightFeet] = useState('');
   const [heightInches, setHeightInches] = useState('');
+  // Height follows the user's LENGTH unit (Settings → Units), not weight:
+  // cm in one field, or feet + inches (it always asked feet/inches before).
+  const lengthUnit = useLengthUnit(weightUnit);
+  const [heightCmInput, setHeightCmInput] = useState('');
+  const totalHeightInches = (): number =>
+    lengthUnit === 'cm'
+      ? (parseFloat(heightCmInput) || 0) / 2.54
+      : (parseFloat(heightFeet) || 0) * 12 + (parseFloat(heightInches) || 0);
   const [age, setAge] = useState(userStats?.age?.toString() || '');
   const [sex, setSex] = useState<Sex>(userStats?.sex || 'male');
   const [bodyFat, setBodyFat] = useState(userStats?.bodyFatPercent?.toString() || '');
@@ -133,6 +142,7 @@ export function MacroCalculatorModal({
       const inches = userStats.heightInches % 12;
       setHeightFeet(feet.toString());
       setHeightInches(inches.toString());
+      setHeightCmInput(String(Math.round(userStats.heightInches * 2.54)));
     }
     if (userStats?.age) {
       setAge(userStats.age.toString());
@@ -189,9 +199,7 @@ export function MacroCalculatorModal({
     setError('');
 
     const weightInput = parseFloat(weight);
-    const feet = parseFloat(heightFeet) || 0;
-    const inches = parseFloat(heightInches) || 0;
-    const totalInches = (feet * 12) + inches;
+    const totalInches = totalHeightInches();
     const ageNum = parseInt(age);
 
     if (!weightInput || weightInput <= 0) {
@@ -256,8 +264,7 @@ export function MacroCalculatorModal({
       });
       
       // Save macro settings for auto-recalculation when weight changes
-      const totalHeightInches = (parseFloat(heightFeet) * 12) + parseFloat(heightInches);
-      const heightCm = inchesToCm(totalHeightInches);
+      const heightCm = inchesToCm(totalHeightInches());
       
       await saveMacroSettings({
         height_cm: heightCm,
@@ -334,6 +341,17 @@ export function MacroCalculatorModal({
             <label className="block text-subhead font-medium text-ink-2 mb-1">
               Height
             </label>
+            {lengthUnit === 'cm' ? (
+              <div>
+                <Input
+                  type="number"
+                  value={heightCmInput}
+                  onChange={(e) => setHeightCmInput(e.target.value)}
+                  placeholder="178"
+                />
+                <span className="text-caption text-ink-3 mt-1">cm</span>
+              </div>
+            ) : (
             <div className="flex gap-2">
               <div className="flex-1">
                 <Input
@@ -354,6 +372,7 @@ export function MacroCalculatorModal({
                 <span className="text-caption text-ink-3 mt-1">inches</span>
               </div>
             </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
