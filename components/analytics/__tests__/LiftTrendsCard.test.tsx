@@ -170,6 +170,9 @@ describe('LiftTrendsCard', () => {
     expect(change.className).not.toMatch(/\btruncate\b/);
     expect(change.parentElement?.className).not.toMatch(/\btruncate\b/);
     // "est. max" is explained in plain words where it first appears.
-    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest single rep/);
+    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest single rep/);    // …and so is how the %/wk rate is worked out, over the card's own window.
+    expect(screen.getByTestId('rate-explainer')).toHaveTextContent(
+      new RegExp(`straight line through the est. max of your best set in each workout over the last ${Math.round(summary.windowDays / 7)} weeks`)
+    );
   });
 });

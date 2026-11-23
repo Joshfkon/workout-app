@@ -204,6 +204,14 @@ export async function seedReturningUser(admin, userId, persona) {
   // Progress honestly say "0 of your 3 lifts beat their first workout".
   const beginner = ['none', 'novice'].includes(persona.experience);
   const strength = STRENGTH[persona.experience] ?? STRENGTH[a.experience] ?? 0.8;
+  // Gain per time a lift is trained: fast for a beginner, slow for an
+  // advanced lifter, about half that on a cut, and uneven across lifts (one
+  // stalls). A uniform +1.5% made an advanced lifter on a cut see all six
+  // lifts "+2–2.7%/wk", which he rightly called unrealistic.
+  const RATE = { none: 0.04, novice: 0.025, intermediate: 0.01, advanced: 0.004 };
+  const baseRate = (RATE[persona.experience] ?? RATE[a.experience] ?? 0.01) * (a.goal === 'cut' ? 0.5 : 1);
+  const LIFT_SPREAD = [1.4, 0.7, 1.0, 0, 1.2, 0.5];
+  const progressRate = (order) => baseRate * LIFT_SPREAD[order % LIFT_SPREAD.length];
   for (let w = 0; w < h.workouts; w++) {
     const offset = -Math.round(h.spanDays - (w * h.spanDays) / h.workouts);
     const date = day(offset);
@@ -235,7 +243,7 @@ export async function seedReturningUser(admin, userId, persona) {
       // Round in the persona's OWN units: a lb lifter logs 120 or 125, never
       // 55 kg (= 121.3 lb), and an off-grid seeded load made the app's
       // suggestions and PRs look broken ("121.25 lbs", "PR vs 192.9").
-      const rawKg = a.weightKg * lift.base * strength * (1 + 0.015 * timesTrained);
+      const rawKg = a.weightKg * lift.base * strength * (1 + progressRate(order) * timesTrained);
       const load = a.units === 'lb'
         ? Math.max(5, Math.round((rawKg * 2.20462) / 5) * 5) / 2.20462
         : Math.max(5, Math.round(rawKg / 2.5) * 2.5);

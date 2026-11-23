@@ -75,10 +75,10 @@ import { BottomSheet } from '@/components/workout/BottomSheet';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, resolveMuscleToStandard } from '@/types/schema';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { beginnerMuscleName, beginnerPickReason, beginnerSuggestedFocus } from '@/lib/beginnerMode';
-import { formatDate, formatWeight } from '@/lib/utils';
+import { convertWeightForDisplay, formatDate, formatWeight } from '@/lib/utils';
 import { localDaysBetween } from '@/lib/date/localDay';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
-import { formatTargetRange } from '@/services/shared/setModality';
+import { formatTargetRange, getSetReps, type ModalitySource } from '@/services/shared/setModality';
 
 interface SheetExercise {
   id: string;
@@ -219,8 +219,41 @@ export function lastDoneLabel(at: Date, now: Date): string {
  * Why this lift, and where its first weight comes from — the panel's
  * "no explanation why it picked Upright Row or 65 lbs".
  */
+/** The best working set of a lift's last completed session (heaviest, then most reps). */
+export interface LastTopSet {
+  weightKg: number;
+  /** Rep count (modality-resolved; never seconds). */
+  repCount: number;
+}
+
+/**
+ * Pick the top working set from one session's logged sets. Reps come through
+ * the modality accessor: a duration exercise's reps field holds seconds, so
+ * it has no "× reps" top set (null).
+ */
+export function topWorkingSet(
+  sets: readonly { weight_kg: number | null; reps: number | null; is_warmup?: boolean | null; set_type?: string | null }[],
+  exercise: ModalitySource | null | undefined
+): LastTopSet | null {
+  let best: LastTopSet | null = null;
+  for (const s of sets) {
+    if (s.is_warmup || s.set_type === 'warmup') continue;
+    const weightKg = Number(s.weight_kg ?? 0);
+    const repCount = getSetReps(s as { reps: number }, exercise);
+    if (repCount === null || !(repCount > 0) || !(weightKg > 0)) continue;
+    if (!best || weightKg > best.weightKg || (weightKg === best.weightKg && repCount > best.repCount)) {
+      best = { weightKg, repCount };
+    }
+  }
+  return best;
+}
+
 export function pickWhyLine(args: {
   isRecent: boolean;
+  /** Best working set of the last completed session with this lift. Shown so
+   *  the progression is visible before the workout starts (UX panel: a Hevy
+   *  switcher "couldn't see the smarter progression" he came for). */
+  lastTopSet?: LastTopSet | null;
   /**
    * When the lift was last done in a COMPLETED session (the sheet's usage
    * query, started_at). Named in the line so "recently" is checkable.
@@ -234,6 +267,12 @@ export function pickWhyLine(args: {
 }): string {
   const { isRecent, lastDoneAt, muscleLabel, rec, units } = args;
   if (isRecent) {
+    const top = args.lastTopSet;
+    if (lastDoneAt && top) {
+      const w = convertWeightForDisplay(top.weightKg, units, 1);
+      const unit = units === 'kg' ? 'kg' : 'lbs';
+      return `Last time (${lastDoneLabel(lastDoneAt, args.now ?? clockNow()).replace(/^on /, '')}): best set ${w} ${unit} × ${top.repCount}. Today’s target builds on it.`;
+    }
     return lastDoneAt
       ? `You did this ${lastDoneLabel(lastDoneAt, args.now ?? clockNow())} — weights start from your last sets.`
       : 'You’ve done this recently — weights start from your last sets.';
@@ -307,6 +346,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   // When each exercise was last done in a COMPLETED session (epoch ms), so a
   // pick's "You did this …" line names a real day.
   const [lastCompletedAt, setLastCompletedAt] = useState<Map<string, number>>(() => new Map());
+  const [lastTopSets, setLastTopSets] = useState<Map<string, LastTopSet>>(() => new Map());
   // The rule the plan builder ordered the picks by (suggestedOrderLine).
   const [planOrder, setPlanOrder] = useState<SuggestedOrderRule | undefined>(undefined);
   // Loaded with the plan data so each pick can preview its starting weight.
@@ -372,7 +412,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             .order('name'),
           supabase
             .from('exercise_blocks')
-            .select('exercise_id, workout_sessions!inner(user_id, started_at, state)')
+            .select('exercise_id, set_logs(weight_kg, reps, is_warmup, set_type), workout_sessions!inner(user_id, started_at, state)')
             .eq('workout_sessions.user_id', userId)
             .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString()),
           supabase
@@ -419,19 +459,30 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         // blocks before any set is logged and must not advance the rotation.
         const bySession = new Map<string, string[]>();
         const completedAt = new Map<string, number>();
+        const exerciseTypeById = new Map(
+          ((exercisesRes.data ?? []) as SheetExercise[]).map((e) => [e.id, { exerciseType: e.exercise_type ?? null }])
+        );
+        const topSets = new Map<string, LastTopSet>();
         for (const block of (usageRes.data ?? []) as {
           exercise_id: string;
+          set_logs?: { weight_kg: number | null; reps: number | null; is_warmup?: boolean | null; set_type?: string | null }[] | null;
           workout_sessions: { started_at: string; state?: string | null };
         }[]) {
           if (block.workout_sessions.state !== 'completed') continue;
           const at = new Date(block.workout_sessions.started_at).getTime();
-          if (at > (completedAt.get(block.exercise_id) ?? 0)) completedAt.set(block.exercise_id, at);
+          if (at > (completedAt.get(block.exercise_id) ?? 0)) {
+            completedAt.set(block.exercise_id, at);
+            const top = topWorkingSet(block.set_logs ?? [], exerciseTypeById.get(block.exercise_id));
+            if (top) topSets.set(block.exercise_id, top);
+            else topSets.delete(block.exercise_id);
+          }
           const key = block.workout_sessions.started_at;
           const ids = bySession.get(key) ?? [];
           ids.push(block.exercise_id);
           bySession.set(key, ids);
         }
         setLastCompletedAt(completedAt);
+        setLastTopSets(topSets);
         setRecentSessionExerciseIds(
           Array.from(bySession.entries())
             .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
@@ -1170,6 +1221,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                           lastDoneAt: lastCompletedAt.has(exercise.id)
                             ? new Date(lastCompletedAt.get(exercise.id)!)
                             : null,
+                          lastTopSet: lastTopSets.get(exercise.id) ?? null,
                           muscleLabel: muscleName(pick.muscle),
                           rec: (() => {
                             const r = estimatePickStart(exercise, pick, profile, transferCandidates);

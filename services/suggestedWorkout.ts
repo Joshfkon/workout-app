@@ -460,16 +460,27 @@ function buildFocus(trainedMuscles: RankedMuscle[]): string {
   return `Today: ${joined} — rested, and furthest behind on this week's sets.`;
 }
 
-/** Compounds first in the final session order (stable within mechanic). */
+/**
+ * Muscles whose compounds are the session's "big lifts". A compound for a
+ * small muscle (upright row for side delts, dips for triceps) still goes
+ * after them: the UX panel saw "Order: big compound lifts first" above an
+ * Upright Row leading a push day, ahead of the bench press.
+ */
+const BIG_MUSCLES: ReadonlySet<StandardMuscleGroup> = new Set<StandardMuscleGroup>([
+  'chest_upper', 'chest_lower', 'lats', 'upper_back', 'quads', 'hamstrings', 'glutes', 'erectors',
+]);
+
+/** Session order: big-muscle compounds, then other compounds, then
+ *  isolations (stable within each — muscle rank order). */
 function orderCompoundsFirst(
   picks: SuggestedWorkoutPick[],
   exerciseById: Map<string, SuggestedExerciseInput>
 ): SuggestedWorkoutPick[] {
-  return [...picks].sort((a, b) => {
-    const mechA = exerciseById.get(a.exerciseId)?.mechanic === 'compound' ? 0 : 1;
-    const mechB = exerciseById.get(b.exerciseId)?.mechanic === 'compound' ? 0 : 1;
-    return mechA - mechB;
-  });
+  const rank = (p: SuggestedWorkoutPick): number => {
+    if (exerciseById.get(p.exerciseId)?.mechanic !== 'compound') return 2;
+    return BIG_MUSCLES.has(p.muscle) ? 0 : 1;
+  };
+  return [...picks].sort((a, b) => rank(a) - rank(b));
 }
 
 /**
