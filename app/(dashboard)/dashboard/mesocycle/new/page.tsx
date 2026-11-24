@@ -48,6 +48,7 @@ import {
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import {
   builderDefaultsFromHistory,
+  builderSplitFor,
   priorityVolumeAdjustments,
   plannedVolumeWithBands,
   deliveredSetsAtPeak,
@@ -61,6 +62,7 @@ import {
   rampLine,
   rirLine,
   deloadSummary,
+  deloadFloorNote,
   formatRir,
   rampExplanation,
   recoveryVolumeExplanation,
@@ -186,10 +188,12 @@ export default function NewMesocyclePage() {
   const [onboardingDefaults, setOnboardingDefaults] = useState<OnboardingScheduleDefaults | null>(null);
   const historyUsable = historyDefaults?.daysPerWeek != null;
   /** The builder split matching recent training, if it reads as one; else
-   *  the split the lifter named at onboarding. */
-  const historySplit: Split | null = historyUsable
-    ? historyDefaults?.splitKind === 'body_part' ? 'Bro Split' : historyDefaults?.splitKind === 'ppl' ? 'PPL' : null
-    : onboardingDefaults?.split ?? null;
+   *  the split the lifter named at onboarding. Upper/lower and full-body
+   *  histories count too, and a history that reads as no split falls back
+   *  to the onboarding answer (UX panel round 22: only PPL and body-part
+   *  histories reached the default, so an upper/lower lifter got Full Body). */
+  const historySplit: Split | null =
+    (historyUsable ? builderSplitFor(historyDefaults?.splitKind) : null) ?? onboardingDefaults?.split ?? null;
 
   // Preferred workout days
   const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
@@ -773,7 +777,7 @@ export default function NewMesocyclePage() {
         <Card variant="elevated">
           <SplitChooser
             value={splitType}
-            recommended={useAiRecommendation ? recommendation?.splitType ?? null : null}
+            recommended={useAiRecommendation ? historySplit ?? recommendation?.splitType ?? null : null}
             matchesHistory={historySplit}
             sessionsPerWeek={plannedSessionsPerWeek}
             onChoose={chooseSplit}
@@ -1143,10 +1147,12 @@ export default function NewMesocyclePage() {
                     {/* The reason must describe the split on the badge; the
                         older recommendation's text described its own pick
                         (a Bro Split badge with an Arnold-split blurb). */}
-                    {fullProgram.split === recommendation?.splitType
-                      ? recommendation?.splitReason
-                      : historySplit === fullProgram.split
+                    {historySplit === fullProgram.split
+                      ? historyUsable
                         ? 'Matches your recent training.'
+                        : 'The split you told us you run.'
+                      : fullProgram.split === recommendation?.splitType
+                        ? recommendation?.splitReason
                         : 'Your choice of split.'}
                   </span>
                 </div>
@@ -1632,6 +1638,11 @@ export default function NewMesocyclePage() {
                 {deloadLine && (
                   <p className="text-caption text-ink-2">
                     <span className="font-semibold text-ink">Deload:</span> {deloadLine}
+                  </p>
+                )}
+                {deloadFloorNote(planWeeks) && (
+                  <p className="text-caption text-ink-2" data-testid="builder-deload-floor-note">
+                    {deloadFloorNote(planWeeks)}
                   </p>
                 )}
                 <details className="text-caption text-ink-3 mb-2">

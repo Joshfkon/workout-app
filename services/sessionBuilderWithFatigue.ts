@@ -2053,26 +2053,71 @@ export function generateFullMesocycleWithFatigue(
     // (mevSessionFloors); the deload goes under MEV by design.
     const floors = isDeload ? {} : mevSessionFloors(volumePerMuscle, sessionTemplates, bandContext, priorityGroups);
     const firstPass = buildWeekSessions(withSessionFloors(volumePerMuscle, floors, priorityGroups));
-    const inflow = indirectCreditByGroup(firstPass);
     const modifier = Math.max(0.1, weekProgression.volumeModifier);
-    let needsSecondPass = false;
-    const directVolume = Object.fromEntries(
-      Object.entries(volumePerMuscle).map(([muscle, vol]) => {
-        const fed = (inflow[muscle as CoarseMuscle] ?? 0) / modifier;
-        const sets = Math.max(MIN_SETS_PER_PLANNED_MUSCLE * vol.frequency, Math.round(vol.sets - fed));
-        if (sets < vol.sets) needsSecondPass = true;
-        return [
-          muscle,
-          {
-            sets: Math.min(vol.sets, sets),
-            frequency: vol.frequency,
-            sessionFloor: floors[muscle as MuscleGroup],
-            priority: priorityGroups.has(muscle as MuscleGroup) || undefined,
-          },
-        ];
-      })
-    ) as Record<MuscleGroup, SessionMuscleVolume>;
-      const weekSessions = needsSecondPass ? buildWeekSessions(directVolume) : firstPass;
+    /** The direct request per muscle, given the indirect credit it can count on. */
+    const directVolumeFor = (inflow: Partial<Record<CoarseMuscle, number>>) => {
+      let reduced = false;
+      const volume = Object.fromEntries(
+        Object.entries(volumePerMuscle).map(([muscle, vol]) => {
+          const fed = (inflow[muscle as CoarseMuscle] ?? 0) / modifier;
+          const sets = Math.max(MIN_SETS_PER_PLANNED_MUSCLE * vol.frequency, Math.round(vol.sets - fed));
+          if (sets < vol.sets) reduced = true;
+          return [
+            muscle,
+            {
+              sets: Math.min(vol.sets, sets),
+              frequency: vol.frequency,
+              sessionFloor: floors[muscle as MuscleGroup],
+              priority: priorityGroups.has(muscle as MuscleGroup) || undefined,
+            },
+          ];
+        })
+      ) as Record<MuscleGroup, SessionMuscleVolume>;
+      return { volume, reduced };
+    };
+    // How far a built week falls short of this week's targets (credited
+    // sets, planned muscles only).
+    const plannedMuscles = new Set<string>(sessionTemplates.flatMap((t) => t.targetMuscles));
+    const shortfall = (sessions: DetailedSessionWithFatigue[]) => {
+      const credited = creditedSetsByGroup(sessions);
+      let short = 0;
+      for (const [muscle, vol] of Object.entries(volumePerMuscle) as [MuscleGroup, { sets: number }][]) {
+        if (!plannedMuscles.has(muscle)) continue;
+        short += Math.max(0, Math.round(vol.sets * modifier) - (credited[muscle as CoarseMuscle] ?? 0));
+      }
+      return short;
+    };
+    let inflowSeen = indirectCreditByGroup(firstPass);
+    const second = directVolumeFor(inflowSeen);
+    let weekSessions = second.reduced ? buildWeekSessions(second.volume) : firstPass;
+    // The second pass picks its own exercises, and they need not be the
+    // ones whose indirect credit it subtracted: a first-pass RDL credits
+    // glutes and hamstrings, the trimmed request then picks a hack squat and
+    // a leg curl, and the credit it counted on never arrives. That left an
+    // advanced Upper/Lower cut with hamstrings at 6 and quads at 8 a week on
+    // a 51-minute Lower day (UX panel round 22, Dre: "back, quads, hamstrings,
+    // calves and traps sit at or below MEV"). Count only the credit EVERY
+    // pass so far delivered, rebuild, and keep the week that falls least
+    // short of its targets (the trim below takes back any excess).
+    if (second.reduced) {
+      let best = weekSessions;
+      let bestShort = shortfall(weekSessions);
+      for (let pass = 0; pass < 2 && bestShort > 0; pass++) {
+        const latest = indirectCreditByGroup(weekSessions);
+        const merged: Partial<Record<CoarseMuscle, number>> = {};
+        for (const k of Object.keys(inflowSeen) as CoarseMuscle[]) {
+          merged[k] = Math.min(inflowSeen[k] ?? 0, latest[k] ?? 0);
+        }
+        inflowSeen = merged;
+        weekSessions = buildWeekSessions(directVolumeFor(inflowSeen).volume);
+        const short = shortfall(weekSessions);
+        if (short < bestShort) {
+          best = weekSessions;
+          bestShort = short;
+        }
+      }
+      weekSessions = best;
+    }
 
     // Indirect-aware allocation — the SAME trim pass generateFullProgram
     // runs (Codex review on 48c5cbe: this path never trimmed, so credited
@@ -2092,7 +2137,7 @@ export function generateFullMesocycleWithFatigue(
         },
       ])
     );
-    const trimNotes = applyIndirectAwareAllocation(weekSessions, weekTargets);
+    const trimNotes = applyIndirectAwareAllocation(weekSessions, weekTargets, undefined, !isDeload);
     if (weekNum === 1) programNotes.push(...trimNotes);
     for (const session of weekSessions) {
       session.totalSets = session.exercises.reduce((sum, ex) => sum + ex.sets, 0);
