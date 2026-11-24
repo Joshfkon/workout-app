@@ -6,8 +6,11 @@ import { Button, Input } from '@/components/ui';
 import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 import { ProTag } from '@/components/subscription/ProTag';
 import type { Goal as NutritionGoal } from '@/lib/nutrition/macroCalculator';
+import { DailyTargetsCard, type DailyTargetsCardProps } from './DailyTargetsCard';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import {
+  SKIP_DEFAULT_DAYS,
+  SKIP_DEFAULT_SPLIT_LABEL,
   SPLIT_OPTIONS,
   TRAINING_DAY_OPTIONS,
   customChangeForGoal,
@@ -41,6 +44,21 @@ export interface TrainingStepProps {
    * that says what Skip uses. Null when none would be created.
    */
   skipTargets?: { calories: number; protein: number } | null;
+  /**
+   * The working and the Edit for the targets above (breakdown, overrides,
+   * handlers). Null = show the plain line only.
+   */
+  targetsCard?: Pick<
+    DailyTargetsCardProps,
+    | 'calorieBasis'
+    | 'proteinBasis'
+    | 'goalName'
+    | 'sex'
+    | 'calorieOverride'
+    | 'proteinOverride'
+    | 'onCaloriesChange'
+    | 'onProteinChange'
+  > | null;
   /** Which button is saving; null = idle. */
   busy: 'continue' | 'skip' | null;
   onBack: () => void;
@@ -68,6 +86,7 @@ export function TrainingStep({
   units,
   targets,
   skipTargets = null,
+  targetsCard = null,
   busy,
   onBack,
   onSkip,
@@ -139,7 +158,9 @@ export function TrainingStep({
         <p id="training-split-label" className="text-headline font-semibold text-ink">
           Your split right now
         </p>
-        <div className="flex flex-wrap gap-2">
+        {/* What each split's days look like, in plain words (UX panel
+            round 21: "split and days step uses jargon"). */}
+        <div className="space-y-2">
           {SPLIT_OPTIONS.map((o) => {
             const selected = answers.split === o.value;
             return (
@@ -150,9 +171,12 @@ export function TrainingStep({
                 aria-checked={selected}
                 data-testid={`training-split-${o.value}`}
                 onClick={() => onChange({ ...answers, split: selected ? null : o.value })}
-                className={chip(selected)}
+                className={`w-full min-h-[44px] text-left px-3 py-2 rounded-xl border transition-colors active:scale-[0.99] ${
+                  selected ? 'bg-action/10 border-action' : 'bg-card border-sep'
+                }`}
               >
-                {o.label}
+                <span className="block text-body font-semibold text-ink">{o.label}</span>
+                <span className="block text-subhead text-ink-2">{o.description}</span>
               </button>
             );
           })}
@@ -241,7 +265,17 @@ export function TrainingStep({
         </div>
       )}
 
-      {rateApplies && targets && (
+      {rateApplies && targets && targetsCard ? (
+        <DailyTargetsCard
+          {...targetsCard}
+          calories={targets.calories}
+          protein={targets.protein}
+          units={units}
+          heading={answersChangeTargets ? 'Your daily targets, updated for your answers' : 'Your daily targets'}
+          footnote="This is what Continue saves. Change them any time in Eat."
+          data-testid="training-rate-targets"
+        />
+      ) : rateApplies && targets ? (
         <p className="text-subhead text-ink-2" data-testid="training-rate-targets">
           Your daily targets:{' '}
           <span className="font-semibold text-ink tabular-nums">
@@ -250,23 +284,12 @@ export function TrainingStep({
           {answersChangeTargets ? ', updated for your answers above' : ''}. This is what Continue
           saves; change them any time in Eat.
         </p>
-      )}
+      ) : null}
 
-      <div className="flex items-center justify-between gap-2 pt-2">
-        <Button variant="ghost" onClick={onBack} disabled={isBusy}>
-          Back
-        </Button>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={onSkip}
-            disabled={isBusy}
-            isLoading={busy === 'skip'}
-            aria-busy={busy === 'skip'}
-            data-testid="training-skip"
-            className="active:scale-[0.97]"
-          >
-            {busy === 'skip' ? 'Using defaults…' : 'Skip'}
+      <div className="space-y-2 pt-2">
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" onClick={onBack} disabled={isBusy}>
+            Back
           </Button>
           <Button
             size="lg"
@@ -280,6 +303,18 @@ export function TrainingStep({
             {busy === 'continue' ? 'Saving…' : 'Continue'}
           </Button>
         </div>
+        {/* Skip names the default it uses (UX panel round 21). */}
+        <Button
+          variant="secondary"
+          onClick={onSkip}
+          disabled={isBusy}
+          isLoading={busy === 'skip'}
+          aria-busy={busy === 'skip'}
+          data-testid="training-skip"
+          className="w-full active:scale-[0.98]"
+        >
+          {busy === 'skip' ? 'Using defaults…' : skipButtonLabel()}
+        </Button>
       </div>
       {/* What Skip means, before and while it saves: the panel saw a bare
           "Skipping…" and was never told a moderate cut had been picked
@@ -294,6 +329,11 @@ export function TrainingStep({
       </p>
     </div>
   );
+}
+
+/** "Skip — use 4 upper/lower days": the plan default Skip leaves in place. Pure. */
+export function skipButtonLabel(): string {
+  return `Skip — use ${SKIP_DEFAULT_DAYS} ${SKIP_DEFAULT_SPLIT_LABEL} days`;
 }
 
 /**
@@ -320,7 +360,7 @@ export function skipDefaultsLine({
   answersChangeTargets?: boolean;
 }): string {
   const rateName = rateOptionsForGoal(goal).find((r) => r.value === defaultRate)?.name ?? null;
-  const plan = 'your first plan starts from your goal and experience.';
+  const plan = `your first plan starts on ${SKIP_DEFAULT_DAYS} ${SKIP_DEFAULT_SPLIT_LABEL} days a week, from your goal and experience.`;
   if (answersChangeTargets) {
     const pace = rateName ? `the default pace (${rateName.toLowerCase()}) and ` : '';
     return `Skip drops your answers above: your targets go back to ${pace}4 workouts a week, and ${plan} Change either any time.`;

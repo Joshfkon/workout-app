@@ -9,10 +9,15 @@
 import {
   baseProteinPerLbLeanMass,
   calculateMacros,
+  calculateTDEE,
+  GOAL_PERCENT_BW,
   getLeanMassLbs,
+  getLossRateCap,
   kgToLbs,
+  MIN_CALORIE_FLOORS,
   type ActivityLevel,
   type Goal as NutritionGoal,
+  type MacroRecommendation,
   type Peptide,
 } from '@/lib/nutrition/macroCalculator';
 
@@ -57,12 +62,19 @@ export function phaseToNutritionGoal(phase: Phase, current: NutritionGoal | null
 }
 
 /**
- * Activity settings a brand-new user starts with: the macro calculator's own
- * defaults (moderate activity, 4 × 60 min moderate workouts, no medication).
+ * Activity settings a brand-new user starts with (onboarding doesn't ask):
+ * lightly active daily life, 4 × 60 min moderate workouts, no medication.
  * Saved with the starter targets so Eat's calculator reopens on them.
+ *
+ * activity_level is daily life OUTSIDE workouts: calculateTDEE adds the
+ * workouts on top. It was 'moderate' (×1.55, the classic "exercise 3–5 days
+ * a week" level) PLUS four workouts, which counted training twice: an 80 kg,
+ * 11% body fat man cutting got 2,882 kcal, ~270 under a 3,149 burn (UX panel
+ * round 21). 'light' (×1.375) matches the app's own steps model for a
+ * desk-job day (STEP_ACTIVITY_MULTIPLIER floors at ×1.35).
  */
 export const STARTER_ACTIVITY_SETTINGS = {
-  activity_level: 'moderate' as ActivityLevel,
+  activity_level: 'light' as ActivityLevel,
   workouts_per_week: 4,
   avg_workout_minutes: 60,
   workout_intensity: 'moderate' as const,
@@ -85,8 +97,34 @@ export function targetsFromMacroSettings(
   settings: PhaseTargetSettings,
   extras: TargetExtras = {}
 ): PhaseTargets {
+  const recommendation = recommendationFromMacroSettings(weightKg, settings, extras);
+  return {
+    calories: recommendation.calories,
+    protein: recommendation.protein,
+    carbs: recommendation.carbs,
+    fat: recommendation.fat,
+  };
+}
+
+/** The activity block calculateMacros gets from saved settings. */
+function activityFromSettings(settings: PhaseTargetSettings) {
+  return {
+    activityLevel: (settings.activity_level ?? 'moderate') as ActivityLevel,
+    // ?? not ||: a stated 0 workouts (a food-only tracker) is an answer, not a gap.
+    workoutsPerWeek: settings.workouts_per_week ?? 4,
+    avgWorkoutMinutes: settings.avg_workout_minutes || 60,
+    workoutIntensity: settings.workout_intensity || 'moderate',
+  };
+}
+
+/** The calculator's full answer for saved settings (burn, deficit, …), not just the four targets. */
+function recommendationFromMacroSettings(
+  weightKg: number,
+  settings: PhaseTargetSettings,
+  extras: TargetExtras = {}
+): MacroRecommendation {
   const bodyFat = extras.bodyFatPercent;
-  const recommendation = calculateMacros(
+  return calculateMacros(
     {
       weightKg,
       heightCm: settings.height_cm,
@@ -94,13 +132,7 @@ export function targetsFromMacroSettings(
       sex: settings.sex,
       ...(bodyFat != null && bodyFat > 0 && bodyFat < 100 ? { bodyFatPercent: bodyFat } : {}),
     },
-    {
-      activityLevel: (settings.activity_level ?? 'moderate') as ActivityLevel,
-      // ?? not ||: a stated 0 workouts (a food-only tracker) is an answer, not a gap.
-      workoutsPerWeek: settings.workouts_per_week ?? 4,
-      avgWorkoutMinutes: settings.avg_workout_minutes || 60,
-      workoutIntensity: settings.workout_intensity || 'moderate',
-    },
+    activityFromSettings(settings),
     {
       goal: settings.goal,
       ...(extras.targetWeightChangePerWeekKg != null
@@ -109,12 +141,6 @@ export function targetsFromMacroSettings(
       peptide: settings.peptide || 'none',
     }
   );
-  return {
-    calories: recommendation.calories,
-    protein: recommendation.protein,
-    carbs: recommendation.carbs,
-    fat: recommendation.fat,
-  };
 }
 
 /** Saved settings for starter targets: every activity field filled in. */
@@ -155,6 +181,61 @@ export interface StarterTargetsInput {
   weeklyChangeKg?: number | null;
   /** Protein the user set by hand (g a day); calories stay, carbs absorb the change. */
   proteinG?: number | null;
+  /** Calories the user set by hand (kcal a day); protein and fat stay, carbs absorb the change. */
+  caloriesKcal?: number | null;
+}
+
+/**
+ * How the calorie figure was reached, for the targets card: estimated
+ * maintenance (resting burn × daily activity + workouts), then the change
+ * for the goal's pace. All numbers come from the calculator's own run.
+ */
+export interface StarterCalorieBasis {
+  /** Estimated maintenance (the calculator's TDEE), kcal a day. */
+  maintenanceKcal: number;
+  /** Resting burn (BMR), kcal a day. */
+  restingKcal: number;
+  /** True when the resting burn came from lean mass (body fat given). */
+  restingFromLeanMass: boolean;
+  /** The daily-activity level used (outside workouts). */
+  activityLevel: ActivityLevel;
+  workoutsPerWeek: number;
+  /** Workouts' share of maintenance, averaged over the week, kcal a day. */
+  workoutKcalPerDay: number;
+  /** Calculated target minus maintenance (negative = deficit), kcal a day. */
+  adjustmentKcal: number;
+  /** The pace the adjustment gives, kg a week (signed). */
+  weeklyChangeKg: number;
+  /** The pace's own % of body weight a week (signed), before any cap. */
+  requestedPercentBW: number;
+  /** Set when leanness capped a cut: the cap (% BW a week) and the body fat it came from. */
+  lossCap: { percentBW: number; bodyFatPercent: number } | null;
+  /** The user's own number replaced the calculated one. */
+  setByHand: boolean;
+  /** What the calculator gave before any hand edit. */
+  calculated: number;
+}
+
+/** Highest hand-set calories, kcal a day (the lowest is the calculator's floor: calorieEditMin). */
+export const CALORIE_EDIT_MAX = 6000;
+
+/** Lowest hand-set calories for this sex (the calculator's own floor). */
+export function calorieEditMin(sex: 'male' | 'female'): number {
+  return MIN_CALORIE_FLOORS[sex];
+}
+
+/**
+ * Swap in hand-set calories: protein and fat are kept, carbs take the
+ * difference. When carbs would go below 0, fat gives the rest (never below 0).
+ */
+export function withCalorieOverride(targets: PhaseTargets, caloriesKcal: number): PhaseTargets {
+  const calories = Math.round(caloriesKcal);
+  const left = calories - targets.protein * 4 - targets.fat * 9;
+  if (left >= 0) {
+    return { ...targets, carbs: Math.round(left / 4), calories };
+  }
+  const fat = Math.max(0, Math.round((calories - targets.protein * 4) / 9));
+  return { ...targets, carbs: 0, fat, calories };
 }
 
 /** How the protein figure was reached, for the onboarding explanation. */
@@ -207,6 +288,7 @@ export function starterTargets(input: StarterTargetsInput): {
   /** kg a week to save as macro_settings.target_weight_change_per_week (null = the pace's default). */
   targetWeightChangePerWeek: number | null;
   protein: StarterProteinBasis;
+  calories: StarterCalorieBasis;
 } | null {
   const { phase, weightKg, heightCm, age, sex } = input;
   if (!sex || !(weightKg > 0) || !(heightCm > 0) || !age || !(age >= 13 && age <= 100)) return null;
@@ -226,16 +308,42 @@ export function starterTargets(input: StarterTargetsInput): {
       ? input.bodyFatPercent
       : null;
   const weeklyChangeKg = paceMatchesPhase(phase, input.weeklyChangeKg) ? input.weeklyChangeKg : null;
-  const calculated = targetsFromMacroSettings(weightKg, settings, {
+  const recommendation = recommendationFromMacroSettings(weightKg, settings, {
     bodyFatPercent: bodyFat,
     targetWeightChangePerWeekKg: weeklyChangeKg,
   });
+  const calculated: PhaseTargets = {
+    calories: recommendation.calories,
+    protein: recommendation.protein,
+    carbs: recommendation.carbs,
+    fat: recommendation.fat,
+  };
   const byHand =
     input.proteinG != null &&
     input.proteinG >= PROTEIN_EDIT_RANGE.min &&
     input.proteinG <= PROTEIN_EDIT_RANGE.max &&
     Math.round(input.proteinG) !== calculated.protein;
-  const targets = byHand ? withProteinOverride(calculated, input.proteinG as number) : calculated;
+  const withProtein = byHand ? withProteinOverride(calculated, input.proteinG as number) : calculated;
+  const caloriesByHand =
+    input.caloriesKcal != null &&
+    input.caloriesKcal >= calorieEditMin(sex) &&
+    input.caloriesKcal <= CALORIE_EDIT_MAX &&
+    Math.round(input.caloriesKcal) !== withProtein.calories;
+  const targets = caloriesByHand ? withCalorieOverride(withProtein, input.caloriesKcal as number) : withProtein;
+
+  // The calorie breakdown, from the same run: maintenance = resting burn ×
+  // daily activity + workouts; the workouts' share is maintenance minus the
+  // same burn with no workouts.
+  const stats = { weightKg, heightCm, age, sex, ...(bodyFat !== null ? { bodyFatPercent: bodyFat } : {}) };
+  const activity = activityFromSettings(settings);
+  const withoutWorkouts = calculateTDEE(stats, { ...activity, workoutsPerWeek: 0 });
+  const requestedPercentBW =
+    weeklyChangeKg !== null ? (weeklyChangeKg / weightKg) * 100 : GOAL_PERCENT_BW[settings.goal].percentBW;
+  const capPercent = getLossRateCap(bodyFat ?? undefined);
+  const lossCap =
+    requestedPercentBW < 0 && Math.abs(requestedPercentBW) > capPercent + 1e-9
+      ? { percentBW: capPercent, bodyFatPercent: bodyFat ?? 0 }
+      : null;
   const leanMassLbs = getLeanMassLbs({ weightKg, sex, bodyFatPercent: bodyFat ?? undefined });
   return {
     settings,
@@ -248,6 +356,20 @@ export function starterTargets(input: StarterTargetsInput): {
       perKgBodyWeight: targets.protein / weightKg,
       setByHand: byHand,
       calculated: calculated.protein,
+    },
+    calories: {
+      maintenanceKcal: recommendation.tdee,
+      restingKcal: Math.round(recommendation.bmr),
+      restingFromLeanMass: bodyFat !== null,
+      activityLevel: activity.activityLevel,
+      workoutsPerWeek: activity.workoutsPerWeek,
+      workoutKcalPerDay: Math.max(0, recommendation.tdee - withoutWorkouts),
+      adjustmentKcal: recommendation.calories - recommendation.tdee,
+      weeklyChangeKg: recommendation.weeklyChangeKg,
+      requestedPercentBW,
+      lossCap,
+      setByHand: caloriesByHand,
+      calculated: calculated.calories,
     },
   };
 }

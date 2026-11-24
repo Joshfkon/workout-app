@@ -82,6 +82,7 @@ import type {
   WarmupSet,
 } from '@/types/schema';
 import { now as clockNow } from '@/lib/clock';
+import type { PendingWorkoutPreview } from '@/lib/training/pendingWorkoutStart';
 
 // ============================================================
 // Types
@@ -129,6 +130,13 @@ export interface StartMesocycleSessionInput {
    * Never called on the resume path. Purely informational.
    */
   onStage?: (stage: 'building' | 'saving', sessionId: string) => void;
+  /**
+   * The exercises about to be written (in order, with their prefilled
+   * weight), called just before the blocks insert so the workout screen can
+   * show the first one while the write and its own load finish
+   * (lib/training/pendingWorkoutStart). Never called on the resume path.
+   */
+  onPreview?: (preview: PendingWorkoutPreview) => void;
   /**
    * The signed-in user's id when the caller already has it. Skips the
    * auth.getUser() round trip that otherwise opens the start (RLS still scopes
@@ -712,6 +720,8 @@ export async function startMesocycleWorkoutSession(
   }
 
   const blocks: ExerciseBlockInsert[] = [];
+  // Name + loggability per block (same index), for onPreview.
+  const previewMeta: Array<{ name: string; loggable: boolean }> = [];
   let order = 1;
   const seenMuscles = new Set<string>();
 
@@ -922,6 +932,10 @@ export async function startMesocycleWorkoutSession(
         suggestion_reason: `${programSession.dayName} - Week ${mesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}${setAdjustment ? ` · ${setAdjustment.label}` : ''}`,
         warmup_protocol: { sets: warmupSets },
       });
+      previewMeta.push({
+        name: exercise.exerciseName,
+        loggable: !isDurationExercise && !dbIsBodyweight,
+      });
     }
   }
 
@@ -1043,12 +1057,28 @@ export async function startMesocycleWorkoutSession(
             suggestion_reason: `${todayWorkout.dayName} - Week ${mesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}`,
             warmup_protocol: { sets: warmupSets },
           });
+          previewMeta.push({
+            name: exercise.name,
+            loggable:
+              !fallbackIsDuration && !(exercise as { is_bodyweight?: boolean | null }).is_bodyweight,
+          });
         }
       }
     }
   }
 
   if (blocks.length > 0) {
+    input.onPreview?.({
+      exercises: blocks.map((b, i) => ({
+        exerciseId: b.exercise_id,
+        name: previewMeta[i]?.name ?? 'Exercise',
+        targetSets: b.target_sets,
+        repRange: [b.target_rep_range[0], b.target_rep_range[1]] as [number, number],
+        targetRir: b.target_rir,
+        weightKg: b.target_weight_kg,
+        loggable: previewMeta[i]?.loggable ?? false,
+      })),
+    });
     input.onStage?.('saving', sessionId);
     const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
     if (blocksError) console.error('Failed to insert exercise blocks:', blocksError);

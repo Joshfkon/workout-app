@@ -21,13 +21,26 @@ export type CurrentSplit = NonNullable<UserPreferences['currentSplit']>;
 
 export const TRAINING_DAY_OPTIONS = [2, 3, 4, 5, 6, 7] as const;
 
-export const SPLIT_OPTIONS: { value: CurrentSplit; label: string }[] = [
-  { value: 'full_body', label: 'Full body' },
-  { value: 'upper_lower', label: 'Upper / lower' },
-  { value: 'ppl', label: 'Push / pull / legs' },
-  { value: 'body_part', label: 'Body-part split' },
-  { value: 'other', label: 'Other' },
+/** Each split with what its training days look like, in plain words (UX panel round 21: jargon). */
+export const SPLIT_OPTIONS: { value: CurrentSplit; label: string; description: string }[] = [
+  { value: 'full_body', label: 'Full body', description: 'Every workout trains your whole body.' },
+  { value: 'upper_lower', label: 'Upper / lower', description: 'Upper-body days and leg days, taking turns.' },
+  {
+    value: 'ppl',
+    label: 'Push / pull / legs',
+    description: 'Chest, shoulders and triceps one day; back and biceps the next; then legs.',
+  },
+  { value: 'body_part', label: 'Body-part split', description: 'One or two muscles a day, like chest day or back day.' },
+  { value: 'other', label: 'Other', description: 'Something else, or you’re not sure.' },
 ];
+
+/**
+ * What Skip leaves the first plan on: the builder's own defaults with no
+ * answers (4 days a week; recommendSplit gives Upper/Lower for 4 days at
+ * every experience level and goal — pinned by a test).
+ */
+export const SKIP_DEFAULT_DAYS = 4;
+export const SKIP_DEFAULT_SPLIT_LABEL = 'upper/lower';
 
 export interface TrainingSetupAnswers {
   daysPerWeek: number | null;

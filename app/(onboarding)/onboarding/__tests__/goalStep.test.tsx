@@ -341,8 +341,13 @@ describe('Onboarding goal step: daily targets', () => {
     const maintain = expected('maintenance').targets;
     expect(card).toHaveTextContent(`${maintain.calories.toLocaleString()} kcal · ${maintain.protein} g protein`);
     expect(card).toHaveTextContent(/Change them any time in Eat/);
-    // Where the numbers come from, in plain words.
-    expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(/estimated daily burn/);
+    // Where the numbers come from, in plain words: maintenance, then the goal's change.
+    const maintainBasis = expected('maintenance').calories;
+    expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(
+      `Estimated maintenance: ~${maintainBasis.maintenanceKcal.toLocaleString()} kcal a day`
+    );
+    expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(/from your lean mass/);
+    expect(screen.getByTestId('targets-edit')).toHaveTextContent('Edit');
     expect(screen.getByTestId('goal-protein-basis')).toHaveTextContent(
       'Protein: 2.2 g per kg of lean mass. Your lean mass is 68 kg (from your body fat), so about 1.9 g per kg of body weight.'
     );
@@ -479,8 +484,10 @@ describe('Onboarding body fat', () => {
     render(<OnboardingBodyCompPage />);
     await user.click(screen.getByTestId('units-continue'));
     const why = await screen.findByTestId('body-fat-why');
-    expect(why).toHaveTextContent(/muscle and fat/);
-    expect(why).toHaveTextContent(/smart scale or scan reading if you have one; otherwise tap the look closest to yours below/);
+    // Why, in terms of what it sets (UX round 22): protein and the burn estimate.
+    expect(why).toHaveTextContent(/Why we ask: it splits your weight into lean mass and fat/);
+    expect(why).toHaveTextContent(/protein target is set from your lean mass, and so is your resting calorie burn/);
+    expect(why).toHaveTextContent(/look-alike guess below is fine/);
     expect(why).toHaveTextContent(/skip it/);
 
     await user.click(screen.getByRole('radio', { name: 'Female' }));
@@ -641,8 +648,29 @@ describe('Onboarding units step', () => {
     expect(mockUpdatePreference).toHaveBeenCalledWith('units', 'kg');
     expect(mockUpdatePreference).toHaveBeenCalledWith('lengthUnits', 'in');
     // Height is asked in feet + inches, weight in kg.
-    expect(await screen.findByText('feet')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Height, feet')).toBeInTheDocument();
+    expect(screen.getByLabelText('Height, inches')).toBeInTheDocument();
     expect(screen.getByLabelText('Weight (kg)')).toBeInTheDocument();
+  });
+
+  it('asks height as one field with a cm / ft & in toggle that carries the number across (UX round 22)', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    await user.click(screen.getByTestId('units-continue'));
+    const toggle = await screen.findByRole('radiogroup', { name: 'Height unit' });
+    expect(within(toggle).getByRole('radio', { name: 'ft & in' })).toHaveAttribute('aria-checked', 'true');
+    // Typing the feet digit moves straight on to inches: one tap for the pair.
+    await user.click(screen.getByLabelText('Height, feet'));
+    await user.keyboard('5');
+    expect(screen.getByLabelText('Height, inches')).toHaveFocus();
+    await user.keyboard('11');
+    await user.click(within(toggle).getByRole('radio', { name: 'cm' }));
+    expect(screen.getByLabelText('Height (cm)')).toHaveValue(180);
+    await user.click(within(toggle).getByRole('radio', { name: 'ft & in' }));
+    expect(screen.getByLabelText('Height, feet')).toHaveValue(5);
+    expect(screen.getByLabelText('Height, inches')).toHaveValue(11);
+    // Only how height is typed changes; the saved length unit stays.
+    expect(mockUpdatePreference).not.toHaveBeenCalledWith('lengthUnits', 'cm');
   });
 });
 
@@ -1001,7 +1029,7 @@ describe('Onboarding: protein is explained and editable, and a pace can be typed
     const user = await reachGoalStep('15', '30');
     await user.click(screen.getByTestId('goal-option-bulk'));
     const before = starterTargets({ phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 15 })!;
-    await user.click(screen.getByTestId('goal-protein-edit'));
+    await user.click(screen.getByTestId('targets-edit'));
     await user.type(screen.getByTestId('goal-protein-input'), '180');
     const card = screen.getByTestId('goal-daily-targets');
     expect(card).toHaveTextContent('180 g protein');
@@ -1012,6 +1040,40 @@ describe('Onboarding: protein is explained and editable, and a pace can be typed
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockSaveMacroSettings).toHaveBeenCalledWith(expect.objectContaining({ auto_update_enabled: false }));
     expect(targetInserts[targetInserts.length - 1]).toMatchObject({ protein: 180, calories: before.targets.calories });
+  });
+
+  it('lets calories be set by hand from the visible Edit: protein stays, it is saved, auto-updates off (UX round 22)', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-option-cut'));
+    const before = starterTargets({ phase: 'cut', weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 15 })!;
+    await user.click(screen.getByTestId('targets-edit'));
+    await user.type(screen.getByTestId('targets-calories-input'), '2300');
+    const card = screen.getByTestId('goal-daily-targets');
+    expect(card).toHaveTextContent(`2,300 kcal · ${before.targets.protein} g protein`);
+    expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(
+      `Calories: set by you. The calculated figure was ${before.targets.calories.toLocaleString()} kcal.`
+    );
+    // The edit carries to the training step's card too.
+    await user.click(screen.getByTestId('goal-continue'));
+    expect(screen.getByTestId('training-rate-targets')).toHaveTextContent('2,300 kcal');
+    await user.click(screen.getByTestId('training-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(mockSaveMacroSettings).toHaveBeenCalledWith(expect.objectContaining({ auto_update_enabled: false }));
+    expect(targetInserts[targetInserts.length - 1]).toMatchObject({ calories: 2300, protein: before.targets.protein });
+  });
+
+  it('shows the working on the training step, including the lean-lifter loss cap (Dre, UX round 22)', async () => {
+    const user = await reachGoalStep('11', '31');
+    await user.click(screen.getByTestId('goal-option-cut'));
+    await user.click(screen.getByTestId('goal-continue'));
+    await user.click(screen.getByTestId('training-days-4'));
+    const card = screen.getByTestId('training-rate-targets');
+    expect(card).toHaveTextContent(/Estimated maintenance: ~[\d,]+ kcal a day/);
+    expect(card).toHaveTextContent(/plus 4 workouts a week/);
+    expect(card).toHaveTextContent(/Moderate cut: −[\d,]+ kcal a day/);
+    expect(card).toHaveTextContent(/At 11% body fat the app holds loss to 0.3% of body weight a week \(not 0.5%\)/);
+    expect(card).toHaveTextContent(/1.1 g per lb|2.4 g per kg of lean mass/);
+    expect(within(card).getByTestId('targets-edit')).toBeInTheDocument();
   });
 
   it('takes a pace in kg a week, shows the % alongside, and saves it as the weekly-change override', async () => {

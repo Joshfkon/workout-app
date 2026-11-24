@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { now } from '@/lib/clock';
@@ -58,19 +58,32 @@ export function mergePendingLiftSessions(input: {
 export const LIFT_TRENDS_QUERY_KEY = ['analytics', 'lift-trends'] as const;
 
 /**
+ * The cache key for a window. The default window (LIFT_TREND_WINDOW_DAYS)
+ * keeps the bare key every other reader shares (Home tile parity, the lift
+ * screen, Train); other windows — Progress's shared range control — add the
+ * day count. All of them sit under the same prefix, so one invalidation of
+ * LIFT_TRENDS_QUERY_KEY (or of 'analytics') reaches every window.
+ */
+export function liftTrendsQueryKey(windowDays: number = LIFT_TREND_WINDOW_DAYS): readonly unknown[] {
+  return windowDays === LIFT_TREND_WINDOW_DAYS ? LIFT_TRENDS_QUERY_KEY : [...LIFT_TRENDS_QUERY_KEY, windowDays];
+}
+
+/**
  * Same select, window (LIFT_TREND_WINDOW_DAYS) and pure function as the home
  * "Lifts" glance tile (lib/actions/dashboard.ts fetchLiftTrends), so the
  * tile's "N rising of M" and the Progress detail can never disagree.
  * Null when signed out.
  */
-export async function fetchLiftTrendsSummary(): Promise<LiftTrendsSummary | null> {
+export async function fetchLiftTrendsSummary(
+  windowDays: number = LIFT_TREND_WINDOW_DAYS
+): Promise<LiftTrendsSummary | null> {
   const supabase = createUntypedClient();
   const userId = await getLocalUserId(supabase);
   if (!userId) return null;
 
   const at = now();
   const since = new Date(at);
-  since.setDate(since.getDate() - LIFT_TREND_WINDOW_DAYS);
+  since.setDate(since.getDate() - windowDays);
 
   const outbox = await listOutbox().catch(() => [] as OutboxEntry[]);
   const pendingIds = Array.from(pendingCompletionsFromOutbox(outbox).keys());
@@ -111,14 +124,21 @@ export async function fetchLiftTrendsSummary(): Promise<LiftTrendsSummary | null
     at,
     // includeRollup: the Strength tab's "Strength by muscle" card rolls up
     // these same series, so a lift and its muscle can never disagree.
-    { programStartDate: mesoRes.data?.[0]?.start_date ?? null, includeRollup: true }
+    { programStartDate: mesoRes.data?.[0]?.start_date ?? null, includeRollup: true, windowDays }
   );
 }
 
-export function useLiftTrends() {
+/**
+ * `windowDays` defaults to the shared 12-week window. A different window
+ * (Progress's range control) is its own cached query; switching keeps the
+ * previous window's numbers on screen until the new ones land, so the
+ * Strength tab never drops to a skeleton on a range tap.
+ */
+export function useLiftTrends(windowDays: number = LIFT_TREND_WINDOW_DAYS) {
   return useQuery({
-    queryKey: LIFT_TRENDS_QUERY_KEY,
-    queryFn: fetchLiftTrendsSummary,
+    queryKey: liftTrendsQueryKey(windowDays),
+    queryFn: () => fetchLiftTrendsSummary(windowDays),
     staleTime: 1000 * 60 * 5,
+    placeholderData: keepPreviousData,
   });
 }

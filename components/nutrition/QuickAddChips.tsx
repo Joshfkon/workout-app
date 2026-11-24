@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconCheck, IconPlus } from '@tabler/icons-react';
 import { Chip } from '@/components/ui';
+import { AddedBanner, type QuickAddConfirmation } from './AddedBanner';
 import { formatPortion, frequentFoodPortion } from '@/lib/nutrition/frequentFoods';
 import type { FrequentFood, MealType } from '@/types/nutrition';
 
@@ -11,17 +12,7 @@ export const QUICK_ADD_CONFIRM_MS = 3000;
 /** How long the confirmation line under the row stays (it has an Undo). */
 export const QUICK_ADD_STATUS_MS = 8000;
 
-/** What a successful one-tap add reports back, shown under the chips. */
-export interface QuickAddConfirmation {
-  /** "Added White Rice (1 cup) to Dinner" */
-  added: string;
-  /** "Day total 283 / 1,872 kcal · 11 / 144 g protein" */
-  totals: string;
-  /** Shown after Undo: "Removed White Rice (1 cup) from Dinner" */
-  removed: string;
-  /** Removes what was just added. */
-  onUndo?: () => Promise<void> | void;
-}
+export type { QuickAddConfirmation } from './AddedBanner';
 
 interface QuickAddChipsProps {
   foods: FrequentFood[];
@@ -30,8 +21,9 @@ interface QuickAddChipsProps {
   meals: Array<{ type: MealType; label: string }>;
   onMealChange: (meal: MealType) => void;
   /**
-   * Logs the food to `mealType`. Rejects on a failed save (no confirmation).
-   * May resolve with a confirmation to show under the row.
+   * Logs the food to `mealType`. Rejects if the add couldn't even start (no
+   * confirmation). May resolve with a confirmation to show under the row —
+   * right away, before the save lands (its `saved` promise).
    */
   onAdd: (food: FrequentFood) => Promise<QuickAddConfirmation | void>;
   /** True while `mealType` is the time-of-day default (not a meal the user picked). */
@@ -65,7 +57,6 @@ export function QuickAddChips({
 }: QuickAddChipsProps) {
   const [addedName, setAddedName] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<QuickAddConfirmation | null>(null);
-  const [undone, setUndone] = useState(false);
   const chipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -79,19 +70,17 @@ export function QuickAddChips({
 
   if (foods.length === 0) return null;
 
-  function showStatus(next: QuickAddConfirmation | null, isUndone = false) {
+  function showStatus(next: QuickAddConfirmation) {
     setConfirmation(next);
-    setUndone(isUndone);
     if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
-    statusTimerRef.current = setTimeout(() => {
-      setConfirmation(null);
-      setUndone(false);
-    }, QUICK_ADD_STATUS_MS);
+    statusTimerRef.current = setTimeout(() => setConfirmation(null), QUICK_ADD_STATUS_MS);
   }
 
   async function handleTap(food: FrequentFood) {
     let result: QuickAddConfirmation | void;
     try {
+      // Resolves as soon as the add is shown (optimistic); the save itself
+      // is result.saved, which the banner watches.
       result = await onAdd(food);
     } catch (err) {
       console.error('[QuickAddChips] quick add failed:', err);
@@ -101,19 +90,6 @@ export function QuickAddChips({
     if (chipTimerRef.current) clearTimeout(chipTimerRef.current);
     chipTimerRef.current = setTimeout(() => setAddedName(null), QUICK_ADD_CONFIRM_MS);
     if (result) showStatus(result);
-  }
-
-  async function handleUndo() {
-    const current = confirmation;
-    if (!current?.onUndo) return;
-    try {
-      await current.onUndo();
-    } catch (err) {
-      console.error('[QuickAddChips] undo failed:', err);
-      return;
-    }
-    setAddedName(null);
-    showStatus({ ...current, onUndo: undefined }, true);
   }
 
   return (
@@ -154,7 +130,7 @@ export function QuickAddChips({
             >
               <span className="truncate">{name}</span>
               {added ? (
-                <span className="flex-shrink-0 font-semibold" data-testid="quick-add-chip-added">· Added</span>
+                <span className="flex-shrink-0 font-semibold" data-testid="quick-add-chip-added">· Added to {mealLabel}</span>
               ) : (
                 <span className="flex-shrink-0 text-subhead text-ink-2" data-testid="quick-add-chip-portion">· {portion}</span>
               )}
@@ -164,34 +140,13 @@ export function QuickAddChips({
       </div>
       <div role="status" aria-live="polite" data-testid="quick-add-status">
         {confirmation && (
-          <div className="mt-2 flex items-start gap-3 rounded-lg border border-status-ok/40 bg-status-ok/15 px-3 py-2.5">
-            {/* A solid check, big enough to read at a glance (Frank: "the
-                confirmation after adding a food was not obvious"). */}
-            <span
-              className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-status-ok text-white"
-              aria-hidden="true"
-            >
-              <IconCheck size={18} stroke={3} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-body font-semibold text-ink" data-testid="quick-add-status-added">
-                {undone ? confirmation.removed : confirmation.added}
-              </p>
-              {!undone && (
-                <p className="text-subhead text-ink-2" data-testid="quick-add-status-totals">
-                  {confirmation.totals}
-                </p>
-              )}
-            </div>
-            {!undone && confirmation.onUndo && (
-              <button
-                type="button"
-                onClick={() => void handleUndo()}
-                className="-my-1 flex-shrink-0 min-h-[44px] px-2 text-body font-semibold text-action hover:underline"
-              >
-                Undo
-              </button>
-            )}
+          <div className="mt-2">
+            <AddedBanner
+              confirmation={confirmation}
+              onFailed={() => {
+                setAddedName(null);
+              }}
+            />
           </div>
         )}
       </div>

@@ -8,6 +8,7 @@
  * purely presentational.
  */
 
+import { useId, useState } from 'react';
 import { formatWeight } from '@/lib/utils';
 import type { StandardMuscleGroup, WeightUnit } from '@/types/schema';
 
@@ -55,23 +56,41 @@ function formatReadyAt(iso: string | null): string | null {
 }
 
 export function StabilizerWarningBanner({ warning, unit, onDismiss }: StabilizerWarningBannerProps) {
+  // Compact by default (UX panel round 21: "banners and warnings clutter the
+  // workout screen"): the warning itself stays visible on the exercise — it
+  // is about load on a tired muscle — but the detail and the options open on
+  // a tap instead of filling the card.
+  const [open, setOpen] = useState(false);
   const recoveredPct = Math.round(warning.readinessRatio * 100);
   const intensityPct = Math.round(warning.intensityRatio * 100);
   const readyIn = formatReadyAt(warning.estimatedReadyAt);
+  const detailsId = useId();
 
   return (
     <div
-      className="rounded-xl border border-status-warn/45 bg-status-warn/10 px-4 py-3"
+      className="rounded-xl border border-status-warn/45 bg-status-warn/10 px-3 py-2"
       role="status"
       data-testid="stabilizer-warning-banner"
     >
-      <div className="flex items-start gap-3">
-        <span aria-hidden="true" className="text-status-warn mt-0.5">⚠</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-subhead font-medium text-status-warn">
-            {warning.displayName} still recovering ({recoveredPct}%)
-          </p>
-          <p className="text-subhead text-ink-2 mt-0.5">
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true" className="text-status-warn">⚠</span>
+        <p className="flex-1 min-w-0 text-subhead font-medium text-status-warn">
+          {warning.displayName} still recovering ({recoveredPct}%)
+        </p>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={detailsId}
+          className="flex-shrink-0 min-h-[36px] px-2 text-subhead font-medium text-action"
+          data-testid="stabilizer-warning-toggle"
+        >
+          {open ? 'Less' : 'Options'}
+        </button>
+      </div>
+      {open && (
+        <div id={detailsId} className="mt-1 pl-6">
+          <p className="text-subhead text-ink-2">
             {warning.hoursSinceLoaded !== null
               ? `Last loaded ${formatHoursAgo(warning.hoursSinceLoaded)}`
               : 'Recently loaded'}
@@ -90,18 +109,16 @@ export function StabilizerWarningBanner({ warning, unit, onDismiss }: Stabilizer
               ))}
             </ul>
           )}
-          <div className="flex items-center gap-3 mt-2">
-            <button
-              type="button"
-              onClick={onDismiss}
-              className="min-h-[36px] px-3 text-subhead text-ink-2 hover:text-ink"
-              data-testid="stabilizer-warning-dismiss"
-            >
-              Got it — train as planned
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="mt-1 min-h-[36px] text-subhead text-ink-2 hover:text-ink"
+            data-testid="stabilizer-warning-dismiss"
+          >
+            Got it — train as planned
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -361,7 +361,7 @@ export default function TrainPage() {
       // Navigate-first (lib/training/pendingWorkoutStart): open the workout
       // screen once the session row exists; it finishes the build there.
       await runNavigateFirstStart({
-        start: ({ sessionReady, stage }) =>
+        start: ({ sessionReady, stage, preview }) =>
           startMesocycleWorkoutSession({
             supabase,
             mesocycle: activeMeso,
@@ -372,6 +372,7 @@ export default function TrainPage() {
               if (s === 'building') sessionReady(id);
               stage(s);
             },
+            onPreview: preview,
           }),
         navigate: (id) => {
           setStartStage('opening');

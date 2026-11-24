@@ -54,6 +54,20 @@ export function weightTrendRule(units: 'lb' | 'kg', weighIns: number, days: numb
   );
 }
 
+/**
+ * The page-level "How trends are worked out", in two short sentences — one
+ * for weight, one for lifts (UX panel r21, Maya: the explanation was wordy).
+ * The longer rules above stay on the cards that need them.
+ */
+export const SHORT_WEIGHT_RULE =
+  'Weight uses every weigh-in in the range, so one heavy or light day barely moves it.';
+
+export function shortLiftRule(units: 'lb' | 'kg'): string {
+  const example = EXAMPLE_LIFT[units];
+  const perWeek = trimNumber((example * FLAT_BAND_PCT) / 100);
+  return `A lift is going up or slipping once its estimated max moves more than ${perWeek} ${units} a week on a ${example} ${units} lift.`;
+}
+
 /** Goals / phases on which holding strength is the win. */
 export function isCutGoal(goal: string | null | undefined): boolean {
   return goal === 'cut';

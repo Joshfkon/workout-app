@@ -58,7 +58,7 @@ import {
 import { requiredStabilizersFor } from './muscleRecovery';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation, type VolumeAdjustmentInput } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation, type VolumeAdjustmentInput, type StartingVolume } from './mesocycleBuilder';
 import { getEffectiveBand, type CoarseMuscle } from './volumeBands';
 import { perSetCredits, perSetGroupCredits } from './shared/volumeCredit';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
@@ -379,6 +379,117 @@ function reserveMinutesAfter(allotted: number[], index: number, goal: Goal): num
     if (floor > 0) minutes += estimateExerciseTime(false, goal, floor, false);
   }
   return minutes;
+}
+
+/** One exercise a session builder placed, as the time top-up reads it. */
+interface PlacedExercise {
+  /** Index into the session's plans. */
+  plan: number;
+  /** Index into the session's exercises. */
+  index: number;
+  isCompound: boolean;
+  avgReps: number;
+  /** RIR the session's fatigue budget checks this exercise at. */
+  gateRir: number;
+  /** RIR the exercise is prescribed at (recovery history). */
+  rir: number;
+  position: number;
+}
+
+/** Most sets the top-up puts on one exercise (selectExercisesWithFatigue's
+ *  own cap), and the one extra it allows while a muscle is still under its
+ *  MEV share: on a Bro Split Back day with a raised limit, the second shrug
+ *  came late enough for the fatigue budget to refuse it and traps sat at
+ *  5.5 credited sets (MEV 6). */
+const TOP_UP_MAX_SETS_PER_EXERCISE = 4;
+const TOP_UP_MAX_SETS_UNDER_FLOOR = 5;
+
+/**
+ * Spend a session's leftover minutes on the muscles it shorted. The fair
+ * share counts sets against sessionSetCapacity, which assumes half the sets
+ * are compounds with long rests; a day of cable and machine isolations
+ * (Bro Split Arms: 27 sets in ~59 of 75 minutes) hit that count with a
+ * quarter of its time unused while biceps and triceps sat well short of
+ * their requests (UX panel round 21: "volume is low for an advanced
+ * lifter"). One set at a time, high priorities first, then the muscle
+ * furthest short of its request. Each set must keep the session inside
+ * `budgetMinutes` on the SAME duration model the plan shows
+ * (estimatePlannedSessionMinutes — the build loop's rougher clock let a
+ * topped-up Upper day read 84 minutes of a 75-minute choice) and inside the
+ * session's fatigue budget, and never takes a muscle past its request
+ * (which already holds the per-session ceiling and the week's ramp).
+ * Mutates `exercises`, `got` and the fatigue manager.
+ */
+function topUpSessionSets(args: {
+  plans: readonly { request: number; priority: boolean; floor: number }[];
+  got: number[];
+  placed: readonly PlacedExercise[];
+  exercises: DetailedExerciseWithFatigue[];
+  fatigueManager: SessionFatigueManager;
+  weeklyRecovery: PlannedWeekRecovery;
+  currentDay: number;
+  budgetMinutes: number;
+}): void {
+  const { plans, got, placed, exercises, fatigueManager, weeklyRecovery, currentDay, budgetMinutes } = args;
+  const minutesOf = () => plannedMinutesOf(exercises);
+  const done = new Set<number>();
+  for (let guard = 0; guard < 200; guard++) {
+    let pick = -1;
+    for (let i = 0; i < plans.length; i++) {
+      if (done.has(i) || got[i] >= plans[i].request || got[i] === 0) continue;
+      if (pick === -1) { pick = i; continue; }
+      const short = (j: number) => (plans[j].request - got[j]) / plans[j].request;
+      if (plans[i].priority !== plans[pick].priority) {
+        if (plans[i].priority) pick = i;
+      } else if (short(i) > short(pick)) {
+        pick = i;
+      }
+    }
+    if (pick === -1) break;
+    // The muscle's exercise with the fewest sets that can take another.
+    const maxSets = got[pick] < plans[pick].floor ? TOP_UP_MAX_SETS_UNDER_FLOOR : TOP_UP_MAX_SETS_PER_EXERCISE;
+    const own = placed
+      .filter((p) => p.plan === pick && exercises[p.index].sets < maxSets)
+      .sort((a, b) => exercises[a.index].sets - exercises[b.index].sets || a.position - b.position);
+    let added = false;
+    for (const p of own) {
+      const ex = exercises[p.index];
+      ex.sets += 1;
+      const fits = minutesOf() <= budgetMinutes;
+      ex.sets -= 1;
+      if (!fits) continue;
+      const oneSet = calculateExerciseFatigue(ex.exercise, 1, p.avgReps, p.gateRir, p.position);
+      // The exercise is already in the session, so only the systemic and
+      // local limits apply to another set of it (not the slot's SFR check).
+      if (!admitExercise(fatigueManager, oneSet, true).allowed) continue;
+      fatigueManager.addExercise(oneSet);
+      ex.sets += 1;
+      weeklyRecovery.record(currentDay, {
+        primaryMuscle: ex.exercise.primaryMuscle,
+        secondaryMuscles: ex.exercise.secondaryMuscles ?? [],
+        stabilizers: (ex.exercise as { stabilizers?: string[] }).stabilizers,
+        sets: 1,
+        targetRir: p.rir,
+      });
+      got[pick] += 1;
+      added = true;
+      break;
+    }
+    if (!added) done.add(pick);
+  }
+}
+
+/** A built session's length on the shared duration model (the number the
+ *  plan shows). */
+function plannedMinutesOf(exercises: readonly DetailedExerciseWithFatigue[]): number {
+  return estimatePlannedSessionMinutes(
+    exercises.map((e) => ({
+      sets: e.sets,
+      restSeconds: e.restSeconds,
+      mechanic: e.exercise.pattern === 'isolation' ? 'isolation' : 'compound',
+      muscle: e.exercise.primaryMuscle,
+    }))
+  );
 }
 
 // ============================================================
@@ -808,6 +919,9 @@ export function buildDetailedSessionWithFatigue(
   );
 
   let exercisePosition = 1;
+  // What each plan actually got, and where, for the time top-up below.
+  const got = plans.map(() => 0);
+  const placed: PlacedExercise[] = [];
 
   for (let planIndex = 0; planIndex < plans.length; planIndex++) {
     const { muscle, readiness } = plans[planIndex];
@@ -944,6 +1058,17 @@ export function buildDetailedSessionWithFatigue(
         targetRir: adjustedRIR,
       });
 
+      placed.push({
+        plan: planIndex,
+        index: exercises.length - 1,
+        isCompound,
+        avgReps,
+        gateRir: FATIGUE_GATE_RIR,
+        rir: adjustedRIR,
+        position: exercisePosition,
+      });
+      got[planIndex] += selection.sets;
+
       // Track time and exercise count (reuse isCompound and needsWarmup from above)
       estimatedTimeUsed += estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmup);
       if (needsWarmup) {
@@ -953,6 +1078,17 @@ export function buildDetailedSessionWithFatigue(
       addedForMuscle++;
     }
   }
+
+  topUpSessionSets({
+    plans,
+    got,
+    placed,
+    exercises,
+    fatigueManager,
+    weeklyRecovery,
+    currentDay,
+    budgetMinutes: sessionMinutes * Math.min(1, Math.max(0, capacityScale)),
+  });
 
   // Get session fatigue summary
   const fatigueSummary = fatigueManager.getSessionSummary();
@@ -1069,6 +1205,8 @@ export function buildDUPSession(
   );
 
   let exercisePosition = 1;
+  const got = plans.map(() => 0);
+  const placed: PlacedExercise[] = [];
 
   for (let planIndex = 0; planIndex < plans.length; planIndex++) {
     const { muscle, readiness } = plans[planIndex];
@@ -1182,6 +1320,17 @@ export function buildDUPSession(
         targetRir: repConfig.targetRIR,
       });
 
+      placed.push({
+        plan: planIndex,
+        index: exercises.length - 1,
+        isCompound,
+        avgReps,
+        gateRir: repConfig.targetRIR,
+        rir: repConfig.targetRIR,
+        position: exercisePosition,
+      });
+      got[planIndex] += selection.sets;
+
       // Track time and exercise count
       const needsWarmupTrack = isCompound && !warmedUpMuscles.has(muscle);
       estimatedTimeUsed += estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmupTrack);
@@ -1191,6 +1340,19 @@ export function buildDUPSession(
       exercisePosition++;
     }
   }
+
+  // Leftover minutes go to the muscles the fair share shorted (see the
+  // standard builder).
+  topUpSessionSets({
+    plans,
+    got,
+    placed,
+    exercises,
+    fatigueManager,
+    weeklyRecovery,
+    currentDay,
+    budgetMinutes: sessionMinutes * Math.min(1, Math.max(0, capacityScale)),
+  });
 
   const fatigueSummary = fatigueManager.getSessionSummary();
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
@@ -1430,12 +1592,20 @@ export function capTargetsToDelivered(
 export function mevSessionFloors(
   volumePerMuscle: Record<MuscleGroup, { sets: number; frequency: number }>,
   templates: readonly SessionTemplate[],
-  bandContext: Parameters<typeof getEffectiveBand>[1]
+  bandContext: Parameters<typeof getEffectiveBand>[1],
+  /** High-priority groups. When there are any, every other muscle trained
+   *  in ONE session a week keeps its MEV share there: a priority is served
+   *  first from the session's time, and on a Bro Split Legs day a
+   *  high-priority hamstrings at a 16-set limit left quads at 7 (MEV 8)
+   *  with no other day to make it up. A muscle trained twice is left to the
+   *  fair share, so a priority on Upper/Lower still moves 4+ sets. */
+  priority: ReadonlySet<MuscleGroup> = new Set()
 ): Partial<Record<MuscleGroup, number>> {
   const out: Partial<Record<MuscleGroup, number>> = {};
   for (const [muscle, vol] of Object.entries(volumePerMuscle) as [MuscleGroup, { sets: number; frequency: number }][]) {
-    if (!MEV_FLOOR_MUSCLES.has(muscle)) continue;
     const sessions = templates.filter((t) => t.targetMuscles.includes(muscle)).length;
+    const guarded = MEV_FLOOR_MUSCLES.has(muscle) || (priority.size > 0 && !priority.has(muscle) && sessions === 1);
+    if (!guarded) continue;
     if (sessions === 0) continue;
     const mev = getEffectiveBand(muscle as CoarseMuscle, bandContext)?.mev;
     if (!mev) continue;
@@ -1467,6 +1637,15 @@ export function highPriorityGroups(adjustments: readonly VolumeAdjustmentInput[]
   return new Set(
     (adjustments ?? []).filter((a) => a.reason === 'user_priority' && a.volumeMultiplier > 1).map((a) => a.muscleGroup)
   );
+}
+
+/**
+ * The day names a split's week holds at `sessionsPerWeek` (the generator's
+ * own templates), for the builder's split cards: "Upper A · Lower A ·
+ * Upper B · Lower B". Pure.
+ */
+export function splitWeekDays(split: Split, sessionsPerWeek: number): string[] {
+  return buildSessionTemplates(split, Math.max(1, Math.round(sessionsPerWeek))).map((t) => t.day);
 }
 
 /** Sessions a split's rotation needs so no muscle group is skipped in a week. */
@@ -1511,10 +1690,13 @@ function buildSessionTemplates(split: Split, daysPerWeek: number): SessionTempla
     ],
     // Abs had no day at all, and calves sat last on a Legs day that could
     // not hold quads, hamstrings and glutes already; the shorter single-
-    // muscle days carry them twice a week instead.
+    // muscle days carry them twice a week instead. Calves ride the Chest day,
+    // not Back: chest stops at its per-session limit with half a 75-minute
+    // session unused, while Back (lats, rows, shrugs) filled its time and
+    // calves took sets from back (UX panel round 21: back at MEV).
     'Bro Split': [
-      { day: 'Chest', focus: 'Chest, abs', targetMuscles: ['chest', 'abs'] },
-      { day: 'Back', focus: 'Back, traps, calves', targetMuscles: ['back', 'traps', 'calves'] },
+      { day: 'Chest', focus: 'Chest, abs, calves', targetMuscles: ['chest', 'abs', 'calves'] },
+      { day: 'Back', focus: 'Back, traps', targetMuscles: ['back', 'traps'] },
       { day: 'Shoulders', focus: 'All three heads, calves', targetMuscles: ['shoulders', 'calves'] },
       { day: 'Arms', focus: 'Biceps & Triceps, abs', targetMuscles: ['biceps', 'triceps', 'abs'] },
       { day: 'Legs', focus: 'Quads, hamstrings, glutes', targetMuscles: ['quads', 'hamstrings', 'glutes'] },
@@ -1549,6 +1731,10 @@ export interface GenerateMesocycleOptions {
    *  changed (`priorityEffects`). Costs a second generation, so only the
    *  builder's review step asks for it. */
   reportPriorityEffects?: boolean;
+  /** The builder's "Starting volume" (mesocycleBuilder StartingVolume):
+   *  where in each muscle's MEV–MAV–MRV landmarks the targets sit. Omitted =
+   *  the long-standing presets. */
+  startingVolume?: StartingVolume;
 }
 
 /**
@@ -1676,7 +1862,8 @@ export function generateFullMesocycleWithFatigue(
     recoveryFactors,
     laggingAreas,
     volumeAdjustments,
-    profile.enhancedAthleteMode
+    profile.enhancedAthleteMode,
+    options.startingVolume
   );
   
   // Scale volume based on available time (40min = ~67% volume of 60min)
@@ -1864,7 +2051,7 @@ export function generateFullMesocycleWithFatigue(
     // the remainder (never under the per-session floor).
     // A muscle held at MEV keeps its share of it in every training week
     // (mevSessionFloors); the deload goes under MEV by design.
-    const floors = isDeload ? {} : mevSessionFloors(volumePerMuscle, sessionTemplates, bandContext);
+    const floors = isDeload ? {} : mevSessionFloors(volumePerMuscle, sessionTemplates, bandContext, priorityGroups);
     const firstPass = buildWeekSessions(withSessionFloors(volumePerMuscle, floors, priorityGroups));
     const inflow = indirectCreditByGroup(firstPass);
     const modifier = Math.max(0.1, weekProgression.volumeModifier);

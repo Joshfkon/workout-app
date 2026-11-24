@@ -142,6 +142,39 @@ describe('QuickAddChips', () => {
     error.mockRestore();
   });
 
+  it('the chip says which meal it went to', async () => {
+    renderChips(jest.fn().mockResolvedValue(confirmation()));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-add-chip'));
+    });
+    expect(screen.getByTestId('quick-add-chip-added')).toHaveTextContent('Added to Dinner');
+  });
+
+  it('a save that fails after the optimistic confirmation turns it into an error and clears the chip', async () => {
+    let reject!: (err: Error) => void;
+    const saved = new Promise((_, r) => {
+      reject = r;
+    });
+    renderChips(
+      jest.fn().mockResolvedValue({
+        ...confirmation(),
+        saved,
+        failed: 'Couldn’t save Greek yogurt. Check your connection and try again.',
+      })
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-add-chip'));
+    });
+    // Shown before the save lands.
+    expect(screen.getByTestId('quick-add-status-added')).toHaveTextContent('Added Greek yogurt (170 g) to Dinner');
+    expect(screen.getByTestId('quick-add-status-totals')).toHaveTextContent('Day total 283');
+    await act(async () => {
+      reject(new Error('offline'));
+    });
+    expect(screen.getByTestId('quick-add-status-failed')).toHaveTextContent('Couldn’t save Greek yogurt');
+    expect(screen.getByTestId('quick-add-chip')).not.toHaveAttribute('data-added');
+  });
+
   it('renders nothing with no recent foods', () => {
     const { container } = render(
       <QuickAddChips foods={[]} mealType="dinner" mealLabel="Dinner" meals={meals} onMealChange={jest.fn()} onAdd={jest.fn()} />

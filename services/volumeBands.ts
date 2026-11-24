@@ -482,3 +482,37 @@ export function getEffectiveBand(
   }
   return { mev: base.mev, mrv: scaleMrvForProfile(base.mrv, tierKey, ctx) };
 }
+
+/**
+ * Where MAV sits inside the MEV–MRV band for a coarse group at an experience
+ * level, read off the DIRECT landmark table (DEFAULT_VOLUME_LANDMARKS): the
+ * group's own row when it has one (biceps, quads…), else the mean over its
+ * children (chest_upper/chest_lower…). A fraction, so it carries across the
+ * direct/credited convention without converting set counts. Pure.
+ */
+export function mavBandFraction(muscle: CoarseMuscle, experience: 'novice' | 'intermediate' | 'advanced'): number {
+  const table = DEFAULT_VOLUME_LANDMARKS[experience] as Partial<Record<string, VolumeLandmarks>>;
+  const fractionOf = (l: VolumeLandmarks | undefined): number | null =>
+    l && l.mrv > l.mev ? Math.min(1, Math.max(0, (l.mav - l.mev) / (l.mrv - l.mev))) : null;
+  const own = fractionOf(table[muscle]);
+  if (own !== null) return own;
+  const kids = COARSE_CHILDREN[muscle].map((c) => fractionOf(table[c])).filter((f): f is number => f !== null);
+  return kids.length > 0 ? kids.reduce((s, f) => s + f, 0) / kids.length : 0.5;
+}
+
+/**
+ * A coarse group's MEV / MAV / MRV in CREDITED sets: MEV and MRV are the
+ * group band (getEffectiveBand, recovery profile applied); MAV sits at the
+ * same place inside that band as the experience level's landmark MAV does
+ * in its own (mavBandFraction). The builder's "starting volume" choice and
+ * the review read these. Pure.
+ */
+export function coarseVolumeLandmarks(
+  muscle: CoarseMuscle,
+  experience: 'novice' | 'intermediate' | 'advanced',
+  ctx?: BandContext
+): VolumeLandmarks {
+  const band = getEffectiveBand(muscle, ctx);
+  const mav = Math.round(band.mev + mavBandFraction(muscle, experience) * (band.mrv - band.mev));
+  return { mev: band.mev, mav: Math.min(band.mrv, Math.max(band.mev, mav)), mrv: band.mrv };
+}

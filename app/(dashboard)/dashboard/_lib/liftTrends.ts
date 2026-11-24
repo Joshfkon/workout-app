@@ -362,6 +362,13 @@ export interface ComputeLiftTrendsOptions {
   programStartDate?: string | null;
   /** Also return the per-lift series for the muscle rollup (`rollup`). */
   includeRollup?: boolean;
+  /**
+   * Days the caller fetched sessions over, reported back as `windowDays`
+   * (the sentences say "over the last N weeks" from it). The sessions are
+   * already bounded by the caller's query; this does not filter them.
+   * Defaults to LIFT_TREND_WINDOW_DAYS (Home's tile and Progress's default).
+   */
+  windowDays?: number;
 }
 
 /**
@@ -692,7 +699,7 @@ export function computeLiftTrends(
     sessionsInWindow: sessions.length,
     earlyLifts,
     stalled,
-    windowDays: LIFT_TREND_WINDOW_DAYS,
+    windowDays: options.windowDays ?? LIFT_TREND_WINDOW_DAYS,
     ...(options.includeRollup
       ? {
           rollup: {

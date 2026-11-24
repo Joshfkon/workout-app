@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { Sidebar } from '../Sidebar';
 
 // Mock next/navigation
@@ -64,5 +64,22 @@ describe('Sidebar', () => {
     render(<Sidebar onSignOut={mockOnSignOut} volumeGoalsMet={false} />);
     expect(screen.queryByRole('link', { name: /^Train/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Weight/ })).toHaveAttribute('href', '/dashboard/nutrition/trends');
+  });
+
+  // UX panel round 21: the closed drawer was only translated off screen, so
+  // its Train / Progress links stayed in the accessibility tree and the
+  // first tap on Home went to an off-screen copy.
+  it('keeps the closed phone drawer out of reach until the menu opens it', () => {
+    usePathname.mockReturnValue('/dashboard');
+    render(<Sidebar onSignOut={mockOnSignOut} volumeGoalsMet={false} />);
+    const drawer = screen.getByTestId('app-sidebar');
+    expect(drawer.className).toMatch(/(^|\s)invisible(\s|$)/);
+    expect(drawer.className).toContain('lg:visible');
+
+    const menu = screen.getByRole('button', { name: 'Open menu' });
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(menu);
+    expect(drawer.className).not.toMatch(/(^|\s)invisible(\s|$)/);
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
   });
 });

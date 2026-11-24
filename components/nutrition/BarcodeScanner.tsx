@@ -9,6 +9,7 @@ import { Button, LoadingAnimation } from '@/components/ui';
 import { lookupBarcode, type BarcodeSearchResult } from '@/services/openFoodFactsService';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { lookupBarcodeUsdaAction } from '@/lib/actions/nutrition';
+import { precheckWebCamera } from '@/lib/nutrition/cameraPrecheck';
 
 // ML Kit barcode scanning (native only) - loaded via dynamic import so the
 // plugin never ends up in web bundles that don't need it.
@@ -330,26 +331,8 @@ export function canRetryCamera(issue: CameraIssue): boolean {
   return issue !== 'missing';
 }
 
-/**
- * Before asking for the camera on the web: if the browser can list devices
- * and lists no video input, there is no camera to ask for (a desktop without
- * a webcam). Returns 'missing' then, else null ("try it"). Never throws, and
- * an empty or failed listing is NOT taken as proof of no camera, except the
- * explicit "devices listed, none of them video" case.
- */
-export async function precheckWebCamera(
-  nav: { mediaDevices?: { enumerateDevices?: () => Promise<Array<{ kind: string }>> } } | undefined
-): Promise<CameraIssue | null> {
-  const enumerate = nav?.mediaDevices?.enumerateDevices;
-  if (typeof enumerate !== 'function') return null;
-  try {
-    const devices = await enumerate.call(nav!.mediaDevices);
-    if (devices.length > 0 && !devices.some((d) => d.kind === 'videoinput')) return 'missing';
-    return null;
-  } catch {
-    return null;
-  }
-}
+// Moved to lib so the Add food sheet can check before Scan is tapped.
+export { precheckWebCamera } from '@/lib/nutrition/cameraPrecheck';
 
 /**
  * Shown when the camera can't start: manual entry is the primary action,

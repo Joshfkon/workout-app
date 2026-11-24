@@ -1,6 +1,16 @@
 import { SkeletonExercise } from '@/components/ui/LoadingAnimation';
+import { PendingStartFallback } from './_components/PendingStartFallback';
 
+/**
+ * Right after Start, this boundary shows while the workout screen's code
+ * loads: PendingStartFallback renders the start's first exercise instead of
+ * the skeleton when the start published one (UX panel round 21).
+ */
 export default function ActiveWorkoutLoading() {
+  return <PendingStartFallback fallback={<ActiveWorkoutLoadingSkeleton />} />;
+}
+
+function ActiveWorkoutLoadingSkeleton() {
   return (
     <div className="space-y-4 p-4">
       {/* Workout header skeleton */}

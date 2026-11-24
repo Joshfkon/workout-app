@@ -4,6 +4,7 @@ import {
   starterTargets,
   targetsFromMacroSettings,
   STARTER_ACTIVITY_SETTINGS,
+  withCalorieOverride,
   withProteinOverride,
 } from '@/lib/nutrition/phaseTargets';
 
@@ -25,7 +26,7 @@ describe('phaseTargets', () => {
     };
     const rec = calculateMacros(
       { weightKg: 70, heightCm: 170, age: 40, sex: 'female' },
-      { activityLevel: 'moderate', workoutsPerWeek: 4, avgWorkoutMinutes: 60, workoutIntensity: 'moderate' },
+      { activityLevel: 'light', workoutsPerWeek: 4, avgWorkoutMinutes: 60, workoutIntensity: 'moderate' },
       { goal: 'moderate_cut', peptide: 'none' }
     );
     expect(targetsFromMacroSettings(70, settings)).toEqual({
@@ -86,7 +87,7 @@ describe('starterTargets: onboarding training-step answers', () => {
       const r = starterTargets({ ...base, bodyFatPercent: 10 })!;
       const direct = calculateMacros(
         { weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 10 },
-        { activityLevel: 'moderate', workoutsPerWeek: 4, avgWorkoutMinutes: 60, workoutIntensity: 'moderate' },
+        { activityLevel: 'light', workoutsPerWeek: 4, avgWorkoutMinutes: 60, workoutIntensity: 'moderate' },
         { goal: 'slow_bulk', peptide: 'none' }
       );
       expect(r.targets.protein).toBe(direct.protein);
@@ -123,6 +124,64 @@ describe('starterTargets: onboarding training-step answers', () => {
     it('never takes carbs below zero', () => {
       const t = withProteinOverride({ calories: 2000, protein: 150, carbs: 20, fat: 60 }, 200);
       expect(t).toEqual({ calories: 200 * 4 + 0 + 60 * 9, protein: 200, carbs: 0, fat: 60 });
+    });
+  });
+});
+
+describe('starter targets: no double-counted training, and the working shown (UX round 22)', () => {
+  // Dre: 31, 178 cm, 80 kg, 11% body fat, cutting, 4 days a week.
+  const dre = {
+    phase: 'cut' as const,
+    weightKg: 80,
+    heightCm: 178,
+    age: 31,
+    sex: 'male' as const,
+    nutritionGoal: 'moderate_cut' as const,
+    workoutsPerWeek: 4,
+    bodyFatPercent: 11,
+  };
+
+  it('counts workouts once: light daily life plus the workouts, not "moderate exercise" plus them', () => {
+    const r = starterTargets(dre)!;
+    expect(r.settings.activity_level).toBe('light');
+    // Resting 1,908 (Katch-McArdle, 71.2 kg lean) × 1.375 + 4 × 60 min ≈ 192/day.
+    expect(r.calories.restingKcal).toBe(1908);
+    expect(r.calories.workoutKcalPerDay).toBe(192);
+    expect(r.calories.maintenanceKcal).toBe(2815);
+    // Was 2,882 from a 3,149 "maintenance" (×1.55 and the workouts on top).
+    expect(r.targets.calories).toBe(2550);
+  });
+
+  it('explains the cut: the pace asked for, the leanness cap, and the result adding up', () => {
+    const r = starterTargets(dre)!;
+    expect(r.calories.requestedPercentBW).toBe(-0.5);
+    expect(r.calories.lossCap).toEqual({ percentBW: 0.3, bodyFatPercent: 11 });
+    expect(r.calories.maintenanceKcal + r.calories.adjustmentKcal).toBe(r.targets.calories);
+    expect(r.calories.adjustmentKcal).toBeLessThan(0);
+    // Protein is the calculator's cut rule: 1.1 g per lb of lean mass.
+    expect(r.protein.perLbLeanMass).toBe(1.1);
+    expect(r.targets.protein).toBe(173);
+    // No cap above the leanness tiers' line.
+    expect(starterTargets({ ...dre, bodyFatPercent: 25 })!.calories.lossCap).toBeNull();
+  });
+
+  it('takes calories by hand: protein and fat kept, carbs move, the calculated figure remembered', () => {
+    const calc = starterTargets(dre)!;
+    const r = starterTargets({ ...dre, caloriesKcal: 2300 })!;
+    expect(r.targets.calories).toBe(2300);
+    expect(r.targets.protein).toBe(calc.targets.protein);
+    expect(r.targets.fat).toBe(calc.targets.fat);
+    expect(r.calories).toMatchObject({ setByHand: true, calculated: calc.targets.calories });
+    // Out of range (below the male floor) is ignored.
+    expect(starterTargets({ ...dre, caloriesKcal: 900 })!.calories.setByHand).toBe(false);
+  });
+
+  it('withCalorieOverride takes from fat only once carbs are gone', () => {
+    expect(withCalorieOverride({ calories: 2000, protein: 150, carbs: 200, fat: 60 }, 1800)).toEqual({
+      calories: 1800, protein: 150, carbs: 165, fat: 60,
+    });
+    expect(withCalorieOverride({ calories: 2000, protein: 200, carbs: 100, fat: 80 }, 1000)).toEqual({
+      calories: 1000, protein: 200, carbs: 0, fat: 22,
     });
   });
 });

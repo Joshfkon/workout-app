@@ -2,6 +2,13 @@
 
 import { mealFromAddParam } from '@/lib/nutrition/addFoodLink';
 import { JUST_ADDED_MS, rowNeedsScroll } from '@/lib/nutrition/addConfirmation';
+import {
+  WEIGHT_CHART_RANGE_DAYS,
+  notEnoughWeighInsMessage,
+  pickWeightChartRange,
+  type WeightChartRange,
+} from '@/lib/nutrition/weightChartRange';
+import { buildPendingRows, dropPendingRows, reconcileSavedRows, totalsWith, isPendingFoodLogId } from '@/lib/nutrition/optimisticAdd';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useHydrated } from '@/hooks/useHydrated';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
@@ -82,6 +89,8 @@ import {
   addedToMealMessage,
   quickAddConfirmation,
   mealTypeForHour,
+  dayTotalsLine,
+  formatPortion,
 } from '@/lib/nutrition/frequentFoods';
 import { now as clockNow } from '@/lib/clock';
 import type { QuickAddConfirmation } from '@/components/nutrition/QuickAddChips';
@@ -221,13 +230,6 @@ interface FoodLogInsert {
   nutritionix_id?: string;
 }
 
-const WEIGHT_CHART_RANGE_DAYS = {
-  '7d': 7,
-  '14d': 14,
-  '30d': 30,
-  '90d': 90,
-} as const;
-type WeightChartRange = keyof typeof WEIGHT_CHART_RANGE_DAYS;
 
 /** Skeleton for the macro summary numbers while a never-fetched day loads. */
 function MacroNumbersSkeleton() {
@@ -337,7 +339,9 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   const [showSavedMeals, setShowSavedMeals] = useState(false);
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showWeightHistory, setShowWeightHistory] = useState(false);
-  const [weightChartRange, setWeightChartRange] = useState<WeightChartRange>('30d');
+  // null = not chosen yet: the chart opens on the shortest of 30 / 90 days
+  // with enough weigh-ins (lib/nutrition/weightChartRange).
+  const [weightChartRange, setWeightChartRange] = useState<WeightChartRange | null>(null);
   const [editingWeight, setEditingWeight] = useState<WeightLogEntry | null>(null);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
@@ -381,7 +385,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   useEffect(() => {
     const meal = mealFromAddParam(searchParams.get('add'), getMealTypeForNow());
     if (!meal) return;
-    openAddFood(meal);
+    // Straight into search: the box focused, recent foods under it.
+    openAddFood(meal, 'search', { focusSearch: true });
     window.history.replaceState(null, '', pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -403,7 +408,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
 
-  const { toasts, dismissToast, showSuccess, addToast } = useToasts();
+  const { toasts, dismissToast, showSuccess, showError, addToast } = useToasts();
   // Food-only users (hooks/useTrackingFocus) get no FFMI in the projections.
   const { foodOnly } = useTrackingFocus();
 
@@ -545,24 +550,31 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Optimistic writer for the selected day's cache. Drop-in replacement for the
   // old setFoodEntries(setState) used by every mutation/undo path.
   const mutateFoodEntries = useCallback(
-    (updater: FoodLogEntry[] | ((prev: FoodLogEntry[]) => FoodLogEntry[])) => {
-      if (!selectedDate) return;
+    (
+      updater: FoodLogEntry[] | ((prev: FoodLogEntry[]) => FoodLogEntry[]),
+      // The day to write; defaults to the selected one. An optimistic add
+      // passes the day it was made on, so a save that lands after the user
+      // switched days still reconciles the right day.
+      dayArg?: string | null
+    ) => {
+      const day = dayArg === undefined ? selectedDate : dayArg;
+      if (!day) return;
       const nextEntries = queryClient.setQueryData<FoodLogEntry[]>(
-        nutritionDayKey(selectedDate),
+        nutritionDayKey(day),
         (prev = []) => (typeof updater === 'function' ? updater(prev) : updater)
       );
       // The calendar's month aggregate now disagrees with the day cache. Mark
       // it stale so the next sheet open refetches — matters for PAST months,
       // whose immutable-in-practice staleTime would otherwise hide the edit.
       void queryClient.invalidateQueries({
-        queryKey: nutritionMonthKey(selectedDate.slice(0, 7)),
+        queryKey: nutritionMonthKey(day.slice(0, 7)),
         refetchType: 'none',
       });
       // Cross-surface: the Home ('/dashboard/log') "Today so far" card reads
       // today's totals from a SEPARATE query (['log','home']) that this write
       // doesn't touch. Only today's edits affect Home (it only ever shows
       // today's totals).
-      if (selectedDate === getLocalDateString()) {
+      if (day === getLocalDateString()) {
         // Patch the Home cache's totals optimistically from the same food-entry
         // rows we just wrote, THEN invalidate for reconciliation. Invalidation
         // alone only marks the query stale: React Query keeps serving the old
@@ -577,7 +589,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           const sumOf = (key: 'calories' | 'protein' | 'carbs' | 'fat') =>
             Math.round(nextEntries.reduce((sum, r) => sum + (r[key] || 0), 0));
           queryClient.setQueryData<LogHomeData | null>(LOG_HOME_QUERY_KEY, (prev) => {
-            if (!prev || prev.date !== selectedDate) return prev;
+            if (!prev || prev.date !== day) return prev;
             return {
               ...prev,
               todaySoFar: {
@@ -894,6 +906,88 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   /**
+   * One-tap adds are optimistic: placeholder rows go into the day's cache at
+   * once, so the totals at the top, the meal card and the confirmation all
+   * change on the tap, then are swapped for the saved rows (or removed if
+   * the insert fails). See lib/nutrition/optimisticAdd.
+   */
+  const pendingIdRef = useRef(0);
+  function addFoodsOptimistically(foods: FoodLogInsert[]): {
+    rows: FoodLogEntry[];
+    saved: Promise<FoodLogEntry[]>;
+    /** The day's calories and protein with these rows in (read from the cache, so rapid taps each count the last). */
+    dayTotals: { calories: number; protein: number };
+  } {
+    const day = selectedDate;
+    if (!day) throw new Error('Date not initialized');
+    const pending = buildPendingRows(foods, {
+      day,
+      createdAt: new Date().toISOString(),
+      nextId: () => String(++pendingIdRef.current),
+    });
+    const pendingIds = pending.map((row) => row.id);
+    mutateFoodEntries((prev) => [...prev, ...pending], day);
+    flagJustAdded(pending);
+    const dayTotals = totalsWith(
+      { calories: 0, protein: 0 },
+      queryClient.getQueryData<FoodLogEntry[]>(nutritionDayKey(day)) ?? pending
+    );
+
+    const insert = foods.length === 1 ? insertFoodEntry(foods[0]).then((row) => [row]) : insertFoodEntries(foods);
+    const saved = insert.then(
+      (rows) => {
+        mutateFoodEntries((prev) => reconcileSavedRows(prev, pendingIds, rows), day);
+        setFrequentFoods((prev) => addLoggedRowsToFrequentFoods(prev, rows, new Date().toISOString()));
+        mutateRecentFoodsCache((prev) => [...rows, ...prev]);
+        // Keep the "Added just now" highlight on the saved rows.
+        setJustAddedIds((prev) => {
+          if (!pendingIds.some((id) => prev.has(id))) return prev;
+          const next = new Set(prev);
+          pendingIds.forEach((id, i) => {
+            if (next.delete(id) && rows[i]) next.add(rows[i].id);
+          });
+          return next;
+        });
+        return rows;
+      },
+      (err) => {
+        mutateFoodEntries((prev) => dropPendingRows(prev, pendingIds), day);
+        // Said here, not only by the confirmation banner: the banner may have
+        // timed out, been replaced or closed with the sheet by the time the
+        // insert fails, and the user already saw "Added" (Codex review on #871).
+        const names = foods.map((f) => f.food_name).filter(Boolean).join(', ') || 'That food';
+        showError(`${names} wasn't saved, so it's no longer in your log. Please add it again.`);
+        throw err;
+      }
+    );
+    // Callers watch `saved` (the confirmation turns into an error line);
+    // this branch only keeps a failure from surfacing as unhandled.
+    saved.catch(() => {});
+    return { rows: pending, saved, dayTotals };
+  }
+
+  /** The confirmation for an optimistic add, quoting the day with it included. */
+  function optimisticConfirmation(
+    text: { added: string; removed: string; failed: string },
+    dayTotals: { calories: number; protein: number },
+    saved: Promise<FoodLogEntry[]>
+  ): QuickAddConfirmation {
+    return {
+      added: text.added,
+      removed: text.removed,
+      failed: text.failed,
+      totals: `Day total ${dayTotalsLine(dayTotals, {
+        calories: effectiveTargets?.calories ?? null,
+        protein: effectiveTargets?.protein ?? null,
+      })}`,
+      saved,
+      onUndo: async () => {
+        await undoQuickAdd(await saved);
+      },
+    };
+  }
+
+  /**
    * Refresh only the data a weight or target change can affect (weight list,
    * nutrition targets, adaptive TDEE) — 2 queries + 1 server action instead
    * of the full loadData() tree.
@@ -1022,35 +1116,42 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   /**
-   * Quick-add from the Recent / Meals views: re-log a snapshot into the
-   * selected day WITHOUT closing the sheet, with an undo toast. Keeps the
-   * per-day and recents caches consistent optimistically.
+   * Quick-add from the Recent / Meals / search views: re-log a snapshot into
+   * the selected day WITHOUT closing the sheet. Optimistic; the sheet shows
+   * the returned confirmation at the top of its list, where the tap was
+   * (r21 panel: the page's toast sat over the sheet with no totals).
    */
-  async function handleQuickAddFood(food: FoodLogInsert) {
-    const inserted = await insertFoodEntry(food);
-    applyInsertedEntries([inserted]);
-    mutateRecentFoodsCache((prev) => [inserted, ...prev]);
-    flagJustAdded([inserted]);
-    replaceAddedToast(
-      addToast('success', quickAddMessage(toTitleCase(food.food_name), food.serving_size, mealLabelFor(food.meal_type)), 5000, {
-        label: 'Undo',
-        onClick: () => { void undoQuickAdd([inserted]); },
-      })
+  async function handleQuickAddFood(food: FoodLogInsert): Promise<QuickAddConfirmation> {
+    const name = toTitleCase(food.food_name);
+    const mealLabel = mealLabelFor(food.meal_type);
+    const { dayTotals, saved } = addFoodsOptimistically([food]);
+    replaceAddedToast(null);
+    return optimisticConfirmation(
+      {
+        added: quickAddMessage(name, food.serving_size, mealLabel),
+        removed: `Removed ${name} (${formatPortion(food.serving_size)}) from ${mealLabel}`,
+        failed: `Couldn’t save ${name}. Check your connection and try again.`,
+      },
+      dayTotals,
+      saved
     );
   }
 
-  /** "Add all" from a prior meal — one insert per item, one combined undo. */
-  async function handleQuickAddManyFoods(foods: FoodLogInsert[]) {
+  /** "Add all" from a prior meal — one insert, one combined undo. */
+  async function handleQuickAddManyFoods(foods: FoodLogInsert[]): Promise<QuickAddConfirmation | void> {
     if (foods.length === 0) return;
-    const inserted = await insertFoodEntries(foods);
-    applyInsertedEntries(inserted);
-    mutateRecentFoodsCache((prev) => [...inserted, ...prev]);
-    flagJustAdded(inserted);
-    replaceAddedToast(
-      addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'} to ${mealLabelFor(foods[0].meal_type)}`, 6000, {
-        label: 'Undo',
-        onClick: () => { void undoQuickAdd(inserted); },
-      })
+    const mealLabel = mealLabelFor(foods[0].meal_type);
+    const count = `${foods.length} item${foods.length === 1 ? '' : 's'}`;
+    const { dayTotals, saved } = addFoodsOptimistically(foods);
+    replaceAddedToast(null);
+    return optimisticConfirmation(
+      {
+        added: `Added ${count} to ${mealLabel}`,
+        removed: `Removed ${count} from ${mealLabel}`,
+        failed: `Couldn’t save those ${count}. Check your connection and try again.`,
+      },
+      dayTotals,
+      saved
     );
   }
 
@@ -1194,43 +1295,48 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     // Re-log the last portion exactly as logged, so the chip's label
     // ("Oatmeal · 1 cup") is what lands in the log.
     const portion = frequentFoodPortion(food);
-    const inserted = await insertFoodEntry({
-      food_name: food.food_name,
-      serving_size: portion.serving_size,
-      servings: portion.servings,
-      calories: portion.calories,
-      protein: portion.protein,
-      carbs: portion.carbs,
-      fat: portion.fat,
-      meal_type: mealType,
-      source: portion.source ?? 'manual',
-      food_id: portion.food_id ?? undefined,
-    });
-    applyInsertedEntries([inserted]);
-    mutateRecentFoodsCache((prev) => [inserted, ...prev]);
-    flagJustAdded([inserted]);
+    const { dayTotals, saved } = addFoodsOptimistically([
+      {
+        food_name: food.food_name,
+        serving_size: portion.serving_size,
+        servings: portion.servings,
+        calories: portion.calories,
+        protein: portion.protein,
+        carbs: portion.carbs,
+        fat: portion.fat,
+        meal_type: mealType,
+        source: portion.source ?? 'manual',
+        food_id: portion.food_id ?? undefined,
+      },
+    ]);
     // An earlier add's toast still on screen has the old day total and covers
-    // the meal cards: clear it, this add is confirmed inline.
+    // the meal cards: clear it, this add is confirmed inline under the chips
+    // (what, how much, which meal, where the day now stands), at once.
     replaceAddedToast(null);
-    // Confirmed inline under the chips (what, how much, which meal, where the
-    // day now stands), not by a toast that would sit over the meal cards.
-    // dailyTotals is this render's (pre-insert) day, so add the new row.
+    const name = toTitleCase(food.food_name);
+    const confirmation = quickAddConfirmation(
+      name,
+      portion.serving_size,
+      mealLabel,
+      dayTotals,
+      { calories: effectiveTargets?.calories ?? null, protein: effectiveTargets?.protein ?? null }
+    );
     return {
-      ...quickAddConfirmation(
-        toTitleCase(food.food_name),
-        portion.serving_size,
-        mealLabel,
-        {
-          calories: dailyTotals.calories + (inserted.calories || 0),
-          protein: dailyTotals.protein + (inserted.protein || 0),
-        },
-        { calories: effectiveTargets?.calories ?? null, protein: effectiveTargets?.protein ?? null }
-      ),
-      onUndo: () => undoQuickAdd([inserted]),
+      ...confirmation,
+      saved,
+      failed: `Couldn’t save ${name}. Check your connection and try again.`,
+      onUndo: async () => {
+        await undoQuickAdd(await saved);
+      },
     };
   }
 
   async function handleDeleteFood(id: string) {
+    // A row still being saved has no database id yet (Codex review on #871).
+    if (isPendingFoodLogId(id)) {
+      addToast('info', 'Still saving that food. Try again in a moment.', 3000);
+      return;
+    }
     const entry = foodEntries.find((e) => e.id === id);
     const { error } = await supabase.from('food_log').delete().eq('id', id);
 
@@ -1345,6 +1451,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   function openEditFood(entry: FoodLogEntry) {
+    // Editing a row still being saved would keep its placeholder id and make
+    // the later save fail; wait until it has its real id.
+    if (isPendingFoodLogId(entry.id)) {
+      addToast('info', 'Still saving that food. Try again in a moment.', 3000);
+      return;
+    }
     setEditingFood(entry);
     setShowEditFood(true);
   }
@@ -1769,6 +1881,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // home "Weight" glance tile uses, so the "+3.8 lb/wk · target +0.5" the
   // user tapped is the number this tab shows. The regression window follows
   // the chart's 7d/14d/30d/90d toggle so the rate describes what's plotted.
+  const weightChartDefault = pickWeightChartRange(
+    weightEntries.map((entry) => entry.logged_at),
+    getLocalDateString()
+  );
+  const activeWeightRange: WeightChartRange = weightChartRange ?? weightChartDefault.range;
+  const weightChartShortMessage = notEnoughWeighInsMessage(weightChartDefault);
   const weightTrendRate = computeWeightRate(
     weightEntries.map((e) => ({
       date: e.logged_at,
@@ -1777,7 +1895,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     })),
     weightUnit,
     currentPhase ?? 'maintenance',
-    WEIGHT_CHART_RANGE_DAYS[weightChartRange]
+    WEIGHT_CHART_RANGE_DAYS[activeWeightRange]
   );
   const weightRateOnTrack =
     !weightTrendRate || weightTrendRate.target === null || weightTrendRate.target === 0
@@ -1792,7 +1910,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
   const weightChartCutoff = new Date();
-  weightChartCutoff.setDate(weightChartCutoff.getDate() - WEIGHT_CHART_RANGE_DAYS[weightChartRange]);
+  weightChartCutoff.setDate(weightChartCutoff.getDate() - WEIGHT_CHART_RANGE_DAYS[activeWeightRange]);
   const weightChartEntries = [...weightEntries]
     .filter((entry) => new Date(entry.logged_at) >= weightChartCutoff)
     .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
@@ -1865,15 +1983,66 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // The cold-start state is reserved for first-ever load with an empty persisted
   // cache. Date switches (keepPreviousData) and warm reloads (IndexedDB) never
   // reach this — they render chrome + skeletons or cached data instead.
+  // One Add food sheet for both states below. It also renders over the
+  // cold-start skeleton: "Log food" from Home lands here with ?add=, and the
+  // search box must be usable at once, not after the page's data arrives
+  // (r21 panel: "loading skeletons ... I had to wait before I could search").
+  const addFoodSheet = (
+    <AddFoodModal
+      isOpen={showAddFood}
+      onClose={() => setShowAddFood(false)}
+      onAdd={handleAddFood}
+      units={weightUnit}
+      defaultMealType={selectedMealType}
+      onMealTypeChange={(m) => { setSelectedMealType(m); setQuickMeal(m); }}
+      initialTab={addFoodTab}
+      focusSearch={addFoodFocusSearch}
+      onOpenDescribe={() => {
+        setShowAddFood(false);
+        setDescribeMealType(selectedMealType);
+        setShowDescribeMeal(true);
+      }}
+      onOpenSavedMeals={() => {
+        setShowAddFood(false);
+        setShowSavedMeals(true);
+      }}
+      onCreateCustomFood={(barcode) => {
+        setShowAddFood(false);
+        setCustomFoodBarcode(barcode);
+        setShowCreateCustomFood(true);
+      }}
+      onLabelScanned={(prefill) => {
+        setShowAddFood(false);
+        setLabelScanPrefill(prefill);
+        setShowCreateCustomFood(true);
+      }}
+      customFoods={customFoods}
+      frequentFoods={frequentFoods}
+      systemFoods={systemFoods}
+      recentEntries={recentFoodsQuery.data ?? []}
+      recentsLoading={recentFoodsQuery.isLoading}
+      mealNames={nutritionTargets?.meal_names ?? null}
+      selectedDay={selectedDate}
+      onQuickAdd={handleQuickAddFood}
+      onQuickAddMany={handleQuickAddManyFoods}
+    />
+  );
+
   if (isColdStart) {
+    // Same position as in the loaded page below (second child of a
+    // fragment), so the open sheet keeps its typed search when data lands.
     return (
-      <div className="max-w-7xl mx-auto" data-testid="nutrition-full-loading">
-        {isTrends ? <PageSkeleton title="Weight & trends" /> : <NutritionLoading />}
-      </div>
+      <>
+        <div className="max-w-7xl mx-auto" data-testid="nutrition-full-loading">
+          {isTrends ? <PageSkeleton title="Weight & trends" /> : <NutritionLoading />}
+        </div>
+        {isMounted && selectedDate ? addFoodSheet : null}
+      </>
     );
   }
 
   return (
+    <>
     <div className="max-w-7xl mx-auto space-y-4" suppressHydrationWarning>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
@@ -2381,7 +2550,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                 )}
                 {weightTrendRate && (
                   <div>
-                    <div className="text-subhead text-ink-2">Trend ({weightChartRange})</div>
+                    <div className="text-subhead text-ink-2">Trend ({activeWeightRange})</div>
                     <div
                       className={`text-headline font-semibold ${
                         weightRateOnTrack ? 'text-status-ok' : 'text-status-warn'
@@ -2407,7 +2576,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                         key={range}
                         onClick={() => setWeightChartRange(range)}
                         className={`px-2 py-1 text-caption rounded-md transition-colors ${
-                          weightChartRange === range
+                          activeWeightRange === range
                             ? 'bg-action text-on-action'
                             : 'text-ink-2 hover:text-ink'
                         }`}
@@ -2417,6 +2586,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                     ))}
                   </div>
                 </div>
+                {weightChartShortMessage && (
+                  <p className="mb-2 text-subhead text-ink-2" data-testid="weight-chart-not-enough">
+                    {weightChartShortMessage}
+                  </p>
+                )}
                 {weightChartData.length === 0 && (
                   <div className="flex h-[200px] items-center justify-center">
                     <p className="text-subhead text-ink-2">No weight data for this period</p>
@@ -2436,7 +2610,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                           showDateTick(
                             index,
                             weightChartData.length,
-                            dateTickStep(WEIGHT_CHART_RANGE_DAYS[weightChartRange])
+                            dateTickStep(WEIGHT_CHART_RANGE_DAYS[activeWeightRange])
                           )
                             ? value
                             : ''
@@ -2473,6 +2647,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                         stroke="#3b82f6"
                         strokeWidth={2}
                         dot={{ fill: '#3b82f6', r: 4 }}
+                        // Drawn whole at once: the draw-in animation left a
+                        // screenshot (and a quick glance) of a near-empty
+                        // chart (r21 panel, Priya).
+                        isAnimationActive={false}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -2614,44 +2792,6 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         eatingWindow={eatingWindow}
       />
 
-      <AddFoodModal
-        isOpen={showAddFood}
-        onClose={() => setShowAddFood(false)}
-        onAdd={handleAddFood}
-        units={weightUnit}
-        defaultMealType={selectedMealType}
-        onMealTypeChange={(m) => { setSelectedMealType(m); setQuickMeal(m); }}
-        initialTab={addFoodTab}
-        focusSearch={addFoodFocusSearch}
-        onOpenDescribe={() => {
-          setShowAddFood(false);
-          setDescribeMealType(selectedMealType);
-          setShowDescribeMeal(true);
-        }}
-        onOpenSavedMeals={() => {
-          setShowAddFood(false);
-          setShowSavedMeals(true);
-        }}
-        onCreateCustomFood={(barcode) => {
-          setShowAddFood(false);
-          setCustomFoodBarcode(barcode);
-          setShowCreateCustomFood(true);
-        }}
-        onLabelScanned={(prefill) => {
-          setShowAddFood(false);
-          setLabelScanPrefill(prefill);
-          setShowCreateCustomFood(true);
-        }}
-        customFoods={customFoods}
-        frequentFoods={frequentFoods}
-        systemFoods={systemFoods}
-        recentEntries={recentFoodsQuery.data ?? []}
-        recentsLoading={recentFoodsQuery.isLoading}
-        mealNames={nutritionTargets?.meal_names ?? null}
-        selectedDay={selectedDate}
-        onQuickAdd={handleQuickAddFood}
-        onQuickAddMany={handleQuickAddManyFoods}
-      />
 
       <DescribeMealModal
         isOpen={showDescribeMeal}
@@ -2752,6 +2892,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         entry={editingFood}
       />
     </div>
+    {addFoodSheet}
+    </>
   );
 }
 

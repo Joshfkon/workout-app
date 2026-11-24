@@ -91,13 +91,19 @@ import {
   type ProgressTab,
 } from './progressTabs';
 import { buildProgressSummary } from './progressSummary';
+import {
+  DEFAULT_PROGRESS_RANGE,
+  PROGRESS_RANGES,
+  progressRange,
+  progressRangeStart,
+  type ProgressRangeId,
+} from './progressRange';
 import { ProgressSummaryCard } from './ProgressSummaryCard';
 import { now as clockNow } from '@/lib/clock';
 import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { listOutbox } from '@/lib/offline/setOutbox';
 import {
-  rangeStartLocalDay,
   pendingCompletionsFromOutbox,
   pendingSetsFromOutbox,
   mergeLocalPendingWorkouts,
@@ -202,19 +208,6 @@ interface UserProfile {
   targetWeightKg: number | null;
 }
 
-// Get time range label
-function getTimeRangeLabel(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): string {
-  switch (range) {
-    case '7d': return 'this week';
-    case '30d': return 'this month';
-    case '60d': return '2 months';
-    case '6m': return '6 months';
-    case '1y': return '1 year';
-    case 'all': return 'all time';
-    default: return 'this period';
-  }
-}
-
 // Helper function for percentile bars
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
   const segments = generatePercentileSegments(percentile);
@@ -271,7 +264,6 @@ async function fetchAllRowsNewestFirst(
 }
 
 type PlateauAlertRow = { exerciseId: string; exerciseName: string; result: PlateauDetectionResult };
-type AnalyticsTimeRange = '7d' | '30d' | '60d' | '6m' | '1y' | 'all';
 
 /**
  * Plateau alerts for the Strength tab's "need attention" line, per time
@@ -280,7 +272,7 @@ type AnalyticsTimeRange = '7d' | '30d' | '60d' | '6m' | '1y' | 'all';
  * of a fetch-in-useEffect that re-ran on every visit and first spent an auth
  * round trip on getUser().
  */
-async function fetchPlateauAlerts(timeRange: AnalyticsTimeRange): Promise<PlateauAlertRow[]> {
+async function fetchPlateauAlerts(rangeDays: number): Promise<PlateauAlertRow[]> {
   const supabase = createUntypedClient();
   // Identity from the locally persisted session (no auth round trip — RLS
   // still checks the token on every request below). Signed out → nothing.
@@ -291,7 +283,7 @@ async function fetchPlateauAlerts(timeRange: AnalyticsTimeRange): Promise<Platea
   // Range lower bound at local midnight so a range means whole local
   // calendar days — never a rolling UTC-instant window (this bug class
   // has shipped twice; see services/volumeTrendsData).
-  const startDate = rangeStartLocalDay(timeRange);
+  const startDate = progressRangeStart(rangeDays, clockNow());
 
   let query = supabase
     .from('workout_sessions')
@@ -486,6 +478,9 @@ async function fetchPlateauAlerts(timeRange: AnalyticsTimeRange): Promise<Platea
 
 const EMPTY_PLATEAU_ALERTS: PlateauAlertRow[] = [];
 
+/** Anchor of the Strength tab's weekly sets card (?section= deep links too). */
+const WEEKLY_SETS_SECTION_ID = 'weekly-sets';
+
 function AnalyticsPageContent() {
   const { rows: weeklyVolumeRows } = useWeeklyVolume();
   const beginnerMode = useBeginnerMode();
@@ -519,7 +514,10 @@ function AnalyticsPageContent() {
     // subsequent taps.
     setPickedTab(tab);
   };
-  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d' | '6m' | '1y' | 'all'>('30d');
+  // ONE range for every trend on the page (./progressRange): the summary,
+  // the weight chart, lift trends, the muscle rollup, plateaus and Wellness.
+  const [rangeId, setRangeId] = useState<ProgressRangeId>(DEFAULT_PROGRESS_RANGE);
+  const range = progressRange(rangeId);
 
   // Body composition state
   const [scans, setScans] = useState<DexaScan[]>([]);
@@ -583,7 +581,11 @@ function AnalyticsPageContent() {
   // Per-lift trend breakdown behind the home "Lifts" tile (shared function +
   // identical query window, so the tile aggregate and this detail agree).
   // Shared React Query cache with the single-lift screen (hooks/useLiftTrends).
-  const liftTrendsQuery = useLiftTrends();
+  // The default 12-week query decides which tab opens and in what order
+  // (so a range tap never reshuffles the tabs); the range's own query feeds
+  // everything that is SHOWN. At the default range they are the same query.
+  const defaultLiftTrendsQuery = useLiftTrends();
+  const liftTrendsQuery = useLiftTrends(range.days);
   const liftTrendsSummary = liftTrendsQuery.data ?? null;
 
   // Data-driven default tab. Both signals are persisted React Query reads,
@@ -597,7 +599,16 @@ function AnalyticsPageContent() {
   const { foodOnly } = useTrackingFocus();
   // Beginner mode with no body scan yet: no FFMI / "log a DEXA scan" prompts.
   const hideScanPrompts = hideBodyScanPrompts(beginnerMode, scans.length);
-  const liftedForTabs = foodOnly ? false : hasRecentLifting(liftTrendsQuery.data);
+  const liftedForTabs = foodOnly ? false : hasRecentLifting(defaultLiftTrendsQuery.data);
+  // Weekly sets per muscle vs MEV–MRV: for anyone who lifts, outside
+  // beginner mode (as everywhere). Not for someone with no lifting in the
+  // window: a card of zeros pushed the empty state below the fold (r19).
+  const showWeeklySets = !beginnerMode && liftedForTabs !== false;
+  const [volumeScrollRequest, setVolumeScrollRequest] = useState(0);
+  useEffect(() => {
+    if (volumeScrollRequest === 0) return;
+    document.getElementById(WEEKLY_SETS_SECTION_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [volumeScrollRequest]);
   const dataDefaultTab = resolveDefaultProgressTab({
     hasRecentLifting: liftedForTabs,
     hasBodyOrFoodData:
@@ -1101,28 +1112,8 @@ function AnalyticsPageContent() {
 
       const supabase = createUntypedClient();
       
-      // Calculate date range based on timeRange
-      const now = new Date();
-      let startDate: Date;
-      switch (timeRange) {
-        case '7d':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case '30d':
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        case '60d':
-          startDate = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-          break;
-        case '6m':
-          startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-          break;
-        case '1y':
-          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startDate = new Date(0); // All time
-      }
+      // The page's shared range (./progressRange), whole local days.
+      const startDate = progressRangeStart(range.days, clockNow());
 
       const startDateStr = getLocalDateString(startDate);
 
@@ -1244,7 +1235,7 @@ function AnalyticsPageContent() {
     let cancelled = false;
     fetchWellnessData();
     return () => { cancelled = true; };
-  }, [userId, timeRange]);
+  }, [userId, range.days]);
 
   // Fetch workout data for the Strength tab's plateau alerts. (The
   // muscle-progression card rolls up the lift-trend series instead — see
@@ -1253,8 +1244,8 @@ function AnalyticsPageContent() {
   // Cached per time range (fetchPlateauAlerts): flipping 7d -> 30d -> 7d,
   // or coming back to Progress, doesn't refetch the nested query tree.
   const plateauQuery = useQuery({
-    queryKey: ['analytics', 'plateaus', timeRange],
-    queryFn: () => fetchPlateauAlerts(timeRange),
+    queryKey: ['analytics', 'plateaus', range.days],
+    queryFn: () => fetchPlateauAlerts(range.days),
     staleTime: 1000 * 60 * 5,
     gcTime: IMMUTABLE_GC_TIME,
     placeholderData: keepPreviousData,
@@ -1483,6 +1474,7 @@ function AnalyticsPageContent() {
   const bodyTrendModule = (
     <BodyHubTrends
       units={units}
+      windowDays={range.days}
       heightCm={userProfile?.heightCm ?? null}
       trend={bodyCompTrend}
       weightHistory={bodyWeightHistory}
@@ -1549,51 +1541,63 @@ function AnalyticsPageContent() {
         liftTrends: liftTrendsSummary,
         units: units === 'kg' ? 'kg' : 'lb',
         now: clockNow(),
+        windowDays: range.days,
+        // Weekly sets per muscle vs MEV–MRV, for lifters (same gate as the
+        // card on Strength): the first place an advanced lifter looks.
+        volumeRows: showWeeklySets ? weeklyVolumeRows : null,
         // Same rule as the Body chart's advice framing: the active phase,
         // else users.goal (the lift-trend query reads users.goal too).
         goal: currentPhase?.phaseType ?? userProfile?.goal ?? liftRollup?.goal ?? null,
       });
 
-  // The global time-range selector genuinely scopes only the Wellness data
-  // (hydration/cardio/check-in series). On Body and Strength it was a dead
-  // control, so it renders only where it applies.
-  const rangeAppliesToTab = activeTab === 'wellness';
-
-  const timeRangeSelector = (
-    <div className="flex gap-0.5 bg-fill p-0.5 rounded-[10px] flex-wrap" data-testid="analytics-range-selector">
-      {([
-        { value: '7d', label: '7d' },
-        { value: '30d', label: '30d' },
-        { value: '60d', label: '60d' },
-        { value: '6m', label: '6mo' },
-        { value: '1y', label: '1yr' },
-        { value: 'all', label: 'All' },
-      ] as const).map((range) => (
+  // ONE range control for the whole page: weight, strength and wellness
+  // are always read over the same period (UX panel r21: weight over 30 days
+  // next to strength over 12 weeks).
+  const rangeSelector = (
+    <div
+      className="flex gap-0.5 rounded-[10px] bg-fill p-0.5"
+      role="radiogroup"
+      aria-label="Time range for every trend on this page"
+      data-testid="analytics-range-selector"
+    >
+      {PROGRESS_RANGES.map((r) => (
         <button
-          key={range.value}
-          onClick={() => setTimeRange(range.value)}
-          className={`h-7 px-2.5 text-caption rounded-[8px] transition-colors ${
-            timeRange === range.value ? 'bg-card text-ink font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]' : 'text-ink-2'
+          key={r.id}
+          type="button"
+          role="radio"
+          aria-checked={rangeId === r.id}
+          aria-label={`Last ${r.words}`}
+          onClick={() => setRangeId(r.id)}
+          data-testid={`analytics-range-${r.id}`}
+          className={`min-h-[36px] px-2.5 text-subhead rounded-[8px] transition-colors ${
+            rangeId === r.id ? 'bg-card text-ink font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]' : 'text-ink-2'
           }`}
         >
-          {range.label}
+          {r.short}
         </button>
       ))}
     </div>
   );
+
+  // Scroll the weekly sets card into view from the summary's link (it lives
+  // on Strength, so switch there first).
+  const showVolumeCard = () => {
+    setPickedTab('strength');
+    setVolumeScrollRequest((n) => n + 1);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="analytics-content">
       {/* Header. The page title now matches the "Progress" nav label. The
           range selector renders here only on tabs it actually scopes
           (Training / Wellness); Body and Strength carry no dead control. */}
-      <PageHeader
-        title="Progress"
-        actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
-      />
+      <PageHeader title="Progress" actions={rangeSelector} />
 
       {progressSummary ? (
-        <ProgressSummaryCard summary={progressSummary} />
+        <ProgressSummaryCard
+          summary={progressSummary}
+          onSeeVolume={showWeeklySets ? showVolumeCard : undefined}
+        />
       ) : (isBodyTrendLoading || (liftTrendsQuery.isPending && !liftTrendsSummary)) ? (
         // Cold start only: the summary waits on weigh-ins and lift trends
         // (separate fetches), so hold its place instead of leaving a gap.
@@ -1804,8 +1808,8 @@ function AnalyticsPageContent() {
           {/* Not for someone with no lifting in the window: a card of zeros
               ("13 below MEV") pushed the empty state — and its "Log a
               workout" button — below the fold (UX panel r19). */}
-          {!beginnerMode && hasRecentLifting(liftTrendsSummary) !== false && (
-            <WeeklySetsCard rows={weeklyVolumeRows} />
+          {showWeeklySets && (
+            <WeeklySetsCard rows={weeklyVolumeRows} title="Weekly sets per muscle" id={WEEKLY_SETS_SECTION_ID} />
           )}
           {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
               First so ?section=lift-trends deep links land above the fold. */}
@@ -2028,7 +2032,7 @@ function AnalyticsPageContent() {
             hydrationData={hydrationData}
             cardioData={cardioData}
             hydrationUnit={units === 'kg' ? 'ml' : 'oz'}
-            rangeLabel={getTimeRangeLabel(timeRange)}
+            rangeLabel={`the last ${range.words}`}
           />
 
           {/* ONE "Today" card consolidating steps/activity (HealthKit-aware),
