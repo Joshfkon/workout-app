@@ -16,7 +16,7 @@ import { PhotoDetailModal } from '@/components/progress-photos/PhotoDetailModal'
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
 import type { ProgressPhoto } from '@/types/schema';
-import { TRACKING_REMINDERS_QUERY_PREFIX } from '@/hooks/useTrackingReminders';
+import { useInvalidateTrackingReminders } from '@/hooks/useTrackingReminders';
 
 const AUTH_REQUIRED = { authRequired: true } as const;
 
@@ -40,6 +40,7 @@ export default function ProgressPhotosPage() {
   useDocumentTitle('Progress Photos');
   const router = useRouter();
   const queryClient = useQueryClient();
+  const invalidateTrackingReminders = useInvalidateTrackingReminders();
   const { preferences } = useUserPreferences();
   const units = preferences.units;
   const weightUnit = units === 'lb' ? 'lbs' : 'kg';
@@ -134,9 +135,10 @@ export default function ProgressPhotosPage() {
     queryClient.invalidateQueries({ queryKey: ['analytics', 'photos'] });
     // The Analytics page bundles its own copy of recent photos.
     queryClient.invalidateQueries({ queryKey: ['analytics', 'main'] });
-    // Home's "progress photos due" nudge reads the latest photo date.
-    queryClient.invalidateQueries({ queryKey: [TRACKING_REMINDERS_QUERY_PREFIX] });
-  }, [queryClient]);
+    // Home's "progress photos due" nudge (and the photo reminder) read the
+    // latest photo date.
+    invalidateTrackingReminders();
+  }, [queryClient, invalidateTrackingReminders]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;

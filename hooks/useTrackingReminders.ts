@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import { fetchTrackingSnapshot } from '@/lib/reminders/trackingSnapshot';
+import { isNativePlatform } from '@/lib/integrations/capacitor-stub';
 import {
   NUDGE_SNOOZE_DAYS,
   TRACKING_KINDS,
@@ -95,10 +96,20 @@ export function useTrackingReminders(userId: string | null | undefined): Trackin
   return { due, snooze };
 }
 
-/** Call after logging a weigh-in, tape entry or photo so Home updates. */
+/**
+ * Call after logging (or deleting) a weigh-in, tape entry or photo: Home's
+ * nudge refetches, and in the native app the scheduled notifications are
+ * re-planned at once — otherwise a reminder for the thing just logged could
+ * still fire before the next launch/foreground re-plan.
+ */
 export function useInvalidateTrackingReminders(): () => void {
   const queryClient = useQueryClient();
   return useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [TRACKING_REMINDERS_QUERY_PREFIX] });
+    if (isNativePlatform()) {
+      import('@/lib/reminders/trackingReminderSync')
+        .then(({ syncTrackingReminders }) => syncTrackingReminders())
+        .catch(() => {});
+    }
   }, [queryClient]);
 }
