@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { IconBarbell, IconPlayerPlay } from '@tabler/icons-react';
-import { createUntypedClient } from '@/lib/supabase/client';
+import { fetchResumableWorkoutId } from '@/lib/training/resumableSession';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
 import { useLastRepeatableWorkout } from './FreestyleStartActions';
@@ -25,19 +25,6 @@ const SuggestedWorkoutSheet = dynamic(
   () => import('@/components/workout/SuggestedWorkoutSheet').then((m) => m.SuggestedWorkoutSheet),
   { ssr: false }
 );
-
-/** The user's unfinished workout (any day), newest first, or null. */
-async function fetchInProgressWorkoutId(userId: string): Promise<string | null> {
-  const { data, error } = await createUntypedClient()
-    .from('workout_sessions')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('state', 'in_progress')
-    .order('started_at', { ascending: false, nullsFirst: false })
-    .limit(1);
-  if (error) throw error;
-  return (data?.[0]?.id as string | undefined) ?? null;
-}
 
 const BUTTON =
   'flex w-full min-h-[50px] items-center justify-center gap-2 rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110 active:brightness-95';
@@ -66,7 +53,9 @@ export function HomeStartWorkout({
   // Live state: never trust a cached "nothing in progress" on revisit.
   const { data: inProgressId } = useQuery({
     queryKey: ['workout', 'in-progress-id', userId],
-    queryFn: () => fetchInProgressWorkoutId(userId as string),
+    // Only a workout the screen will actually open: an empty leftover is
+    // archived here instead of offered (it only bounced you to Train).
+    queryFn: () => fetchResumableWorkoutId(userId as string, Date.now()),
     enabled: !!userId,
     staleTime: 0,
   });

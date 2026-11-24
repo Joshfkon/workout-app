@@ -80,6 +80,44 @@ export function ResumeWorkoutBanner() {
     return () => clearInterval(interval);
   }, [mounted, activeSession]);
 
+  // The pill reads a workout saved on this device. Check it against the
+  // database once per session id: a workout that's gone, finished elsewhere,
+  // or an empty leftover the workout screen would archive is cleared instead
+  // of offered (user report: a "Resume workout" that only led to Train).
+  const activeId = activeSession?.id ?? null;
+  const activeStartedAt = activeSession?.startedAt ?? null;
+  const onWorkoutScreen = !!pathname?.startsWith('/dashboard/workout/');
+  useEffect(() => {
+    // Never on the workout screen itself: a just-started workout may not be
+    // saved yet (Start opens it before the insert lands).
+    if (!mounted || !activeId || onWorkoutScreen) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { fetchSessionResumeRow, isResumableSession, isStaleLeftover } = await import('@/lib/training/resumableSession');
+        const row = await fetchSessionResumeRow(activeId);
+        if (cancelled || isResumableSession(row, Date.now())) return;
+        // Not in the database yet and only just started: its save may still
+        // be in flight. Leave it alone.
+        const ageMs = activeStartedAt ? Date.now() - new Date(activeStartedAt).getTime() : Infinity;
+        if (!row && ageMs < 10 * 60 * 1000) return;
+        if (row && isStaleLeftover(row, Date.now())) {
+          const { discardStaleSession } = await import('@/app/(dashboard)/dashboard/workout/_lib/adhocSession');
+          const { createUntypedClient } = await import('@/lib/supabase/client');
+          await discardStaleSession(createUntypedClient(), activeId).catch(() => 'failed');
+        }
+        if (cancelled) return;
+        endSession();
+        void queryClient.invalidateQueries({ queryKey: ['workout'] });
+      } catch {
+        // Offline or a failed read: keep the pill (it may be a real workout).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, activeId, activeStartedAt, onWorkoutScreen, endSession, queryClient]);
+
   // Don't render on server (hydration mismatch prevention)
   if (!mounted) return null;
 

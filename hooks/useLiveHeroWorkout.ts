@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { createUntypedClient } from '@/lib/supabase/client';
+import { fetchSessionResumeRow, isStaleLeftover } from '@/lib/training/resumableSession';
 import type { TodaysWorkout } from '@/components/dashboard/home/TodayHeroCard';
 
 /**
@@ -44,14 +44,12 @@ export function useLiveHeroWorkout(hero: TodaysWorkout | null): TodaysWorkout | 
     // Live state: a cached "in progress" is exactly the bug this fixes.
     staleTime: 0,
     queryFn: async () => {
-      const { data: rows, error } = await createUntypedClient()
-        .from('workout_sessions')
-        .select('state')
-        .eq('id', id as string)
-        .limit(1);
-      if (error) throw error;
-      const row = rows?.[0] as { state: string } | undefined;
-      return row ? { found: true, state: row.state } : { found: false };
+      const row = await fetchSessionResumeRow(id as string);
+      if (!row) return { found: false };
+      // An empty leftover the workout screen would archive is not something
+      // to "Continue" (it only bounced the lifter to Train).
+      if (isStaleLeftover(row, Date.now())) return { found: true, state: 'stale_leftover' };
+      return { found: true, state: row.state };
     },
   });
   return reconcileHeroWorkout(hero, data);
