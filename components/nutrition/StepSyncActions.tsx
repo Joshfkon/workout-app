@@ -23,6 +23,23 @@ import { HEALTH_GLANCE_QUERY_KEY, useHealthGlance } from '@/components/dashboard
 import { STEP_ADJUSTMENT_KEY } from '@/hooks/useStepCalorieAdjustment';
 import { isHealthKitAvailable } from '@/lib/integrations';
 
+/** What to tell the lifter after Sync now, from the sync's own outcome. Pure. */
+export function syncOutcomeMessage(outcome: { status: 'synced' | 'skipped'; reason?: string } | null | undefined): string {
+  if (outcome?.status === 'synced') return 'Synced. If steps still show 0, Apple Health has none for today yet.';
+  switch (outcome?.reason) {
+    case 'needs_authorization':
+      return "Apple Health hasn't allowed HyperTrack to read steps. In the Health app, go to Sharing → Apps → HyperTrack, turn on Steps, then try again.";
+    case 'not_connected':
+      return "Apple Health isn't connected yet. Connect it, then sync.";
+    case 'not_available':
+      return "Apple Health isn't available on this device. Enter steps instead.";
+    case 'throttled':
+      return 'Synced a moment ago. Try again in a minute.';
+    default:
+      return "Couldn't reach Apple Health. Try again, or enter steps.";
+  }
+}
+
 export function StepSyncActions({ date, userWeightKg }: { date: string; userWeightKg: number }) {
   const queryClient = useQueryClient();
   const { data: health } = useHealthGlance();
@@ -57,9 +74,12 @@ export function StepSyncActions({ date, userWeightKg }: { date: string; userWeig
     try {
       const sync = await import('@/lib/integrations/healthkit-sync');
       const { healthKitNeedsAuthorizationRequest } = await import('@/lib/integrations/healthkit');
-      if (await healthKitNeedsAuthorizationRequest()) await sync.authorizeHealthKitAndSync();
-      else await sync.runHealthKitSync({ force: true });
-      setStatus('Synced. If steps still show 0, Apple Health has none for today yet.');
+      // Report what actually happened: both helpers resolve (not throw) on a
+      // failed sync or a missing permission (Codex review on #872).
+      const outcome = (await healthKitNeedsAuthorizationRequest())
+        ? await sync.authorizeHealthKitAndSync()
+        : await sync.runHealthKitSync({ force: true });
+      setStatus(syncOutcomeMessage(outcome));
     } catch {
       setStatus("Couldn't reach Apple Health. Try again, or enter steps.");
     } finally {

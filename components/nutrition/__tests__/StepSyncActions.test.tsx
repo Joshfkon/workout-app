@@ -6,7 +6,7 @@ let glance: { source?: string; sourceName?: string } | undefined;
 let capable = false;
 let needsAuth = false;
 const runSync = jest.fn().mockResolvedValue({ status: 'synced' });
-const authorizeAndSync = jest.fn().mockResolvedValue(undefined);
+const authorizeAndSync = jest.fn().mockResolvedValue({ status: 'synced' });
 
 jest.mock('@/components/dashboard/home/HealthGlanceCard', () => ({
   HEALTH_GLANCE_QUERY_KEY: ['health-glance'],
@@ -21,7 +21,7 @@ jest.mock('@/lib/integrations/healthkit', () => ({ healthKitNeedsAuthorizationRe
 jest.mock('@/components/wearables/WearableConnectionsScreen', () => ({ WearableConnectionsScreen: () => <div>connect screen</div> }));
 jest.mock('@/components/nutrition/StepTracking', () => ({ StepTracking: () => <div>manual steps</div> }));
 
-import { StepSyncActions } from '@/components/nutrition/StepSyncActions';
+import { StepSyncActions, syncOutcomeMessage } from '@/components/nutrition/StepSyncActions';
 
 function setup() {
   const qc = new QueryClient();
@@ -72,5 +72,24 @@ describe('StepSyncActions (no steps synced yet)', () => {
     capable = true;
     setup();
     expect(await screen.findByText('Connect Apple Health')).toBeInTheDocument();
+  });
+});
+
+describe('syncOutcomeMessage', () => {
+  it('only says synced when the sync did, and says why otherwise', () => {
+    expect(syncOutcomeMessage({ status: 'synced' })).toMatch(/^Synced/);
+    expect(syncOutcomeMessage({ status: 'skipped', reason: 'error' })).toMatch(/Couldn't reach Apple Health/);
+    expect(syncOutcomeMessage({ status: 'skipped', reason: 'needs_authorization' })).toMatch(/hasn't allowed/);
+    expect(syncOutcomeMessage({ status: 'skipped', reason: 'not_connected' })).toMatch(/isn't connected/);
+    expect(syncOutcomeMessage(undefined)).not.toMatch(/^Synced/);
+  });
+
+  it('shows a failed sync as a failure, not "Synced" (Codex review on #872)', async () => {
+    capable = true;
+    glance = { source: 'apple_healthkit', sourceName: 'Apple Health' };
+    runSync.mockResolvedValueOnce({ status: 'skipped', reason: 'error' });
+    setup();
+    await userEvent.setup().click(await screen.findByTestId('step-sync-now'));
+    expect(await screen.findByRole('status')).toHaveTextContent(/Couldn't reach Apple Health/);
   });
 });
