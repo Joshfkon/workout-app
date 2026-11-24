@@ -1,3 +1,4 @@
+import { foodKeysFor, recordLastUsedServingForKeys } from '@/lib/nutrition/lastUsedServing';
 /**
  * @jest-environment jsdom
  *
@@ -204,6 +205,32 @@ describe('searched foods add in one tap', () => {
     await user.type(screen.getByLabelText('Search foods'), 'bagel');
     const row = await screen.findByTestId('usda-food-row');
     expect(within(row).queryByRole('button', { name: /quick-add/i })).not.toBeInTheDocument();
+    searchFoodsAction.mockResolvedValue({ foods: [] });
+  });
+
+  it('a USDA one-tap reuses only a saved WEIGHT, never a saved "serving" whose grams came from another entry', async () => {
+    const { searchFoodsAction } = jest.requireMock('@/lib/actions/food-search') as {
+      searchFoodsAction: jest.Mock;
+    };
+    const food = { foodId: 'u2', name: 'Bagel, plain', servingSize: '100 g', calories: 250, protein: 10, carbs: 49, fat: 1.5 };
+    searchFoodsAction.mockResolvedValue({ foods: [food] });
+    const keys = foodKeysFor({ foodId: 'u2', name: 'Bagel, plain' });
+    // Saved as 1.6 "serving" (a 160 g cup on the logged entry): no +, since this
+    // result's "serving" is its own 100 g reference.
+    recordLastUsedServingForKeys(keys, 1.6, 'serving');
+    const user = userEvent.setup();
+    setup();
+    await user.type(screen.getByLabelText('Search foods'), 'bagel');
+    let row = await screen.findByTestId('usda-food-row');
+    expect(within(row).queryByRole('button', { name: /quick-add/i })).not.toBeInTheDocument();
+    cleanup();
+    // Saved as grams: + adds exactly that weight.
+    recordLastUsedServingForKeys(keys, 160, 'g');
+    setup();
+    await user.type(screen.getByLabelText('Search foods'), 'bagel');
+    row = await screen.findByTestId('usda-food-row');
+    expect(within(row).getByRole('button', { name: /quick-add/i })).toBeInTheDocument();
+    expect(row).toHaveTextContent('160');
     searchFoodsAction.mockResolvedValue({ foods: [] });
   });
 });

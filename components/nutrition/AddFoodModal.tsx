@@ -104,6 +104,9 @@ interface ScannedProduct {
   barcode: string;
 }
 
+
+/** Units whose grams mean the same thing in any model: safe for a USDA one-tap add. */
+const USDA_ONE_TAP_UNITS = new Set(['g', 'oz']);
 export type AddFoodTab = 'search' | 'barcode' | 'label' | 'manual';
 
 interface AddFoodModalProps {
@@ -1663,9 +1666,15 @@ export function AddFoodModal({
                       {usdaResults.map((food, idx) => {
                         const keys = foodKeysFor({ foodId: food.foodId, name: food.name });
                         // A USDA result carries only a generic serving until its
-                        // details load, so + only for a food you've logged before.
+                        // details load, so + only for a food you've logged before,
+                        // and only when that portion was an absolute weight: a
+                        // saved "serving" or household unit got its grams from the
+                        // logged entry, while this result's "serving" is its own
+                        // reference amount (often 100 g) — matching the unit id
+                        // would quietly change the portion (Codex review on #870).
+                        const savedUsda = getLastUsedServingForKeys(keys);
                         const oneTap = oneTapPortion(buildUsdaModel(food), {
-                          lastUsed: getLastUsedServingForKeys(keys),
+                          lastUsed: savedUsda && USDA_ONE_TAP_UNITS.has(savedUsda.unitId) ? savedUsda : null,
                           requireLast: true,
                         });
                         const rowKey = `usda:${food.foodId ?? idx}`;
