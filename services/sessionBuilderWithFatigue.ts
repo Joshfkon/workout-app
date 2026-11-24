@@ -23,6 +23,7 @@ import type {
   PeriodizationPlan,
   RecoveryFactors,
   FullProgramRecommendation,
+  PriorityEffect,
   Split,
 } from '@/types/schema';
 import { muscleMatchesGroup, toLegacyMuscleGroup, MUSCLE_PRIORITY_HEADS } from '@/types/schema';
@@ -140,9 +141,35 @@ export const MAX_SETS_PER_MUSCLE_PER_SESSION = 12;
  * week 1, so its sets were identical every week while the block claimed to
  * climb (UX panel round 19). The peak week gets the full ceiling.
  */
-export function sessionMuscleCeiling(capacityScale: number = 1): number {
+export function sessionMuscleCeiling(
+  capacityScale: number = 1,
+  /** The lifter's ceiling (normalizeSessionMuscleCeiling); default 12. */
+  maxSetsPerMuscle: number = MAX_SETS_PER_MUSCLE_PER_SESSION
+): number {
   const scale = Math.min(1, Math.max(0, capacityScale));
-  return Math.max(MIN_SETS_PER_PLANNED_MUSCLE, Math.round(MAX_SETS_PER_MUSCLE_PER_SESSION * scale));
+  return Math.max(MIN_SETS_PER_PLANNED_MUSCLE, Math.round(normalizeSessionMuscleCeiling(maxSetsPerMuscle) * scale));
+}
+
+/**
+ * The highest per-muscle per-session ceiling an advanced lifter may choose.
+ * Most research finds diminishing returns past ~10–12 hard sets for one
+ * muscle in one session, so 12 stays the default; a lifter on a once-a-week
+ * body-part split may opt up to this (UX panel round 20).
+ */
+export const MAX_SESSION_MUSCLE_CEILING = 16;
+
+/** Local-fatigue points one primary hard set costs at FATIGUE_GATE_RIR
+ *  (services/fatigueBudgetEngine calculateExerciseFatigue). */
+const LOCAL_POINTS_PER_HARD_SET = 8;
+
+/** The ceilings the builder offers. */
+export const SESSION_MUSCLE_CEILING_OPTIONS: readonly number[] = [12, 14, 16];
+
+/** A requested ceiling, clamped to [MAX_SETS_PER_MUSCLE_PER_SESSION,
+ *  MAX_SESSION_MUSCLE_CEILING] and rounded. Pure. */
+export function normalizeSessionMuscleCeiling(requested: number | null | undefined): number {
+  if (requested == null || !Number.isFinite(requested)) return MAX_SETS_PER_MUSCLE_PER_SESSION;
+  return Math.min(MAX_SESSION_MUSCLE_CEILING, Math.max(MAX_SETS_PER_MUSCLE_PER_SESSION, Math.round(requested)));
 }
 
 /**
@@ -165,6 +192,9 @@ export interface SessionMuscleVolume {
   sets: number;
   frequency: number;
   sessionFloor?: number;
+  /** A high priority: served first from the session's time
+   *  (fairShareSessionSets). */
+  priority?: boolean;
 }
 
 /** Every recovered muscle a session plans gets at least this many sets. */
@@ -192,11 +222,24 @@ export function sessionSetCapacity(sessionMinutes: number, goal: Goal): number {
  * of the capacity is split in proportion to what each still wants (largest
  * remainder, ties to the earlier muscle). Pure.
  *
+ * A muscle flagged in `priority` (a high priority in Settings → Muscle
+ * priorities) is served FIRST from the room above the floors: it gets its
+ * whole request when that fits, and the others share what is left (still
+ * keeping their floors). Proportional sharing swallowed a priority whenever
+ * the session could not hold the plain requests — every target of an
+ * advanced bulk sits near MRV, so a +20% target moved hamstrings 9 → 10
+ * (UX panel round 20).
+ *
  * This replaces first-come-first-served filling, where the muscles a
  * template listed first consumed the whole session and the ones after them
  * (arms on an Upper day, calves and abs on a Lower day) got 0 sets.
  */
-export function fairShareSessionSets(requests: number[], capacity: number, minimums: readonly number[] = []): number[] {
+export function fairShareSessionSets(
+  requests: number[],
+  capacity: number,
+  minimums: readonly number[] = [],
+  priority: readonly boolean[] = []
+): number[] {
   const want = requests.map((r) => Math.max(0, Math.round(r)));
   const total = want.reduce((s, r) => s + r, 0);
   if (total <= capacity) return want;
@@ -205,19 +248,35 @@ export function fairShareSessionSets(requests: number[], capacity: number, minim
   // every minimum fits; otherwise the uniform floor is all the room allows.
   const raised = want.map((r, i) => Math.min(r, Math.max(base[i], Math.round(minimums[i] ?? 0))));
   const floors = raised.reduce((sum, f) => sum + f, 0) <= capacity ? raised : base;
-  const room = capacity - floors.reduce((s, f) => s + f, 0);
+  let room = capacity - floors.reduce((s, f) => s + f, 0);
   if (room <= 0) return floors;
-  const extra = want.map((r, i) => r - floors[i]);
+  const out = [...floors];
+  const first = want.map((_, i) => !!priority[i]);
+  if (first.some(Boolean)) {
+    const given = shareProportionally(want.map((r, i) => (first[i] ? r - floors[i] : 0)), room);
+    given.forEach((g, i) => (out[i] += g));
+    room -= given.reduce((s, g) => s + g, 0);
+    if (room <= 0) return out;
+  }
+  shareProportionally(want.map((r, i) => (first[i] ? 0 : r - floors[i])), room).forEach((g, i) => (out[i] += g));
+  return out;
+}
+
+/** `room` split in proportion to `extra` (never more than an entry's own
+ *  extra): largest remainder, ties to the earlier entry. Pure. */
+function shareProportionally(extra: readonly number[], room: number): number[] {
   const extraTotal = extra.reduce((s, e) => s + e, 0);
+  if (extraTotal <= 0 || room <= 0) return extra.map(() => 0);
+  if (extraTotal <= room) return [...extra];
   const raw = extra.map((e) => (e * room) / extraTotal);
-  const out = raw.map((x, i) => floors[i] + Math.floor(x));
-  let left = room - raw.reduce((s, x) => s + Math.floor(x), 0);
+  const out = raw.map((x) => Math.floor(x));
+  let left = room - out.reduce((s, x) => s + x, 0);
   const byRemainder = raw
     .map((x, i) => ({ i, frac: x - Math.floor(x) }))
     .sort((a, b) => b.frac - a.frac || a.i - b.i);
   for (const { i } of byRemainder) {
     if (left <= 0) break;
-    if (out[i] >= want[i]) continue;
+    if (out[i] >= extra[i]) continue;
     out[i] += 1;
     left -= 1;
   }
@@ -272,10 +331,22 @@ const SESSION_MUSCLE_ORDER: MuscleGroup[] = [
   'abs',
 ];
 
-function orderSessionMuscles(targetMuscles: MuscleGroup[]): MuscleGroup[] {
+/**
+ * The order a session trains its muscles in: big compound-led muscles first,
+ * except that a HIGH-priority muscle goes first of all (the priority
+ * principle: train what you most want to grow while fresh). The order is
+ * not cosmetic: the fatigue budget discounts each exercise's stimulus-to-
+ * fatigue by its slot, so a prioritized hamstrings trained after the quads
+ * had every hinge refused and stopped at two leg curls (8 sets) however
+ * many sets its priority asked for (UX panel round 20). Pure.
+ */
+export function orderSessionMuscles(
+  targetMuscles: MuscleGroup[],
+  isPriority: (m: MuscleGroup) => boolean = () => false
+): MuscleGroup[] {
   const rank = (m: MuscleGroup) => {
     const i = SESSION_MUSCLE_ORDER.indexOf(m);
-    return i === -1 ? SESSION_MUSCLE_ORDER.length : i;
+    return (isPriority(m) ? -SESSION_MUSCLE_ORDER.length - 1 : 0) + (i === -1 ? SESSION_MUSCLE_ORDER.length : i);
   };
   return [...targetMuscles].sort((a, b) => rank(a) - rank(b));
 }
@@ -672,7 +743,9 @@ export function buildDetailedSessionWithFatigue(
   headEmphasis?: HeadEmphasis,
   /** Share of the session's set capacity this week may use: the week's
    *  volume modifier over the block's peak modifier (1 = the full session). */
-  capacityScale: number = 1
+  capacityScale: number = 1,
+  /** The per-muscle per-session ceiling (sessionMuscleCeiling). */
+  maxSetsPerMuscle: number = MAX_SETS_PER_MUSCLE_PER_SESSION
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -680,7 +753,7 @@ export function buildDetailedSessionWithFatigue(
   let estimatedTimeUsed = 0;
   const warmedUpMuscles = new Set<string>();
 
-  const orderedMuscles = orderSessionMuscles(sessionTemplate.targetMuscles);
+  const orderedMuscles = orderSessionMuscles(sessionTemplate.targetMuscles, (m) => !!volumePerMuscle[m]?.priority);
 
   // Stabilizer state for this planned day (from the shared recovery model) —
   // exercise selection deprioritizes candidates requiring a run-down one.
@@ -692,7 +765,7 @@ export function buildDetailedSessionWithFatigue(
   // the per-session ceiling. Readiness reads only EARLIER days' planned work
   // (PlannedWeekRecovery.historyBefore), so reading it up front gives the
   // same answer the loop used to get muscle by muscle.
-  const plans: { muscle: MuscleGroup; request: number; readiness: PlannedReadiness; floor: number }[] = [];
+  const plans: { muscle: MuscleGroup; request: number; readiness: PlannedReadiness; floor: number; priority: boolean }[] = [];
   for (const muscle of orderedMuscles) {
     const readiness = weeklyRecovery.readiness(muscle, currentDay);
     // Skip this muscle entirely if severely under-recovered
@@ -712,9 +785,10 @@ export function buildDetailedSessionWithFatigue(
     const floor = recoveryScale < 1 ? 0 : muscleVolume.sessionFloor ?? 0;
     plans.push({
       muscle,
-      request: Math.min(sessionMuscleCeiling(capacityScale), Math.max(setsThisSession, floor)),
+      request: Math.min(sessionMuscleCeiling(capacityScale, maxSetsPerMuscle), Math.max(setsThisSession, floor)),
       readiness,
       floor,
+      priority: !!muscleVolume.priority,
     });
   }
 
@@ -729,7 +803,8 @@ export function buildDetailedSessionWithFatigue(
       MIN_SETS_PER_PLANNED_MUSCLE,
       Math.round(sessionSetCapacity(sessionMinutes, profile.goal) * Math.min(1, Math.max(0, capacityScale)))
     ),
-    plans.map((p) => p.floor)
+    plans.map((p) => p.floor),
+    plans.map((p) => p.priority)
   );
 
   let exercisePosition = 1;
@@ -935,7 +1010,9 @@ export function buildDUPSession(
   /** The week's volume modifier (1 = the target). */
   weekVolumeModifier: number = 1,
   /** See buildDetailedSessionWithFatigue. */
-  capacityScale: number = 1
+  capacityScale: number = 1,
+  /** See buildDetailedSessionWithFatigue. */
+  maxSetsPerMuscle: number = MAX_SETS_PER_MUSCLE_PER_SESSION
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -943,7 +1020,7 @@ export function buildDUPSession(
   let estimatedTimeUsed = 0;
   const warmedUpMuscles = new Set<string>();
 
-  const orderedMuscles = orderSessionMuscles(sessionTemplate.targetMuscles);
+  const orderedMuscles = orderSessionMuscles(sessionTemplate.targetMuscles, (m) => !!volumePerMuscle[m]?.priority);
 
   // Adjust volume based on DUP day type
   const volumeModifiers: Record<DUPDayType, number> = {
@@ -957,7 +1034,7 @@ export function buildDUPSession(
 
   // Same two passes as the standard builder: per-muscle requests, then a
   // fair share of the session's time (see fairShareSessionSets).
-  const plans: { muscle: MuscleGroup; request: number; readiness: PlannedReadiness; floor: number }[] = [];
+  const plans: { muscle: MuscleGroup; request: number; readiness: PlannedReadiness; floor: number; priority: boolean }[] = [];
   for (const muscle of orderedMuscles) {
     // Skip only when severely under-recovered (parity with the old DUP gate,
     // which never trimmed sets — the DUP day-type modifier owns volume shape).
@@ -972,9 +1049,13 @@ export function buildDUPSession(
     setsThisSession = Math.max(1, Math.round(setsThisSession * volumeModifiers[dupDayType] * weekVolumeModifier));
     plans.push({
       muscle,
-      request: Math.min(sessionMuscleCeiling(capacityScale), Math.max(setsThisSession, muscleVolume.sessionFloor ?? 0)),
+      request: Math.min(
+        sessionMuscleCeiling(capacityScale, maxSetsPerMuscle),
+        Math.max(setsThisSession, muscleVolume.sessionFloor ?? 0)
+      ),
       readiness,
       floor: muscleVolume.sessionFloor ?? 0,
+      priority: !!muscleVolume.priority,
     });
   }
   const allotted = fairShareSessionSets(
@@ -983,7 +1064,8 @@ export function buildDUPSession(
       MIN_SETS_PER_PLANNED_MUSCLE,
       Math.round(sessionSetCapacity(sessionMinutes, profile.goal) * Math.min(1, Math.max(0, capacityScale)))
     ),
-    plans.map((p) => p.floor)
+    plans.map((p) => p.floor),
+    plans.map((p) => p.priority)
   );
 
   let exercisePosition = 1;
@@ -1368,11 +1450,23 @@ export const MEV_FLOOR_MUSCLES: ReadonlySet<MuscleGroup> = new Set<MuscleGroup>(
 
 function withSessionFloors(
   volume: Record<MuscleGroup, { sets: number; frequency: number }>,
-  floors: Partial<Record<MuscleGroup, number>>
+  floors: Partial<Record<MuscleGroup, number>>,
+  priority: ReadonlySet<MuscleGroup> = new Set()
 ): Record<MuscleGroup, SessionMuscleVolume> {
   return Object.fromEntries(
-    Object.entries(volume).map(([m, v]) => [m, { ...v, sessionFloor: floors[m as MuscleGroup] }])
+    Object.entries(volume).map(([m, v]) => [
+      m,
+      { ...v, sessionFloor: floors[m as MuscleGroup], priority: priority.has(m as MuscleGroup) || undefined },
+    ])
   ) as Record<MuscleGroup, SessionMuscleVolume>;
+}
+
+/** The coarse groups a HIGH priority boosts (a head's parent included):
+ *  served first from each session's time. Pure. */
+export function highPriorityGroups(adjustments: readonly VolumeAdjustmentInput[] | undefined): Set<MuscleGroup> {
+  return new Set(
+    (adjustments ?? []).filter((a) => a.reason === 'user_priority' && a.volumeMultiplier > 1).map((a) => a.muscleGroup)
+  );
 }
 
 /** Sessions a split's rotation needs so no muscle group is skipped in a week. */
@@ -1445,6 +1539,18 @@ function buildSessionTemplates(split: Split, daysPerWeek: number): SessionTempla
   return baseTemplates.slice(0, daysPerWeek);
 }
 
+export interface GenerateMesocycleOptions {
+  /** Hard sets one muscle may get in one session (12 default, up to
+   *  MAX_SESSION_MUSCLE_CEILING). Raising it also raises the session's
+   *  local-fatigue limit in proportion, which otherwise stops one muscle
+   *  near 10–11 sets whatever the ceiling says. */
+  maxSetsPerMusclePerSession?: number;
+  /** Also build the plan WITHOUT the muscle priorities and report what they
+   *  changed (`priorityEffects`). Costs a second generation, so only the
+   *  builder's review step asks for it. */
+  reportPriorityEffects?: boolean;
+}
+
 /**
  * Generate a complete mesocycle with fatigue-integrated sessions
  */
@@ -1474,10 +1580,12 @@ export function generateFullMesocycleWithFatigue(
    *  to be cosmetic — this function always recommended its own split from
    *  days per week, so "Upper/Lower" came back as Full Body (UX panel).
    *  Omitted → the recommendation. */
-  splitOverride?: Split
+  splitOverride?: Split,
+  options: GenerateMesocycleOptions = {}
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
+  const maxSetsPerMuscle = normalizeSessionMuscleCeiling(options.maxSetsPerMusclePerSession);
 
   // Determine workout mode based on session duration
   const quickWorkoutMode = sessionMinutes <= 25;
@@ -1506,7 +1614,26 @@ export function generateFullMesocycleWithFatigue(
   }
 
   // Step 2: Create fatigue budget (reduced for shorter workouts)
-  const baseFatigueBudget = createFatigueBudget(profile);
+  // A raised ceiling raises the local limit with it: one muscle's local
+  // budget (~8 points a hard set at the gate RIR) otherwise stops it near
+  // 11 sets whatever the lifter chose.
+  const defaultFatigueBudget = createFatigueBudget(profile);
+  const baseFatigueBudget =
+    maxSetsPerMuscle > MAX_SETS_PER_MUSCLE_PER_SESSION
+      ? {
+          ...defaultFatigueBudget,
+          localLimit: Math.max(
+            Math.round((defaultFatigueBudget.localLimit * maxSetsPerMuscle) / MAX_SETS_PER_MUSCLE_PER_SESSION),
+            maxSetsPerMuscle * LOCAL_POINTS_PER_HARD_SET
+          ),
+        }
+      : defaultFatigueBudget;
+  if (maxSetsPerMuscle > MAX_SETS_PER_MUSCLE_PER_SESSION) {
+    programNotes.push(
+      `Per-session ceiling raised to ${maxSetsPerMuscle} hard sets per muscle (default ${MAX_SETS_PER_MUSCLE_PER_SESSION}). ` +
+        'Most research finds diminishing returns past ~10–12 in one session.'
+    );
+  }
   const fatigueBudgetConfig = quickWorkoutMode 
     ? { ...baseFatigueBudget, systemicLimit: baseFatigueBudget.systemicLimit * 0.5 }
     : shortWorkoutMode
@@ -1636,6 +1763,7 @@ export function generateFullMesocycleWithFatigue(
   } as const;
   const mesocycleWeeks: MesocycleWeek[] = [];
   const headEmphasis = headEmphasisFrom(volumeAdjustments);
+  const priorityGroups = highPriorityGroups(volumeAdjustments);
   // The block's highest accumulation-week modifier: the week that may use a
   // whole session. Lighter weeks use a matching share of it.
   const peakVolumeModifier = Math.max(
@@ -1694,7 +1822,8 @@ export function generateFullMesocycleWithFatigue(
           sessionMinutes,
           headEmphasis,
           weekProgression.volumeModifier,
-          capacityScale
+          capacityScale,
+          maxSetsPerMuscle
         );
         dupIndex++;
       } else {
@@ -1715,7 +1844,8 @@ export function generateFullMesocycleWithFatigue(
           undefined,
           undefined,
           headEmphasis,
-          capacityScale
+          capacityScale,
+          maxSetsPerMuscle
         );
       }
 
@@ -1735,7 +1865,7 @@ export function generateFullMesocycleWithFatigue(
     // A muscle held at MEV keeps its share of it in every training week
     // (mevSessionFloors); the deload goes under MEV by design.
     const floors = isDeload ? {} : mevSessionFloors(volumePerMuscle, sessionTemplates, bandContext);
-    const firstPass = buildWeekSessions(withSessionFloors(volumePerMuscle, floors));
+    const firstPass = buildWeekSessions(withSessionFloors(volumePerMuscle, floors, priorityGroups));
     const inflow = indirectCreditByGroup(firstPass);
     const modifier = Math.max(0.1, weekProgression.volumeModifier);
     let needsSecondPass = false;
@@ -1744,7 +1874,15 @@ export function generateFullMesocycleWithFatigue(
         const fed = (inflow[muscle as CoarseMuscle] ?? 0) / modifier;
         const sets = Math.max(MIN_SETS_PER_PLANNED_MUSCLE * vol.frequency, Math.round(vol.sets - fed));
         if (sets < vol.sets) needsSecondPass = true;
-        return [muscle, { sets: Math.min(vol.sets, sets), frequency: vol.frequency, sessionFloor: floors[muscle as MuscleGroup] }];
+        return [
+          muscle,
+          {
+            sets: Math.min(vol.sets, sets),
+            frequency: vol.frequency,
+            sessionFloor: floors[muscle as MuscleGroup],
+            priority: priorityGroups.has(muscle as MuscleGroup) || undefined,
+          },
+        ];
       })
     ) as Record<MuscleGroup, SessionMuscleVolume>;
       const weekSessions = needsSecondPass ? buildWeekSessions(directVolume) : firstPass;
@@ -1812,10 +1950,33 @@ export function generateFullMesocycleWithFatigue(
       `Your ${sessionMinutes}-minute sessions hold fewer weekly sets than the plan wants for ` +
         capped.map(([m, c]) => `${m} (${c.fits} of ${c.wanted})`).join(', ') +
         `. A session fits about ${sessionSetCapacity(sessionMinutes, profile.goal)} working sets, and one muscle ` +
-        `gets at most ~${MAX_SETS_PER_MUSCLE_PER_SESSION} hard sets a day, so those targets are set to what fits. ` +
+        `gets at most ~${maxSetsPerMuscle} hard sets a day, so those targets are set to what fits. ` +
         `Longer sessions raise them up to that per-day limit; past it, a muscle trained once a week needs a second day, or a split that trains it twice a week.`
     );
   }
+
+  // Step 8c: what the priorities did, against the same plan without them.
+  const priorityAdjustments = (volumeAdjustments ?? []).filter(isPriorityAdjustment);
+  const priorityEffects =
+    priorityAdjustments.length > 0 && options.reportPriorityEffects
+      ? priorityEffectsBetween(
+          priorityAdjustments,
+          generateFullMesocycleWithFatigue(
+            daysPerWeek,
+            profile,
+            sessionMinutes,
+            laggingAreas,
+            unavailableEquipmentIds,
+            sessionsPerDay,
+            totalWeeks,
+            (volumeAdjustments ?? []).filter((a) => !isPriorityAdjustment(a)),
+            splitOverride,
+            { ...options, reportPriorityEffects: false }
+          ).mesocycleWeeks ?? [],
+          mesocycleWeeks,
+          sessionTemplates
+        )
+      : undefined;
 
   // Step 9: Use first week's sessions for backward compatibility
   const sessions = mesocycleWeeks[0].sessions;
@@ -1864,7 +2025,54 @@ export function generateFullMesocycleWithFatigue(
     warnings,
     programNotes,
     volumeCaps,
+    priorityEffects,
+    maxSetsPerMusclePerSession: maxSetsPerMuscle,
   };
+}
+
+/** The adjustments that are Settings → Muscle priorities (high or low). */
+function isPriorityAdjustment(a: VolumeAdjustmentInput): boolean {
+  return a.reason === 'user_priority' || a.reason === 'dominant';
+}
+
+/**
+ * Each priority's effect on the plan's peak week: credited sets of the group
+ * (or of the head, for a head priority) without the priorities and with
+ * them. The builder shows these ("Hamstrings +7 sets/week from priority") so
+ * a priority that the plan could not honour reads as such. Pure.
+ */
+export function priorityEffectsBetween(
+  adjustments: readonly VolumeAdjustmentInput[],
+  withoutPriorities: readonly MesocycleWeek[],
+  withPriorities: readonly MesocycleWeek[],
+  templates: readonly SessionTemplate[]
+): PriorityEffect[] {
+  const before = peakTrainingWeek(withoutPriorities);
+  const after = peakTrainingWeek(withPriorities);
+  if (!before || !after) return [];
+  const read = (week: MesocycleWeek, a: VolumeAdjustmentInput): number => {
+    const sets = a.head
+      ? creditedSetsByHead(week.sessions)[a.head]
+      : creditedSetsByGroup(week.sessions)[a.muscleGroup as CoarseMuscle];
+    return Math.round((sets ?? 0) * 10) / 10;
+  };
+  const seen = new Set<string>();
+  const out: PriorityEffect[] = [];
+  for (const a of adjustments) {
+    if (!isPriorityAdjustment(a) || a.volumeMultiplier === 1) continue;
+    const key = a.head ?? a.muscleGroup;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      muscleGroup: a.muscleGroup,
+      head: a.head,
+      direction: a.volumeMultiplier > 1 ? 'up' : 'down',
+      before: read(before, a),
+      after: read(after, a),
+      sessionsPerWeek: templates.filter((t) => t.targetMuscles.includes(a.muscleGroup)).length,
+    });
+  }
+  return out;
 }
 
 // ============================================================

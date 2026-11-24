@@ -1,6 +1,8 @@
 'use client';
 
 import { ProTag } from '@/components/subscription/ProTag';
+import { MesocycleSkeleton } from './_components/MesocycleSkeleton';
+import { SavedBlockBanner } from './_components/SavedBlockBanner';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect } from 'react';
@@ -711,43 +713,13 @@ export default function MesocyclePage() {
         </Link>
       </div>
 
+      <SavedBlockBanner />
+
       {isLoading ? (
         // Skeletons approximating the loaded layout (today card + overview)
         // instead of a spinner: structural guard against load-time layout
         // shift on this page (audit: CLS 0.417) + perceived-perf (PERF item 2)
-        <>
-          <Card variant="elevated" aria-busy="true">
-            <CardContent className="p-6">
-              <div className="animate-pulse space-y-3">
-                <div className="h-4 w-28 bg-fill rounded" />
-                <div className="h-6 w-48 bg-fill rounded" />
-                <div className="flex gap-2">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="h-6 w-16 bg-fill rounded-full" />
-                  ))}
-                </div>
-                <div className="h-4 w-56 bg-fill rounded" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card aria-busy="true">
-            <CardContent className="p-6">
-              <div className="animate-pulse space-y-6">
-                <div className="grid gap-4 grid-cols-2 sm:grid-cols-5">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-20 bg-fill rounded-lg" />
-                  ))}
-                </div>
-                <div className="h-2 bg-fill rounded-full" />
-                <div className="flex gap-2 overflow-hidden">
-                  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                    <div key={i} className="h-16 min-w-[80px] bg-fill rounded-lg" />
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </>
+        <MesocycleSkeleton />
       ) : !activeMesocycle ? (
         <Card className="text-center py-12">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">

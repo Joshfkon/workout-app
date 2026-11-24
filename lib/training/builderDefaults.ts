@@ -18,7 +18,9 @@ import {
   creditedSetsByHead,
   peakTrainingWeek,
   MAX_SETS_PER_MUSCLE_PER_SESSION,
+  MAX_SESSION_MUSCLE_CEILING,
 } from '@/services/sessionBuilderWithFatigue';
+import type { PriorityEffect } from '@/types/schema';
 import { muscleDisplayName } from '@/lib/utils';
 
 /** Days of history the builder reads to prefill the schedule. */
@@ -169,6 +171,27 @@ export function isUnderDelivered(target: number, delivered: number | undefined):
   return target > 0 && (delivered ?? 0) < target * 0.85;
 }
 
+export type VolumeStatus = 'below_mev' | 'over_mrv' | 'short' | 'in_range';
+
+/**
+ * One review-table row's status, worst first: at or under MEV, past MRV,
+ * clearly short of its target, else in range. Pure.
+ */
+export function volumeStatus(done: number, target: number, mev: number, mrv: number): VolumeStatus {
+  if (isAtOrBelowMev(done, mev)) return 'below_mev';
+  if (done > mrv) return 'over_mrv';
+  if (isUnderDelivered(target, done)) return 'short';
+  return 'in_range';
+}
+
+/** The words for a VolumeStatus. */
+export const VOLUME_STATUS_LABEL: Record<VolumeStatus, string> = {
+  below_mev: 'At/below MEV',
+  over_mrv: 'Over MRV',
+  short: 'Short of target',
+  in_range: 'In range',
+};
+
 /** A muscle whose sets sit at or under its minimum effective volume. */
 export function isAtOrBelowMev(sets: number | undefined, mev: number): boolean {
   return (sets ?? 0) <= mev;
@@ -184,11 +207,13 @@ export function isAtOrBelowMev(sets: number | undefined, mev: number): boolean {
  */
 export function onceWeeklyCeilingMuscles(
   volumePerMuscle: Partial<Record<string, { sets: number; frequency: number }>>,
-  delivered: Partial<Record<CoarseMuscle, number>>
+  delivered: Partial<Record<CoarseMuscle, number>>,
+  /** The plan's per-session ceiling (12 unless the lifter raised it). */
+  ceiling: number = MAX_SETS_PER_MUSCLE_PER_SESSION
 ): { muscle: CoarseMuscle; delivered: number; wanted: number }[] {
   const out: { muscle: CoarseMuscle; delivered: number; wanted: number }[] = [];
   for (const [muscle, vol] of Object.entries(volumePerMuscle)) {
-    if (!vol || vol.frequency !== 1 || vol.sets <= MAX_SETS_PER_MUSCLE_PER_SESSION) continue;
+    if (!vol || vol.frequency !== 1 || vol.sets <= ceiling) continue;
     const got = delivered[muscle as CoarseMuscle];
     if (!isUnderDelivered(vol.sets, got)) continue;
     out.push({ muscle: muscle as CoarseMuscle, delivered: Math.round(got ?? 0), wanted: vol.sets });
@@ -211,7 +236,11 @@ const TWICE_A_WEEK_SPLITS: { split: Split; label: string; days: number }[] = [
  */
 export function onceWeeklyCeilingNote(
   muscles: readonly { muscle: CoarseMuscle; delivered: number; wanted: number }[],
-  split: Split
+  split: Split,
+  /** The plan's per-session ceiling (12 unless the lifter raised it). */
+  ceiling: number = MAX_SETS_PER_MUSCLE_PER_SESSION,
+  /** Whether this lifter is offered the raise (advanced). */
+  canRaiseCeiling: boolean = false
 ): string | null {
   if (muscles.length === 0) return null;
   const names = muscles.map((m) => muscleDisplayName(m.muscle));
@@ -221,11 +250,52 @@ export function onceWeeklyCeilingNote(
   const alternatives = TWICE_A_WEEK_SPLITS.filter((s) => s.split !== split)
     .map((s) => `${s.label} (${s.days} days)`)
     .join(' or ');
+  const raise =
+    canRaiseCeiling && ceiling < MAX_SESSION_MUSCLE_CEILING
+      ? ` Or raise the per-session limit (up to ${MAX_SESSION_MUSCLE_CEILING} hard sets); ` +
+        `most research finds diminishing returns past ~10–12 sets in one session, so a second day usually does more.`
+      : '';
   return (
     `${list} ${muscles.length === 1 ? 'is' : 'are'} trained once a week, and one session holds about ` +
-    `${MAX_SETS_PER_MUSCLE_PER_SESSION} hard sets of a muscle, so longer sessions won't raise ${them} (${counts}). ` +
+    `${ceiling} hard sets of a muscle, so longer sessions won't raise ${them} (${counts}). ` +
     `To reach the target, train ${them} on more days: give ${them} a second day in your week, ` +
-    `or switch to a split that hits each muscle twice, like ${alternatives}.`
+    `or switch to a split that hits each muscle twice, like ${alternatives}.${raise}`
+  );
+}
+
+/** One priority's effect as the builder says it: "Hamstrings +7 sets/week
+ *  from priority (12 → 19)". Pure. */
+export function priorityEffectLine(effect: PriorityEffect): string {
+  const name = effect.head ? STANDARD_MUSCLE_DISPLAY_NAMES[effect.head] : muscleDisplayName(effect.muscleGroup);
+  const delta = Math.round(effect.after - effect.before);
+  const range = `${fmtSets(effect.before)} → ${fmtSets(effect.after)}`;
+  if (delta === 0) return `${name}: no change from priority (${fmtSets(effect.after)} sets/week)`;
+  const sign = delta > 0 ? '+' : '−';
+  return `${name} ${sign}${Math.abs(delta)} sets/week from priority (${range})`;
+}
+
+function fmtSets(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/**
+ * Why a high priority moved a muscle little or not at all, when the reason
+ * is the once-a-week per-session ceiling (Bro Split: one day holds ~12 sets
+ * of a muscle). null when the priority did its job (+3 or more) or the
+ * muscle is trained more than once a week. Pure.
+ */
+export function priorityCeilingHint(
+  effect: PriorityEffect,
+  ceiling: number,
+  canRaiseCeiling: boolean
+): string | null {
+  if (effect.direction !== 'up' || effect.sessionsPerWeek !== 1 || effect.after - effect.before >= 3) return null;
+  const name = effect.head ? STANDARD_MUSCLE_DISPLAY_NAMES[effect.head] : muscleDisplayName(effect.muscleGroup);
+  return (
+    `${name} is trained once a week and one session holds about ${ceiling} hard sets of it, so priority can't add much. ` +
+    (canRaiseCeiling && ceiling < MAX_SESSION_MUSCLE_CEILING
+      ? `Raise the per-session limit (up to ${MAX_SESSION_MUSCLE_CEILING}) or give it a second day.`
+      : 'Give it a second day, or pick a split that trains it twice a week.')
   );
 }
 
