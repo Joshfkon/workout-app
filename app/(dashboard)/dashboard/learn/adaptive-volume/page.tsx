@@ -102,7 +102,7 @@ const phases = [
     number: 2,
     title: 'Analyze outcomes',
     description:
-      'At the end of the mesocycle, we analyze progression, RIR drift, form quality, and recovery correlation.',
+      'At the end of the training block, we analyze progression, RIR drift, form quality, and recovery correlation.',
   },
   {
     number: 3,
@@ -114,7 +114,7 @@ const phases = [
     number: 4,
     title: 'Refine',
     description:
-      'Over multiple mesocycles, your personal volume tolerance emerges. After 3-4 cycles, we have high confidence in your optimal ranges.',
+      'Over multiple training blocks, your personal volume tolerance emerges. After 3-4 cycles, we have high confidence in your optimal ranges.',
   },
 ];
 
@@ -148,7 +148,7 @@ const tips: Array<{ icon: TablerIcon; iconClass: string; title: string; items: s
     items: [
       'Log RIR and form honestly every set',
       'Complete daily check-ins (especially recovery)',
-      'Run full 3-4 week mesocycles before adjusting',
+      'Run full 3-4 week training blocks before adjusting',
       'Trust the process - it takes a few cycles',
     ],
   },
@@ -157,7 +157,7 @@ const tips: Array<{ icon: TablerIcon; iconClass: string; title: string; items: s
     iconClass: 'text-status-bad',
     title: "Don't",
     items: [
-      'Change volume mid-mesocycle based on feelings',
+      'Change volume mid-block based on feelings',
       'Ignore fatigue warnings',
       'Skip logging for some sessions',
       'Expect perfect answers in week 1',
@@ -334,7 +334,7 @@ export default function AdaptiveVolumeArticle() {
 
       <ArticleSection title="Real-time fatigue monitoring">
         <p className="text-body text-ink-2">
-          We don&apos;t wait until you&apos;re overtrained. Mid-mesocycle, we watch for warning signs:
+          We don&apos;t wait until you&apos;re overtrained. Mid-block, we watch for warning signs:
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {signGroups.map((group) => (
@@ -385,7 +385,7 @@ export default function AdaptiveVolumeArticle() {
             ))}
           </div>
         </ContentCard>
-        <Callout title="After 2-3 mesocycles, you'll know:">
+        <Callout title="After 2-3 training blocks, you'll know:">
           <BulletList
             items={[
               'Exactly how much chest volume you thrive on',

@@ -69,7 +69,7 @@ We show you this feedback so you can recalibrate your internal sense of effort.`
 Push to true failure. The machine catches the weight. This is your calibration data.
 
 **Moderate Risk** - Dumbbells, lunges, supported rows
-Push hard but keep 1 rep in reserve. We'll test limits at mesocycle end.
+Push hard but keep 1 rep in reserve. We'll test limits at the end of the training block.
 
 **Protect** - Barbell squat, bench, deadlift, overhead press
 Stay at 2+ RIR always. A torn pec or herniated disc isn't worth that last rep. The injury risk of failure far outweighs any benefit.`,
@@ -139,7 +139,7 @@ These exercises can be failed relatively safely:
 - Single leg work allows you to catch yourself
 - Lower absolute loads than barbells
 
-We allow AMRAP sets at mesocycle end or after deloads, but keep RIR at 1+ normally.`,
+We allow AMRAP sets at the end of a training block or after deloads, but keep RIR at 1+ normally.`,
     },
     {
       heading: 'Protect (Red)',
@@ -199,7 +199,7 @@ Add weight when you can. This is the most effective driver of strength.
 Add reps at the same weight before adding more weight.
 
 **3. Set Progression**
-Add sets within a mesocycle to accumulate more volume.
+Add sets within a training block to accumulate more volume.
 
 **4. Technique Progression**
 Improve movement quality - better mind-muscle connection, fuller range of motion.`,
@@ -262,7 +262,7 @@ Think of it as two steps forward, one step back - the step back enables larger f
     {
       heading: 'Proactive vs Reactive Deloads',
       content: `**Proactive (Scheduled)**
-Every 4-6 weeks, regardless of how you feel. Built into your mesocycle as the final week.
+Every 4-6 weeks, regardless of how you feel. Built into your training block as the final week.
 
 **Reactive (As Needed)**
 When warning signs appear: declining performance, persistent fatigue, loss of motivation, joint aches.

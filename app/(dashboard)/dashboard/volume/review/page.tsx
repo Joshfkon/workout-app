@@ -227,9 +227,9 @@ export default function MesocycleReviewPage() {
 
         <Card className="p-8 text-center">
           <span className="text-4xl mb-4 block">{'\uD83D\uDCCA'}</span>
-          <h2 className="text-title font-semibold text-ink mb-2">No mesocycle analysis yet</h2>
+          <h2 className="text-title font-semibold text-ink mb-2">No training block analysis yet</h2>
           <p className="text-ink-2 mb-4">
-            Complete at least 3 weeks of training to generate your first mesocycle analysis.
+            Complete at least 3 weeks of training to generate your first training block analysis.
           </p>
           <Link href="/dashboard/log">
             <button className="px-4 py-2 bg-action hover:bg-action text-on-action font-medium rounded-lg transition-colors">
@@ -256,7 +256,7 @@ export default function MesocycleReviewPage() {
 
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-large-title text-ink mb-2">Mesocycle review</h1>
+        <h1 className="text-large-title text-ink mb-2">Training block review</h1>
         <p className="text-ink-2">
           {formatDateRange} ({latestAnalysis.weeks} weeks)
         </p>
@@ -285,7 +285,7 @@ export default function MesocycleReviewPage() {
       {/* Apply Suggestions Button */}
       <div className="mt-8">
         <Card className="p-4 text-center">
-          <h3 className="font-semibold text-ink mb-2">Ready for your next mesocycle?</h3>
+          <h3 className="font-semibold text-ink mb-2">Ready for your next training block?</h3>
           <p className="text-body text-ink-2 mb-4">
             Apply these volume adjustments to optimize your next training block.
           </p>

@@ -619,7 +619,7 @@ export default function TrainPage() {
           <>
             <h2 className="text-title text-ink mt-1.5">No training plan</h2>
             <p className="text-subhead text-ink-2 mt-1">
-              Plan a mesocycle for smart progression and volume tracking
+              Plan a training block for smart progression and volume tracking
             </p>
             {(
               <div className="flex gap-2 mt-4">
@@ -634,7 +634,7 @@ export default function TrainPage() {
                     className="w-full text-body"
                   >
                     <span className="inline-flex items-center gap-2">
-                      Plan a mesocycle
+                      Plan a training block
                       <ProTag feature="mesocycleBuilder" tone="onAccent" />
                     </span>
                   </StyledButton>
@@ -680,7 +680,7 @@ export default function TrainPage() {
               <ProTag feature="mesocycleBuilder" />
             </span>
             <span className="block text-subhead text-ink-2">
-              A multi-week mesocycle: sets ramp toward your MRV, then a deload.
+              A multi-week program: sets ramp toward your MRV, then a deload.
             </span>
           </span>
           {pending ? (

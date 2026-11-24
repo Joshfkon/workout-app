@@ -74,7 +74,7 @@ export const TIER_FEATURES = {
     yearlyPrice: 39.99,
     features: [
       'Everything in Free',
-      'AI mesocycle builder',
+      'AI training block builder',
       'Smart weight suggestions',
       'Advanced analytics',
       // (No "Unlimited workouts" here: Free is unlimited too, and the

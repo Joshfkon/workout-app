@@ -195,10 +195,16 @@ describe('computeLiftTrends', () => {
       {
         name: 'Bench Press', sessions: 2, bestWeightKg: 85, bestReps: 6,
         firstWeightKg: 80, firstReps: 8, latestWeightKg: 85, latestReps: 6,
+        // Each workout's top set, oldest first, for the pre-trend chart.
+        points: [
+          { date: '2026-06-15', weightKg: 80, topSetReps: 8, e1rmKg: expect.any(Number) },
+          { date: '2026-06-22', weightKg: 85, topSetReps: 6, e1rmKg: expect.any(Number) },
+        ],
       },
       {
         name: 'Squat', sessions: 1, bestWeightKg: 100, bestReps: 5,
         firstWeightKg: 100, firstReps: 5, latestWeightKg: 100, latestReps: 5,
+        points: [expect.objectContaining({ weightKg: 100, topSetReps: 5 })],
       },
     ]);
   });

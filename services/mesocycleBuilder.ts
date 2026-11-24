@@ -501,7 +501,7 @@ function getTooShortReasoning(
   factor: MesocycleLengthGuidance['primaryFactor']
 ): string {
   if (goal === 'bulk' && factor === 'goal') {
-    return `Longer mesocycles (${min}+ weeks) work better for hypertrophy — you get more weeks of progressive overload on the same movements before resetting, which drives more growth. Shorter cycles are better suited for cuts or if recovery is limited.`;
+    return `Longer training blocks (${min}+ weeks) work better for hypertrophy — you get more weeks of progressive overload on the same movements before resetting, which drives more growth. Shorter cycles are better suited for cuts or if recovery is limited.`;
   }
 
   if (experience === 'intermediate' || experience === 'advanced') {
@@ -1999,7 +1999,7 @@ export function generateFullProgram(
   const periodization = buildPeriodizationPlan(profile, recoveryFactors);
 
   programNotes.push(`Periodization: ${periodization.model}`);
-  programNotes.push(`Mesocycle length: ${periodization.mesocycleWeeks} weeks (${periodization.deloadFrequency} training + 1 deload)`);
+  programNotes.push(`Training block length: ${periodization.mesocycleWeeks} weeks (${periodization.deloadFrequency} training + 1 deload)`);
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
 
   // Step 4: Calculate volume distribution (with adjustments for lagging areas and user priorities)
@@ -2196,7 +2196,7 @@ export function recommendDuration(experience: Experience, goal: Goal): { weeks: 
     case 'advanced':
       return { weeks: 8, reason: 'Advanced lifters need longer to accumulate stimulus' };
     default:
-      return { weeks: 6, reason: 'Standard mesocycle length' };
+      return { weeks: 6, reason: 'Standard training block length' };
   }
 }
 

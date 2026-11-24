@@ -44,15 +44,15 @@ const features: Array<{
 }> = [
   {
     icon: IconBrain,
-    title: 'AI-powered mesocycle planning',
+    title: 'AI-powered training block planning',
     description: 'Unlike basic workout trackers, HyperTrack uses intelligent algorithms to design periodized training programs tailored to your goals, experience, recovery capacity, and available time.',
     howItWorks: 'We analyze your training frequency, session duration, experience level, sleep quality, and stress to recommend the optimal split, volume distribution, and periodization model.',
   },
   {
     icon: IconRobot,
     title: 'AI coaching and personalized notes',
-    description: 'Get real AI-powered coaching advice before every workout. Our system analyzes your history, body composition, and current mesocycle phase to give context-aware guidance.',
-    howItWorks: 'Using Grok from xAI, we generate personalized coach notes that consider your workout type, week in mesocycle, recent performance, body composition goals, and training history, like having a knowledgeable coach in your pocket.',
+    description: 'Get real AI-powered coaching advice before every workout. Our system analyzes your history, body composition, and current training block phase to give context-aware guidance.',
+    howItWorks: 'Using Grok from xAI, we generate personalized coach notes that consider your workout type, week in the training block, recent performance, body composition goals, and training history, like having a knowledgeable coach in your pocket.',
     disclaimer: 'AI-generated coaching is informational and educational. It is not a substitute for professional coaching, medical advice, or personalized training supervision.',
   },
   {
@@ -72,7 +72,7 @@ const features: Array<{
     icon: IconTarget,
     title: 'S-tier exercise selection',
     description: 'Not all exercises are created equal. Our database rates every exercise by hypertrophy effectiveness (S/A/B/C tier) based on stimulus-to-fatigue ratio.',
-    howItWorks: 'When building your mesocycle, we prioritize S-tier exercises (high stimulus, low fatigue) like cable work and machines, especially later in mesocycles when fatigue accumulates. Compounds are reserved for when you\'re fresh.',
+    howItWorks: 'When building your training block, we prioritize S-tier exercises (high stimulus, low fatigue) like cable work and machines, especially later in training blocks when fatigue accumulates. Compounds are reserved for when you\'re fresh.',
   },
   {
     icon: IconRepeat,
@@ -128,7 +128,7 @@ const scienceConcepts: Array<{
     source: 'Renaissance Periodization',
     citation: 'Israetel, M. (2017). Training Volume Landmarks for Muscle Growth. Renaissance Periodization.',
     explanation: 'Not all exercises are equal. A machine fly gives great chest stimulus with minimal fatigue to recover from. A barbell bench press stimulates chest but also taxes shoulders, triceps, and CNS.',
-    application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in mesocycles when fatigue is high, saving low-SFR compounds for when you\'re fresh.',
+    application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in training blocks when fatigue is high, saving low-SFR compounds for when you\'re fresh.',
   },
   {
     title: 'Evidence-based protein requirements',
@@ -152,7 +152,7 @@ const scienceConcepts: Array<{
     citation: 'Helms, E.R., et al. (2016). Application of the Repetitions in Reserve-Based Rating of Perceived Exertion Scale for Resistance Training. Strength & Conditioning Journal, 38(4), 42-49.',
     doi: 'https://doi.org/10.1519/ssc.0000000000000218',
     explanation: 'RPE (rate of perceived exertion) and RIR (reps in reserve: how many more reps you could have done before failing) let you train at the right intensity for your daily readiness, rather than fixed percentages that may not account for recovery state.',
-    application: 'We guide progression through RIR: start mesocycles conservatively at 3 RIR, progress to 1 RIR, with final sets potentially reaching 0 RIR. This systematic approach helps manage fatigue.',
+    application: 'We guide progression through RIR: start training blocks conservatively at 3 RIR, progress to 1 RIR, with final sets potentially reaching 0 RIR. This systematic approach helps manage fatigue.',
   },
   {
     title: 'Energy balance and metabolic adaptation',
@@ -168,7 +168,7 @@ const scienceConcepts: Array<{
     citation: 'Grgic, J., et al. (2017). Effects of linear and daily undulating periodized resistance training programs on measures of muscle hypertrophy: a systematic review and meta-analysis. PeerJ, 5, e3695.',
     doi: 'https://doi.org/10.7717/peerj.3695',
     explanation: 'Periodization involves systematically varying training variables over time. Research comparing linear and daily undulating models found both produce similar hypertrophy outcomes when training volume is equated.',
-    application: 'Our mesocycle builder incorporates periodization principles to help vary intensity and volume across training phases for sustainable progress.',
+    application: 'Our training block builder incorporates periodization principles to help vary intensity and volume across training phases for sustainable progress.',
   },
   {
     title: 'Progressive overload',
@@ -181,7 +181,7 @@ const scienceConcepts: Array<{
 ];
 
 const comparisonTable: Array<{ feature: string; hypertracker: true; others: boolean | 'partial' }> = [
-  { feature: 'AI mesocycle generation', hypertracker: true, others: false },
+  { feature: 'AI training block generation', hypertracker: true, others: false },
   { feature: 'AI coaching notes', hypertracker: true, others: false },
   { feature: 'Integrated nutrition tracking', hypertracker: true, others: 'partial' },
   { feature: 'Smart macro calculator', hypertracker: true, others: false },

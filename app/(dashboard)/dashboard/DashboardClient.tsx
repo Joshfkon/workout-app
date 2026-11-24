@@ -536,7 +536,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       if (!mesoForStart || mesoForStart.id !== activeMesocycle.id) {
         if (!userId) throw new Error('User not authenticated');
         mesoForStart = await fetchActiveMesocycle(supabase, userId);
-        if (!mesoForStart) throw new Error('Active mesocycle not found');
+        if (!mesoForStart) throw new Error('Active training block not found');
         setFullActiveMeso(mesoForStart);
       }
 
@@ -1747,7 +1747,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       {/* Weekly sets vs MEV–MRV, on Home again (it had moved into the Today
           sheet). Lifters only; beginner mode keeps it out, as it does on the
           workout screen. Same rows as the sheet and the Sets per week page. */}
-      {!foodOnly && !beginnerMode && <WeeklySetsCard rows={volumeRows} />}
+      {!foodOnly && !beginnerMode && (
+        // The window is a rolling 7 days (weeklyVolumeWindowStartISO), said
+        // on the card so low bars early in a week aren't read as a miscount.
+        <WeeklySetsCard
+          rows={volumeRows}
+          windowStart={new Date(weeklyVolumeWindowStartISO())}
+          plannedPerWeek={activeMesocycle?.daysPerWeek ?? null}
+        />
+      )}
 
       {/* 3. At most one nudge */}
       {nudgeCard}

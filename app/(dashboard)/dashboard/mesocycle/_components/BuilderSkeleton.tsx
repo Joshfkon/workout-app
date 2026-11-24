@@ -13,7 +13,7 @@ export function BuilderSkeleton() {
       data-testid="mesocycle-builder-loading"
     >
       <div>
-        <h1 className="text-title font-bold text-ink">Create mesocycle</h1>
+        <h1 className="text-title font-bold text-ink">Create training block</h1>
         <p className="mt-1 flex items-center gap-2 text-ink-2">
           <span
             className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-3 border-t-transparent"

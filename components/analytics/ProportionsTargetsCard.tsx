@@ -440,7 +440,7 @@ function WeightProjectionSection({
     <div>
       <p className="text-caption text-ink-3 mb-2">
         {mesocycle
-          ? `Scope: this mesocycle (week ${mesocycle.currentWeek} of ${mesocycle.totalWeeks})`
+          ? `Scope: this training block (week ${mesocycle.currentWeek} of ${mesocycle.totalWeeks})`
           : `Scope: last 90 days of weigh-ins, projected ${DEFAULT_PROJECTION_WEEKS - currentWeek} weeks ahead`}
       </p>
       <div className="h-48" data-testid="weight-projection-chart">

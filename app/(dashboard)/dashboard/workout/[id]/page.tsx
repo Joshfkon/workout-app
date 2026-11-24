@@ -6998,7 +6998,7 @@ export default function WorkoutPage() {
           isOpen={showClaimPrompt}
           onClose={handleDeclineClaim}
           onConfirm={handleConfirmClaim}
-          title="Count toward your mesocycle?"
+          title="Count toward your training block?"
           message={`This workout looks like ${claimCandidate?.dayName ?? 'your next planned session'}. Counting it advances your program to the next session — otherwise it stays an extra workout.`}
           confirmText="Count it"
           cancelText="Keep as extra"

@@ -27,7 +27,7 @@ export async function TodaysWorkoutServer({ userId }: Props) {
               href="/dashboard/mesocycle"
               className="inline-flex items-center gap-2 text-action"
             >
-              <span>Create a mesocycle to get started</span>
+              <span>Create a training block to get started</span>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>

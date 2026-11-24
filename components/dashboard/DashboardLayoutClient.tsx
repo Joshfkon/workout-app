@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { purgeUserCaches } from '@/lib/query/clientCachePurge';
@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { Sidebar } from './Sidebar';
 import { BottomNavigation } from './BottomNavigation';
+import { TabPendingSkeleton } from './TabPendingSkeleton';
 import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
 import { ThemeToggleCompact } from '@/components/settings/ThemeToggle';
@@ -92,6 +93,12 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
     router.refresh();
   };
 
+  // The tab the user just tapped, until its page arrives: its skeleton shows
+  // in place of the old page (see TabPendingSkeleton). Never on the first
+  // render, so server and client HTML match.
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  const showPendingTab = pendingTab != null && pendingTab !== pathname;
+
   // Hide the app header on active workout pages (they have their own back button)
   const hideAppHeader = isActiveWorkoutRoute(pathname);
 
@@ -148,11 +155,17 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
         )}
 
         {/* Page content */}
-        <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-clip">{children}</main>
+        <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-clip">
+          {showPendingTab && <TabPendingSkeleton href={pendingTab} />}
+          {/* Hidden, not unmounted: a cancelled navigation shows it again as it was. */}
+          <div hidden={showPendingTab} className={showPendingTab ? undefined : 'contents'}>
+            {children}
+          </div>
+        </main>
       </div>
 
       {/* Bottom navigation for mobile */}
-      <BottomNavigation volumeGoalsMet={volumeGoalsMet} />
+      <BottomNavigation volumeGoalsMet={volumeGoalsMet} onPendingChange={setPendingTab} />
 
       {/* Resume workout banner - shows when there's an active workout */}
       <ResumeWorkoutBanner />

@@ -9,6 +9,7 @@ import {
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { EstMaxMethod } from './EstMaxMethod';
+import { EarlyLiftChart } from './EarlyLiftChart';
 import { liftRateRule, liftStatusRule } from './trendHelp';
 import { rangePhrase } from '@/app/(dashboard)/dashboard/analytics/progressRange';
 import {
@@ -199,7 +200,8 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
               const change = earlyLiftChange(l, units);
               const left = workoutsUntilTrend(l.sessions);
               return (
-                <div key={l.name} className="flex min-h-[56px] items-center gap-3 px-4 py-2" data-testid="early-lift-row">
+                <div key={l.name} className="px-4 py-2" data-testid="early-lift-row">
+                <div className="flex min-h-[56px] items-center gap-3">
                   <span className="min-w-0 flex-1">
                     <span className="block break-words text-body font-semibold text-ink" data-testid="early-lift-name">
                       {l.name}
@@ -216,6 +218,10 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
                   <span className="w-[84px] flex-shrink-0 text-right text-caption text-ink-2">
                     {left > 0 ? `Trend in ${moreWorkouts(left)}` : 'Trend soon'}
                   </span>
+                </div>
+                {l.points && l.points.length > 0 && (
+                  <EarlyLiftChart points={l.points} units={units} name={l.name} />
+                )}
                 </div>
               );
             })}

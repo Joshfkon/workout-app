@@ -450,7 +450,7 @@ function getMesocycleContextualRecommendation(
   } else if (progressRatio <= 0.66) {
     // Mid meso - fatigue accumulation is normal
     return `Moderate fatigue accumulation (${fatigue}/100) in week ${weekInMeso}. ` +
-           'This is normal for mid-mesocycle. Monitor recovery and adjust if needed.';
+           'This is normal in the middle of a training block. Monitor recovery and adjust if needed.';
   } else {
     // Late in meso - fatigue is expected, near planned deload
     return `High fatigue (${fatigue}/100) in week ${weekInMeso} - planned overreach phase. ` +
@@ -474,7 +474,7 @@ export function shouldTriggerDeload(input: DeloadCheckInput): {
   if (weekInMeso === deloadWeek) {
     return {
       shouldDeload: true,
-      reason: 'Scheduled deload week in mesocycle',
+      reason: 'Scheduled deload week in training block',
       urgency: 'medium',
       mesocycleContext: `Week ${weekInMeso} of ${totalWeeks} - planned deload timing.`,
     };

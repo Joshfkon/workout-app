@@ -277,7 +277,7 @@ export function getAMRAPFrequency(exerciseName: string): {
     case 'push_cautiously':
       return {
         frequencyDays: 28,
-        description: 'Once per mesocycle (usually at end)',
+        description: 'Once per training block (usually at end)',
       };
     case 'protect':
       return {

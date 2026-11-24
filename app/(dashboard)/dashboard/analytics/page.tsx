@@ -74,6 +74,7 @@ import { LiftTrendsSkeleton, ProgressPageSkeleton, ProgressSummarySkeleton, Prog
 import { mergeSleepLogIntoWellness, type SleepLogRow } from './wellnessSleep';
 import { WeeklySetsCard } from '@/components/dashboard/home/WeeklySetsCard';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
+import { goalTargetRate, type WeightGoal } from '@/app/(dashboard)/dashboard/_lib/weightRate';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
@@ -482,7 +483,12 @@ const EMPTY_PLATEAU_ALERTS: PlateauAlertRow[] = [];
 const WEEKLY_SETS_SECTION_ID = 'weekly-sets';
 
 function AnalyticsPageContent() {
-  const { rows: weeklyVolumeRows } = useWeeklyVolume();
+  const {
+    rows: weeklyVolumeRows,
+    workouts: weeklyVolumeWorkouts,
+    windowStartIso: weeklyVolumeWindowStartIso,
+    isLoading: weeklyVolumeLoading,
+  } = useWeeklyVolume();
   const beginnerMode = useBeginnerMode();
   const [pageMounted, setPageMounted] = useState(false);
   useEffect(() => setPageMounted(true), []);
@@ -1534,6 +1540,18 @@ function AnalyticsPageContent() {
   // weight and strength are answered together. Only restates the weight
   // chart's 30-day change and the Strength tab's trend counts; waits for
   // the weigh-ins so it doesn't appear half-written.
+  // Target weekly weight change for the pace line: the current phase's own
+  // target (stored in lb/wk), else the goal's default; none for maintenance.
+  const summaryGoal = currentPhase?.phaseType ?? userProfile?.goal ?? liftRollup?.goal ?? null;
+  const summaryUnits: 'lb' | 'kg' = units === 'kg' ? 'kg' : 'lb';
+  const targetRatePerWeek =
+    currentPhase?.targetRateLbsPerWeek != null && (currentPhase.phaseType === 'cut' || currentPhase.phaseType === 'bulk')
+      ? summaryUnits === 'lb'
+        ? currentPhase.targetRateLbsPerWeek
+        : Math.round((currentPhase.targetRateLbsPerWeek / 2.20462) * 100) / 100
+      : summaryGoal
+        ? goalTargetRate(summaryGoal as WeightGoal, summaryUnits)
+        : null;
   const progressSummary = isBodyTrendLoading
     ? null
     : buildProgressSummary({
@@ -1545,9 +1563,12 @@ function AnalyticsPageContent() {
         // Weekly sets per muscle vs MEV–MRV, for lifters (same gate as the
         // card on Strength): the first place an advanced lifter looks.
         volumeRows: showWeeklySets ? weeklyVolumeRows : null,
+        volumeWorkouts: weeklyVolumeLoading ? null : weeklyVolumeWorkouts,
+        plannedPerWeek: activeMesocycle?.daysPerWeek ?? null,
+        targetRatePerWeek,
         // Same rule as the Body chart's advice framing: the active phase,
         // else users.goal (the lift-trend query reads users.goal too).
-        goal: currentPhase?.phaseType ?? userProfile?.goal ?? liftRollup?.goal ?? null,
+        goal: summaryGoal,
       });
 
   // ONE range control for the whole page: weight, strength and wellness
@@ -1809,7 +1830,14 @@ function AnalyticsPageContent() {
               ("13 below MEV") pushed the empty state — and its "Log a
               workout" button — below the fold (UX panel r19). */}
           {showWeeklySets && (
-            <WeeklySetsCard rows={weeklyVolumeRows} title="Weekly sets per muscle" id={WEEKLY_SETS_SECTION_ID} />
+            <WeeklySetsCard
+              rows={weeklyVolumeRows}
+              title="Weekly sets per muscle"
+              id={WEEKLY_SETS_SECTION_ID}
+              windowStart={new Date(weeklyVolumeWindowStartIso)}
+              workouts={weeklyVolumeLoading ? null : weeklyVolumeWorkouts}
+              plannedPerWeek={activeMesocycle?.daysPerWeek ?? null}
+            />
           )}
           {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
               First so ?section=lift-trends deep links land above the fold. */}

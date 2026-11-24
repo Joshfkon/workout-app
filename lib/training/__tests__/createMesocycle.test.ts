@@ -181,7 +181,7 @@ describe('createMesocycle', () => {
     const { client, calls } = stubClient({ deactivateError: { message: 'permission denied' } });
 
     await expect(createMesocycle(client, baseInput)).rejects.toThrow(
-      /Couldn't close your current mesocycle/
+      /Couldn't close your current training block/
     );
     expect(calls).toEqual(['deactivate:mesocycles']);
   });
