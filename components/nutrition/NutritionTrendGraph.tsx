@@ -437,6 +437,7 @@ export function NutritionTrendGraph({
                   />
                 )}
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="calories"
                   name="Calories"
@@ -484,6 +485,7 @@ export function NutritionTrendGraph({
                   />
                 )}
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="protein"
                   name="Protein"
@@ -493,6 +495,7 @@ export function NutritionTrendGraph({
                   activeDot={{ r: 4 }}
                 />
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="carbs"
                   name="Carbs"
@@ -502,6 +505,7 @@ export function NutritionTrendGraph({
                   activeDot={{ r: 4 }}
                 />
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="fat"
                   name="Fat"
