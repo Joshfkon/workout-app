@@ -8,6 +8,8 @@ import { Card, CardContent, Button, Badge, Input } from '@/components/ui';
 import { PricingCard } from '@/components/subscription';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
+import { ApplePlans } from '@/components/subscription/ApplePlans';
+import { isApplePurchasesAvailable } from '@/lib/integrations/applePurchases';
 import { SubscriptionTier } from '@/lib/stripe';
 import { planComparisonRows } from '@/lib/subscription/planComparison';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
@@ -17,6 +19,8 @@ function PricingContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const isNative = useIsNativePlatform();
+  const [applePurchases, setApplePurchases] = useState(false);
+  useEffect(() => setApplePurchases(isApplePurchasesAvailable()), [isNative]);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
   const [loadingTier, setLoadingTier] = useState<SubscriptionTier | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -183,10 +187,13 @@ function PricingContent() {
         </CardContent>
       </Card>
 
-      {/* Billing Period Toggle + Pricing Cards — web only. The native app
-          cannot sell or link to subscriptions (App Store Guideline 3.1.1),
-          so it shows the feature comparison and promo redemption only. */}
-      {isNative ? (
+      {/* iOS with the purchases plugin: App Store subscriptions (Guideline
+          3.1.1: a subscription unlocked in the app is sold in the app). An
+          app build without the plugin keeps the old web-managed note, with
+          no price, button or link out. Web: Stripe cards. */}
+      {isNative && applePurchases ? (
+        <ApplePlans />
+      ) : isNative ? (
         <Card>
           <CardContent className="p-6 text-center space-y-2">
             <h2 className="text-headline font-semibold text-ink">Plans &amp; billing are managed on the web</h2>

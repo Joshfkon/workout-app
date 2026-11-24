@@ -28,6 +28,7 @@
 		7A1D5E000000000000000014 /* RestTimerAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D5E000000000000000001 /* RestTimerAttributes.swift */; };
 		7A1D5E000000000000000015 /* HyperTrackWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7A1D5E00000000000000000B /* HyperTrackWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 	57A7C0DE2FE9000000000001 /* WatchBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000010 /* WatchBridgePlugin.swift */; };
+	57A7C0DE2FE9000000000101 /* HyperTrackPurchasesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000110 /* HyperTrackPurchasesPlugin.swift */; };
 	57A7C0DE2FE9000000000003 /* HyperTrackWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000012 /* HyperTrackWatchApp.swift */; };
 	57A7C0DE2FE9000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000013 /* ContentView.swift */; };
 	57A7C0DE2FE9000000000005 /* WorkoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A7C0DE2FE9000000000014 /* WorkoutStore.swift */; };
@@ -61,6 +62,8 @@
 		7A1D5E00000000000000000A /* HyperTrackWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HyperTrackWidgets.entitlements; sourceTree = "<group>"; };
 		7A1D5E00000000000000000B /* HyperTrackWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HyperTrackWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 	57A7C0DE2FE9000000000010 /* WatchBridgePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridgePlugin.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000110 /* HyperTrackPurchasesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperTrackPurchasesPlugin.swift; sourceTree = "<group>"; };
+	57A7C0DE2FE9000000000120 /* HyperTrack.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = HyperTrack.storekit; sourceTree = "<group>"; };
 	57A7C0DE2FE9000000000012 /* HyperTrackWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperTrackWatchApp.swift; sourceTree = "<group>"; };
 	57A7C0DE2FE9000000000013 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 	57A7C0DE2FE9000000000014 /* WorkoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutStore.swift; sourceTree = "<group>"; };
@@ -168,6 +171,8 @@
 			7A1D5E000000000000000002 /* HyperTrackNativePlugin.swift */,
 			7A1D5E000000000000000003 /* HyperTrackBridgeViewController.swift */,
 			57A7C0DE2FE9000000000010 /* WatchBridgePlugin.swift */,
+			57A7C0DE2FE9000000000110 /* HyperTrackPurchasesPlugin.swift */,
+			57A7C0DE2FE9000000000120 /* HyperTrack.storekit */,
 			504EC30B1FED79650016851F /* Main.storyboard */,
 			504EC30E1FED79650016851F /* Assets.xcassets */,
 			504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -364,6 +369,7 @@
 				7A1D5E00000000000000000D /* HyperTrackNativePlugin.swift in Sources */,
 				7A1D5E00000000000000000E /* HyperTrackBridgeViewController.swift in Sources */,
 				57A7C0DE2FE9000000000001 /* WatchBridgePlugin.swift in Sources */,
+				57A7C0DE2FE9000000000101 /* HyperTrackPurchasesPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

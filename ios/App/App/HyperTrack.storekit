@@ -1,0 +1,114 @@
+{
+  "identifier": "HyperTrackStoreKitTest",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_applicationInternalID": "",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [
+    {
+      "id": "21000001",
+      "localizations": [],
+      "name": "HyperTrack",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "19.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "71D3DF42",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Everything in Pro, plus AI coaching",
+              "displayName": "Elite Monthly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "app.hypertrack.workout.elite.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Elite Monthly",
+          "subscriptionGroupID": "21000001",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "199.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "D4FB2F16",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Everything in Pro, plus AI coaching",
+              "displayName": "Elite Yearly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "app.hypertrack.workout.elite.yearly",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Elite Yearly",
+          "subscriptionGroupID": "21000001",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "4.99",
+          "familyShareable": false,
+          "groupNumber": 2,
+          "internalID": "E7CCD549",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Program builder, smart weight suggestions, advanced analytics",
+              "displayName": "Pro Monthly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "app.hypertrack.workout.pro.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Pro Monthly",
+          "subscriptionGroupID": "21000001",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "39.99",
+          "familyShareable": false,
+          "groupNumber": 2,
+          "internalID": "B4FDF2DE",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Program builder, smart weight suggestions, advanced analytics",
+              "displayName": "Pro Yearly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "app.hypertrack.workout.pro.yearly",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Pro Yearly",
+          "subscriptionGroupID": "21000001",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}

@@ -15,7 +15,7 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
 - **Charts**: Recharts
 - **Animations**: Framer Motion
 - **AI**: coaching uses xAI Grok (via the `openai` SDK, `lib/actions/coaching.ts`); nutrition, label and progress-photo AI use the Anthropic Claude API (`lib/actions/nutrition-ai.ts`)
-- **Payments**: Stripe
+- **Payments**: Stripe on the web; Apple in-app purchase (StoreKit 2) in the iOS app, verified server-side (`lib/apple/`, `docs/APPLE_IAP_SETUP.md`). Both write the same `subscriptions` row
 - **Mobile**: Capacitor (iOS only — there is no `android/` project in the repo)
 - **Testing**: Jest 30 + React Testing Library
 

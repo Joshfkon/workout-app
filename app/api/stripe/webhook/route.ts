@@ -6,6 +6,16 @@ import Stripe from 'stripe';
 // Disable body parsing, we need raw body for webhook signature verification
 export const runtime = 'nodejs';
 
+/**
+ * Apple in-app purchase writes the same row (lib/apple/applySubscription.ts).
+ * A live Stripe subscription owns it (billing_source 'stripe'); a Stripe
+ * subscription that is NOT live must not end access an App Store
+ * subscription is paying for.
+ */
+function stripeIsLive(status: string): boolean {
+  return status === 'active' || status === 'trialing';
+}
+
 async function getSupabaseAdmin() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
@@ -61,7 +71,7 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
   // Find user by customer ID
   const { data: existingSub, error: existingSubError } = await supabase
     .from('subscriptions')
-    .select('user_id, is_lifetime, promo_code_id')
+    .select('user_id, is_lifetime, promo_code_id, billing_source')
     .eq('stripe_customer_id', customerId)
     .maybeSingle();
   throwOnError({ error: existingSubError }, 'Subscription lookup by customer');
@@ -77,10 +87,20 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
     // Check if user has an existing subscription (e.g., from promo code)
     const { data: userExistingSub, error: userExistingSubError } = await supabase
       .from('subscriptions')
-      .select('is_lifetime, promo_code_id, tier')
+      .select('is_lifetime, promo_code_id, tier, billing_source')
       .eq('user_id', userId)
       .maybeSingle();
     throwOnError({ error: userExistingSubError }, 'Subscription lookup by user');
+
+    // An App Store subscription pays for this row; a Stripe subscription that
+    // isn't live only records its ids.
+    if (userExistingSub?.billing_source === 'apple' && !stripeIsLive(subscription.status)) {
+      throwOnError(
+        await supabase.from('subscriptions').update({ stripe_customer_id: customerId }).eq('user_id', userId),
+        'Subscription customer-id update'
+      );
+      return;
+    }
 
     // Don't overwrite lifetime promo code subscriptions
     if (userExistingSub?.is_lifetime && userExistingSub?.promo_code_id) {
@@ -111,6 +131,7 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
         stripe_price_id: priceId,
         tier,
         status: subscription.status,
+        billing_source: 'stripe',
         trial_ends_at: subscription.trial_end
           ? new Date(subscription.trial_end * 1000).toISOString()
           : null,
@@ -122,6 +143,10 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
       });
     throwOnError(upsertResult, 'Subscription upsert');
   } else {
+    if (existingSub.billing_source === 'apple' && !stripeIsLive(subscription.status)) {
+      console.log('Skipping Stripe update - an App Store subscription bills this account:', existingSub.user_id);
+      return;
+    }
     // Don't overwrite lifetime promo code subscriptions
     if (existingSub.is_lifetime && existingSub.promo_code_id) {
       console.log('Skipping subscription update - user has lifetime promo code subscription:', existingSub.user_id);
@@ -141,6 +166,7 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
         stripe_price_id: priceId,
         tier,
         status: subscription.status,
+        billing_source: 'stripe',
         trial_ends_at: subscription.trial_end
           ? new Date(subscription.trial_end * 1000).toISOString()
           : null,
@@ -160,7 +186,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   // Check if this is a lifetime promo code subscription - don't downgrade those
   const { data: existingSub, error: existingSubError } = await supabase
     .from('subscriptions')
-    .select('is_lifetime, promo_code_id, stripe_subscription_id')
+    .select('is_lifetime, promo_code_id, stripe_subscription_id, billing_source')
     .eq('stripe_customer_id', customerId)
     .maybeSingle();
   throwOnError({ error: existingSubError }, 'Subscription lookup by customer');
@@ -178,6 +204,13 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 
   if (existingSub?.is_lifetime && existingSub?.promo_code_id) {
     console.log('Skipping subscription deletion - user has lifetime promo code subscription');
+    return;
+  }
+
+  // The row is billed by an App Store subscription now; the end of an old
+  // Stripe subscription must not take that access away.
+  if (existingSub?.billing_source === 'apple') {
+    console.log('Skipping subscription deletion - an App Store subscription bills this account');
     return;
   }
 
@@ -205,7 +238,9 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
       .update({
         status: 'past_due',
       })
-      .eq('stripe_customer_id', customerId),
+      .eq('stripe_customer_id', customerId)
+      // An App Store-billed row is not affected by a Stripe invoice.
+      .or('billing_source.is.null,billing_source.neq.apple'),
     'Subscription past_due update'
   );
 }

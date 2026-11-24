@@ -2,6 +2,7 @@ import { DashboardLayoutClient } from '@/components/dashboard/DashboardLayoutCli
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { UserStoreHydrator } from '@/components/providers/UserStoreHydrator';
 import { OnboardingResumeBanner } from '@/components/onboarding/OnboardingResumeBanner';
+import { AppleEntitlementSync } from '@/components/subscription/AppleEntitlementSync';
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,8 @@ export default function DashboardLayout({
       <UserStoreHydrator />
       <DashboardLayoutClient>{children}</DashboardLayoutClient>
       <OnboardingResumeBanner />
+      {/* iOS: App Store subscriptions → server (no-op elsewhere). */}
+      <AppleEntitlementSync />
     </QueryProvider>
   );
 }

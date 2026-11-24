@@ -26,6 +26,8 @@ interface SubscriptionState {
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   stripeCustomerId: string | null;
+  /** Who bills the plan: 'stripe' (web), 'apple' (App Store), 'promo'; null on rows from before Apple IAP. */
+  billingSource: 'stripe' | 'apple' | 'promo' | null;
   isLoading: boolean;
 }
 
@@ -38,6 +40,7 @@ const defaultState: SubscriptionState = {
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
   stripeCustomerId: null,
+  billingSource: null,
   isLoading: true,
 };
 
@@ -93,6 +96,9 @@ function loadFromCache(): SubscriptionState | null {
 export function useSubscription() {
   const [subscription, setSubscription] = useState<SubscriptionState>(globalSubscription);
   const { user: authUser, isLoading: authLoading } = useAuthUser();
+  // Bumped by refresh() so the load effect actually re-runs (it used to only
+  // flag isLoading, so a purchase never showed until the next app launch).
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Subscribe to global updates
   useEffect(() => {
@@ -156,6 +162,7 @@ export function useSubscription() {
             currentPeriodEnd: null,
             cancelAtPeriodEnd: false,
             stripeCustomerId: null,
+            billingSource: null,
             isLoading: false,
           });
           return;
@@ -191,6 +198,7 @@ export function useSubscription() {
           currentPeriodEnd,
           cancelAtPeriodEnd: subscriptionData.cancel_at_period_end || false,
           stripeCustomerId: subscriptionData.stripe_customer_id || null,
+          billingSource: subscriptionData.billing_source ?? null,
           isLoading: false,
         });
       } catch (error) {
@@ -200,7 +208,7 @@ export function useSubscription() {
     }
 
     loadSubscription();
-  }, [authUser, authLoading]);
+  }, [authUser, authLoading, reloadNonce]);
 
   // Check if user can access a feature
   const canAccess = useCallback((feature: Feature): boolean => {
@@ -300,8 +308,9 @@ export function useSubscription() {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(CACHE_KEY);
     }
-    cacheLoaded = false;
+    cacheLoaded = true; // skip the (now cleared) cache: fetch fresh
     notifyListeners({ ...globalSubscription, isLoading: true });
+    setReloadNonce((n) => n + 1);
   }, []);
 
   return {
