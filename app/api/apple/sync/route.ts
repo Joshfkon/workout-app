@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
   const result = await applyAppleSubscription(appleAdminClient(), user.id, best, null, clockNow());
   if (!result.ok) {
-    const status = result.reason === 'other_account' ? 409 : result.reason === 'lifetime_promo' ? 200 : 500;
+    const status = result.reason === 'other_account' ? 409 : result.reason === 'lifetime_promo' || result.reason === 'stale' ? 200 : 500;
     return NextResponse.json({ applied: false, reason: result.reason, message: result.message }, { status });
   }
   return NextResponse.json({

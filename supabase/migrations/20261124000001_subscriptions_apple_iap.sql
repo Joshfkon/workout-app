@@ -20,7 +20,11 @@ ALTER TABLE subscriptions
   ADD COLUMN IF NOT EXISTS apple_original_transaction_id TEXT UNIQUE,
   ADD COLUMN IF NOT EXISTS apple_product_id TEXT,
   ADD COLUMN IF NOT EXISTS apple_environment TEXT
-    CHECK (apple_environment IS NULL OR apple_environment IN ('Production', 'Sandbox', 'Xcode', 'LocalTesting'));
+    CHECK (apple_environment IS NULL OR apple_environment IN ('Production', 'Sandbox', 'Xcode', 'LocalTesting')),
+  -- Apple's signedDate of the newest transaction applied to this row. A
+  -- payload signed earlier (an old purchase resent after a refund, a
+  -- notification delivered late) is stale and must not overwrite it.
+  ADD COLUMN IF NOT EXISTS apple_signed_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_subscriptions_apple_original_transaction_id
   ON subscriptions(apple_original_transaction_id);

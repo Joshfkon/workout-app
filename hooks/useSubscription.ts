@@ -26,6 +26,8 @@ interface SubscriptionState {
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   stripeCustomerId: string | null;
+  /** Who bills the plan: 'stripe' (web), 'apple' (App Store), 'promo'; null on rows from before Apple IAP. */
+  billingSource: 'stripe' | 'apple' | 'promo' | null;
   isLoading: boolean;
 }
 
@@ -38,6 +40,7 @@ const defaultState: SubscriptionState = {
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
   stripeCustomerId: null,
+  billingSource: null,
   isLoading: true,
 };
 
@@ -159,6 +162,7 @@ export function useSubscription() {
             currentPeriodEnd: null,
             cancelAtPeriodEnd: false,
             stripeCustomerId: null,
+            billingSource: null,
             isLoading: false,
           });
           return;
@@ -194,6 +198,7 @@ export function useSubscription() {
           currentPeriodEnd,
           cancelAtPeriodEnd: subscriptionData.cancel_at_period_end || false,
           stripeCustomerId: subscriptionData.stripe_customer_id || null,
+          billingSource: subscriptionData.billing_source ?? null,
           isLoading: false,
         });
       } catch (error) {

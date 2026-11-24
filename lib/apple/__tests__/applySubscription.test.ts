@@ -74,4 +74,26 @@ describe('applyAppleSubscription', () => {
     await run(admin, 'u1', tx({ expiresDate: NOW.getTime() - 1 }));
     expect(admin.rows[0]).toMatchObject({ tier: 'free', status: 'canceled' });
   });
+
+  it('ignores a payload signed before the last one applied (old purchase resent after a refund)', async () => {
+    const admin = fakeAdmin([{ user_id: 'u1', billing_source: 'apple', apple_original_transaction_id: 'orig-1', tier: 'free', status: 'canceled', apple_signed_at: new Date(NOW.getTime() - 3_600_000).toISOString() }]);
+    const r = await run(admin, 'u1', tx({ signedDate: NOW.getTime() - 86_400_000 }));
+    expect(r).toMatchObject({ ok: false, reason: 'stale' });
+    expect(admin.rows[0]).toMatchObject({ tier: 'free', status: 'canceled' });
+    // A newer payload still applies, and is remembered.
+    await run(admin, 'u1', tx({ signedDate: NOW.getTime() }));
+    expect(admin.rows[0]).toMatchObject({ tier: 'pro', status: 'active', apple_signed_at: NOW.toISOString() });
+  });
+
+  it('a web plan bought after an Apple one (billing_source stripe) is never ended by Apple expiry', async () => {
+    const admin = fakeAdmin([{ user_id: 'u1', billing_source: 'stripe', stripe_subscription_id: 'sub_2', apple_original_transaction_id: 'orig-1', tier: 'pro', status: 'active' }]);
+    await run(admin, 'u1', tx({ expiresDate: NOW.getTime() - 1, signedDate: NOW.getTime() }));
+    expect(admin.rows[0]).toMatchObject({ tier: 'pro', status: 'active', billing_source: 'stripe' });
+  });
+
+  it('an Apple-billed row with an old Stripe id follows Apple', async () => {
+    const admin = fakeAdmin([{ user_id: 'u1', billing_source: 'apple', stripe_subscription_id: 'sub_old', apple_original_transaction_id: 'orig-1', tier: 'pro', status: 'active' }]);
+    await run(admin, 'u1', tx({ expiresDate: NOW.getTime() - 1 }));
+    expect(admin.rows[0]).toMatchObject({ tier: 'free', status: 'canceled' });
+  });
 });

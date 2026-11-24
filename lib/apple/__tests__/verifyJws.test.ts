@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { X509Certificate, createPrivateKey, sign } from 'node:crypto';
 import {
@@ -9,11 +11,54 @@ import {
   verifyAppleJws,
 } from '@/lib/apple/verifyJws';
 
-const dir = path.join(__dirname, 'fixtures');
+/**
+ * A throwaway chain made with openssl for this run (nothing committed: *.pem
+ * is gitignored, and no key should live in the repo): root → intermediate
+ * with Apple's WWDR marker OID → leaf with the App Store signing marker OID,
+ * plus a leaf without the marker. Tests trust this root by fingerprint;
+ * production trusts only Apple Root CA - G3.
+ */
+const dir = mkdtempSync(path.join(tmpdir(), 'apple-jws-'));
+const EXT = `[ca]
+basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign,cRLSign
+subjectKeyIdentifier=hash
+[inter]
+basicConstraints=critical,CA:TRUE,pathlen:0
+keyUsage=critical,keyCertSign,cRLSign
+1.2.840.113635.100.6.2.1=ASN1:NULL
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+[leaf]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature
+1.2.840.113635.100.6.11.1=ASN1:NULL
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+[leafnooid]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+`;
+function makeChain() {
+  writeFileSync(path.join(dir, 'ext.cnf'), EXT);
+  const sh = (cmd: string) => execSync(cmd, { cwd: dir, stdio: 'pipe' });
+  for (const k of ['root', 'inter', 'leaf']) sh(`openssl ecparam -name prime256v1 -genkey -noout -out ${k}.key`);
+  sh('openssl req -x509 -new -key root.key -subj "/CN=Test Root CA" -days 36500 -set_serial 1 -extensions ca -config ext.cnf -out root.pem');
+  sh('openssl req -new -key inter.key -subj "/CN=Test WWDR Intermediate" -out inter.csr');
+  sh('openssl x509 -req -in inter.csr -CA root.pem -CAkey root.key -set_serial 2 -days 36500 -extfile ext.cnf -extensions inter -out inter.pem');
+  sh('openssl req -new -key leaf.key -subj "/CN=Test StoreKit Signing" -out leaf.csr');
+  sh('openssl x509 -req -in leaf.csr -CA inter.pem -CAkey inter.key -set_serial 3 -days 36500 -extfile ext.cnf -extensions leaf -out leaf.pem');
+  sh('openssl x509 -req -in leaf.csr -CA inter.pem -CAkey inter.key -set_serial 4 -days 36500 -extfile ext.cnf -extensions leafnooid -out leaf-no-oid.pem');
+}
+makeChain();
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
 const pem = (f: string) => readFileSync(path.join(dir, f), 'utf8');
 const der = (f: string) => new X509Certificate(pem(f)).raw.toString('base64');
 const ROOT = new X509Certificate(pem('root.pem'));
-const KEY = createPrivateKey(pem('TEST-ONLY-leaf-signing-key.pem'));
+const KEY = createPrivateKey(pem('leaf.key'));
 const trust = { trustedRootSha256: [ROOT.fingerprint256] };
 
 const b64url = (b: Buffer | string) => Buffer.from(b).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');

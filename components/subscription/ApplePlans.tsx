@@ -26,9 +26,15 @@ type Msg = { type: 'success' | 'error' | 'info'; text: string } | null;
  * Only rendered when isApplePurchasesAvailable() (the plugin is in this app
  * build). A web (Stripe) subscriber is not offered a second subscription.
  */
+function useWebBilling() {
+  const s = useSubscription();
+  const stripeSubscriptionBilled = s.billingSource === 'stripe' || (s.billingSource === null && !!s.stripeCustomerId);
+  return { ...s, stripeSubscriptionBilled };
+}
+
 export function ApplePlans({ onPurchased }: { onPurchased?: () => void }) {
   const { user } = useAuthUser();
-  const { tier, status, stripeCustomerId, refresh } = useSubscription();
+  const { tier, status, stripeSubscriptionBilled, refresh } = useWebBilling();
   const [period, setPeriod] = useState<AppleBillingPeriod>('yearly');
   const [products, setProducts] = useState<AppleStoreProduct[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -44,7 +50,10 @@ export function ApplePlans({ onPurchased }: { onPurchased?: () => void }) {
     };
   }, []);
 
-  const subscribed = tier !== 'free' && (status === 'active' || status === 'trialing') && !!stripeCustomerId;
+  // Billed on the web: the row says Stripe (or, on rows from before Apple
+  // IAP, has no source but a Stripe customer). A former web customer who now
+  // pays through Apple is billing_source 'apple' and keeps Restore/Manage.
+  const subscribed = tier !== 'free' && (status === 'active' || status === 'trialing') && stripeSubscriptionBilled;
   const product = (t: 'pro' | 'elite') => products?.find((p) => p.id === appleProduct(t, period).id);
 
   const buy = async (t: 'pro' | 'elite') => {

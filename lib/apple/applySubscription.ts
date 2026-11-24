@@ -9,7 +9,11 @@
  *    expired Apple sub on a web subscriber leaves the web tier alone); an
  *    active Apple sub on top only raises the tier;
  *  - one Apple subscription belongs to one account: a transaction already
- *    recorded on another user is refused.
+ *    recorded on another user is refused;
+ *  - newest wins: a payload Apple signed before the last one applied is
+ *    stale (an old purchase JWS resent after a refund still verifies and may
+ *    still carry a future expiry; a notification can arrive late) and is
+ *    ignored.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -21,7 +25,7 @@ import {
 
 export type ApplyResult =
   | { ok: true; state: AppleSubscriptionState; changedTier: boolean }
-  | { ok: false; reason: 'other_account' | 'lifetime_promo' | 'unknown_user' | 'db_error'; message: string };
+  | { ok: false; reason: 'other_account' | 'lifetime_promo' | 'unknown_user' | 'stale' | 'db_error'; message: string };
 
 const TIER_RANK: Record<string, number> = { free: 0, pro: 1, elite: 2 };
 
@@ -34,6 +38,7 @@ interface ExistingRow {
   is_lifetime: boolean | null;
   promo_code_id: string | null;
   apple_original_transaction_id: string | null;
+  apple_signed_at: string | null;
 }
 
 export async function applyAppleSubscription(
@@ -57,7 +62,7 @@ export async function applyAppleSubscription(
 
   const { data: existing, error: existingError } = await admin
     .from('subscriptions')
-    .select('user_id, tier, status, billing_source, stripe_subscription_id, is_lifetime, promo_code_id, apple_original_transaction_id')
+    .select('user_id, tier, status, billing_source, stripe_subscription_id, is_lifetime, promo_code_id, apple_original_transaction_id, apple_signed_at')
     .eq('user_id', userId)
     .maybeSingle<ExistingRow>();
   if (existingError) return { ok: false, reason: 'db_error', message: existingError.message };
@@ -66,15 +71,24 @@ export async function applyAppleSubscription(
     return { ok: false, reason: 'lifetime_promo', message: 'Lifetime access already active.' };
   }
 
+  const signedAt = typeof transaction.signedDate === 'number' ? new Date(transaction.signedDate) : null;
+  if (existing?.apple_signed_at && signedAt && signedAt < new Date(existing.apple_signed_at)) {
+    return { ok: false, reason: 'stale', message: 'A newer App Store update is already recorded.' };
+  }
+
   const appleFields = {
     apple_original_transaction_id: transaction.originalTransactionId,
     apple_product_id: transaction.productId,
     apple_environment: transaction.environment ?? null,
+    ...(signedAt ? { apple_signed_at: signedAt.toISOString() } : {}),
   };
 
+  // The Stripe webhook sets billing_source 'stripe' on every write, so a web
+  // plan bought after an Apple one is recognised here; NULL is a row from
+  // before Apple IAP.
   const stripeActive =
     !!existing?.stripe_subscription_id &&
-    existing.billing_source !== 'apple' &&
+    (existing.billing_source === 'stripe' || existing.billing_source === null) &&
     (existing.status === 'active' || existing.status === 'trialing');
 
   let row: Record<string, unknown>;
