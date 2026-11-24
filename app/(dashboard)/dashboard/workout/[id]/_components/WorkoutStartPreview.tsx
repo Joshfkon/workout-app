@@ -93,9 +93,10 @@ export function WorkoutStartPreview({
 }) {
   const first = preview.exercises[0];
   const unitLabel = unit === 'kg' ? 'kg' : 'lbs';
+  const canLogNow = !earlySet && first.loggable && unit != null;
 
   return (
-    <WorkoutStartPreviewShell preview={preview} stage={stage}>
+    <WorkoutStartPreviewShell preview={preview} stage={stage} canLogNow={canLogNow}>
       {earlySet && unit ? (
         <p
           className="flex items-start gap-2 rounded-lg bg-status-ok-tint px-3 py-2 text-subhead text-ink"

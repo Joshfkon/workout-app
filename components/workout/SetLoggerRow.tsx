@@ -38,6 +38,7 @@ import { lightHaptic } from '@/lib/integrations/notifications';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import {
   BEGINNER_EFFORT_CHOICES,
+  BEGINNER_EFFORT_EXPLAINER,
   beginnerEffortChoiceFor,
   effortLeftPhrase,
   plainWorkoutText,
@@ -264,6 +265,8 @@ export function SetLoggerRow({
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [rirTouched, setRirTouched] = useState(false);
+  // Beginner "What's this?" under the effort question (UX panel round 22).
+  const [showEffortExplainer, setShowEffortExplainer] = useState(false);
   // The selected chip is the sensor's untouched estimate.
   const [rirFromSensor, setRirFromSensor] = useState(false);
   const [sensorRirOffer, setSensorRirOffer] = useState<RepsInTank | null>(null);
@@ -876,9 +879,29 @@ export function SetLoggerRow({
 
       {/* Row 2: effort chips (labeled, full-width) + set type + feedback sheet
           trigger. Asked in plain words; "RIR" stays in the accessible names. */}
-      <p className="pl-1 text-subhead font-medium text-ink" id={`effort-q-${setNumber}`}>
-        {beginner ? 'After the set: how did it feel?' : 'After the set: how many more could you have done?'}
-      </p>
+      <div className="flex items-baseline justify-between gap-2 pl-1">
+        <p className="text-subhead font-medium text-ink" id={`effort-q-${setNumber}`}>
+          {beginner ? 'After the set: how many more reps could you have done?' : 'After the set: how many more could you have done?'}
+        </p>
+        {beginner && (
+          // "A beginner wouldn't know what the feel-rating means" (UX panel
+          // round 22, Maya): a visible word, not another ⓘ.
+          <button
+            type="button"
+            onClick={() => setShowEffortExplainer((v) => !v)}
+            aria-expanded={showEffortExplainer}
+            data-testid="effort-whats-this"
+            className="flex-shrink-0 min-h-[44px] -my-3 text-caption font-medium text-action underline underline-offset-2"
+          >
+            What&apos;s this?
+          </button>
+        )}
+      </div>
+      {beginner && showEffortExplainer && (
+        <p className="-mt-1 pl-1 text-caption text-ink-2" data-testid="effort-explainer">
+          {BEGINNER_EFFORT_EXPLAINER}
+        </p>
+      )}
       {!rirTouched && !rirFromSensor && (
         // The chip starts on the target effort so logging stays one tap; say
         // so, and why, on its own line — an untouched chip read as an answer
@@ -887,7 +910,7 @@ export function SetLoggerRow({
         <p className="-mt-1 pl-1 text-caption text-ink-2" data-testid="rir-preset-note">
           {beginner
             ? `We picked today’s target (“${
-                BEGINNER_EFFORT_CHOICES.find((c) => c.rir === beginnerEffortChoiceFor(targetRir))?.label ?? 'A couple more'
+                BEGINNER_EFFORT_CHOICES.find((c) => c.rir === beginnerEffortChoiceFor(targetRir))?.label ?? 'Just right'
               }”) so logging is one tap. If the set felt harder or easier, tap that answer first.`
             : `Preset to your target (${RIR_CHIP_TEXT[clampToChip(targetRir)]}) so logging is one tap. Tap another if the set felt different.`}
         </p>
@@ -915,12 +938,16 @@ export function SetLoggerRow({
               }}
               disabled={disabled}
               aria-pressed={isSelected}
+              aria-label={`${choice.label}, ${choice.hint}`}
               data-testid={`beginner-effort-${choice.rir}`}
               className={`${SELECTOR_CHIP_BASE} px-1 text-center ${
                 isSelected ? SELECTOR_CHIP_SELECTED : SELECTOR_CHIP_IDLE
               }`}
             >
               <span className="text-caption font-semibold leading-tight">{choice.label}</span>
+              <span className={`text-caption leading-tight ${isSelected ? 'opacity-80' : 'text-ink-2'}`}>
+                {choice.hint}
+              </span>
             </button>
           );
         })}

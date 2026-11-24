@@ -3,10 +3,11 @@
 /**
  * The frame of the just-started workout's preview (see WorkoutStartPreview):
  * title, progress line, the first exercise's card and what comes after it.
- * Kept free of the set logger so the route's loading boundaries can render
- * it too: right after Start, Next shows `workout/loading.tsx` while the
- * workout screen's code arrives, and that used to be three grey cards
- * (UX panel round 21, Dre: "skeleton loaders after start").
+ * Shared by the workout screen and the route's loading boundary: right after
+ * Start, Next shows `workout/[id]/loading.tsx` while the workout screen's
+ * code arrives, and that used to be three grey cards (UX panel round 21,
+ * Dre: "skeleton loaders after start"). Since round 23 the boundary renders
+ * the full preview, logger included (see PendingStartFallback).
  */
 
 import type { ReactNode } from 'react';
@@ -51,7 +52,13 @@ export function previewRepsInput(exercise: Pick<PendingWorkoutPreviewExercise, '
   return String(prefillReps && prefillReps > 0 ? prefillReps : repRange[0]);
 }
 
-export function previewStatusLine(stage: PendingBuildStage | null): string {
+/**
+ * The status line over the preview. When set 1 can be logged right here, it
+ * leads with that: "Getting the rest of your workout ready…" alone read as
+ * "wait" (UX panel round 22, Maya and Frank both waited instead of logging).
+ */
+export function previewStatusLine(stage: PendingBuildStage | null, canLogNow = false): string {
+  if (canLogNow) return 'Set 1 is ready to log. The rest of your workout loads while you lift.';
   if (stage === 'building') return 'Picking weights for the rest of your workout…';
   if (stage === 'saving') return 'Saving your exercises…';
   return 'Getting the rest of your workout ready…';
@@ -75,10 +82,13 @@ export function PreviewReason({
 export function WorkoutStartPreviewShell({
   preview,
   stage,
+  canLogNow = false,
   children,
 }: {
   preview: PendingWorkoutPreview;
   stage: PendingBuildStage | null;
+  /** Set 1's logger is showing: the status line says so instead of "getting ready". */
+  canLogNow?: boolean;
   /** The first set: the logger on the workout screen, the numbers while its code loads. */
   children: ReactNode;
 }) {
@@ -89,8 +99,8 @@ export function WorkoutStartPreviewShell({
       <div className="pt-4">
         <h1 className="text-title font-bold text-ink">Today&apos;s workout</h1>
         <p role="status" className="mt-1 flex items-center gap-1.5 text-subhead text-ink-3">
-          <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
-          {previewStatusLine(stage)}
+          <IconLoader2 size={14} className="animate-spin flex-shrink-0" aria-hidden="true" />
+          {previewStatusLine(stage, canLogNow)}
         </p>
       </div>
 

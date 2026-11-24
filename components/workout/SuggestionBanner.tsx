@@ -197,7 +197,9 @@ export function SuggestionBanner({
       data-testid="why-this-weight"
       className="inline whitespace-nowrap text-caption font-medium text-action underline underline-offset-2"
     >
-      Why this weight?
+      {/* "Why this weight?" read as one more question to decode next to a
+          "Why:" line that already answers it (UX panel round 22). */}
+      How it&apos;s worked out
     </button>
   );
 
