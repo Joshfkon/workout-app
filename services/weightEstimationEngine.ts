@@ -333,6 +333,14 @@ export interface WorkingWeightRecommendation {
   estimateSource?: EstimatedMax['source'];
   /** For exercise_transfer estimates: the logged exercise the strength carried over from. */
   transferFrom?: string;
+  /**
+   * True when this cold-start number was made lighter on purpose: prescribed
+   * with extra reps in reserve (COLD_START_TARGET_RIR) and/or discounted for a
+   * low-confidence or population-based estimate. Lets the UI say "set on the
+   * light side" only when the code actually made it so. Describes the number;
+   * never changes it.
+   */
+  startsLight?: boolean;
 }
 
 /**
@@ -976,6 +984,11 @@ export class WeightEstimationEngine {
     if (isColdStart && effectiveRIR > targetRIR) {
       recommendation.rationale += ` First session: prescribed at ${effectiveRIR} RIR for calibration headroom.`;
     }
+    // Low-confidence / extrapolated paths discount the working weight
+    // (×0.85 / ×0.80); a cold start also gets the RIR headroom above.
+    recommendation.startsLight =
+      isColdStart &&
+      (effectiveRIR > targetRIR || estimatedMax.confidence === 'low' || estimatedMax.confidence === 'extrapolated');
 
     // Apply week-to-week smoothing if we have a previous recommendation
     if (previousRecommendation && previousRecommendation > 0 && recommendation.recommendedWeight > 0) {
