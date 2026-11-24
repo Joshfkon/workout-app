@@ -186,13 +186,17 @@ export function packageSummary(records, packages) {
  */
 export function tippingFeatures(records, packages) {
   const base = packages[0].id;
+  // Everyone who did not say yes to today's Pro, split by what they did say:
+  // most lifters answer "maybe" at a low price, and reporting all of them as
+  // "would not pay" overstated the refusals (round 19 report: "98 of 100").
   const noOnBase = records.filter((r) => yesOf(r.packages, base) === false);
+  const maybeOnBase = noOnBase.filter((r) => r.packages?.stance?.[base] === 'maybe').length;
   const byVariant = {};
   for (const v of packages.slice(1)) byVariant[v.adds ?? v.id] = noOnBase.filter((r) => yesOf(r.packages, v.id) === true).length;
   const oneThing = {};
   for (const r of noOnBase) if (r.packages?.oneThingLabel) oneThing[r.packages.oneThingLabel] = (oneThing[r.packages.oneThingLabel] ?? 0) + 1;
   const sortDesc = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]);
-  return { noOnBase: noOnBase.length, byVariant: sortDesc(byVariant), oneThing: sortDesc(oneThing) };
+  return { noOnBase: noOnBase.length, maybeOnBase, firmNoOnBase: noOnBase.length - maybeOnBase, byVariant: sortDesc(byVariant), oneThing: sortDesc(oneThing) };
 }
 
 /**
@@ -299,7 +303,7 @@ export function recommend(groups, design, tipping = null) {
     pkg ? `The package most often chosen is ${pkg.id} (${pkg.name}, ${pct(pkg.share)} of personas)${pkgRunnerUp ? `, ahead of ${pkgRunnerUp.id} (${pkgRunnerUp.name}, ${pct(pkgRunnerUp.share)})` : ''}; ${pct(pk.shares.none ?? 0)} would choose none.` : '',
     worst ? `At ${money(price)}, the segment served worst is ${worst.label} (${pct(worst.take)} say yes).` : '',
     tipping?.byVariant?.[0]?.[1] > 0
-      ? `Of the ${tipping.noOnBase} who would not pay for today's Pro, the addition that most often turns them into a yes is "${tipping.byVariant[0][0]}" (${tipping.byVariant[0][1]}).`
+      ? `Of the ${tipping.noOnBase} who did not say yes to today's Pro (${tipping.firmNoOnBase} no, ${tipping.maybeOnBase} maybe), the addition that most often turns them into a yes is "${tipping.byVariant[0][0]}" (${tipping.byVariant[0][1]}).`
       : '',
     'All of this is relative, from synthetic personas: confirm the winner with a real price test.',
   ]

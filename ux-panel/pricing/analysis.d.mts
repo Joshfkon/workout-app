@@ -32,7 +32,7 @@ export interface VwResult { n: number; dropped: number; pmc: number | null; opp:
 export interface CurveRow { price: number; n: number; take: number; takeSharp: number; yesShare: number; revenuePer100: number; index: number }
 export interface AnnualRow { multiple: number; n: number; meanPrice: number; take: number; yesShare: number }
 export interface PackageSummary { n: number; shares: Record<string, number>; take: Record<string, number>; yesShare: Record<string, number> }
-export interface Tipping { noOnBase: number; byVariant: Array<[string, number]>; oneThing: Array<[string, number]> }
+export interface Tipping { noOnBase: number; firmNoOnBase: number; maybeOnBase: number; byVariant: Array<[string, number]>; oneThing: Array<[string, number]> }
 export interface GroupAnalysis { label: string; kind: 'all' | 'segment' | 'experience'; n: number; vw: VwResult; gg: CurveRow[]; annual: AnnualRow[]; lifetime: CurveRow[]; packages: PackageSummary; acceptableMedian: number | null }
 export interface Recommendation { price: number | null; priceRunnerUp: number | null; inRange: boolean | null; package: string | null; packageRunnerUp: string | null; worstSegment: string | null; summary: string }
 export interface StanceAgreement { n: number; agree: number; rate: number; unclear: number }

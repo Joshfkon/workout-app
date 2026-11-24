@@ -142,7 +142,7 @@ function packagesSection(analysis, design) {
 <div class="tw"><table><thead><tr><th>Group</th><th class="bar">Share</th>${ids.map((id) => `<th>${esc(id === 'none' ? 'None' : id === 'unclear' ? '?' : id)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
 <h3>Would pay for each option (take-rate · share saying yes)</h3>
 <div class="tw"><table><thead>${takeHead}</thead><tbody>${takeRows}</tbody></table></div>
-<div class="two"><div><h3>What tips a "no" into a "yes"</h3><p class="note">${t.noOnBase} personas would not pay for today's Pro (V1). Of them, how many would pay for each other option, by what it adds:</p>${list(t.byVariant)}</div>
+<div class="two"><div><h3>What tips a "no" into a "yes"</h3><p class="note">${t.noOnBase} personas did not say yes to today's Pro (V1): ${t.firmNoOnBase ?? t.noOnBase} no, ${t.maybeOnBase ?? 0} maybe. Of them, how many would pay for each other option, by what it adds:</p>${list(t.byVariant)}</div>
 <div><h3>"The one thing that would make me pay"</h3><p class="note">Answers of those same ${t.noOnBase}, matched to the nearest feature by embedding similarity:</p>${list(t.oneThing)}</div></div>
 <h3>Feature ranking (Borda: 1 = always first, 0 = always last)</h3>
 <div class="tw"><table><tbody>${feat}</tbody></table></div>`;
