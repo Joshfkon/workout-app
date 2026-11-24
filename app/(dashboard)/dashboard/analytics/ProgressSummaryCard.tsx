@@ -36,6 +36,11 @@ export function ProgressSummaryCard({
           {summary.weight}
         </p>
       )}
+      {summary.weightPace && (
+        <p className="mt-0.5 text-subhead text-ink-2" data-testid="progress-summary-weight-pace">
+          {summary.weightPace}
+        </p>
+      )}
       {summary.strength && (
         <p className="mt-2 text-body text-ink" data-testid="progress-summary-strength">
           {summary.strength}

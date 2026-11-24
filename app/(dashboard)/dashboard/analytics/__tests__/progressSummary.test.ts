@@ -1,5 +1,12 @@
 import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
-import { buildProgressSummary, liftBreakdown, strengthSentence, volumeSentence, weightSentence } from '../progressSummary';
+import {
+  buildProgressSummary,
+  liftBreakdown,
+  strengthSentence,
+  volumeSentence,
+  weightPaceSentence,
+  weightSentence,
+} from '../progressSummary';
 import type { VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { LiftTrend } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 
@@ -120,6 +127,7 @@ describe('buildProgressSummary', () => {
       buildProgressSummary({ weighIns: weighIns(190, -0.1), liftTrends: trends({ rising: 1, flat: 2 }), units: 'lb', now: NOW })
     ).toEqual({
       weight: 'Weight is down 2.8 lb over the last 30 days.',
+      weightPace: null,
       weightMethod: PLAIN_WEIGHT_METHOD,
       liftMethod: null,
       strengthContext: null,
@@ -133,6 +141,7 @@ describe('buildProgressSummary', () => {
   it('gives a food-only user the weight line alone', () => {
     expect(buildProgressSummary({ weighIns: weighIns(160, -0.05), liftTrends: trends(), units: 'lb', now: NOW })).toEqual({
       weight: 'Weight is down 1.4 lb over the last 30 days.',
+      weightPace: null,
       weightMethod: PLAIN_WEIGHT_METHOD,
       liftMethod: null,
       strengthContext: null,
@@ -395,5 +404,46 @@ describe('volumeSentence', () => {
       volumeRows: [row({ sets: 10, zone: 'in_zone', belowMev: false })],
     });
     expect(s?.volume).toBe('Sets per muscle, last 7 days: 1 muscle in range.');
+  });
+});
+
+describe('weekly sets window context (UX panel r22: all under MEV after 2 workouts)', () => {
+  const rows = [row({ key: 'chest', sets: 6 }), row({ key: 'back', sets: 6 })];
+  it('says how many workouts the 7 days hold, and what the plan has', () => {
+    expect(volumeSentence(rows, 2, 4)).toBe(
+      'Sets per muscle, last 7 days (2 workouts; your plan has 4 a week): 0 muscles in range, 2 under the minimum (MEV).'
+    );
+    expect(volumeSentence(rows, 1, null)).toBe(
+      'Sets per muscle, last 7 days (1 workout): 0 muscles in range, 2 under the minimum (MEV).'
+    );
+  });
+});
+
+describe('weightPaceSentence', () => {
+  it('reads the same fitted line against the target rate', () => {
+    // -0.1 lb/day = -0.7 lb/week vs a -1.0 target: slower.
+    expect(weightPaceSentence(weighIns(190, -0.1), 'lb', NOW, 30, -1)).toBe(
+      "That's −0.7 lb a week against your target of −1.0 lb a week: slower than your target."
+    );
+    expect(weightPaceSentence(weighIns(190, -0.14), 'lb', NOW, 30, -1)).toMatch(/on pace\.$/);
+    expect(weightPaceSentence(weighIns(190, -0.3), 'lb', NOW, 30, -1)).toMatch(/faster than your target\.$/);
+    expect(weightPaceSentence(weighIns(190, 0.05), 'lb', NOW, 30, -1)).toMatch(/slower than your target\.$/);
+  });
+
+  it('says nothing without a target (maintenance) or a trend', () => {
+    expect(weightPaceSentence(weighIns(190, -0.1), 'lb', NOW, 30, null)).toBeNull();
+    expect(weightPaceSentence([], 'lb', NOW, 30, -1)).toBeNull();
+  });
+
+  it('rides under the weight line on the summary', () => {
+    const s = buildProgressSummary({
+      weighIns: weighIns(190, -0.1),
+      liftTrends: trends(),
+      units: 'lb',
+      now: NOW,
+      windowDays: 30,
+      targetRatePerWeek: -1,
+    });
+    expect(s?.weightPace).toMatch(/against your target of −1\.0 lb a week/);
   });
 });

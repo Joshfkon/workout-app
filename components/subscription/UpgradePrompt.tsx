@@ -19,8 +19,8 @@ interface UpgradePromptProps {
 
 const FEATURE_INFO: Record<Feature, { title: string; description: string; requiredTier: 'pro' | 'elite' }> = {
   mesocycleBuilder: {
-    title: 'AI mesocycle builder',
-    description: 'Create scientifically-optimized training programs with our AI-powered mesocycle builder.',
+    title: 'AI training block builder',
+    description: 'Create scientifically-optimized training programs with our AI-powered training block builder.',
     requiredTier: 'pro',
   },
   coachingCalibration: {

@@ -369,7 +369,7 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
           <FirstTimeHint
             id="dashboard-mesocycle-intro"
             title="Want a program?"
-            description="HyperTrack can build a 4–8 week program (a mesocycle) that adds a little each week, then gives you a recovery week. Or just start a workout — it learns from what you log."
+            description="HyperTrack can build a 4–8 week program that adds a little each week, then gives you a recovery week. Or just start a workout — it learns from what you log."
             position="top"
           />
           <div className="text-caption font-semibold mb-0.5 text-action">Next up</div>

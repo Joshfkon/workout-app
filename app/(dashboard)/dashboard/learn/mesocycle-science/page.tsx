@@ -174,25 +174,25 @@ const deloadTriggers: Array<{ icon: TablerIcon; label: string }> = [
 ];
 
 export default function MesocycleScienceArticle() {
-  useDocumentTitle('Mesocycle science');
+  useDocumentTitle('Training block science');
   return (
     <ArticlePage>
       <ArticleHeader
         icon={IconMicroscope}
         tag="AI training science"
-        title="The science behind your mesocycle"
+        title="The science behind your training block"
         subtitle="How we build AI-powered training programs that adapt to your body and recovery capacity."
       />
 
-      <ArticleSection title="What is a mesocycle?">
+      <ArticleSection title="What is a training block?">
         <Callout>
           <p>
-            A mesocycle is a 4-8 week training block designed to push your body, accumulate productive
+            A training block (a &ldquo;mesocycle&rdquo; in coaching jargon) is a 4-8 week program designed to push your body, accumulate productive
             fatigue, then recover stronger.
           </p>
         </Callout>
         <p className="text-body text-ink-2">
-          Think of it as a &ldquo;chapter&rdquo; in your training story. Each mesocycle has a beginning
+          Think of it as a &ldquo;chapter&rdquo; in your training story. Each training block has a beginning
           (establishing baseline), middle (progressive overload), and end (deload to recover). This structured
           approach prevents the random, wandering training that leads to plateaus.
         </p>
@@ -212,7 +212,7 @@ export default function MesocycleScienceArticle() {
 
       <ArticleSection title="AI-powered features">
         <p className="text-body text-ink-2">
-          Our mesocycle builder isn&apos;t just a template generator. It&apos;s a sophisticated system that
+          Our training block builder isn&apos;t just a template generator. It&apos;s a sophisticated system that
           considers multiple factors to create a program truly personalized to you.
         </p>
         <div className="space-y-3">
@@ -261,7 +261,7 @@ export default function MesocycleScienceArticle() {
 
       <ArticleSection title="Periodization model">
         <p className="text-body text-ink-2">
-          Your mesocycle follows a structured periodization model that progressively increases demand, then
+          Your training block follows a structured periodization model that progressively increases demand, then
           strategically reduces it to allow adaptation.
         </p>
         <ContentCard className="space-y-4">
@@ -388,9 +388,9 @@ export default function MesocycleScienceArticle() {
 
       <ArticleCTA
         title="Ready to train smarter?"
-        body="Create an AI-powered mesocycle tailored to your body, schedule, and goals."
+        body="Create an AI-powered training block tailored to your body, schedule, and goals."
         href="/dashboard/mesocycle/new"
-        label="Create mesocycle"
+        label="Create training block"
       />
 
       <ArticleSection title="Related articles">

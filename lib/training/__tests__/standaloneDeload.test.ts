@@ -228,7 +228,7 @@ describe('buildStandalonePerformance', () => {
 
 describe('rewriteStandaloneReason', () => {
   it('reframes the mesocycle-start backup trigger for streak semantics', () => {
-    expect(rewriteStandaloneReason('8 weeks since mesocycle start - overdue for deload')).toBe(
+    expect(rewriteStandaloneReason('8 weeks since training block start - overdue for deload')).toBe(
       '8 weeks of training without a break - overdue for a light week'
     );
   });

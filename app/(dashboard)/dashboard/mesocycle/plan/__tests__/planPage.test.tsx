@@ -182,7 +182,7 @@ describe('MesocyclePlanPage', () => {
     render(<MesocyclePlanPage />);
 
     expect(screen.getByRole('heading', { name: 'No plan to preview' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^Plan a mesocycle/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^Plan a training block/ })).toHaveAttribute(
       'href',
       '/dashboard/mesocycle/new'
     );

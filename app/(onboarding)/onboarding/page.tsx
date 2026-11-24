@@ -620,7 +620,7 @@ export default function OnboardingBodyCompPage() {
             <div className="p-3 bg-fill/50 rounded-lg border border-sep">
               <IconBarbell size={20} className="text-action" aria-hidden="true" />
               <p className="text-body font-medium text-ink mt-1">Smart workouts</p>
-              <p className="text-caption text-ink-3">AI mesocycle planning</p>
+              <p className="text-caption text-ink-3">AI training block planning</p>
             </div>
             <div className="p-3 bg-fill/50 rounded-lg border border-sep">
               <IconApple size={20} className="text-action" aria-hidden="true" />

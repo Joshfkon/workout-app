@@ -248,7 +248,7 @@ export function checkDeloadTriggers(
     reasons.push(
       lastDeload
         ? `${weeksSinceLastDeload} weeks since last deload - overdue for deload`
-        : `${weeksSinceLastDeload} weeks since mesocycle start - overdue for deload`
+        : `${weeksSinceLastDeload} weeks since training block start - overdue for deload`
     );
     shouldDeload = true;
   }

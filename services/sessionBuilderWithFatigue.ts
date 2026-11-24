@@ -1850,7 +1850,7 @@ export function generateFullMesocycleWithFatigue(
   // Step 4: Build periodization plan
   const periodization = buildPeriodizationPlan(profile, recoveryFactors, totalWeeks);
   programNotes.push(`Periodization model: ${periodization.model}`);
-  programNotes.push(`Mesocycle: ${periodization.mesocycleWeeks} weeks`);
+  programNotes.push(`Training block: ${periodization.mesocycleWeeks} weeks`);
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
 
   // Step 5: Calculate volume distribution (with extra volume for lagging areas if provided)

@@ -2076,7 +2076,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       )}
 
       {/* Header: title left, date nav + settings right */}
-      <div className={isTrends ? 'hidden' : 'flex items-center justify-between gap-2'}>
+      <div className={isTrends ? 'hidden' : 'flex flex-wrap items-center justify-between gap-2'}>
         <h1 className="text-large-title text-ink">Eat</h1>
         <div className="flex items-center gap-1.5">
           <button
@@ -2125,10 +2125,16 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           <div className="relative">
             <button
               onClick={() => setShowSettingsMenu((open) => !open)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink-2 shadow-card hover:text-ink"
+              // A word, not a bare gear, and a 44px target: an icon-only
+              // settings button was "small for my eyes and I had to guess
+              // what it was" (UX panel r22, Frank).
+              className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-card px-3.5 text-subhead font-semibold text-ink shadow-card hover:brightness-110"
               aria-label="Nutrition options"
+              aria-expanded={showSettingsMenu}
+              data-testid="nutrition-options"
             >
-              <IconSettings size={18} aria-hidden="true" />
+              <IconSettings size={20} aria-hidden="true" />
+              Options
             </button>
             {showSettingsMenu && (
               <>

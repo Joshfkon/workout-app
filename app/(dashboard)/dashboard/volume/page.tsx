@@ -458,7 +458,7 @@ export default function VolumeProfilePage() {
         <Card className="p-4 mt-6">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-medium text-ink">Latest mesocycle review</h4>
+              <h4 className="font-medium text-ink">Latest training block review</h4>
               <p className="text-body text-ink-3">
                 See detailed analysis and recommendations
               </p>

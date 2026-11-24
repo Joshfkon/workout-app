@@ -37,14 +37,14 @@ import {
 const features: Array<{ icon: TablerIcon; title: string; description: string; competitors: string }> = [
   {
     icon: IconBrain,
-    title: 'AI-powered mesocycle planning',
+    title: 'AI-powered training block planning',
     description: 'Unlike basic workout trackers, HyperTrack uses intelligent algorithms to design periodized training programs tailored to your goals, experience, recovery capacity, and available time.',
     competitors: 'Most apps just let you log workouts. We plan them for you.',
   },
   {
     icon: IconRobot,
     title: 'AI coaching notes',
-    description: 'Get personalized coaching advice before every workout. Our AI looks at your history, body composition, mesocycle phase, and goals to give context-aware guidance, like having a knowledgeable coach in your pocket.',
+    description: 'Get personalized coaching advice before every workout. Our AI looks at your history, body composition, training block phase, and goals to give context-aware guidance, like having a knowledgeable coach in your pocket.',
     competitors: 'Other apps give generic tips. We give advice specific to you.',
   },
   {
@@ -157,7 +157,7 @@ function SupportIcon({ value }: { value: SupportLevel }) {
 }
 
 const comparisonPoints: ComparisonRow[] = [
-  { feature: 'AI mesocycle generation', hypertracker: true, strongApp: false, hevy: false, fitbod: 'partial' },
+  { feature: 'AI training block generation', hypertracker: true, strongApp: false, hevy: false, fitbod: 'partial' },
   { feature: 'AI coaching notes', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
   { feature: 'Integrated nutrition tracking', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
   { feature: 'Smart macro calculator', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
@@ -332,7 +332,7 @@ export default function AboutPage() {
           <ContentCard className="space-y-2">
             <h3 className="text-headline text-ink">Autoregulation and RPE</h3>
             <p className="text-subhead text-ink-2">
-              RIR targets that progress through your mesocycle. Start at 3 RIR, end at 0-1 RIR. Steady overload without
+              RIR targets that progress through your training block. Start at 3 RIR, end at 0-1 RIR. Steady overload without
               guessing.
             </p>
           </ContentCard>
@@ -355,7 +355,7 @@ export default function AboutPage() {
             href="/dashboard/mesocycle/new"
             className="inline-flex min-h-[44px] items-center justify-center rounded-button bg-action px-5 text-body font-semibold text-on-action"
           >
-            Create your mesocycle
+            Create your training block
           </Link>
           <Link
             href="/dashboard"

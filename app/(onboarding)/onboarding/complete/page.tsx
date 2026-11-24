@@ -457,7 +457,7 @@ function CompleteContent() {
             <div className="p-3 bg-card/50 rounded-lg border border-sep">
               <div className="flex items-center gap-2 mb-1">
                 <IconBarbell size={20} className="text-action" aria-hidden="true" />
-                <span className="font-medium text-ink">Create mesocycle</span>
+                <span className="font-medium text-ink">Create training block</span>
                 <ProTag feature="mesocycleBuilder" />
               </div>
               <p className="text-caption text-ink-3">AI-generated training blocks with S-tier exercises</p>

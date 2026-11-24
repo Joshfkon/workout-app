@@ -103,6 +103,21 @@ export function deriveWeeklyVolume(
   return { volumeData, rows, tiles: stats.length > 0 ? coarseMevTiles(rows) : EMPTY_TILES };
 }
 
+/**
+ * Completed workouts in the fetched window (distinct sessions with at least
+ * one block), so a card can say "2 workouts in the last 7 days" next to bars
+ * that read low because of it. Pure.
+ */
+export function countWindowWorkouts(blocks: readonly WeeklyVolumeBlockRow[]): number {
+  const ids = new Set<string>();
+  for (const b of blocks) {
+    const s = (b as { workout_sessions?: { id?: string } | { id?: string }[] | null }).workout_sessions;
+    const session = Array.isArray(s) ? s[0] : s;
+    if (session?.id) ids.add(session.id);
+  }
+  return ids.size;
+}
+
 /** Prefix for the shared weekly-volume query (see useWeeklyVolume). */
 export const WEEKLY_VOLUME_QUERY_KEY = ['log', 'weekly-volume'] as const;
 
@@ -205,7 +220,11 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     [blocks, getVolumeLandmarks, storeUser]
   );
 
+  const workouts = useMemo(() => countWindowWorkouts(blocks), [blocks]);
+
   return {
+    /** Completed workouts in the window (see countWindowWorkouts). */
+    workouts,
     /** Per-head (26 standard muscles), uncapped — never sum for a week total. */
     volumeData,
     /** Shared coarse row model. */

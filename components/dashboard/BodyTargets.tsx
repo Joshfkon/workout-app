@@ -500,7 +500,7 @@ export function BodyTargets({
             {activeTarget.mesocycleId && (
               <div className="pt-2 border-t border-sep">
                 <p className="text-caption text-ink-3">
-                  Linked to mesocycle: {mesocycles.find(m => m.id === activeTarget.mesocycleId)?.name || 'Unknown'}
+                  Linked to training block: {mesocycles.find(m => m.id === activeTarget.mesocycleId)?.name || 'Unknown'}
                 </p>
               </div>
             )}
@@ -594,7 +594,7 @@ export function BodyTargets({
           {/* Link to mesocycle */}
           {mesocycles.length > 0 && (
             <div>
-              <label className="block text-subhead text-ink-2 mb-1">Link to Mesocycle (optional)</label>
+              <label className="block text-subhead text-ink-2 mb-1">Link to training block (optional)</label>
               <select
                 className="w-full px-3 py-2 bg-card rounded-lg text-ink shadow-card"
                 value={formData.mesocycleId || ''}

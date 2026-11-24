@@ -19,7 +19,7 @@ import {
 const waysToProgress: Array<{ icon: TablerIcon; title: string; body: string }> = [
   { icon: IconBarbell, title: 'More weight', body: 'Add 2.5-5 lbs when you hit your rep target' },
   { icon: IconListNumbers, title: 'More reps', body: 'Add 1-2 reps per set before increasing weight' },
-  { icon: IconChartBar, title: 'More sets', body: 'Add volume over the mesocycle' },
+  { icon: IconChartBar, title: 'More sets', body: 'Add volume over the training block' },
   { icon: IconTarget, title: 'Better technique', body: 'Improved muscle tension per rep' },
 ];
 
@@ -75,10 +75,10 @@ export default function ProgressiveOverloadArticle() {
       </ArticleSection>
 
       <ArticleCTA
-        title="Start a new mesocycle"
+        title="Start a new training block"
         body="Our AI builds progression right into your program."
         href="/dashboard/mesocycle/new"
-        label="Create mesocycle"
+        label="Create training block"
       />
     </ArticlePage>
   );

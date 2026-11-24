@@ -31,5 +31,5 @@ export function describeMesocycleInsertFailure(insertError: unknown): string {
     );
   }
 
-  return describeSupabaseError(insertError, 'Failed to create mesocycle');
+  return describeSupabaseError(insertError, 'Failed to create training block');
 }
