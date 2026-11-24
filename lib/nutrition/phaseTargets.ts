@@ -7,7 +7,10 @@
  * both call it, so the numbers onboarding shows are the numbers Eat gets.
  */
 import {
+  baseProteinPerLbLeanMass,
   calculateMacros,
+  getLeanMassLbs,
+  kgToLbs,
   type ActivityLevel,
   type Goal as NutritionGoal,
   type Peptide,
@@ -66,13 +69,30 @@ export const STARTER_ACTIVITY_SETTINGS = {
   peptide: 'none' as Peptide,
 };
 
-export function targetsFromMacroSettings(weightKg: number, settings: PhaseTargetSettings): PhaseTargets {
+/**
+ * Inputs the saved settings don't carry: a body fat % (the calculator then
+ * sizes protein to measured lean mass, as Eat's calculator does with one) and
+ * a kg-a-week pace (macro_settings.target_weight_change_per_week, which Eat
+ * honours too). Omitted = the calculator's defaults.
+ */
+export interface TargetExtras {
+  bodyFatPercent?: number | null;
+  targetWeightChangePerWeekKg?: number | null;
+}
+
+export function targetsFromMacroSettings(
+  weightKg: number,
+  settings: PhaseTargetSettings,
+  extras: TargetExtras = {}
+): PhaseTargets {
+  const bodyFat = extras.bodyFatPercent;
   const recommendation = calculateMacros(
     {
       weightKg,
       heightCm: settings.height_cm,
       age: settings.age,
       sex: settings.sex,
+      ...(bodyFat != null && bodyFat > 0 && bodyFat < 100 ? { bodyFatPercent: bodyFat } : {}),
     },
     {
       activityLevel: (settings.activity_level ?? 'moderate') as ActivityLevel,
@@ -83,6 +103,9 @@ export function targetsFromMacroSettings(weightKg: number, settings: PhaseTarget
     },
     {
       goal: settings.goal,
+      ...(extras.targetWeightChangePerWeekKg != null
+        ? { targetWeightChangePerWeek: extras.targetWeightChangePerWeekKg }
+        : {}),
       peptide: settings.peptide || 'none',
     }
   );
@@ -118,6 +141,59 @@ export interface StarterTargetsInput {
   nutritionGoal?: NutritionGoal | null;
   /** Sessions a week the lifter said they train (2–7); replaces the starter 4. */
   workoutsPerWeek?: number | null;
+  /**
+   * The user's own body fat % (DEXA, typed, or picked from the visual guide;
+   * never a skipped-question placeholder). Protein then follows their lean
+   * mass, the calculator's own rule, instead of an assumed 20% / 28%.
+   */
+  bodyFatPercent?: number | null;
+  /**
+   * A pace typed in kg a week (signed: + gain, − loss). Saved as
+   * macro_settings.target_weight_change_per_week; ignored when its sign
+   * doesn't match the phase.
+   */
+  weeklyChangeKg?: number | null;
+  /** Protein the user set by hand (g a day); calories stay, carbs absorb the change. */
+  proteinG?: number | null;
+}
+
+/** How the protein figure was reached, for the onboarding explanation. */
+export interface StarterProteinBasis {
+  /** g per lb of lean mass the calculator used (1.0, or 1.1 on a cut). */
+  perLbLeanMass: number;
+  leanMassKg: number;
+  /** True when lean mass came from the user's body fat, false when estimated. */
+  fromBodyFat: boolean;
+  /** g per kg of BODY weight, the figure lifters usually compare. */
+  perKgBodyWeight: number;
+  /** The user's own number replaced the calculated one. */
+  setByHand: boolean;
+  /** What the calculator gave before any hand edit. */
+  calculated: number;
+}
+
+/** Allowed hand-set protein, g a day. */
+export const PROTEIN_EDIT_RANGE = { min: 40, max: 400 } as const;
+
+/**
+ * Swap in a hand-set protein figure: calories are kept, carbs take the
+ * difference (never below 0, which is the only case calories move).
+ */
+export function withProteinOverride(targets: PhaseTargets, proteinG: number): PhaseTargets {
+  const protein = Math.round(proteinG);
+  const carbs = Math.max(0, targets.carbs - (protein - targets.protein));
+  return {
+    ...targets,
+    protein,
+    carbs,
+    calories: protein * 4 + carbs * 4 + targets.fat * 9,
+  };
+}
+
+/** The phase's sign: + bulk, − cut, none for maintenance. */
+function paceMatchesPhase(phase: Phase, kg: number | null | undefined): kg is number {
+  if (kg == null || !Number.isFinite(kg) || kg === 0) return false;
+  return phase === 'bulk' ? kg > 0 : phase === 'cut' ? kg < 0 : false;
 }
 
 /**
@@ -125,9 +201,13 @@ export interface StarterTargetsInput {
  * settings to save alongside them. Null when something the calculation
  * needs is missing (no guessing an age).
  */
-export function starterTargets(
-  input: StarterTargetsInput
-): { settings: StarterMacroSettings; targets: PhaseTargets } | null {
+export function starterTargets(input: StarterTargetsInput): {
+  settings: StarterMacroSettings;
+  targets: PhaseTargets;
+  /** kg a week to save as macro_settings.target_weight_change_per_week (null = the pace's default). */
+  targetWeightChangePerWeek: number | null;
+  protein: StarterProteinBasis;
+} | null {
   const { phase, weightKg, heightCm, age, sex } = input;
   if (!sex || !(weightKg > 0) || !(heightCm > 0) || !age || !(age >= 13 && age <= 100)) return null;
   const settings: StarterMacroSettings = {
@@ -141,5 +221,33 @@ export function starterTargets(
       : {}),
     ...(input.liftsWeights === false ? { workouts_per_week: 0 } : {}),
   };
-  return { settings, targets: targetsFromMacroSettings(weightKg, settings) };
+  const bodyFat =
+    input.bodyFatPercent != null && input.bodyFatPercent > 0 && input.bodyFatPercent < 100
+      ? input.bodyFatPercent
+      : null;
+  const weeklyChangeKg = paceMatchesPhase(phase, input.weeklyChangeKg) ? input.weeklyChangeKg : null;
+  const calculated = targetsFromMacroSettings(weightKg, settings, {
+    bodyFatPercent: bodyFat,
+    targetWeightChangePerWeekKg: weeklyChangeKg,
+  });
+  const byHand =
+    input.proteinG != null &&
+    input.proteinG >= PROTEIN_EDIT_RANGE.min &&
+    input.proteinG <= PROTEIN_EDIT_RANGE.max &&
+    Math.round(input.proteinG) !== calculated.protein;
+  const targets = byHand ? withProteinOverride(calculated, input.proteinG as number) : calculated;
+  const leanMassLbs = getLeanMassLbs({ weightKg, sex, bodyFatPercent: bodyFat ?? undefined });
+  return {
+    settings,
+    targets,
+    targetWeightChangePerWeek: weeklyChangeKg,
+    protein: {
+      perLbLeanMass: baseProteinPerLbLeanMass(settings.goal),
+      leanMassKg: leanMassLbs / kgToLbs(1),
+      fromBodyFat: bodyFat !== null,
+      perKgBodyWeight: targets.protein / weightKg,
+      setByHand: byHand,
+      calculated: calculated.protein,
+    },
+  };
 }

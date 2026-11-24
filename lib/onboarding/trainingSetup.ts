@@ -15,6 +15,8 @@ import { GOAL_PERCENT_BW, type Goal as NutritionGoal } from '@/lib/nutrition/mac
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import type { UserPreferences, WeightUnit } from '@/types/schema';
 
+const LB_PER_KG = 2.20462;
+
 export type CurrentSplit = NonNullable<UserPreferences['currentSplit']>;
 
 export const TRAINING_DAY_OPTIONS = [2, 3, 4, 5, 6, 7] as const;
@@ -32,9 +34,20 @@ export interface TrainingSetupAnswers {
   split: CurrentSplit | null;
   /** A macro-calculator goal in the same direction as the training goal. */
   rate: NutritionGoal | null;
+  /**
+   * A pace typed in the user's unit, stored in kg a week, signed (+ gain,
+   * − loss). Replaces `rate` while set; saved as
+   * macro_settings.target_weight_change_per_week.
+   */
+  weeklyChangeKg: number | null;
 }
 
-export const EMPTY_TRAINING_SETUP: TrainingSetupAnswers = { daysPerWeek: null, split: null, rate: null };
+export const EMPTY_TRAINING_SETUP: TrainingSetupAnswers = {
+  daysPerWeek: null,
+  split: null,
+  rate: null,
+  weeklyChangeKg: null,
+};
 
 const CUT_RATES: NutritionGoal[] = ['slow_cut', 'moderate_cut', 'aggressive_cut'];
 const BULK_RATES: NutritionGoal[] = ['slow_bulk', 'moderate_bulk', 'aggressive_bulk'];
@@ -66,10 +79,88 @@ export function formatRatePercent(percentBW: number): string {
 export function rateAmountPerWeek(percentBW: number, weightKg: number, units: WeightUnit): string | null {
   if (!(weightKg > 0)) return null;
   const kg = (weightKg * percentBW) / 100;
-  const amount = units === 'lb' ? kg * 2.20462 : kg;
+  const amount = units === 'lb' ? kg * LB_PER_KG : kg;
   const rounded = Math.round(Math.abs(amount) * 100) / 100;
   const sign = amount > 0 ? '+' : amount < 0 ? '−' : '';
   return `about ${sign}${rounded} ${units} a week`;
+}
+
+/** Largest typed pace, as % of body weight a week (the calculator's steepest level). */
+export const MAX_CUSTOM_RATE_PERCENT = 1;
+
+/** "0.31% of body weight a week" for a kg-a-week pace (null without a weight). */
+export function percentOfBodyWeight(weeklyChangeKg: number, weightKg: number): number | null {
+  if (!(weightKg > 0)) return null;
+  return Math.round((Math.abs(weeklyChangeKg) / weightKg) * 10000) / 100;
+}
+
+export type CustomRateResult =
+  | { ok: true; weeklyChangeKg: number; percentBW: number }
+  | { ok: false; error: string | null };
+
+/**
+ * A pace typed in the user's unit, as an unsigned amount a week: the goal
+ * gives the sign. Empty = no custom pace (error null). Pure.
+ */
+export function parseCustomRate(
+  text: string,
+  units: WeightUnit,
+  goal: TrainingGoal | null,
+  weightKg: number
+): CustomRateResult {
+  const trimmed = text.trim().replace(',', '.');
+  if (trimmed === '') return { ok: false, error: null };
+  if (goal !== 'bulk' && goal !== 'cut') return { ok: false, error: null };
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value <= 0) {
+    return { ok: false, error: `Enter an amount in ${units} a week, like ${units === 'lb' ? '0.5' : '0.25'}.` };
+  }
+  const kg = units === 'lb' ? value / LB_PER_KG : value;
+  if (weightKg > 0) {
+    const pct = (kg / weightKg) * 100;
+    if (pct > MAX_CUSTOM_RATE_PERCENT) {
+      const maxAmount = (weightKg * MAX_CUSTOM_RATE_PERCENT) / 100 * (units === 'lb' ? LB_PER_KG : 1);
+      return {
+        ok: false,
+        error: `That's over ${MAX_CUSTOM_RATE_PERCENT}% of your body weight a week. Try ${Math.floor(maxAmount * 100) / 100} ${units} or less.`,
+      };
+    }
+  }
+  const weeklyChangeKg = Math.round((goal === 'cut' ? -kg : kg) * 1000) / 1000;
+  return { ok: true, weeklyChangeKg, percentBW: percentOfBodyWeight(weeklyChangeKg, weightKg) ?? 0 };
+}
+
+/**
+ * The calculator level closest to a typed pace, saved as macro_settings.goal
+ * so the pace's name (and Eat's goal picker) still reads right.
+ */
+export function nearestRateForChange(
+  goal: TrainingGoal | null,
+  weeklyChangeKg: number,
+  weightKg: number
+): NutritionGoal | null {
+  const options = rateOptionsForGoal(goal);
+  if (options.length === 0 || !(weightKg > 0)) return null;
+  const pct = (weeklyChangeKg / weightKg) * 100;
+  return options.reduce((best, o) =>
+    Math.abs(o.percentBW - pct) < Math.abs(best.percentBW - pct) ? o : best
+  ).value;
+}
+
+/** A typed pace that runs the goal's way, else null (switching goal drops it). */
+export function customChangeForGoal(goal: TrainingGoal | null, weeklyChangeKg: number | null): number | null {
+  if (weeklyChangeKg == null || weeklyChangeKg === 0) return null;
+  if (goal === 'bulk') return weeklyChangeKg > 0 ? weeklyChangeKg : null;
+  if (goal === 'cut') return weeklyChangeKg < 0 ? weeklyChangeKg : null;
+  return null;
+}
+
+/** "+0.25 kg a week" / "−0.5 lb a week" in the user's unit. */
+export function formatWeeklyChange(weeklyChangeKg: number, units: WeightUnit): string {
+  const amount = units === 'lb' ? weeklyChangeKg * LB_PER_KG : weeklyChangeKg;
+  const rounded = Math.round(Math.abs(amount) * 100) / 100;
+  const sign = amount > 0 ? '+' : amount < 0 ? '−' : '';
+  return `${sign}${rounded} ${units} a week`;
 }
 
 /** A rate that fits the goal's direction, else null (never a cut rate on a bulk). */
@@ -99,5 +190,6 @@ export function trainingSetupFromPreferences(prefs: Record<string, unknown> | nu
       typeof days === 'number' && (TRAINING_DAY_OPTIONS as readonly number[]).includes(days) ? days : null,
     split: SPLIT_OPTIONS.some((o) => o.value === split) ? (split as CurrentSplit) : null,
     rate: null,
+    weeklyChangeKg: null,
   };
 }
