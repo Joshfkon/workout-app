@@ -12,8 +12,13 @@ import {
 } from '@/types/schema';
 import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
 import { COARSE_MUSCLES, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
-import { perSetCredits } from '@/services/shared/volumeCredit';
-import { creditedSetsByGroup, peakTrainingWeek } from '@/services/sessionBuilderWithFatigue';
+// The same head counter enforceNonDecreasingRamp holds non-decreasing.
+import {
+  creditedSetsByGroup,
+  creditedSetsByHead,
+  peakTrainingWeek,
+  MAX_SETS_PER_MUSCLE_PER_SESSION,
+} from '@/services/sessionBuilderWithFatigue';
 import { muscleDisplayName } from '@/lib/utils';
 
 /** Days of history the builder reads to prefill the schedule. */
@@ -169,6 +174,61 @@ export function isAtOrBelowMev(sets: number | undefined, mev: number): boolean {
   return (sets ?? 0) <= mev;
 }
 
+/**
+ * Muscles one session a week trains whose weekly target is more than one
+ * session can hold (MAX_SETS_PER_MUSCLE_PER_SESSION) and that the sessions
+ * deliver clearly short of it: Bro Split chest, 11 of a 20-set target.
+ * Longer sessions do not raise these; only a second day does. `frequency`
+ * is the number of sessions a week that train the muscle (the generator
+ * sets it from the split's templates). Pure.
+ */
+export function onceWeeklyCeilingMuscles(
+  volumePerMuscle: Partial<Record<string, { sets: number; frequency: number }>>,
+  delivered: Partial<Record<CoarseMuscle, number>>
+): { muscle: CoarseMuscle; delivered: number; wanted: number }[] {
+  const out: { muscle: CoarseMuscle; delivered: number; wanted: number }[] = [];
+  for (const [muscle, vol] of Object.entries(volumePerMuscle)) {
+    if (!vol || vol.frequency !== 1 || vol.sets <= MAX_SETS_PER_MUSCLE_PER_SESSION) continue;
+    const got = delivered[muscle as CoarseMuscle];
+    if (!isUnderDelivered(vol.sets, got)) continue;
+    out.push({ muscle: muscle as CoarseMuscle, delivered: Math.round(got ?? 0), wanted: vol.sets });
+  }
+  return out;
+}
+
+/** Splits that train every muscle at least twice a week, with the days each
+ *  needs, for the once-a-week note. */
+const TWICE_A_WEEK_SPLITS: { split: Split; label: string; days: number }[] = [
+  { split: 'Full Body', label: 'Full Body', days: 3 },
+  { split: 'Upper/Lower', label: 'Upper/Lower', days: 4 },
+  { split: 'PPL', label: 'Push/Pull/Legs', days: 6 },
+];
+
+/**
+ * The plain-words fix for onceWeeklyCeilingMuscles: why a longer session
+ * won't help, and what will (a second day for that muscle, or a split that
+ * hits it twice). null when there is nothing to say. Pure.
+ */
+export function onceWeeklyCeilingNote(
+  muscles: readonly { muscle: CoarseMuscle; delivered: number; wanted: number }[],
+  split: Split
+): string | null {
+  if (muscles.length === 0) return null;
+  const names = muscles.map((m) => muscleDisplayName(m.muscle));
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  const counts = muscles.map((m) => `${muscleDisplayName(m.muscle)} ${m.delivered} of ${m.wanted}`).join(', ');
+  const them = muscles.length === 1 ? 'it' : 'them';
+  const alternatives = TWICE_A_WEEK_SPLITS.filter((s) => s.split !== split)
+    .map((s) => `${s.label} (${s.days} days)`)
+    .join(' or ');
+  return (
+    `${list} ${muscles.length === 1 ? 'is' : 'are'} trained once a week, and one session holds about ` +
+    `${MAX_SETS_PER_MUSCLE_PER_SESSION} hard sets of a muscle, so longer sessions won't raise ${them} (${counts}). ` +
+    `To reach the target, train ${them} on more days: give ${them} a second day in your week, ` +
+    `or switch to a split that hits each muscle twice, like ${alternatives}.`
+  );
+}
+
 export interface RirRange {
   min: number;
   max: number;
@@ -209,21 +269,6 @@ export interface PlanWeekSummary {
   /** Credited sets per prioritizable head (MUSCLE_PRIORITY_HEADS), same
    *  counter, rounded to 0.1. */
   heads: Partial<Record<StandardMuscleGroup, number>>;
-}
-
-/** Credited sets per standard muscle in a set of sessions (primary 1,
- *  secondary 0.5 split across what it resolves to). Rounded to 0.1. Pure. */
-function creditedSetsByHead(sessions: PlanWeek['sessions']): Partial<Record<StandardMuscleGroup, number>> {
-  const out: Partial<Record<StandardMuscleGroup, number>> = {};
-  for (const session of sessions) {
-    for (const ex of session.exercises) {
-      for (const { muscle, credit } of perSetCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? [])) {
-        out[muscle] = (out[muscle] ?? 0) + ex.sets * credit;
-      }
-    }
-  }
-  for (const k of Object.keys(out) as StandardMuscleGroup[]) out[k] = Math.round((out[k] ?? 0) * 10) / 10;
-  return out;
 }
 
 /** The heads shown under a group in the week table (side delts under

@@ -47,6 +47,8 @@ import {
   deliveredSetsAtPeak,
   isUnderDelivered,
   isAtOrBelowMev,
+  onceWeeklyCeilingMuscles,
+  onceWeeklyCeilingNote,
   weekByWeekPlan,
   rampLine,
   rirLine,
@@ -1665,6 +1667,11 @@ export default function NewMesocyclePage() {
                     ? rows.filter((r) => caps[r.muscle as keyof typeof caps] || isUnderDelivered(r.sets, delivered[r.muscle]))
                     : [];
                   const lowRows = hasDelivered ? rows.filter((r) => isAtOrBelowMev(delivered[r.muscle], r.mev)) : [];
+                  // Trained once a week past what one session holds: a longer
+                  // session won't help, a second day will (say which).
+                  const onceWeeklyNote = hasDelivered && fullProgram
+                    ? onceWeeklyCeilingNote(onceWeeklyCeilingMuscles(fullProgram.volumePerMuscle, delivered), fullProgram.split)
+                    : null;
                   return (
                     <>
                       <p className="text-subhead font-medium text-ink-2">Weekly sets per muscle (peak week)</p>
@@ -1706,7 +1713,12 @@ export default function NewMesocyclePage() {
                               </button>
                             ))}
                           </div>
-                          {sessionOptions.length === 0 && (
+                          {onceWeeklyNote && (
+                            <p className="text-subhead text-ink mt-2" data-testid="builder-once-weekly-note">
+                              {onceWeeklyNote}
+                            </p>
+                          )}
+                          {sessionOptions.length === 0 && !onceWeeklyNote && (
                             <p className="text-caption text-ink-2 mt-1">
                               Longer sessions don&apos;t raise these: one session holds about 10–12 hard sets per muscle. Train them twice a week to go higher.
                             </p>
