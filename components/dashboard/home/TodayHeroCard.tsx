@@ -271,7 +271,8 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
                   aria-busy={isStarting || undefined}
                   className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {isStarting ? workoutStartLabel(startStage) : 'Start workout'}
+                  {/* Same words as every one-tap start on Home (round 20, Frank). */}
+                  {isStarting ? workoutStartLabel(startStage) : 'Start today’s workout'}
                 </button>
                 {isStarting && <WorkoutStartProgress stage={startStage} compact className="mt-2" />}
               </>

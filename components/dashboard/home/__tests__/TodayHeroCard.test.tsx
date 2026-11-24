@@ -247,7 +247,7 @@ describe('TodayHeroCard — start workout handler (bugfix)', () => {
       />
     );
 
-    const button = screen.getByRole('button', { name: 'Start workout' });
+    const button = screen.getByRole('button', { name: 'Start today’s workout' });
     await user.click(button);
     
     expect(onStartWorkout).toHaveBeenCalledTimes(1);
@@ -285,7 +285,7 @@ describe('TodayHeroCard — start workout handler (bugfix)', () => {
       />
     );
 
-    const button = screen.getByRole('button', { name: 'Start workout' });
+    const button = screen.getByRole('button', { name: 'Start today’s workout' });
     expect(button).toBeDisabled();
   });
 });

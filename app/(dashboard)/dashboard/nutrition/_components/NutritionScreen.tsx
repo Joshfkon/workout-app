@@ -2048,6 +2048,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         {!isDaySwitching && targetBasis && dailySummary.hasTargets && (
           <TargetBasisDisclosure
             basis={targetBasis}
+            // Home's "How your calorie target was worked out" link.
+            defaultOpen={searchParams.get('explain') === 'target'}
             onChangeTargets={() =>
               targetBasis.source === 'manual' ? setShowTargetsModal(true) : setShowMacroCalculator(true)
             }

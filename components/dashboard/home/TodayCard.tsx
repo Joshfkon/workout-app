@@ -1,11 +1,13 @@
 'use client';
 
-import { IconBowl, IconMoon, IconChartLine } from '@tabler/icons-react';
+import Link from 'next/link';
+import { IconBowl, IconMoon, IconChartLine, IconInfoCircle } from '@tabler/icons-react';
 import { ListGroup, ListRow } from '@/components/ui';
 import { formatSleepHours } from '@/lib/sleep/formatSleep';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import type { SleepLogEntry } from '@/types/schema';
+import type { ReactNode } from 'react';
 import type { PaceStatus } from './intakePace';
 import type { GlanceNutritionTotals, GlanceVolumeSummary, GlanceWeightRate } from './MetricTileGrid';
 
@@ -33,15 +35,39 @@ export interface TodayCardProps {
 
 const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}`;
 
+/** Where Home's "how was this worked out" link lands: Eat, with "How this is set" open. */
+export const TARGET_EXPLAINER_HREF = '/dashboard/nutrition?explain=target';
+
+/**
+ * The calorie line, with its context: "2,912 kcal left of your 3,200 target
+ * today". A bare "3,174 left" said neither what it counted nor against what
+ * (UX panel round 20, Sam). Pure.
+ */
+export function kcalLeftLine(eatenKcal: number, targetKcal: number): string {
+  const target = Math.round(targetKcal);
+  const left = Math.round(targetKcal - eatenKcal);
+  return left >= 0
+    ? `${left.toLocaleString()} kcal left of your ${target.toLocaleString()} target today`
+    : `${Math.abs(left).toLocaleString()} kcal over your ${target.toLocaleString()} target today`;
+}
+
 function eatRow({ nutritionTotals, nutritionTargets, kcalPace }: TodayCardProps) {
   if (!nutritionTargets) {
-    return { value: undefined, subtitle: 'Set calorie and protein targets' };
+    return { value: undefined, subtitle: 'Set calorie and protein targets' as ReactNode };
   }
-  const left = Math.round(nutritionTargets.calories - nutritionTotals.calories);
   const proteinLeft = Math.round(nutritionTargets.protein - nutritionTotals.protein);
-  const value = left >= 0 ? `${left.toLocaleString()} left` : `${Math.abs(left).toLocaleString()} over`;
   const protein = proteinLeft > 0 ? `${proteinLeft} g protein to go` : 'Protein target hit';
-  return { value, subtitle: kcalPace ? `${protein} · ${kcalPace}` : protein };
+  return {
+    value: undefined,
+    subtitle: (
+      <>
+        <span className="block text-ink" data-testid="today-kcal-left">
+          {kcalLeftLine(nutritionTotals.calories, nutritionTargets.calories)}
+        </span>
+        <span className="block">{kcalPace ? `${protein} · ${kcalPace}` : protein}</span>
+      </>
+    ) as ReactNode,
+  };
 }
 
 function recoveryRow({ lastNight, stepsToday, hrvDeltaPct, readiness }: TodayCardProps) {
@@ -94,6 +120,18 @@ export function TodayCard(props: TodayCardProps) {
         value={eat.value}
         href="/dashboard/nutrition"
       />
+      {props.nutritionTargets ? (
+        // One tap to how the target was worked out (Eat's "How this is
+        // set", opened). Its own row: the Eat row is already a link.
+        <Link
+          href={TARGET_EXPLAINER_HREF}
+          className="flex min-h-[44px] items-center gap-2 px-4 pl-[60px] text-subhead font-medium text-action transition-colors active:bg-fill"
+          data-testid="today-target-explainer"
+        >
+          <IconInfoCircle size={16} aria-hidden="true" />
+          How your calorie target was worked out
+        </Link>
+      ) : null}
       <ListRow
         icon={<IconMoon size={18} />}
         title="Recovery"

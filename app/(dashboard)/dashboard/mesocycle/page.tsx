@@ -20,6 +20,7 @@ import {
   type ExerciseOverride,
   type ExtractedSession,
 } from '@/services/mesocycleHelpers';
+import { runNavigateFirstStart } from '@/lib/training/pendingWorkoutStart';
 import {
   startMesocycleWorkoutSession,
   getWorkoutsForDate,
@@ -665,14 +666,23 @@ export default function MesocyclePage() {
 
     try {
       const supabase = createUntypedClient();
-      const { sessionId } = await startMesocycleWorkoutSession({
-        supabase,
-        mesocycle: activeMesocycle,
-        todayWorkout,
-        completedSessions,
+      const mesocycle = activeMesocycle;
+      // Navigate-first (lib/training/pendingWorkoutStart): open the workout
+      // screen once the session row exists; it finishes the build there.
+      await runNavigateFirstStart({
+        start: ({ sessionReady, stage }) =>
+          startMesocycleWorkoutSession({
+            supabase,
+            mesocycle,
+            todayWorkout,
+            completedSessions,
+            onStage: (s, id) => {
+              if (s === 'building') sessionReady(id);
+              stage(s);
+            },
+          }),
+        navigate: (id) => router.push(`/dashboard/workout/${id}`),
       });
-
-      router.push(`/dashboard/workout/${sessionId}`);
     } catch (error) {
       console.error('Failed to start workout:', error);
       setIsStartingWorkout(false);

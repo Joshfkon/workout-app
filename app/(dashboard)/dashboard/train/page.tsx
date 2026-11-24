@@ -103,7 +103,8 @@ import {
   type StandardMuscleGroup,
 } from '@/types/schema';
 import type { Experience, FullProgramRecommendation, WorkoutDay } from '@/types/schema';
-import { WorkoutStartProgress, prefetchWorkoutRoute, workoutStartLabel, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
+import { WorkoutStartProgress, workoutStartLabel, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
+import { runNavigateFirstStart } from '@/lib/training/pendingWorkoutStart';
 
 // The readiness card (good-targets strip + body map + per-muscle rows) shares
 // the in-workout sheet's assembly. Lazy so that whole stack stays out of the
@@ -357,18 +358,26 @@ export default function TrainPage() {
     setStartStage('preparing');
     setError(null);
     try {
-      const { sessionId } = await startMesocycleWorkoutSession({
-        supabase,
-        mesocycle: activeMeso,
-        todayWorkout: todayWorkout ?? nextWorkoutInfo?.workout ?? null,
-        completedSessions: mesoCompletedCount ?? undefined,
-        onStage: (stage, id) => {
-          setStartStage(stage);
-          if (stage === 'building') prefetchWorkoutRoute(router, id);
+      // Navigate-first (lib/training/pendingWorkoutStart): open the workout
+      // screen once the session row exists; it finishes the build there.
+      await runNavigateFirstStart({
+        start: ({ sessionReady, stage }) =>
+          startMesocycleWorkoutSession({
+            supabase,
+            mesocycle: activeMeso,
+            todayWorkout: todayWorkout ?? nextWorkoutInfo?.workout ?? null,
+            completedSessions: mesoCompletedCount ?? undefined,
+            userId: userId ?? undefined,
+            onStage: (s, id) => {
+              if (s === 'building') sessionReady(id);
+              stage(s);
+            },
+          }),
+        navigate: (id) => {
+          setStartStage('opening');
+          router.push(`/dashboard/workout/${id}`);
         },
       });
-      setStartStage('opening');
-      router.push(`/dashboard/workout/${sessionId}`);
     } catch (err) {
       console.error('Failed to start workout:', err);
       setError('Failed to start workout. Please try again.');

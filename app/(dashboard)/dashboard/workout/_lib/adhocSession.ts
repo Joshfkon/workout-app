@@ -129,17 +129,35 @@ export async function getOrCreateTodaySession(
     return { sessionId: existing.id, isNewSession: !hasLoggedSets };
   }
 
+  const sessionId = await insertTodayAdhocSession(supabase, userId, origin, effectiveLocationId);
+  return { sessionId, isNewSession: true };
+}
+
+/**
+ * Insert a fresh in-progress ad-hoc session for today and return its id.
+ * `id` lets a navigate-first start (lib/training/pendingWorkoutStart) pick
+ * the id up front and open the workout screen while this insert is still in
+ * flight; omitted, the database assigns one.
+ */
+export async function insertTodayAdhocSession(
+  supabase: UntypedSupabase,
+  userId: string,
+  origin: SessionOrigin,
+  locationId: string | null,
+  id?: string
+): Promise<string> {
   const { data: newSessions, error: createError } = await insertWorkoutSessions(supabase, [
     {
+      ...(id ? { id } : {}),
       user_id: userId,
-      planned_date: today,
+      planned_date: getLocalDateString(),
       state: 'in_progress',
       started_at: clockNow().toISOString(),
       completion_percent: 0,
       origin,
       // The gym this workout happens at (drives location-scoped calibration).
       // insertWorkoutSessions strips this if the migration hasn't landed.
-      location_id: effectiveLocationId,
+      location_id: locationId,
     },
   ]);
 
@@ -147,7 +165,39 @@ export async function getOrCreateTodaySession(
   if (createError || !newSession) {
     throw (createError as Error | null) ?? new Error('Failed to create session');
   }
-  return { sessionId: newSession.id, isNewSession: true };
+  return newSession.id;
+}
+
+/**
+ * Read-only: does today already have a planned / in-progress ad-hoc session?
+ * null when the read failed (unknown). A start that knows the answer is "no"
+ * can skip getOrCreateTodaySession's lookups and insert straight away.
+ */
+export async function hasTodayAdhocSession(
+  supabase: UntypedSupabase,
+  userId: string
+): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from('workout_sessions')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('planned_date', getLocalDateString())
+    .is('mesocycle_id', null)
+    .in('state', ['planned', 'in_progress'])
+    .limit(1);
+  if (error) return null;
+  return (data?.length ?? 0) > 0;
+}
+
+/** A v4 UUID for a session row created client-side, or null if unsupported. */
+export function newClientSessionId(): string | null {
+  try {
+    return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** How old an empty ad-hoc session must be before auto-discard (ms). */
