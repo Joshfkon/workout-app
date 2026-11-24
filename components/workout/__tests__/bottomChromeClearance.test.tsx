@@ -4,8 +4,8 @@
  * scrolls the logger clear by exactly the overlap.
  */
 import React from 'react';
-import { render, act } from '@testing-library/react';
-import { scrollToClear, useKeepLoggerClearOfBottomChrome } from '../bottomChromeClearance';
+import { render, act, fireEvent } from '@testing-library/react';
+import { scrollToClear, shouldClearAfterGrowth, CLEAR_AFTER_TAP_MS, useKeepLoggerClearOfBottomChrome } from '../bottomChromeClearance';
 
 describe('scrollToClear', () => {
   it('is 0 when the target already sits above the stack', () => {
@@ -23,6 +23,16 @@ describe('scrollToClear', () => {
 
   it('leaves a target wholly below the stack alone (the pinned bar covers it)', () => {
     expect(scrollToClear({ top: 700, bottom: 900 }, 600)).toBe(0);
+  });
+});
+
+describe('shouldClearAfterGrowth', () => {
+  it('only right after a logger tap, and not once the lifter has scrolled', () => {
+    expect(shouldClearAfterGrowth(1000, null, null)).toBe(false);
+    expect(shouldClearAfterGrowth(1000, 500, null)).toBe(true);
+    expect(shouldClearAfterGrowth(500 + CLEAR_AFTER_TAP_MS + 1, 500, null)).toBe(false);
+    expect(shouldClearAfterGrowth(1000, 500, 700)).toBe(false);
+    expect(shouldClearAfterGrowth(1000, 500, 400)).toBe(true);
   });
 });
 
@@ -69,13 +79,30 @@ describe('useKeepLoggerClearOfBottomChrome', () => {
     return utils;
   }
 
-  it('scrolls the logger clear when a toast makes the stack taller', () => {
-    setup();
+  it('scrolls the logger clear when a toast makes the stack taller right after a tap in the logger', () => {
+    const { getByTestId } = setup();
+    fireEvent.pointerDown(getByTestId('logger'));
     // The observer attached with the stack's first height; now a toast joins.
     stackHeight = 150;
     stackTop = 690;
     act(() => resizeCb?.());
     expect(scrollBy).toHaveBeenCalledWith({ top: 58, behavior: 'smooth' });
+  });
+
+  it('never pulls the lifter back down after they scroll (user report)', () => {
+    const { getByTestId } = setup();
+    // Scrolling up with no tap: the pinned Log set bar joins the stack.
+    stackHeight = 150;
+    stackTop = 690;
+    act(() => resizeCb?.());
+    expect(scrollBy).not.toHaveBeenCalled();
+    // A tap, then a scroll before the stack grows: the scroll wins.
+    fireEvent.pointerDown(getByTestId('logger'));
+    fireEvent.touchMove(window);
+    stackHeight = 220;
+    stackTop = 620;
+    act(() => resizeCb?.());
+    expect(scrollBy).not.toHaveBeenCalled();
   });
 
   it('does nothing when the stack shrinks, even over the logger', () => {
