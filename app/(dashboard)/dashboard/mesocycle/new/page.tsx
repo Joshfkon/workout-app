@@ -338,8 +338,35 @@ export default function NewMesocyclePage() {
     queryKey: BUILDER_INPUTS_QUERY_KEY,
     queryFn: fetchBuilderInputs,
     staleTime: 60 * 1000,
+    // The cache paints the form instantly, but every visit also refetches:
+    // injuries, equipment and priorities may have changed in Settings since.
+    refetchOnMount: 'always',
   });
   const appliedInputsRef = useRef(false);
+  // Fields that come from Settings and have no control in the builder. Unlike
+  // the schedule defaults (seeded once, then the lifter's), these follow the
+  // freshest data on every fetch, so a program never ignores an injury or
+  // equipment change saved after the cached copy (Codex review on #869).
+  const settingsAppliedAtRef = useRef(0);
+  useEffect(() => {
+    const inputs = inputsQuery.data;
+    const at = inputsQuery.dataUpdatedAt;
+    if (!inputs || at <= settingsAppliedAtRef.current) return;
+    settingsAppliedAtRef.current = at;
+    const { profile } = inputs;
+    if (profile) {
+      setEnhancedAthleteMode(profile.enhanced_athlete_mode === true);
+      setUserGoal((profile.goal as Goal) || 'maintenance');
+      setUserExperience((profile.experience as Experience) || 'intermediate');
+      if (profile.training_age !== null && profile.training_age !== undefined) setStoredTrainingAge(Number(profile.training_age));
+      if (profile.available_equipment && Array.isArray(profile.available_equipment)) {
+        setAvailableEquipment(profile.available_equipment as Equipment[]);
+      }
+      setInjuryHistory(Array.isArray(profile.injury_history) ? (profile.injury_history as MuscleGroup[]) : []);
+    }
+    setUnavailableEquipmentIds(inputs.unavailableEquipmentIds);
+    setPriorityAdjustments(priorityVolumeAdjustments(inputs.priorityRows));
+  }, [inputsQuery.data, inputsQuery.dataUpdatedAt]);
   useEffect(() => {
     const inputs = inputsQuery.data;
     if (!inputs || appliedInputsRef.current) return;
@@ -350,20 +377,10 @@ export default function NewMesocyclePage() {
     const { profile, latestDexa: scan } = inputs;
     setUserId(inputs.userId);
     if (profile) {
-      setEnhancedAthleteMode(profile.enhanced_athlete_mode === true);
-      setUserGoal((profile.goal as Goal) || 'maintenance');
-      setUserExperience((profile.experience as Experience) || 'intermediate');
       setHeightCm(profile.height_cm);
       if (profile.age) setUserAge(profile.age);
       if (profile.sleep_quality) setSleepQuality(profile.sleep_quality as Rating);
       if (profile.stress_level) setStressLevel(profile.stress_level as Rating);
-      if (profile.training_age !== null && profile.training_age !== undefined) setStoredTrainingAge(Number(profile.training_age));
-      if (profile.available_equipment && Array.isArray(profile.available_equipment)) {
-        setAvailableEquipment(profile.available_equipment as Equipment[]);
-      }
-      if (profile.injury_history && Array.isArray(profile.injury_history)) {
-        setInjuryHistory(profile.injury_history as MuscleGroup[]);
-      }
     }
     if (scan) {
       setLatestDexa({
@@ -380,7 +397,6 @@ export default function NewMesocyclePage() {
         createdAt: scan.created_at,
       } as DexaScan);
     }
-    setUnavailableEquipmentIds(inputs.unavailableEquipmentIds);
     setIsFirstMesocycle(inputs.isFirstMesocycle);
     // Session length: the last block's, else by experience
     // (lib/training/builderDefaults defaultSessionMinutes).
@@ -389,8 +405,6 @@ export default function NewMesocyclePage() {
       inputs.lastSessionMinutes
     );
     setSessionDurationMinutes((current) => (sessionLengthTouchedRef.current ? current : loadedDefault));
-    // Muscle priorities from Settings — the generator never saw them.
-    setPriorityAdjustments(priorityVolumeAdjustments(inputs.priorityRows));
     // Recent training → schedule defaults (sessions a week, split).
     const defaults = builderDefaultsFromHistory(inputs.recentSessions, inputs.historySpanDays);
     setHistoryDefaults(defaults);
