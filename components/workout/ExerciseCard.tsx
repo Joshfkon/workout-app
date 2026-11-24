@@ -5374,7 +5374,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   so under them on the lift's first set (UX panel round 20:
                   4 of 6 read the prefill as fixed and unexplained). Below
                   the logger, so nothing above it moves. */}
-              {completedSets.length === 0 && (suggestion.weight || input.reps) && (
+              {completedSets.length === 0 && (suggestion.weight || suggestion.repsLabel) && (
                 <p className="px-1 text-caption text-ink-2" data-testid="prefill-editable-hint">
                   Suggested numbers — tap one or use − / + to change it before you log.
                 </p>
