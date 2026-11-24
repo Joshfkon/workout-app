@@ -232,6 +232,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             required
+            inputSize="large"
             autoComplete="email"
           />
 
@@ -243,10 +244,11 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              inputSize="large"
               autoComplete="current-password"
             />
             <div className="mt-1 text-right">
-              <Link href="/forgot-password" className="text-caption text-action">
+              <Link href="/forgot-password" className="inline-flex min-h-[44px] items-center text-body text-action">
                 Forgot password?
               </Link>
             </div>

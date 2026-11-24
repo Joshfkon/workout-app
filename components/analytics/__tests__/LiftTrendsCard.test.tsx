@@ -138,7 +138,7 @@ describe('LiftTrendsCard', () => {
     const head = screen.getByTestId('lift-trends-summary');
     expect(head).toHaveTextContent('No strength trends yet');
     expect(screen.getByTestId('lift-first-trend-hint')).toHaveTextContent(
-      'Log Bench Press once more to see its trend line. A trend needs the same lift in 3 workouts.'
+      "Log Bench Press in 1 more workout to see if it's going up. A trend needs the lift in 3 separate workouts."
     );
     expect(early).toHaveTextContent(/best set on each lift/);
   });
@@ -175,9 +175,16 @@ describe('LiftTrendsCard', () => {
     // formula, the reps-left rule and the %/wk rate, one tap away.
     expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest single rep/);
     expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/Brzycki/);
-    expect(screen.getByTestId('rate-explainer')).toHaveTextContent(
-      new RegExp(`straight line through each workout's best-set est. max over the last ${Math.round(summary.windowDays / 7)} weeks`)
+    const rate = screen.getByTestId('rate-explainer');
+    expect(rate).toHaveTextContent(
+      new RegExp(`best set of every workout in the last ${Math.round(summary.windowDays / 7)} weeks`)
     );
+    // Plain words, and the real "flat" threshold (liftTrends FLAT_BAND_PCT).
+    expect(rate).not.toHaveTextContent(/straight line|fitted|trend line/);
+    expect(rate).toHaveTextContent(
+      'flat in between (on a 200 lb lift, that\'s less than 0.3 lb a week either way)'
+    );
+    expect(rate).toHaveTextContent('rising when its est. max goes up more than 0.15% a week');
   });
 
   it("explains est. max on the user's own best set", async () => {
@@ -208,13 +215,17 @@ describe('LiftTrendsCard', () => {
     const empty = screen.getByTestId('lift-trends-empty');
     expect(empty).toHaveTextContent('No lifts logged in the last 12 weeks.');
     expect(empty).not.toHaveTextContent(/enough (data|history)/i);
+    // What will appear here, and after how many workouts — workouts, not sets.
+    const what = screen.getByTestId('lift-trends-empty-what');
+    expect(what).toHaveTextContent('After 1 workout: your best set on each lift shows up here.');
+    expect(what).toHaveTextContent(/After 3 workouts with the same lift: .*going up, flat or down\. Sets in one workout count once\./);
     const cta = within(empty).getByRole('link', { name: 'Log a workout' });
     expect(cta).toHaveAttribute('href', '/dashboard/workout/new');
   });
 
   it('says what an untrended lift needs in plain words, not "enough history"', () => {
     render(<LiftTrendsCard summary={{ ...summary, insufficientData: 2 }} units="kg" />);
-    expect(screen.getByText(/2 more lifts have no trend line yet: each needs 3 workouts\./)).toBeInTheDocument();
+    expect(screen.getByText(/2 more lifts have no trend yet: each needs 3 separate workouts\./)).toBeInTheDocument();
     expect(screen.queryByText(/enough history/)).not.toBeInTheDocument();
   });
 });

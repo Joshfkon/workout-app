@@ -1,5 +1,5 @@
-import { PageSkeleton } from '@/components/ui/LoadingAnimation';
+import { ProgressPageSkeleton } from '@/components/analytics/RegionSkeletons';
 
 export default function AnalyticsLoading() {
-  return <PageSkeleton title="Progress" />;
+  return <ProgressPageSkeleton />;
 }

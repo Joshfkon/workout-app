@@ -296,6 +296,7 @@ import {
 } from '../_lib/staleTargets';
 import { RecalcTargetsBanner } from '@/components/workout';
 import { STICKY_LOG_SLOT_ID } from '@/components/workout/SetLoggerRow';
+import { useKeepLoggerClearOfBottomChrome } from '@/components/workout/bottomChromeClearance';
 import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
@@ -923,6 +924,10 @@ export default function WorkoutPage() {
   // reusable workout_template. Purely additive — no session state changes.
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
+  // The fixed bottom stack (toast · rest timer · pinned Log set). When it
+  // grows — the "Set N logged · Undo" toast arriving — the active logger is
+  // scrolled clear of it instead of sitting under it for the toast's 5 s.
+  const bottomChromeRef = useKeepLoggerClearOfBottomChrome();
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
   const [selectedInjurySeverity, setSelectedInjurySeverity] = useState<1 | 2 | 3>(1);
@@ -7908,6 +7913,7 @@ export default function WorkoutPage() {
                         explanation: weightRec.rationale,
                         transferFrom: weightRec.transferFrom || undefined,
                         estimateSource: weightRec.estimateSource,
+                        startsLight: weightRec.startsLight === true,
                       }
                     : undefined;
 
@@ -8400,6 +8406,7 @@ export default function WorkoutPage() {
           active set's pinned "Log set" bar portals into the slot at its
           bottom, and a portal target must outlive what renders into it. */}
       <div
+          ref={bottomChromeRef}
           className={`fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto flex flex-col items-stretch gap-2 pointer-events-none [&>*]:pointer-events-auto pb-[env(safe-area-inset-bottom)] ${
             keyboardOpen ? 'hidden' : ''
           }`}

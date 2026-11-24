@@ -101,6 +101,7 @@ describe('packages, tipping and features', () => {
   it('counts what turns a "no" on today\'s Pro into a "yes"', () => {
     const t = tippingFeatures(records, PACKAGES);
     expect(t.noOnBase).toBe(3);
+    expect(t.firmNoOnBase + t.maybeOnBase).toBe(3);
     const byVariant = Object.fromEntries(t.byVariant);
     expect(byVariant[PACKAGES[1].adds!]).toBe(1); // V2: AI food logging
     expect(byVariant[PACKAGES[2].adds!]).toBe(1); // V3: food-only tier

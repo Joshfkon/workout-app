@@ -234,6 +234,34 @@ export function emptyBarStartLine(reps: number): string {
   return `Empty bar — a safe start; add weight if ${reps} reps feel easy`;
 }
 
+/**
+ * First-time line for a prefilled starting estimate. Always names what the
+ * number rests on (the panel: "a guess, with no explanation"), says it is
+ * light on purpose ONLY when the engine made it so (`startsLight`), and
+ * tells the lifter to change it.
+ */
+export function coldStartSourceLine(input: {
+  basis: string;
+  startsLight: boolean;
+  /** "pick a weight you could lift ~10 times" — how to judge the number. */
+  pickHint: string;
+}): string {
+  const light = input.startsLight ? ', set on the light side' : '';
+  return `First time on this lift — starting estimate from ${input.basis}${light}. Adjust if it feels heavy: ${input.pickHint}`;
+}
+
+/**
+ * The caution under a prefill when the lifter reported an injury this lift
+ * may load. No prescription path lowers the load for an injury, so this
+ * never claims it did: it says so, and says when the start is light anyway.
+ */
+export function injuryLoadNote(input: { area: string; startsLight: boolean }): string {
+  const area = input.area.toLowerCase();
+  return input.startsLight
+    ? `Started light, but not adjusted for your ${area} — go lighter if it hurts`
+    : `Not adjusted for your ${area} — go lighter if it hurts`;
+}
+
 /** The empty Olympic bar: 20 kg, or 45 lb (20.4 kg). */
 export function isEmptyBarLoad(loadKg: number, equipment: string | null | undefined): boolean {
   if ((equipment ?? '').toLowerCase() !== 'barbell') return false;

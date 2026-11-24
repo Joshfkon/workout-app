@@ -1,4 +1,5 @@
 import {
+  beginnerModeSummaryLine,
   beginnerMuscleName,
   beginnerPickReason,
   beginnerSuggestedFocus,
@@ -20,6 +21,15 @@ describe('resolveBeginnerMode', () => {
     expect(resolveBeginnerMode(undefined, 'advanced')).toBe(false);
     expect(resolveBeginnerMode(undefined, null)).toBe(false);
     expect(resolveBeginnerMode('yes', 'intermediate')).toBe(false);
+  });
+});
+
+describe('beginnerModeSummaryLine', () => {
+  it('says what the mode is and how to change it, either way', () => {
+    expect(beginnerModeSummaryLine(true)).toMatch(/simpler workout screen/i);
+    expect(beginnerModeSummaryLine(true)).toMatch(/Turn it off/);
+    expect(beginnerModeSummaryLine(false)).toMatch(/Turn it on/);
+    expect(beginnerModeSummaryLine(false)).toMatch(/simpler workout screen/);
   });
 });
 

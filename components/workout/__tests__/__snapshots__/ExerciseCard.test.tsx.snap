@@ -116,7 +116,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                   class="font-medium"
                   data-testid="suggestion-source"
                 >
-                  First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust
+                  First time on this lift — starting estimate from your training profile. Adjust if it feels heavy: pick a weight you could lift ~12 times
                 </span>
                  
                 <button
@@ -171,6 +171,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         <div
           aria-label="Set 1 logger"
           class="rounded-card bg-action-tint p-3 space-y-2.5"
+          data-active-logger=""
           role="group"
         >
           <div
@@ -541,6 +542,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             Log set
           </button>
         </div>
+        <p
+          class="px-1 text-caption text-ink-2"
+          data-testid="prefill-editable-hint"
+        >
+          Suggested numbers — tap one or use − / + to change it before you log.
+        </p>
       </div>
       <div
         class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"

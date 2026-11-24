@@ -8,6 +8,7 @@ import {
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { EstMaxMethod } from './EstMaxMethod';
+import { liftRateRule, liftStatusRule } from './trendHelp';
 import {
   earlyLiftChange,
   estMaxExample,
@@ -66,10 +67,12 @@ export { EST_MAX_EXPLAINER } from './EstMaxMethod';
 /**
  * How "%/wk" is worked out — an advanced lifter saw every lift "+2%/wk" and
  * couldn't tell whether it came from est. max, rep PRs or something else, so
- * didn't trust any of it (UX panel).
+ * didn't trust any of it (UX panel) — and what makes a lift rising / flat /
+ * down (UX panel r19: the "flat" threshold wasn't stated). Plain words, the
+ * real threshold (trendHelp), behind the card's one info toggle.
  */
-export function rateExplainer(weeks: number): string {
-  return `%/wk = a straight line through each workout's best-set est. max over the last ${weeks} weeks, as a share of today's.`;
+export function rateExplainer(weeks: number, units: 'lb' | 'kg'): string {
+  return `${liftRateRule(weeks)} ${liftStatusRule(units)}`;
 }
 
 /**
@@ -114,14 +117,14 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
         )}
         {firstTrendHint && (
           <p className="mt-1 text-subhead text-ink" data-testid="lift-first-trend-hint">
-            {firstTrendHint} A trend needs the same lift in {MIN_SESSIONS_FOR_TREND} workouts.
+            {firstTrendHint} A trend needs the lift in {MIN_SESSIONS_FOR_TREND} separate workouts.
           </p>
         )}
         {summary.lifts.length > 0 && (
           <EstMaxMethod
             className="mt-1"
             example={estMaxExample(exampleSetPoint(summary.lifts), units)}
-            rate={rateExplainer(weeks)}
+            rate={rateExplainer(weeks, units)}
           />
         )}
         {confident + rebuilding > 0 && (
@@ -180,26 +183,7 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
           </ListGroup>
         </div>
       ) : summary.lifts.length === 0 ? (
-        <div className="rounded-card bg-card p-6 text-center shadow-card" data-testid="lift-trends-empty">
-          <p className="text-body text-ink">
-            {summary.insufficientData > 0
-              ? `Log the same lift in ${MIN_SESSIONS_FOR_TREND} workouts to see its trend line.`
-              : `No lifts logged in the last ${weeks} weeks.`}
-          </p>
-          <p className="mt-1 text-subhead text-ink-2">
-            {summary.insufficientData > 0
-              ? 'Your best sets show up here as you go.'
-              : `Log a workout with weights and your best sets show up here. Do the same lift ${MIN_SESSIONS_FOR_TREND} times to see whether it is going up.`}
-          </p>
-          {/* The empty state's one next step: straight into an empty workout. */}
-          <Link
-            href={LOG_WORKOUT_HREF}
-            className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-button bg-action px-5 text-body font-semibold text-on-action"
-            data-testid="lift-trends-log-workout"
-          >
-            Log a workout
-          </Link>
-        </div>
+        <LiftTrendsEmptyState weeks={weeks} startedLifting={summary.insufficientData > 0} />
       ) : (
         <ListGroup>
           {summary.lifts.map((lift) => {
@@ -251,11 +235,44 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
 
       {summary.insufficientData > 0 && summary.lifts.length > 0 && (
         <p className="px-1 text-subhead text-ink-2">
-          {summary.insufficientData} more lift{summary.insufficientData === 1 ? ' has' : 's have'} no trend line yet: each
-          needs {MIN_SESSIONS_FOR_TREND} workouts.
+          {summary.insufficientData} more lift{summary.insufficientData === 1 ? ' has' : 's have'} no trend yet: each
+          needs {MIN_SESSIONS_FOR_TREND} separate workouts.
         </p>
       )}
 
     </section>
+  );
+}
+
+/**
+ * Strength with nothing to show yet: what will appear here and after how
+ * many workouts, and one big next step (UX panel r19: "The strength tab was
+ * empty. It had no button to go and log a workout", and "repeat the same
+ * lift 3 times" read as 3 sets).
+ */
+export function LiftTrendsEmptyState({ weeks, startedLifting }: { weeks: number; startedLifting: boolean }) {
+  return (
+    <div className="rounded-card bg-card p-5 shadow-card" data-testid="lift-trends-empty">
+      <p className="text-headline text-ink">
+        {startedLifting ? 'Your lifts are on their way' : `No lifts logged in the last ${weeks} weeks.`}
+      </p>
+      <ul className="mt-2 space-y-1.5 text-body text-ink-2" data-testid="lift-trends-empty-what">
+        <li>
+          <span className="font-semibold text-ink">After 1 workout:</span> your best set on each lift shows up here.
+        </li>
+        <li>
+          <span className="font-semibold text-ink">After {MIN_SESSIONS_FOR_TREND} workouts with the same lift:</span>{' '}
+          you&apos;ll see whether it&apos;s going up, flat or down. Sets in one workout count once.
+        </li>
+      </ul>
+      {/* The empty state's one next step: straight into an empty workout. */}
+      <Link
+        href={LOG_WORKOUT_HREF}
+        className="mt-4 flex min-h-[48px] w-full items-center justify-center rounded-button bg-action px-5 text-body font-semibold text-on-action"
+        data-testid="lift-trends-log-workout"
+      >
+        Log a workout
+      </Link>
+    </div>
   );
 }

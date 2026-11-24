@@ -82,6 +82,8 @@ import {
   whyThisWeightLine,
   setChangeLine,
   emptyBarStartLine,
+  coldStartSourceLine,
+  injuryLoadNote,
   isEmptyBarLoad,
   withoutUnbackedHistoryClaims,
   type SetChangeCause,
@@ -253,6 +255,25 @@ function getExerciseInjuryRiskFromService(
     reasons: Array.from(new Set(reasons)),
     risk: worstRisk
   };
+}
+
+/**
+ * The injured area a prefilled load should be cautioned for, in words
+ * ("Shoulder"): a check-in injury this exercise may aggravate, else the area
+ * the suggested-workout sheet picked around ("For your shoulder: …").
+ * Null when neither applies. Pure; exported for tests.
+ */
+export function injuryAreaForPrefill(
+  exercise: { name: string; primaryMuscle: string },
+  injuries: TemporaryInjury[],
+  injuryNote: string | null
+): string | null {
+  for (const injury of injuries) {
+    if (getExerciseInjuryRiskFromService(exercise, [injury]).isRisky) {
+      return INJURY_LABELS[injury.area] || injury.area.replace(/_/g, ' ');
+    }
+  }
+  return injuryNote?.match(/^For your ([^:]+):/)?.[1]?.trim() ?? null;
 }
 
 /**
@@ -541,6 +562,12 @@ export interface ColdStartSuggestion {
   transferFrom?: string;
   /** Which estimation rung produced the number, so the source line can name it plainly. */
   estimateSource?: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio' | 'calibration' | 'exercise_transfer';
+  /**
+   * The engine made this number lighter on purpose (cold-start headroom /
+   * low-confidence discount — WorkingWeightRecommendation.startsLight). Only
+   * then may the card say the estimate is on the light side.
+   */
+  startsLight?: boolean;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -2577,11 +2604,14 @@ export const ExerciseCard = memo(function ExerciseCard({
      * strip drops the separate logged-effort verdict.
      */
     sourceKind: 'set_change' | null;
+    /** The prefill is a cold-start estimate the engine made light on purpose. */
+    startsLight: boolean;
   } => {
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
     let sourceLine = '';
+    let startsLight = false;
     let why: WhyThisWeight | null = null;
     // Within-session load change (set N → N+1): what the just-logged set
     // showed, as the engine's own branch read it. Null = no e1RM-path
@@ -2599,7 +2629,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       Math.max(0, Math.round(effectiveTargetRir));
     const coldStartPickLine = isDurationBased
       ? 'adjust to a weight you can hold for the target time'
-      : `pick a weight you could lift ~${coldStartMaxReps} times, then adjust`;
+      : `pick a weight you could lift ~${coldStartMaxReps} times`;
 
     // Observed RIR for the reason string. Half-step values are real data (the
     // RIR-2 "good" chip stores RPE 7.5) — show one decimal, not a rounded lie.
@@ -3239,12 +3269,28 @@ export const ExerciseCard = memo(function ExerciseCard({
         const basis = transferFrom
           ? `your ${transferFrom}`
           : COLD_START_BASIS[coldStartSuggestion.estimateSource ?? ''] ?? null;
-        sourceLine = basis
-          ? `First time on this lift — starting guess from ${basis}; ${coldStartPickLine}`
-          : `First time on this lift — starting guess; ${coldStartPickLine}`;
+        // "Set on the light side" only when the engine made THIS number light
+        // and the prefill is still that number (a seed may have replaced it).
+        const shownKg = inputWeightToKg(parseFloat(weight), unit);
+        const lightTolKg = Math.max(exercise.minWeightIncrementKg ?? 0, 2.5);
+        startsLight =
+          coldStartSuggestion.startsLight === true &&
+          Number.isFinite(shownKg) &&
+          Math.abs(shownKg - coldStartSuggestion.weightKg) <= lightTolKg;
+        // Never a bare "guess": with no named rung it is still the profile
+        // estimate (the reason and the ⓘ sheet already say so).
+        sourceLine = coldStartSourceLine({
+          basis: basis ?? 'your training profile',
+          startsLight,
+          pickHint: coldStartPickLine,
+        });
         why = { ref: null, rule: 'start_guess', basis };
       } else if (weight) {
-        sourceLine = `First time on this lift — starting guess; ${coldStartPickLine}`;
+        // No estimate handed down by the page (e.g. no height/weight on the
+        // profile): the prefill is the block's stored target, which session
+        // start estimated from the profile. Name that basis, claim nothing
+        // about it being light.
+        sourceLine = coldStartSourceLine({ basis: 'your training profile', startsLight: false, pickHint: coldStartPickLine });
         why = { ref: null, rule: 'start_guess', basis: 'your training profile' };
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
@@ -3392,6 +3438,8 @@ export const ExerciseCard = memo(function ExerciseCard({
         source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
         sourceKind,
         why,
+        // Deload / pain lines replace the start line, so the claim goes too.
+        startsLight: startsLight && why?.rule === 'start_guess',
       },
       previousSets.length > 0
     );
@@ -3561,6 +3609,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Bodyweight sets with a recorded breakdown read "BW+25 lbs × 14" so the
   // added load is visible instead of the blended effective number.
   const injuryNote = injuryNoteFromReason(block.suggestionReason);
+  const prefillInjuryArea = injuryAreaForPrefill(exercise, currentInjuries, injuryNote);
 
   const lastSessionMeta = (() => {
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
@@ -5181,7 +5230,15 @@ export const ExerciseCard = memo(function ExerciseCard({
           const stripSource = latestCall?.heldByVelocity
             ? 'Holding: bar speed says your last set was harder than logged'
             : suggestion.source;
-          const stickyWhyRaw = stripSource || stripVerdict || null;
+          // Every prefill carries a reason on the bar too: when the strip's
+          // source line was folded into the reason (or blanked as an unbacked
+          // history claim), the engine's reason stands in.
+          const stickyWhyRaw = stripSource || stripVerdict || (beginner ? null : suggestion.reason) || null;
+          // Injury caution under the numbers (load-bearing lifts only).
+          const injuryCaution =
+            prefillInjuryArea && !isBodyweightExercise && !isDurationBased && suggestion.weight
+              ? injuryLoadNote({ area: prefillInjuryArea, startsLight: suggestion.startsLight })
+              : null;
           const stickyHint: StickyHint = {
             why: stickyWhyRaw ? (beginner ? plainWorkoutText(stickyWhyRaw) : stickyWhyRaw) : null,
             expect:
@@ -5247,6 +5304,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 expect={expectText}
                 score={predictionScoreLine}
                 nextTime={nextTimeText}
+                caution={injuryCaution}
               />
               {/* Always mounted at a fixed one-line height: the note is
                   cleared on every weight/reps keystroke and re-issued by the
@@ -5312,6 +5370,15 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : undefined
                 }
               />
+              {/* The prefilled numbers are a suggestion, not a setting: say
+                  so under them on the lift's first set (UX panel round 20:
+                  4 of 6 read the prefill as fixed and unexplained). Below
+                  the logger, so nothing above it moves. */}
+              {completedSets.length === 0 && (suggestion.weight || suggestion.repsLabel) && (
+                <p className="px-1 text-caption text-ink-2" data-testid="prefill-editable-hint">
+                  Suggested numbers — tap one or use − / + to change it before you log.
+                </p>
+              )}
               {activeIsAmrap && amrapPrompt && (
                 // Quiet inline note, not a card: the last set's ask, with
                 // its reason in plain words. Same choices as before — OK

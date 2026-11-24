@@ -69,6 +69,34 @@ describe('portion before adding', () => {
     expect(screen.getByTestId('add-food-preview-calories')).toHaveTextContent('186');
   });
 
+  it('offers everyday units alongside grams, and one tap switches to one (panel r19)', async () => {
+    const user = userEvent.setup();
+    const { onAdd } = renderAdd({ units: 'lb' });
+    await user.click(screen.getByText(CHICKEN.name));
+    const line = screen.getByTestId('add-food-equivalents');
+    expect(line).toHaveTextContent('Same as4 oz·1 palm-size portion');
+    // The everyday measure is in the unit picker too, but not the default.
+    expect(screen.getByTestId('add-food-unit')).toHaveValue('g');
+    expect(screen.getByRole('option', { name: 'palm-size portion (113 g)' })).toBeInTheDocument();
+    // The food still has no standard serving of its own.
+    await user.click(screen.getByRole('button', { name: 'Switch to 1 palm-size portion' }));
+    expect(screen.getByTestId('add-food-unit')).toHaveValue('everyday');
+    expect(screen.getByTestId('add-food-amount')).toHaveValue(1);
+    await user.click(screen.getByRole('button', { name: 'Add to Dinner' }));
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ serving_size: '1 palm-size portion (113g)', calories: 186 })
+    );
+  });
+
+  it('leaves ounces out of the equivalents for a metric user', async () => {
+    const user = userEvent.setup();
+    renderAdd({ units: 'kg' });
+    await user.click(screen.getByText(CHICKEN.name));
+    const line = screen.getByTestId('add-food-equivalents');
+    expect(line).toHaveTextContent('1 palm-size portion');
+    expect(line).not.toHaveTextContent('oz');
+  });
+
   it('the stepper changes the amount before adding, and that amount is logged', async () => {
     const user = userEvent.setup();
     const { onAdd } = renderAdd();

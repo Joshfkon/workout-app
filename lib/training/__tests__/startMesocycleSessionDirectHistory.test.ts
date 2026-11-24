@@ -244,9 +244,13 @@ function makeResponder(benchRow: BenchHistoryRow): Responder {
       if (Array.isArray(query.filters['id'])) {
         return { data: benchRow ? [benchRow, { id: EX_FLY, exercise_blocks: [] }] : [] };
       }
-      // Per-exercise metadata lookup by name (.single()).
+      // Batched metadata lookup by name (one .in('name', [...]) query).
       const name = query.filters['name'];
-      if (typeof name === 'string') return { data: EXERCISE_META[name] ?? null };
+      if (Array.isArray(name)) {
+        return {
+          data: (name as string[]).filter((n) => EXERCISE_META[n]).map((n) => ({ name: n, ...EXERCISE_META[n] })),
+        };
+      }
       return { data: null };
     }
     if (query.table === 'exercise_blocks') {
@@ -466,5 +470,35 @@ describe('coldStartTargetWeight', () => {
 
   it('rounds to the nearest 0.5 kg', () => {
     expect(coldStartTargetWeight(41.3, { intensityModifier: 1, isDeload: false })).toBe(41.5);
+  });
+});
+
+describe('startMesocycleWorkoutSession — start latency (UX round 20)', () => {
+  it('looks up every exercise’s metadata in ONE query, not one per exercise', async () => {
+    const { supabase, queries } = createSupabaseMock(makeResponder(null));
+    await startMesocycleWorkoutSession({
+      supabase,
+      mesocycle: baseMesocycle,
+      todayWorkout: null,
+      completedSessions: 0,
+    });
+    const byName = queries.filter((q) => q.table === 'exercises' && q.filters['name'] !== undefined);
+    expect(byName).toHaveLength(1);
+    expect(Array.isArray(byName[0].filters['name'])).toBe(true);
+    // The metadata still reaches the blocks (both exercises resolved).
+    expect(insertedBlocks(queries).map((b) => b.exercise_id).sort()).toEqual([EX_BENCH, EX_FLY].sort());
+  });
+
+  it('reports building (with the session id) then saving, for the start UI', async () => {
+    const { supabase } = createSupabaseMock(makeResponder(null));
+    const stages: string[] = [];
+    await startMesocycleWorkoutSession({
+      supabase,
+      mesocycle: baseMesocycle,
+      todayWorkout: null,
+      completedSessions: 0,
+      onStage: (stage, sessionId) => stages.push(`${stage}:${sessionId}`),
+    });
+    expect(stages).toEqual(['building:new-session', 'saving:new-session']);
   });
 });

@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { IconChevronRight } from '@tabler/icons-react';
+import { IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
 import { rowBarClass, rowTextClass, type VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 /** Rows shown before "See all". */
@@ -25,14 +26,27 @@ export function pickWeeklySetsRows(rows: VolumeRow[], max = WEEKLY_SETS_CARD_MAX
   return { shown: sorted.slice(0, max), total: coarse.length };
 }
 
-/** One-line digest for the header: "2 below MEV · 1 over MRV", or all-clear. */
+/**
+ * One-line digest for the header, in plain words with the acronym after:
+ * "2 muscles under their minimum (MEV) · 1 over its max (MRV)", or all-clear.
+ * "13 below MEV" alone was unexplained jargon to 6 of 6 panel personas
+ * (round 19).
+ */
 export function weeklySetsDigest(rows: VolumeRow[]): string {
   const coarse = rows.filter((r) => !r.isChild);
   const below = coarse.filter((r) => r.zone === 'below_mev' && r.warnable).length;
   const over = coarse.filter((r) => r.zone === 'over_mrv').length;
-  const parts = [below > 0 ? `${below} below MEV` : null, over > 0 ? `${over} over MRV` : null].filter(Boolean);
+  const parts = [
+    below > 0 ? `${below} ${below === 1 ? 'muscle' : 'muscles'} under ${below === 1 ? 'its' : 'their'} minimum (MEV)` : null,
+    over > 0 ? `${over} over ${over === 1 ? 'its' : 'their'} max (MRV)` : null,
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : 'Every trained muscle is in its range';
 }
+
+/** The plain-language key for MEV / MRV, shown from the card's info button. */
+export const MEV_MRV_EXPLAINER =
+  'MEV (minimum effective volume) is the fewest hard sets a week that still grow a muscle. ' +
+  'MRV (maximum recoverable volume) is the most you can recover from. Aim to land between the two.';
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
@@ -49,6 +63,7 @@ interface WeeklySetsCardProps {
  * Sets per week page, so the numbers agree everywhere.
  */
 export function WeeklySetsCard({ rows }: WeeklySetsCardProps) {
+  const [showKey, setShowKey] = useState(false);
   const { shown, total } = pickWeeklySetsRows(rows);
   if (shown.length === 0) return null;
   return (
@@ -57,8 +72,29 @@ export function WeeklySetsCard({ rows }: WeeklySetsCardProps) {
         <h2 id="home-weekly-sets-title" className="text-headline text-ink">
           Sets this week
         </h2>
-        <span className="text-caption text-ink-2">vs MEV–MRV</span>
+        {/* The jargon gets its key one tap away, right where it is used. */}
+        <button
+          type="button"
+          onClick={() => setShowKey((v) => !v)}
+          aria-expanded={showKey}
+          aria-controls="home-weekly-sets-key"
+          className="-my-2 -mr-2 inline-flex min-h-[44px] items-center gap-1 px-2 text-caption text-ink-2 hover:text-ink"
+          data-testid="home-weekly-sets-info"
+        >
+          vs MEV–MRV
+          <IconInfoCircle size={16} aria-hidden="true" />
+          <span className="sr-only">: what do these mean?</span>
+        </button>
       </div>
+      {showKey && (
+        <p
+          id="home-weekly-sets-key"
+          className="mt-1 rounded-lg bg-fill px-3 py-2 text-caption text-ink-2"
+          data-testid="home-weekly-sets-key"
+        >
+          {MEV_MRV_EXPLAINER}
+        </p>
+      )}
       <p className="mt-0.5 text-subhead text-ink-2" data-testid="home-weekly-sets-digest">
         {weeklySetsDigest(rows)}
       </p>

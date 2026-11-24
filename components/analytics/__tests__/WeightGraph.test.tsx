@@ -68,7 +68,9 @@ describe('WeightGraph', () => {
   it('labels the trend-line rate with its unit, matching the drawn trend', () => {
     render(<WeightGraph weightHistory={history} preferredUnit="lb" />);
     expect(screen.getByTestId('weight-trend')).toHaveTextContent(/That's −0\.\d lb\/wk/);
-    expect(screen.getByTestId('weight-trend')).toHaveTextContent(/can differ from your latest weigh-in/);
+    expect(screen.getByTestId('weight-trend')).toHaveTextContent(/can differ from your latest one/);
+    // The method is explained once, on the Progress summary — not here too.
+    expect(screen.getByTestId('weight-trend')).not.toHaveTextContent(/straight line|fitted/);
   });
 
   it('converts to the viewer unit', () => {

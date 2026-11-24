@@ -253,7 +253,7 @@ describe('TodayHeroCard — start workout handler (bugfix)', () => {
     expect(onStartWorkout).toHaveBeenCalledTimes(1);
   });
 
-  it('shows Starting... and disables button while starting', () => {
+  it('shows which start step is running, with a progress bar, and disables the button', () => {
     const onStartWorkout = jest.fn();
     
     render(
@@ -264,11 +264,15 @@ describe('TodayHeroCard — start workout handler (bugfix)', () => {
         mesocycleName="Arnold"
         onStartWorkout={onStartWorkout}
         isStarting
+        startStage="building"
       />
     );
 
-    const button = screen.getByRole('button', { name: 'Starting...' });
+    const button = screen.getByRole('button', { name: 'Picking weights… (2 of 4)' });
     expect(button).toBeDisabled();
+    expect(screen.getByTestId('workout-start-progress')).toHaveAttribute('data-stage', 'building');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '38');
+    expect(screen.getByText('Step 2 of 4: Picking weights from your history…')).toBeInTheDocument();
   });
 
   it('disables button when no onStartWorkout handler is provided', () => {

@@ -5,6 +5,8 @@ import {
   frequentFoodPortion,
   quickAddMessage,
   addedToMealMessage,
+  quickAddConfirmation,
+  mealTypeForHour,
   type FrequentFoodRow,
 } from '../frequentFoods';
 import type { FrequentFood } from '@/types/nutrition';
@@ -103,4 +105,27 @@ it('addedToMealMessage names the meal and where the day now stands', () => {
   expect(addedToMealMessage('Lunch', { calories: 900, protein: 40 }, { calories: null, protein: 150 })).toBe(
     'Added to Lunch · 900 kcal · 40 / 150 g protein'
   );
+});
+
+it('quickAddConfirmation says what was added, to which meal, and the day total', () => {
+  expect(
+    quickAddConfirmation('White Rice', '1 cup', 'Dinner', { calories: 283.2, protein: 11 }, { calories: 1872, protein: 144 })
+  ).toEqual({
+    added: 'Added White Rice (1 cup) to Dinner',
+    totals: 'Day total 283 / 1,872 kcal · 11 / 144 g protein',
+    removed: 'Removed White Rice (1 cup) from Dinner',
+  });
+});
+
+it.each([
+  [6, 'breakfast'],
+  [10, 'breakfast'],
+  [11, 'lunch'],
+  [14, 'lunch'],
+  [15, 'dinner'],
+  [19, 'dinner'],
+  [20, 'snack'],
+  [23, 'snack'],
+] as const)('mealTypeForHour(%p) → %p', (hour, meal) => {
+  expect(mealTypeForHour(hour)).toBe(meal);
 });

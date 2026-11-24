@@ -4,6 +4,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
+import { catalogShowsLoading } from './_lib/catalogLoading';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -270,10 +271,14 @@ export default function ExercisesPage() {
   // Skeleton only when we have NO catalog to show and aren't mid-restore. A
   // disabled/pre-mount query still returns cached data, so a revisit (SPA) or
   // warm reload (IndexedDB) renders the list immediately without the skeleton
-  // flash; only the first-ever load (empty cache) shows it. Keeping `!mounted`
-  // in the empty case preserves the server/client hydration match.
-  const isCatalogLoading =
-    !isRestoring && (!mounted || catalogQuery.isLoading) && exercises.length === 0;
+  // flash; only the first-ever load (empty cache) shows it. Hydration-safe:
+  // `isRestoring` is ignored before mount (see catalogShowsLoading).
+  const isCatalogLoading = catalogShowsLoading({
+    mounted,
+    isRestoring,
+    isQueryLoading: catalogQuery.isLoading,
+    count: exercises.length,
+  });
 
   // Optimistic writer for the cached catalog — drop-in for the old setExercises.
   const mutateExercises = useCallback(

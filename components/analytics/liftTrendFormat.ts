@@ -87,14 +87,9 @@ export function moreWorkouts(n: number): string {
   return `${n} more workout${n === 1 ? '' : 's'}`;
 }
 
-/** "once more" / "2 more times". */
-export function moreTimes(n: number): string {
-  return n === 1 ? 'once more' : `${n} more times`;
-}
-
 /**
  * The one concrete next step toward a first trend, for the lift closest to
- * one, in plain words: "Log Squat once more to see its trend line." Null
+ * one, in plain words: "Log Squat in 1 more workout to see if it's going up." Null
  * when there is no not-yet-trended lift.
  */
 export function nextTrendHint(earlyLifts: readonly EarlyLift[] | null | undefined): string | null {
@@ -102,7 +97,7 @@ export function nextTrendHint(earlyLifts: readonly EarlyLift[] | null | undefine
   const closest = earlyLifts.reduce((a, b) => (b.sessions > a.sessions ? b : a));
   const n = workoutsUntilTrend(closest.sessions);
   if (n === 0) return null;
-  return `Log ${closest.name} ${moreTimes(n)} to see its trend line.`;
+  return `Log ${closest.name} in ${moreWorkouts(n)} to see if it's going up.`;
 }
 
 /**

@@ -86,6 +86,7 @@ import { convertWeightForDisplay, formatDate, formatWeight } from '@/lib/utils';
 import { localDaysBetween } from '@/lib/date/localDay';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
 import { formatTargetRange, getSetReps, type ModalitySource } from '@/services/shared/setModality';
+import { WorkoutStartProgress, workoutStartLabel, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
 
 interface SheetExercise {
   id: string;
@@ -293,14 +294,14 @@ export function pickWhyLine(args: {
   return basis ? `${lead} Starts at ~${w}, estimated from ${basis}.` : `${lead} Starts at ~${w} (an estimate).`;
 }
 
-type StartStage = 'creating' | 'opening';
-
 /**
  * The Start button's copy while starting: which step it is on, not a bare
- * "Starting..." (UX panel round 19: the wait read as a stall).
+ * "Starting..." (UX panel round 19: the wait read as a stall). The steps
+ * themselves, with a progress bar, render under the button
+ * (WorkoutStartProgress).
  */
-export function startStageLabel(stage: StartStage): string {
-  return stage === 'opening' ? 'Opening your workout…' : 'Setting up your workout…';
+export function startStageLabel(stage: WorkoutStartStage): string {
+  return workoutStartLabel(stage);
 }
 
 interface SuggestedWorkoutSheetProps {
@@ -417,7 +418,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   const [aiPlan, setAiPlan] = useState<SubstitutedWorkoutPlan | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   /** Where the start is (button copy): building the session, then opening it. */
-  const [startStage, setStartStage] = useState<StartStage>('creating');
+  const [startStage, setStartStage] = useState<WorkoutStartStage>('preparing');
   // One-tap start from Home: cleared by the first start or any user edit.
   const [autoStartPending, setAutoStartPending] = useState(autoStart);
   const [error, setError] = useState<string | null>(null);
@@ -880,7 +881,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   const handleStart = async () => {
     if (!aiPlan || aiPlan.exercises.length === 0 || isStarting) return;
     setIsStarting(true);
-    setStartStage('creating');
+    setStartStage('preparing');
     setError(null);
     try {
       // Only bounce to /login when the persisted session is genuinely absent.
@@ -912,6 +913,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
       } catch {
         // Prefetch is an optimisation only.
       }
+      setStartStage('building');
       const transferCandidates = await transferCandidatesPromise;
 
       let order = 1;
@@ -1007,6 +1009,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
       if (blocks.length === 0) throw new Error('No exercises to start');
       rememberDuration(aiDuration);
 
+      setStartStage('saving');
       const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
       if (blocksError) throw blocksError;
 
@@ -1200,6 +1203,9 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
             <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
             {autoStartPending ? `Building and starting today’s ~${aiDuration}-minute workout…` : `Building a ~${aiDuration}-minute workout...`}
           </p>
+          {/* One-tap start: the same step list the Start button shows, from
+              the first frame, so the wait is visibly moving (round 19). */}
+          {autoStartPending && <WorkoutStartProgress stage="preparing" />}
         </div>
       )}
 
@@ -1421,6 +1427,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
           </div>
 
           <div className="space-y-2">
+            {isStarting && <WorkoutStartProgress stage={startStage} className="pb-1" />}
             <button
               onClick={handleStart}
               disabled={isStarting || aiPlan.exercises.length === 0}

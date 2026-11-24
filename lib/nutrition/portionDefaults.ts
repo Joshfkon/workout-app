@@ -162,6 +162,34 @@ export function typicalPortionForSystemFood(food: SystemFoodLike): TypicalPortio
   };
 }
 
+/**
+ * Everyday measures for foods people weigh, offered next to grams (never the
+ * default). Only where the measure is a common, fair stand-in for the typical
+ * portion above: a palm-size piece of meat or fish ≈ 4 oz, a small handful of
+ * nuts ≈ 1 oz, a scoop of powder ≈ 30 g. Grains are left out: a cup of cooked
+ * rice, pasta and quinoa weigh too differently for one number.
+ */
+const EVERYDAY_BY_SUBCATEGORY: Record<string, { noun: string; grams: number }> = {
+  poultry: { noun: 'palm-size portion', grams: 113 },
+  beef: { noun: 'palm-size portion', grams: 113 },
+  pork: { noun: 'palm-size portion', grams: 113 },
+  game: { noun: 'palm-size portion', grams: 113 },
+  fish: { noun: 'palm-size portion', grams: 113 },
+  seafood: { noun: 'palm-size portion', grams: 113 },
+  nuts: { noun: 'small handful', grams: 28 },
+  protein_powder: { noun: 'scoop', grams: 30 },
+};
+
+/**
+ * An everyday measure for a weighed system food ("palm-size portion"), or
+ * null. Foods with their own name-specific portion (28 g of cheddar) get none.
+ */
+export function everydayUnitForSystemFood(food: SystemFoodLike): { noun: string; grams: number } | null {
+  if (TYPICAL_BY_NAME[food.name.trim()]) return null;
+  const sub = food.subcategory ?? null;
+  return (sub && EVERYDAY_BY_SUBCATEGORY[sub]) || null;
+}
+
 /** Typical portion for a system food, or null when we don't know one. */
 export function typicalPortionGramsForSystemFood(food: SystemFoodLike): number | null {
   return typicalPortionForSystemFood(food)?.grams ?? null;
