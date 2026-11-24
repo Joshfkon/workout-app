@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BUILDER_INPUTS_QUERY_KEY, fetchBuilderInputs } from '@/lib/training/fetchBuilderInputs';
 import { invalidatePlannedFrequency } from '@/hooks/usePlannedFrequency';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Slider, Badge, Toggle } from '@/components/ui';
 import { FirstTimeHint, InlineHint } from '@/components/ui/FirstTimeHint';
 import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -34,13 +34,16 @@ import {
   calculateRecoveryFactors,
   effectiveTrainingAge,
   evaluateMesocycleLength,
+  recommendVolume,
   type MesocycleRecommendation,
+  type StartingVolume,
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
 import {
   generateFullMesocycleWithFatigue,
   sessionSetCapacity,
   MAX_SETS_PER_MUSCLE_PER_SESSION,
+  MAX_SESSION_MUSCLE_CEILING,
 } from '@/services/sessionBuilderWithFatigue';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import {
@@ -67,6 +70,10 @@ import {
   defaultSessionMinutes,
   sessionLengthOptions,
   onboardingScheduleDefaults,
+  oncePerWeekPriorities,
+  twiceWeeklySplitFor,
+  splitMinDays,
+  splitLabel,
   type OnboardingScheduleDefaults,
   type BuilderHistoryDefaults,
   type MusclePriorityRow,
@@ -79,9 +86,10 @@ import { BuilderSkeleton } from '../_components/BuilderSkeleton';
 import { ReviewVolumeTable } from '../_components/ReviewVolumeTable';
 import { SaveBlockBar } from '../_components/SaveBlockBar';
 import { SessionCeilingChooser } from '../_components/SessionCeilingChooser';
-
-/** Days a split's rotation needs so no day is dropped (Bro Split: one per body part). */
-const SPLIT_MIN_DAYS: Record<string, number> = { 'Bro Split': 5, 'Upper/Lower': 4 };
+import { SplitChooser } from '../_components/SplitChooser';
+import { StartingVolumeChooser } from '../_components/StartingVolumeChooser';
+import { PriorityFrequencyWarning } from '../_components/PriorityFrequencyWarning';
+import { PlanBuildingIndicator } from '../_components/PlanBuildingIndicator';
 
 /** The generator's session-cap warning (sessionBuilderWithFatigue Step 8b);
  *  the review's volume card says it with the fix beside it, so the
@@ -130,6 +138,13 @@ export default function NewMesocyclePage() {
   // Hard sets one muscle may get in one session. 12 for everyone; an
   // advanced lifter on a once-a-week split may raise it (up to 16).
   const [sessionCeilingChoice, setSessionCeilingChoice] = useState(MAX_SETS_PER_MUSCLE_PER_SESSION);
+  // Where each muscle's target sits on its MEV–MAV–MRV landmarks
+  // (mesocycleBuilder StartingVolume). Standard = MAV.
+  const [startingVolume, setStartingVolume] = useState<StartingVolume>('standard');
+  // The plan is generated off the render path so a "Building your plan"
+  // line can paint first (UX panel round 21: "a progress indicator while
+  // the plan builds").
+  const [isBuilding, setIsBuilding] = useState(false);
   // Once the lifter moves the length, the loaded default stops overwriting it.
   const sessionLengthTouchedRef = useRef(false);
   const chooseSessionLength = (minutes: number) => {
@@ -467,8 +482,20 @@ export default function NewMesocyclePage() {
       totalWeeks,
       priorityAdjustments,
       splitType as Split,
-      { maxSetsPerMusclePerSession: sessionCeiling, reportPriorityEffects }
+      { maxSetsPerMusclePerSession: sessionCeiling, reportPriorityEffects, startingVolume }
     );
+
+  /** Pick a split (the cards, or the one-tap fix beside a priority). A
+   *  split needs its whole rotation each week: a 5-day body-part split in
+   *  4 sessions dropped Legs, so the days rise to what it needs. */
+  const chooseSplit = (next: Split) => {
+    setSplitType(next);
+    setSplitTouched(true);
+    const needs = splitMinDays(next);
+    if (scheduleMode === 'fixed_days' && daysPerWeek * effectiveSessionsPerDay < needs) {
+      setDaysPerWeek(Math.ceil(needs / effectiveSessionsPerDay));
+    }
+  };
 
   // Calculate recovery factors for display
   const recoveryFactors = calculateRecoveryFactors(extendedProfile);
@@ -521,16 +548,22 @@ export default function NewMesocyclePage() {
   // The chosen length drives generation — the program has exactly totalWeeks
   // weeks and its last one is the deload this page promises.
   useEffect(() => {
-    if (useAiRecommendation) {
-      // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks.
-      // The review also compares against the plan without priorities (a
-      // second generation), so earlier steps skip that.
+    if (!useAiRecommendation) return;
+    // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks.
+    // The review also compares against the plan without priorities (a
+    // second generation), so earlier steps skip that. Deferred one tick so
+    // the "Building your plan" line paints before the (synchronous)
+    // generation runs; a newer input cancels a pending build.
+    setIsBuilding(true);
+    const timer = setTimeout(() => {
       setFullProgram(buildProgramAt(sessionDurationMinutes, onReview));
-    }
+      setIsBuilding(false);
+    }, 0);
+    return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
       userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks, priorityAdjustments, splitType, laggingAreas,
-      sessionCeiling, onReview]);
+      sessionCeiling, onReview, startingVolume]);
 
   // The generated plan read week by week: credited sets per muscle, volume
   // and load shares, RIR (lib/training/builderDefaults weekByWeekPlan).
@@ -647,12 +680,15 @@ export default function NewMesocyclePage() {
     }
   };
 
-  const splitOptions = [
-    { value: 'PPL', label: 'Push/Pull/Legs' },
-    { value: 'Upper/Lower', label: 'Upper/Lower' },
-    { value: 'Full Body', label: 'Full Body' },
-    { value: 'Bro Split', label: 'Bro Split (5-day)' },
-  ];
+  // High priorities the split trains once a week (the warning beside the
+  // priority editor), and what each starting volume means in sets.
+  const oncePerWeek = oncePerWeekPriorities(priorityAdjustments, fullProgram?.volumePerMuscle);
+  const startingVolumeExamples = Object.fromEntries(
+    (['conservative', 'standard', 'high'] as const).map((v) => [
+      v,
+      `e.g. quads ${recommendVolume(userExperience, userGoal, 'quads', enhancedAthleteMode, v)}, back ${recommendVolume(userExperience, userGoal, 'back', enhancedAthleteMode, v)} sets a week`,
+    ])
+  ) as Record<StartingVolume, string>;
 
   // Check subscription access (must be after all hooks)
   if (!subLoading && !canAccess('mesocycleBuilder')) {
@@ -730,6 +766,26 @@ export default function NewMesocyclePage() {
       {/* Step 1: Context Card */}
       {step === 1 && showBeginnerTips && (
         <ContextCard cardKey="mesocycleSchedule" variant="subtle" defaultCollapsed={!isFirstMesocycle} />
+      )}
+
+      {/* The split, as the first decision on the page (UX panel round 21). */}
+      {step === 1 && (
+        <Card variant="elevated">
+          <SplitChooser
+            value={splitType}
+            recommended={useAiRecommendation ? recommendation?.splitType ?? null : null}
+            matchesHistory={historySplit}
+            sessionsPerWeek={plannedSessionsPerWeek}
+            onChoose={chooseSplit}
+          />
+          <PlanBuildingIndicator active={isBuilding} className="mt-2" />
+          {fullProgram && fullProgram.split !== splitType && !isBuilding && (
+            <p className="mt-2 text-caption text-status-warn" data-testid="builder-split-fallback">
+              {splitLabel(splitType)} needs {splitMinDays(splitType)} sessions a week; with {plannedSessionsPerWeek} this plan uses{' '}
+              {splitLabel(fullProgram.split)}.
+            </p>
+          )}
+        </Card>
       )}
 
       {/* Your Profile Summary */}
@@ -1191,6 +1247,17 @@ export default function NewMesocyclePage() {
                   <MusclePrioritySettings userId={userId} onSave={applySavedPriorities} />
                 </div>
               )}
+              {fullProgram && (
+                <PriorityFrequencyWarning
+                  muscles={oncePerWeek}
+                  split={fullProgram.split}
+                  ceiling={sessionCeiling}
+                  canRaiseCeiling={canRaiseCeiling}
+                  onRaiseCeiling={() => setSessionCeilingChoice(MAX_SESSION_MUSCLE_CEILING)}
+                  twiceWeeklySplit={twiceWeeklySplitFor(plannedSessionsPerWeek)}
+                  onSwitchSplit={chooseSplit}
+                />
+              )}
             </div>
 
             <Input
@@ -1200,31 +1267,21 @@ export default function NewMesocyclePage() {
               placeholder="e.g., Hypertrophy Block 1"
             />
 
-            <Select
-              label="Training split"
-              value={splitType}
-              onChange={(e) => {
-                const next = e.target.value;
-                setSplitType(next);
-                setSplitTouched(true);
-                // A body-part split is five days; squeezed into four, the
-                // generator dropped a day (legs). Give it its days.
-                const needs = SPLIT_MIN_DAYS[next] ?? 0;
-                if (scheduleMode === 'fixed_days' && daysPerWeek < needs) setDaysPerWeek(needs);
-              }}
-              options={splitOptions}
-              hint={
-                splitTouched
-                  ? SPLIT_MIN_DAYS[splitType] && daysPerWeek === SPLIT_MIN_DAYS[splitType] && splitType === 'Bro Split'
-                    ? 'Set to 5 days — one per body part.'
-                    : undefined
-                  : historySplit && splitType === historySplit
-                    ? 'Matches your recent training.'
-                    : useAiRecommendation && recommendation
-                      ? `Recommended for ${plannedSessionsPerWeek} sessions a week: ${recommendation.splitType}. Pick another if you prefer — the plan follows your choice.`
-                      : undefined
-              }
-            />
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-fill/30 p-3" data-testid="builder-customize-split">
+              <p className="text-subhead text-ink">
+                <span className="text-ink-2">Split:</span> <span className="font-semibold">{splitLabel(splitType)}</span>
+              </p>
+              <button
+                type="button"
+                className="min-h-[44px] px-2 font-semibold text-action"
+                onClick={() => setStep(1)}
+                data-testid="builder-change-split"
+              >
+                Change split
+              </button>
+            </div>
+
+            <StartingVolumeChooser value={startingVolume} onChange={setStartingVolume} examples={startingVolumeExamples} />
 
             {canRaiseCeiling && (
               <SessionCeilingChooser value={sessionCeiling} onChange={setSessionCeilingChoice} />
@@ -1307,6 +1364,7 @@ export default function NewMesocyclePage() {
                   : `${daysPerWeek} days/week`}{' '}
                 · {sessionDurationMinutes} min · {totalWeeks} weeks (week {totalWeeks} is a deload)
               </p>
+              <PlanBuildingIndicator active={isBuilding} className="mt-1" />
             </div>
 
             {/* Weekly sets per muscle: one line per concept, details folded.
@@ -1964,6 +2022,7 @@ export default function NewMesocyclePage() {
               saved={saved}
               error={error}
               blockName={name}
+              isBuilding={isBuilding}
             />
           </div>
         </Card>

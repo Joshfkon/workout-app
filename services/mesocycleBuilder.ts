@@ -38,6 +38,7 @@ import type {
 import {
   COARSE_CHILDREN,
   COARSE_MUSCLES,
+  coarseVolumeLandmarks,
   FINE_CHILD_MUSCLES,
   getEffectiveBand,
   getStandardMev,
@@ -927,13 +928,44 @@ function buildWeeklyProgression(
 // ============================================================
 
 /**
+ * The builder's "Starting volume" choice: where in each muscle's MEV–MAV–MRV
+ * landmarks the block's peak-week target sits (before the goal adjustment).
+ *   conservative — halfway from MEV to MAV
+ *   standard     — at MAV
+ *   high         — halfway from MAV to MRV
+ * Omitted, the generator keeps its long-standing per-experience presets
+ * (recommendVolume's table), so headless callers and the simulation are
+ * unchanged.
+ */
+export type StartingVolume = 'conservative' | 'standard' | 'high';
+
+export const STARTING_VOLUME_OPTIONS: readonly StartingVolume[] = ['conservative', 'standard', 'high'];
+
+/**
+ * A coarse group's weekly target for a starting-volume choice, in credited
+ * sets, from its landmarks (coarseVolumeLandmarks). Pure.
+ */
+export function landmarkVolumeTarget(
+  muscle: CoarseMuscle,
+  experience: Experience,
+  startingVolume: StartingVolume,
+  enhancedAthleteMode?: boolean
+): number {
+  const l = coarseVolumeLandmarks(muscle, experience, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
+  const at = startingVolume === 'conservative' ? (l.mev + l.mav) / 2 : startingVolume === 'high' ? (l.mav + l.mrv) / 2 : l.mav;
+  return Math.round(at);
+}
+
+/**
  * Recommend sets per muscle group per week based on comprehensive factors
  */
 export function recommendVolume(
   experience: Experience,
   goal: Goal,
   muscleGroup: string,
-  enhancedAthleteMode?: boolean
+  enhancedAthleteMode?: boolean,
+  /** Anchor the target on the landmarks instead of the preset table. */
+  startingVolume?: StartingVolume
 ): number {
   // Base volumes (MAV estimates), TOTAL-INCLUSIVE (convention-conversion v2,
   // ADOPTED): the tracking surfaces count credited volume (0.5/secondary
@@ -998,13 +1030,18 @@ export function recommendVolume(
     erectors: { novice: 5, intermediate: 8, advanced: 10 },
   };
 
-  let volume = baseVolumes[muscleGroup]?.[experience] || 12;
+  const isCoarseGroup = (COARSE_MUSCLES as readonly string[]).includes(muscleGroup);
+  let volume =
+    startingVolume && isCoarseGroup
+      ? landmarkVolumeTarget(muscleGroup as CoarseMuscle, experience, startingVolume, enhancedAthleteMode)
+      : baseVolumes[muscleGroup]?.[experience] || 12;
 
   // Enhanced preset shift is capped at +10% — deliberately LESS than the
   // enhanced MRV scaling (min tier ×1.15, see ENHANCED_MRV_MULTIPLIERS): the
   // extra ceiling is headroom for autoregulated exploration, not a
   // prescription. (Replaces the old flat ×1.25 MAV bump.)
-  if (enhancedAthleteMode) {
+  // (The landmark path's MAV already carries the enhanced shift.)
+  if (enhancedAthleteMode && !(startingVolume && isCoarseGroup)) {
     volume = Math.round(volume * 1.10);
   }
 
@@ -1024,6 +1061,9 @@ export function recommendVolume(
       recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard',
     });
     volume = Math.min(volume, band.mrv);
+    // A landmark-anchored target never starts under MEV (a cut's ×0.7 on
+    // "conservative" would otherwise plan maintenance-or-less).
+    if (startingVolume) volume = Math.max(volume, band.mev);
   }
 
   return volume;
@@ -1057,7 +1097,9 @@ export function calculateVolumeDistribution(
   recoveryFactors: RecoveryFactors,
   laggingAreas?: string[],  // From regional DEXA analysis
   volumeAdjustments?: VolumeAdjustmentInput[],  // From imbalance engine or user priorities
-  enhancedAthleteMode?: boolean
+  enhancedAthleteMode?: boolean,
+  /** The builder's starting-volume choice (StartingVolume); omitted = presets. */
+  startingVolume?: StartingVolume
 ): Record<MuscleGroup, { sets: number; frequency: number }> {
 
   // traps added in the residuals pass: it was absent from planning entirely
@@ -1156,7 +1198,7 @@ export function calculateVolumeDistribution(
   }
 
   muscles.forEach(muscle => {
-    let baseVolume = recommendVolume(experience, goal, muscle, enhancedAthleteMode);
+    let baseVolume = recommendVolume(experience, goal, muscle, enhancedAthleteMode, startingVolume);
 
     // Apply muscle-specific multiplier
     const muscleMultiplier = muscleMultipliers.get(muscle) || 1.0;

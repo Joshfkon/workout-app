@@ -8,6 +8,7 @@
  * refused every hinge after the quads), and the per-session ceiling
  * (now raisable to 16 for a once-a-week split).
  */
+import { COARSE_MUSCLES, coarseVolumeLandmarks, type CoarseMuscle } from '../volumeBands';
 import {
   creditedSetsByGroup,
   creditedSetsByHead,
@@ -110,11 +111,18 @@ describe('a high priority raises peak weekly sets by a meaningful amount', () =>
   });
 
   // Bro Split ×5 trains each muscle once: the per-session ceiling binds, so
-  // the raised ceiling is what lets the priority show.
-  it.each(['hamstrings', 'biceps', 'back', 'lateral_delts'])('Bro Split ×5, 75 min, 16-set ceiling: %s +3 or more', (muscle) => {
+  // the raised ceiling is what lets the priority show — unless the plain
+  // plan already fills that one session past MAV (since round 22 a day's
+  // leftover minutes go to its muscles: Bro Split biceps 22, back 18.5 at
+  // a 16-set limit with no priority), where there is nothing left to add.
+  it.each(['hamstrings', 'biceps', 'back', 'lateral_delts'])('Bro Split ×5, 75 min, 16-set ceiling: %s +3 or more, or already past MAV', (muscle) => {
     const before = peak(build('Bro Split', 5, [], 16), muscle);
     const after = peak(build('Bro Split', 5, high(muscle), 16), muscle);
-    expect(after - before).toBeGreaterThanOrEqual(3);
+    expect(after).toBeGreaterThanOrEqual(before);
+    const alreadyPastMav =
+      (COARSE_MUSCLES as readonly string[]).includes(muscle) &&
+      before >= coarseVolumeLandmarks(muscle as CoarseMuscle, 'advanced').mav;
+    if (!alreadyPastMav) expect(after - before).toBeGreaterThanOrEqual(3);
   });
 
   it('Bro Split ×5 at the default ceiling never lowers the prioritized muscle', () => {

@@ -10,7 +10,7 @@ import {
   type Split,
   type StandardMuscleGroup,
 } from '@/types/schema';
-import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
+import type { StartingVolume, VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
 import { COARSE_MUSCLES, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
 // The same head counter enforceNonDecreasingRamp holds non-decreasing.
 import {
@@ -589,4 +589,94 @@ export function onboardingScheduleDefaults(preferences: unknown): OnboardingSche
       ? ONBOARDING_SPLIT[prefs.currentSplit]
       : null;
   return { daysPerWeek, split };
+}
+
+// ============================================================
+// SPLIT CHOICE, STARTING VOLUME, PRIORITY FREQUENCY (UX round 22)
+// ============================================================
+
+export interface SplitChoice {
+  split: Split;
+  label: string;
+  /** What the week is like, in plain words. */
+  blurb: string;
+  /** Fewest sessions a week the rotation needs (no day dropped). */
+  minDays: number;
+}
+
+/**
+ * The splits the builder offers as cards, in the order a lifter reads them
+ * (UX panel round 21: "The split was AI-chosen by default and I didn't see a
+ * clear way to choose my own"). minDays matches the generator's rotation
+ * (sessionBuilderWithFatigue splitRotationLength): a split given fewer
+ * sessions falls back to the recommendation.
+ */
+export const SPLIT_CHOICES: readonly SplitChoice[] = [
+  { split: 'Full Body', label: 'Full Body', blurb: 'Every session trains the whole body, so each muscle gets 2–3 days a week.', minDays: 2 },
+  { split: 'Upper/Lower', label: 'Upper / Lower', blurb: 'Upper-body and lower-body days in turn; each muscle twice a week on 4 days.', minDays: 4 },
+  { split: 'PPL', label: 'Push / Pull / Legs', blurb: 'Pushing muscles, pulling muscles, then legs; each muscle once a week on 3 days, twice on 6.', minDays: 3 },
+  { split: 'Arnold', label: 'Arnold', blurb: 'Chest & back, then shoulders & arms, then legs; once a week on 3 days, twice on 6.', minDays: 3 },
+  { split: 'Bro Split', label: 'Bro Split', blurb: 'One body part a day over 5 days; each muscle once a week, in one long session.', minDays: 5 },
+];
+
+/** Fewest sessions a week a split needs (SPLIT_CHOICES). */
+export function splitMinDays(split: string): number {
+  return SPLIT_CHOICES.find((c) => c.split === split)?.minDays ?? 2;
+}
+
+/** The plain-words label for a split ("Push / Pull / Legs"). */
+export function splitLabel(split: string): string {
+  return SPLIT_CHOICES.find((c) => c.split === split)?.label ?? split;
+}
+
+/** The builder's "Starting volume" choices, each against the landmarks
+ *  (mesocycleBuilder StartingVolume). */
+export const STARTING_VOLUME_CHOICES: readonly { value: StartingVolume; label: string; detail: string }[] = [
+  { value: 'conservative', label: 'Conservative', detail: 'halfway from MEV to MAV' },
+  { value: 'standard', label: 'Standard', detail: 'at MAV' },
+  { value: 'high', label: 'High', detail: 'halfway from MAV to MRV' },
+];
+
+/** A high-priority muscle (or head) the chosen split trains once a week. */
+export interface OncePerWeekPriority {
+  label: string;
+  muscleGroup: MuscleGroup;
+  head?: StandardMuscleGroup;
+}
+
+/**
+ * High priorities whose muscle the plan trains in only one session a week
+ * (Bro Split, or PPL/Arnold on 3 days). One session holds about the
+ * per-session limit of a muscle, so a priority there adds little (UX panel
+ * round 21: "high priority only gave hamstrings +1 set. The app doesn't
+ * warn about the frequency limit"). `volumePerMuscle[group].frequency` is
+ * the generator's count of sessions that train the group. Pure.
+ */
+export function oncePerWeekPriorities(
+  adjustments: readonly VolumeAdjustmentInput[],
+  volumePerMuscle: Partial<Record<string, { frequency: number }>> | null | undefined
+): OncePerWeekPriority[] {
+  if (!volumePerMuscle) return [];
+  const out: OncePerWeekPriority[] = [];
+  const seen = new Set<string>();
+  for (const a of adjustments) {
+    if (a.reason !== 'user_priority' || a.volumeMultiplier <= 1) continue;
+    const key = a.head ?? a.muscleGroup;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (volumePerMuscle[a.muscleGroup]?.frequency !== 1) continue;
+    out.push({ label: priorityLabel(a), muscleGroup: a.muscleGroup, head: a.head });
+  }
+  return out;
+}
+
+/**
+ * A split that trains every muscle at least twice a week in
+ * `sessionsPerWeek` sessions, for the one-tap fix beside the once-a-week
+ * warning: Full Body up to 3, Upper/Lower at 4–5, Push/Pull/Legs at 6+. Pure.
+ */
+export function twiceWeeklySplitFor(sessionsPerWeek: number): Split {
+  if (sessionsPerWeek >= 6) return 'PPL';
+  if (sessionsPerWeek >= 4) return 'Upper/Lower';
+  return 'Full Body';
 }
