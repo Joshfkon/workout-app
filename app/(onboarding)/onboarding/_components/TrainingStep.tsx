@@ -2,6 +2,7 @@
 
 import { IconCheck } from '@tabler/icons-react';
 import { Button } from '@/components/ui';
+import { ProTag } from '@/components/subscription/ProTag';
 import type { Goal as NutritionGoal } from '@/lib/nutrition/macroCalculator';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import {
@@ -87,6 +88,14 @@ export function TrainingStep({
         <p className="text-ink-2">
           Optional. Answer what you know and skip the rest. It starts your first training plan
           from how you already train.
+        </p>
+        {/* Say what's paid where the plan is first offered, not after setup
+            (UX panel round 19: an advanced lifter found the Pro label on
+            "Build a program" only on Home). The free path is named first. */}
+        <p className="mt-3 rounded-lg bg-fill px-3 py-2 text-left text-caption text-ink-2" data-testid="onboarding-pro-note">
+          Logging workouts, your history and progress are free. Building a multi-week program
+          (a training block) is a <ProTag feature="mesocycleBuilder" className="align-middle" /> feature
+          you can try free for your first 14 days.
         </p>
       </div>
 

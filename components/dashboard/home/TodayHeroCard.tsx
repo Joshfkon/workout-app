@@ -7,6 +7,7 @@ import { IconSparkles } from '@tabler/icons-react';
 import { FirstTimeHint } from '@/components/ui';
 import { StartWorkoutButton } from './StartWorkoutButton';
 import { StartTodaysWorkoutButton } from './StartTodaysWorkoutButton';
+import { WorkoutStartProgress, workoutStartLabel, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
 
 /** Summary of today's workout session shown on the dashboard. */
 export interface TodaysWorkout {
@@ -66,6 +67,8 @@ interface TodayHeroCardProps {
   onStartWorkout?: () => void;
   /** True while starting a workout. */
   isStarting?: boolean;
+  /** Which step a running start is on (drives the label + progress bar). */
+  startStage?: WorkoutStartStage;
   /**
    * Freestyle "Ready to train?" secondary starts under Start workout
    * (FreestyleStartActions: Repeat last · Suggest one). Omit to fall back to
@@ -206,6 +209,7 @@ export function TodayHeroCard({
   coachLine,
   onStartWorkout,
   isStarting = false,
+  startStage = 'preparing',
   freestyleActions,
   foodFocus = false,
 }: TodayHeroCardProps) {
@@ -259,14 +263,18 @@ className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill
             title={scheduled.dayName}
             meta={workoutMeta ?? null}
             cta={
-              <button
-                type="button"
-                onClick={onStartWorkout}
-                disabled={isStarting || !onStartWorkout}
-                className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isStarting ? 'Starting...' : 'Start workout'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onStartWorkout}
+                  disabled={isStarting || !onStartWorkout}
+                  aria-busy={isStarting || undefined}
+                  className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isStarting ? workoutStartLabel(startStage) : 'Start workout'}
+                </button>
+                {isStarting && <WorkoutStartProgress stage={startStage} compact className="mt-2" />}
+              </>
             }
           >
             {coachLine && <CoachLine text={coachLine} />}

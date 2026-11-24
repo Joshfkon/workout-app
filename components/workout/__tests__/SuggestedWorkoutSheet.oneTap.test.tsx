@@ -326,10 +326,14 @@ describe('SuggestedWorkoutSheet: injury areas and the start wait (round 19)', ()
     const user = userEvent.setup();
     render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Start workout (2 exercises)' }));
-    expect(await screen.findByRole('button', { name: 'Setting up your workout…' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Checking your plan… (1 of 4)' })).toBeDisabled();
+    // A step list with a progress bar under the button, not just a label.
+    expect(screen.getByTestId('workout-start-progress')).toHaveAttribute('data-stage', 'preparing');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '13');
     releaseSession({ sessionId: 'sess-9', isNewSession: true });
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard/workout/sess-9?fromCreate=true'));
     expect(mockPrefetch).toHaveBeenCalledWith('/dashboard/workout/sess-9?fromCreate=true');
-    expect(screen.getByRole('button', { name: 'Opening your workout…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Opening workout… (4 of 4)' })).toBeDisabled();
+    expect(screen.getByTestId('workout-start-progress')).toHaveAttribute('data-stage', 'opening');
   });
 });

@@ -73,17 +73,21 @@ export async function getOrCreateTodaySession(
 
   // Rule 12: with no explicit location (blank / quick workout), silently adopt
   // the last-used location so sets are still stamped for calibration.
-  const effectiveLocationId =
-    locationId ?? (await resolveDefaultLocationId(supabase, userId).catch(() => null));
-
-  const { data: existingSessions } = await supabase
-    .from('workout_sessions')
-    .select('id, state')
-    .eq('user_id', userId)
-    .eq('planned_date', today)
-    .is('mesocycle_id', null)
-    .in('state', ['planned', 'in_progress'])
-    .limit(1);
+  // Both reads are independent, so they run together (a start tap used to
+  // wait on them one after the other).
+  const [effectiveLocationId, { data: existingSessions }] = await Promise.all([
+    typeof locationId === 'string'
+      ? Promise.resolve<string | null>(locationId)
+      : resolveDefaultLocationId(supabase, userId).catch(() => null),
+    supabase
+      .from('workout_sessions')
+      .select('id, state')
+      .eq('user_id', userId)
+      .eq('planned_date', today)
+      .is('mesocycle_id', null)
+      .in('state', ['planned', 'in_progress'])
+      .limit(1),
+  ]);
 
   const existing: { id: string; state: string } | undefined = existingSessions?.[0];
   if (existing) {

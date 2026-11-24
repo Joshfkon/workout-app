@@ -1,5 +1,6 @@
 'use client';
 
+import { ProTag } from '@/components/subscription/ProTag';
 import { IconAlertTriangle, IconApple, IconBarbell, IconChartLine, IconSparkles } from '@tabler/icons-react';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -470,6 +471,7 @@ function CompleteContent() {
               <div className="flex items-center gap-2 mb-1">
                 <IconBarbell size={20} className="text-action" aria-hidden="true" />
                 <span className="font-medium text-ink">Create mesocycle</span>
+                <ProTag feature="mesocycleBuilder" />
               </div>
               <p className="text-caption text-ink-3">AI-generated training blocks with S-tier exercises</p>
             </div>
@@ -486,6 +488,7 @@ function CompleteContent() {
               <div className="flex items-center gap-2 mb-1">
                 <IconSparkles size={20} className="text-action" aria-hidden="true" />
                 <span className="font-medium text-ink">AI coaching</span>
+                <ProTag feature="ai-coaching" />
               </div>
               <p className="text-caption text-ink-3">Get personalized advice before every workout</p>
             </div>
