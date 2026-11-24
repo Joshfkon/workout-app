@@ -49,6 +49,7 @@ import {
   clearPendingWorkoutPreview,
   recordEarlyLoggedSet,
   takeEarlyLoggedSet,
+  getEarlyLoggedSet,
 } from '@/lib/training/pendingWorkoutStart';
 import { WorkoutStartPreview } from './_components/WorkoutStartPreview';
 import { WorkoutNoticeStack, type WorkoutNotice } from './_components/WorkoutNoticeStack';
@@ -6773,10 +6774,14 @@ export default function WorkoutPage() {
   useEffect(() => {
     if (phase === 'loading') return;
     clearPendingWorkoutPreview(sessionId);
+    // Only the live workout can take the set. On any other phase (a load
+    // error above all) it stays held, unconsumed: the error screen names it so
+    // it isn't lost silently (Codex review on #871).
+    if (phase !== 'workout') return;
     if (earlySetReplayedForRef.current === sessionId) return;
     earlySetReplayedForRef.current = sessionId;
     const early = takeEarlyLoggedSet(sessionId);
-    if (!early || phase !== 'workout') return;
+    if (!early) return;
     if (
       !currentBlock ||
       currentBlock.exerciseId !== early.exerciseId ||
@@ -6793,9 +6798,10 @@ export default function WorkoutPage() {
       setType: 'normal',
       feedback: early.feedback,
     });
-    // Runs once, when the screen leaves its loading phase.
+    // Runs once, when the screen reaches the live workout.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, sessionId]);
+  const heldEarlySet = phase === 'error' ? getEarlyLoggedSet(sessionId) : null;
 
   // Apple Watch: mirror the active set and take logs/navigation back. A watch
   // log goes through the active ExerciseCard's completeLoggedSet, i.e. this
@@ -6883,6 +6889,11 @@ export default function WorkoutPage() {
           </div>
           <p className="text-headline font-medium text-ink">Error loading workout</p>
           <p className="text-ink-3 mt-1">{error}</p>
+          {heldEarlySet && (
+            <p className="mt-3 rounded-lg bg-status-warn/10 px-3 py-2 text-subhead text-ink" data-testid="workout-error-early-set">
+              The set you logged before the workout opened ({formatWeight(heldEarlySet.weightKg, preferences.units)} × {heldEarlySet.repCount}) wasn&apos;t saved. Log it again once your workout opens.
+            </p>
+          )}
           <Button className="mt-4" onClick={() => router.push('/dashboard/workout')}>
             Go back
           </Button>

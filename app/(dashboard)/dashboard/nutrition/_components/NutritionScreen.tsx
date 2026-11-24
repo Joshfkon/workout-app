@@ -8,7 +8,7 @@ import {
   pickWeightChartRange,
   type WeightChartRange,
 } from '@/lib/nutrition/weightChartRange';
-import { buildPendingRows, dropPendingRows, reconcileSavedRows, totalsWith } from '@/lib/nutrition/optimisticAdd';
+import { buildPendingRows, dropPendingRows, reconcileSavedRows, totalsWith, isPendingFoodLogId } from '@/lib/nutrition/optimisticAdd';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useHydrated } from '@/hooks/useHydrated';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
@@ -408,7 +408,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
 
-  const { toasts, dismissToast, showSuccess, addToast } = useToasts();
+  const { toasts, dismissToast, showSuccess, showError, addToast } = useToasts();
   // Food-only users (hooks/useTrackingFocus) get no FFMI in the projections.
   const { foodOnly } = useTrackingFocus();
 
@@ -952,6 +952,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       },
       (err) => {
         mutateFoodEntries((prev) => dropPendingRows(prev, pendingIds), day);
+        // Said here, not only by the confirmation banner: the banner may have
+        // timed out, been replaced or closed with the sheet by the time the
+        // insert fails, and the user already saw "Added" (Codex review on #871).
+        const names = foods.map((f) => f.food_name).filter(Boolean).join(', ') || 'That food';
+        showError(`${names} wasn't saved, so it's no longer in your log. Please add it again.`);
         throw err;
       }
     );
@@ -1327,6 +1332,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   async function handleDeleteFood(id: string) {
+    // A row still being saved has no database id yet (Codex review on #871).
+    if (isPendingFoodLogId(id)) {
+      addToast('info', 'Still saving that food. Try again in a moment.', 3000);
+      return;
+    }
     const entry = foodEntries.find((e) => e.id === id);
     const { error } = await supabase.from('food_log').delete().eq('id', id);
 
@@ -1441,6 +1451,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   function openEditFood(entry: FoodLogEntry) {
+    // Editing a row still being saved would keep its placeholder id and make
+    // the later save fail; wait until it has its real id.
+    if (isPendingFoodLogId(entry.id)) {
+      addToast('info', 'Still saving that food. Try again in a moment.', 3000);
+      return;
+    }
     setEditingFood(entry);
     setShowEditFood(true);
   }
