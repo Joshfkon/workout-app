@@ -89,3 +89,26 @@ export function experienceSummary(
   }
   return null;
 }
+
+/**
+ * The experience level onboarding should use for this account.
+ *
+ * Sign-up keeps its answer in auth user_metadata, but the users row is
+ * created by a trigger that (before 20261124000021) ignored it, so every
+ * account started at the column default, 'intermediate'. A lifter who said
+ * "Just started" then saw "Beginner mode: off" (UX panel round 19). Until
+ * setup is finished the sign-up answer wins; after that the stored level is
+ * the user's (Settings may have changed it), so it is left alone.
+ *
+ * `changed` is true when the stored level should be updated to match.
+ */
+export function onboardingExperience(
+  answer: LiftingAnswer | null,
+  stored: string | null | undefined,
+  onboardingCompleted: boolean | null | undefined
+): { experience: string | null; changed: boolean } {
+  const storedLevel = stored ?? null;
+  if (onboardingCompleted || answer === null) return { experience: storedLevel, changed: false };
+  const fromAnswer = EXPERIENCE_FOR_ANSWER[answer];
+  return { experience: fromAnswer, changed: fromAnswer !== storedLevel };
+}

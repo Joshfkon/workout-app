@@ -177,8 +177,15 @@ function BenchmarksContent() {
         ))}
       </div>
       
-      <div className="text-center">
-        <h1 className="text-large-title font-bold text-ink">Test your strength? (optional)</h1>
+      <div className="text-center space-y-2">
+        <span
+          className="inline-block rounded-full bg-fill px-3 py-1 text-subhead font-semibold text-ink-2"
+          data-testid="benchmarks-optional-badge"
+        >
+          Optional
+        </span>
+        <h1 className="text-large-title font-bold text-ink">Test your strength?</h1>
+        <p className="text-body text-ink-2">You don&apos;t need this to start. Most people skip it.</p>
       </div>
 
       {/* What this is for and what skipping changes, as a short list at the
@@ -189,8 +196,8 @@ function BenchmarksContent() {
         data-testid="benchmarks-purpose"
       >
         <p>
-          Optional. A test is a few warm-up sets and one hard set of a lift at a gym, then you log
-          the weight and reps.
+          A test is a few warm-up sets and one hard set of a lift at a gym, then you log the weight
+          and reps.
         </p>
         <div>
           <p className="font-medium text-ink">What a test does:</p>
@@ -203,16 +210,20 @@ function BenchmarksContent() {
           <p className="font-medium text-ink">If you skip:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              Starting weights are estimated from your experience and body weight, and refine after
-              your first few sets.
+              Weight suggestions start from estimates (your experience and body weight) and adjust
+              after your first sessions.
             </li>
             <li>Strength percentiles stay off until you test.</li>
             <li>Everything else works the same. Not lifting? Nothing here affects food tracking.</li>
           </ul>
         </div>
-        <p className="text-subhead text-ink-3">
-          Most people skip this. You can test any time later from Progress.
+        {/* Panel (round 19): a lifter back from a shoulder injury worried
+            the step expected him to test it. */}
+        <p className="font-medium text-ink" data-testid="benchmarks-injury-note">
+          Injured or sore somewhere? Don&apos;t test a lift that loads it. Testing isn&apos;t needed,
+          and it isn&apos;t worth the risk.
         </p>
+        <p className="text-subhead text-ink-2">You can test any time later from Progress.</p>
       </div>
 
       {/* Skipping comes before the lift list: testing takes about an hour at
@@ -227,7 +238,7 @@ function BenchmarksContent() {
           disabled={isLoading}
           data-testid="skip-benchmarks"
         >
-          {isSkipping ? 'Opening the app…' : 'Skip and start using the app'}
+          {isSkipping ? 'Opening the app…' : 'Skip for now'}
         </Button>
         {/* Said out loud and on screen the moment Skip is tapped. */}
         <p role="status" aria-live="polite" className="text-subhead text-ink-2 text-center min-h-[1.125rem]">

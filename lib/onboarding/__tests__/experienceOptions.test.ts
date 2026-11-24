@@ -4,6 +4,7 @@ import {
   experienceForLiftingAnswer,
   experienceSummary,
   liftingAnswerFromMetadata,
+  onboardingExperience,
 } from '../experienceOptions';
 
 describe('sign-up lifting experience options', () => {
@@ -45,5 +46,19 @@ describe('showing the sign-up answer back in onboarding', () => {
     expect(experienceSummary(null, 'advanced')).toEqual({ label: '3+ years', fromSignUp: false });
     expect(experienceSummary('no', 'novice')).toEqual({ label: 'Under a year', fromSignUp: false });
     expect(experienceSummary(null, null)).toBeNull();
+  });
+});
+
+describe('onboardingExperience', () => {
+  it('uses the sign-up answer while setup is unfinished, flagging a stale row', () => {
+    expect(onboardingExperience('under_6_months', 'intermediate', false)).toEqual({ experience: 'novice', changed: true });
+    expect(onboardingExperience('2_to_3_years', 'intermediate', false)).toEqual({ experience: 'intermediate', changed: false });
+    expect(onboardingExperience('no', 'intermediate', null)).toEqual({ experience: 'novice', changed: true });
+  });
+
+  it('keeps the stored level with no answer, or once setup is finished', () => {
+    expect(onboardingExperience(null, 'advanced', false)).toEqual({ experience: 'advanced', changed: false });
+    expect(onboardingExperience('under_6_months', 'advanced', true)).toEqual({ experience: 'advanced', changed: false });
+    expect(onboardingExperience(null, undefined, false)).toEqual({ experience: null, changed: false });
   });
 });

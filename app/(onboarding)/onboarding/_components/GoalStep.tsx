@@ -3,7 +3,11 @@
 import { useEffect, useState } from 'react';
 import { IconCheck, IconChevronDown, IconInfoCircle } from '@tabler/icons-react';
 import { Button, Input, Toggle } from '@/components/ui';
-import { BEGINNER_MODE_DESCRIPTION, BEGINNER_MODE_TITLE } from '@/lib/beginnerMode';
+import {
+  BEGINNER_MODE_DESCRIPTION,
+  BEGINNER_MODE_TITLE,
+  beginnerModeSummaryLine,
+} from '@/lib/beginnerMode';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import { STANDING_INJURY_OPTIONS, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
@@ -408,7 +412,13 @@ function ExperienceSummary({
             {experience.fromSignUp && <span className="font-normal text-ink-2"> (from sign-up)</span>}
           </p>
           <p className="text-subhead text-ink-2" data-testid="experience-summary-beginner">
-            {BEGINNER_MODE_TITLE}: {beginnerMode ? 'on' : 'off'}
+            <span className="font-medium text-ink">
+              {BEGINNER_MODE_TITLE}: {beginnerMode ? 'on' : 'off'}
+            </span>
+            {/* One line on what it is, so "off" for a beginner never reads
+                as a mistake (UX panel round 19). */}
+            {'. '}
+            {beginnerModeSummaryLine(beginnerMode)}
           </p>
         </div>
         <button

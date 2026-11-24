@@ -9,6 +9,11 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   hint?: string;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
+  /**
+   * 'large': bigger label, field text and hint, for screens read before the
+   * user can pick a text size (sign-up / sign-in; UX panel round 19).
+   */
+  inputSize?: 'default' | 'large';
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -20,6 +25,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       hint,
       leftIcon,
       rightIcon,
+      inputSize = 'default',
       type = 'text',
       id,
       ...props
@@ -27,13 +33,14 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     ref
   ) => {
     const inputId = id || label?.toLowerCase().replace(/\s/g, '-');
+    const large = inputSize === 'large';
 
     return (
       <div className="w-full">
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-subhead font-medium text-ink mb-1.5"
+            className={cn('block font-medium text-ink mb-1.5', large ? 'text-headline' : 'text-subhead')}
           >
             {label}
           </label>
@@ -53,6 +60,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               text-ink placeholder:text-ink-3
               focus:outline-none focus:ring-2 focus:border-transparent
               transition-all duration-200`,
+              large && 'min-h-[52px] py-3 text-headline font-normal',
               error
                 ? 'border-status-bad focus:ring-status-bad'
                 : 'border-sep focus:ring-action',
@@ -69,10 +77,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
         </div>
         {error && (
-          <p className="mt-1.5 text-subhead text-status-bad">{error}</p>
+          <p className={cn('mt-1.5 text-status-bad', large ? 'text-body' : 'text-subhead')}>{error}</p>
         )}
         {hint && !error && (
-          <p className="mt-1.5 text-subhead text-ink-3">{hint}</p>
+          <p className={cn('mt-1.5', large ? 'text-body text-ink-2' : 'text-subhead text-ink-3')}>{hint}</p>
         )}
       </div>
     );

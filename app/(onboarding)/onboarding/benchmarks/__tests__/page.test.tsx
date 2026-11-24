@@ -42,18 +42,28 @@ describe('Onboarding benchmarks page', () => {
   it('says what the tests are for and what skipping does, with skip first', () => {
     render(<BenchmarksPage />);
     const purpose = screen.getByTestId('benchmarks-purpose');
-    expect(purpose).toHaveTextContent(/^Optional\./);
+    expect(screen.getByTestId('benchmarks-optional-badge')).toHaveTextContent('Optional');
+    expect(screen.getByTestId('skip-benchmarks')).toHaveTextContent('Skip for now');
     expect(purpose).toHaveTextContent(/warm-up sets and one hard set/);
     expect(purpose).toHaveTextContent(/starting weights we suggest/);
     const cost = screen.getByTestId('benchmarks-skip-cost');
-    expect(cost).toHaveTextContent(/estimated from your experience and body weight/);
-    expect(cost).toHaveTextContent(/refine after your first few sets/);
+    expect(cost).toHaveTextContent(/start from estimates \(your experience and body weight\)/);
+    expect(cost).toHaveTextContent(/adjust after your first sessions/);
     expect(cost).toHaveTextContent(/Strength percentiles stay off until you test\./);
     const skip = screen.getByTestId('skip-benchmarks');
     const start = screen.getByRole('button', { name: /Pick lifts to test/ });
     // Skip comes before any lift choice in the page.
     expect(skip.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText(/Nothing here affects food tracking/)).toBeInTheDocument();
+  });
+
+  it('tells an injured lifter not to test that area', () => {
+    render(<BenchmarksPage />);
+    const note = screen.getByTestId('benchmarks-injury-note');
+    expect(note).toHaveTextContent(/Don.t test a lift that loads it/);
+    expect(note).toHaveTextContent(/Testing isn.t needed/);
+    // Inside the purpose box, so it is read before Skip or any lift.
+    expect(screen.getByTestId('benchmarks-purpose')).toContainElement(note);
   });
 
   it('shows the time estimate once a lift is chosen', async () => {
