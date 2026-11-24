@@ -10,6 +10,7 @@
  */
 
 import type { FoodSource, FrequentFood, FrequentFoodPortion, MealType } from '@/types/nutrition';
+import { pluralNoun } from './portionDefaults';
 
 export interface FrequentFoodRow {
   meal_type: string;
@@ -152,11 +153,12 @@ export function formatPortion(servingSize: string | null | undefined): string {
   return pluralServing(s);
 }
 
-/** "2 serving" → "2 servings" (the stored noun is always singular). */
+/** "2 serving" → "2 servings", "2 large egg" → "2 large eggs" (the stored noun is always singular). */
 function pluralServing(s: string): string {
-  const m = s.match(/^([\d.]+)\s+serving$/i);
-  if (m && parseFloat(m[1]) !== 1) return `${m[1]} servings`;
-  return s;
+  const m = s.match(/^([\d.]+)\s+(.+)$/);
+  if (!m) return s;
+  const amount = parseFloat(m[1]);
+  return Number.isFinite(amount) ? `${m[1]} ${pluralNoun(m[2], amount)}` : s;
 }
 
 /** Toast after a one-tap add: "Added Oatmeal (1 cup) to Lunch". */
