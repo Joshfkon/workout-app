@@ -39,6 +39,8 @@ describe('not enough data (UX panel r20: 0.0%/wk read as a stall)', () => {
   it('writes the weekly change in words, not %/wk', () => {
     expect(signedPct(1.234)).toBe('+1.2% per week');
     expect(signedPct(-0.4)).toBe('−0.4% per week');
+    expect(signedPct(0)).toBe('no change per week');
+    expect(signedPct(0.04)).toBe('no change per week');
   });
 });
 

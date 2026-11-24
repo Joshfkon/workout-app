@@ -25,7 +25,9 @@ const DIRECTION_LABEL: Record<LiftTrend['direction'], string> = {
  * `notEnoughData` shows notEnoughDataLine instead.
  */
 export const signedPct = (n: number) =>
-  `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}% per week`;
+  // A real rate that rounds to zero reads "no change", not "0.0% per week",
+  // which looked like missing data (UX panel r20/r21).
+  Math.abs(n) < 0.05 ? 'no change per week' : `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}% per week`;
 
 /**
  * What counts toward a trend, in the user's terms (UX panel r20: "I couldn't

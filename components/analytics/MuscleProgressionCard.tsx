@@ -54,6 +54,7 @@ function paceHasRate(pace: ProgressionPace): boolean {
 
 /** "+1.2% per week" — plain words, not "%/wk" (UX panel r20: jargon). */
 export function formatWeeklyPct(pct: number): string {
+  if (Math.abs(pct) < 0.05) return 'no change per week';
   return `${pct >= 0 ? '+' : ''}${pct}% per week`;
 }
 
