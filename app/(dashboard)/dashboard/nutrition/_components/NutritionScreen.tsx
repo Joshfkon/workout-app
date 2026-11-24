@@ -99,6 +99,7 @@ import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { computeScanPairPRatios } from '@/services/compositionSpace';
 import { StepTracking } from '@/components/nutrition/StepTracking';
+import { StepSyncActions } from '@/components/nutrition/StepSyncActions';
 import {
   getLocalDateString,
   formatDate,
@@ -2191,6 +2192,16 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             {stepAdjustment.adjustment !== 0
               ? `Target ${stepAdjustment.adjustedCalories.toLocaleString()} kcal (base ${stepAdjustment.baseCalories.toLocaleString()}). ${stepAdjustment.reason}. `
               : `${stepAdjustment.reason}. `}
+            {/* No steps yet: offer a way to get them in (sync, connect or
+                type them), not only the settings link (user report). */}
+            {selectedDate && (stepAdjustment.daySteps == null || stepAdjustment.daySteps <= 0) && (
+              <>
+                <StepSyncActions
+                  date={selectedDate}
+                  userWeightKg={tdeeData?.currentWeight ? tdeeData.currentWeight / 2.20462 : 80}
+                />{' '}
+              </>
+            )}
             <button
               type="button"
               onClick={() => setShowActivitySettings(true)}
