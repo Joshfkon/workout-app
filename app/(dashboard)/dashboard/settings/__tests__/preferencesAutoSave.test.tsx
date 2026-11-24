@@ -151,6 +151,30 @@ describe('Settings → Preferences auto-save', () => {
     });
   });
 
+  it('first load shows the page itself (header + placeholders), not a spinner', async () => {
+    renderSettings();
+    const loading = screen.getByTestId('settings-full-loading');
+    expect(loading).toHaveAttribute('aria-busy', 'true');
+    expect(within(loading).getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByText(/Loading settings/)).not.toBeInTheDocument();
+    // Then the real controls replace it.
+    expect(await screen.findByRole('radio', { name: 'Preferences' })).toBeInTheDocument();
+    expect(screen.queryByTestId('settings-full-loading')).not.toBeInTheDocument();
+  });
+
+  it('renders straight from a warm cache with no loading state', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { fetchSettingsBundle, SETTINGS_KEY } = jest.requireActual('@/hooks/useSettingsQuery');
+    queryClient.setQueryData(SETTINGS_KEY, await fetchSettingsBundle());
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsPage />
+      </QueryClientProvider>
+    );
+    expect(screen.queryByTestId('settings-full-loading')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Preferences' })).toBeInTheDocument();
+  });
+
   it('saves units the moment they change, with no Save button', async () => {
     const user = userEvent.setup();
     const { queryClient } = renderSettings();

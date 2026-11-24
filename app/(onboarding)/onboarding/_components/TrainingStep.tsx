@@ -30,6 +30,11 @@ export interface TrainingStepProps {
   units: WeightUnit;
   /** Daily targets with the current answers (null when they can't be worked out). */
   targets: { calories: number; protein: number } | null;
+  /**
+   * Daily targets Skip would create (no pace or days picked), for the line
+   * that says what Skip uses. Null when none would be created.
+   */
+  skipTargets?: { calories: number; protein: number } | null;
   /** Which button is saving; null = idle. */
   busy: 'continue' | 'skip' | null;
   onBack: () => void;
@@ -56,6 +61,7 @@ export function TrainingStep({
   weightKg,
   units,
   targets,
+  skipTargets = null,
   busy,
   onBack,
   onSkip,
@@ -64,6 +70,7 @@ export function TrainingStep({
   const rates = rateOptionsForGoal(goal);
   const pickedRate = answers.rate ?? defaultRate;
   const isBusy = busy !== null;
+  const skipLine = skipDefaultsLine({ goal, defaultRate, rateApplies, skipTargets });
 
   return (
     <div className="max-w-md mx-auto space-y-6 animate-fade-in" data-testid="onboarding-training-step">
@@ -212,7 +219,7 @@ export function TrainingStep({
             data-testid="training-skip"
             className="active:scale-[0.97]"
           >
-            {busy === 'skip' ? 'Skipping…' : 'Skip'}
+            {busy === 'skip' ? 'Using defaults…' : 'Skip'}
           </Button>
           <Button
             size="lg"
@@ -227,6 +234,44 @@ export function TrainingStep({
           </Button>
         </div>
       </div>
+      {/* What Skip means, before and while it saves: the panel saw a bare
+          "Skipping…" and was never told a moderate cut had been picked
+          (round 19). */}
+      <p
+        role="status"
+        aria-live="polite"
+        className="text-subhead text-ink-2"
+        data-testid="training-skip-defaults"
+      >
+        {busy === 'skip' ? `Skipped. ${skipLine} Opening the next step…` : skipLine}
+      </p>
     </div>
   );
+}
+
+/**
+ * The one line under the buttons saying what Skip keeps: the default pace by
+ * name and the daily targets it gives, or that the plan starts from the goal.
+ * Pure (exported for tests).
+ */
+export function skipDefaultsLine({
+  goal,
+  defaultRate,
+  rateApplies,
+  skipTargets,
+}: {
+  goal: TrainingGoal | null;
+  defaultRate: NutritionGoal | null;
+  rateApplies: boolean;
+  skipTargets: { calories: number; protein: number } | null;
+}): string {
+  const rateName = rateOptionsForGoal(goal).find((r) => r.value === defaultRate)?.name ?? null;
+  const plan = 'your first plan starts from your goal and experience.';
+  if (rateApplies && rateName) {
+    const targets = skipTargets
+      ? ` (${skipTargets.calories.toLocaleString()} kcal · ${Math.round(skipTargets.protein)} g protein a day)`
+      : '';
+    return `Skip uses the default pace, ${rateName.toLowerCase()}${targets}, and ${plan} Change either any time.`;
+  }
+  return `Skip keeps your goal, and ${plan} Change it any time.`;
 }

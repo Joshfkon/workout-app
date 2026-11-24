@@ -20,7 +20,11 @@ import {
   trainingSetupFromPreferences,
   type TrainingSetupAnswers,
 } from '@/lib/onboarding/trainingSetup';
-import { experienceSummary, liftingAnswerFromMetadata } from '@/lib/onboarding/experienceOptions';
+import {
+  experienceSummary,
+  liftingAnswerFromMetadata,
+  onboardingExperience,
+} from '@/lib/onboarding/experienceOptions';
 import { TextSizeControl } from '@/components/settings/TextSizeControl';
 import { phaseToNutritionGoal, starterTargets } from '@/lib/nutrition/phaseTargets';
 import { askedForBenchmarks, skipsBenchmarks, statedTrackingFocus } from '@/lib/onboarding/trackingFocus';
@@ -163,6 +167,9 @@ export default function OnboardingBodyCompPage() {
   const beginnerTouched = useRef(false);
   // Sign-up's experience answer, shown back on the goal step (not re-asked).
   const [experienceShown, setExperienceShown] = useState<{ label: string; fromSignUp: boolean } | null>(null);
+  // The sign-up answer's level when the users row doesn't have it yet
+  // (lib/onboarding/experienceOptions onboardingExperience); saved on Continue.
+  const [experienceToSave, setExperienceToSave] = useState<string | null>(null);
   // Optional training step (lifters): days, split, and the bulk/cut pace.
   const [trainingAnswers, setTrainingAnswers] = useState<TrainingSetupAnswers>(EMPTY_TRAINING_SETUP);
   const trainingTouched = useRef(false);
@@ -292,10 +299,17 @@ export default function OnboardingBodyCompPage() {
         setAgeDisplay((current) => current || String(userData.age));
       }
       const prefs = (userData?.preferences as Record<string, unknown> | null) ?? {};
+      const liftingAnswer = liftingAnswerFromMetadata(user.user_metadata);
+      const signUpLevel = onboardingExperience(
+        liftingAnswer,
+        userData?.experience,
+        userData?.onboarding_completed
+      );
+      if (signUpLevel.changed) setExperienceToSave(signUpLevel.experience);
       if (!beginnerTouched.current) {
-        setBeginnerMode(resolveBeginnerMode(prefs.beginnerMode, userData?.experience));
+        setBeginnerMode(resolveBeginnerMode(prefs.beginnerMode, signUpLevel.experience));
       }
-      setExperienceShown(experienceSummary(liftingAnswerFromMetadata(user.user_metadata), userData?.experience));
+      setExperienceShown(experienceSummary(liftingAnswer, signUpLevel.experience));
       if (!trainingTouched.current) setTrainingAnswers(trainingSetupFromPreferences(prefs));
       const savedGoal = confirmedOnboardingGoal(userData);
       if (savedGoal) {
@@ -426,7 +440,15 @@ export default function OnboardingBodyCompPage() {
       // Update user profile with sex, height, and the confirmed training goal
       const { error: profileError } = await supabase
         .from('users')
-        .update({ sex, height_cm: height, weight_kg: weight, goal, ...(getAge() ? { age: getAge() } : {}) })
+        .update({
+          sex,
+          height_cm: height,
+          weight_kg: weight,
+          goal,
+          ...(getAge() ? { age: getAge() } : {}),
+          // The sign-up answer's level, when the row still had the default.
+          ...(experienceToSave ? { experience: experienceToSave } : {}),
+        })
         .eq('id', user.id);
 
       // First nutrition targets for the chosen goal (best-effort: Eat can
@@ -712,6 +734,7 @@ export default function OnboardingBodyCompPage() {
         weightKg={useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg()}
         units={units}
         targets={trainingStarter ? trainingStarter.targets : null}
+        skipTargets={createStarterTargets && starter ? starter.targets : null}
         busy={trainingBusy ?? (isLoading ? 'continue' : null)}
         onBack={() => setStep('goal')}
         onSkip={() => finishTrainingStep(true)}

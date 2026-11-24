@@ -20,6 +20,16 @@ export const BEGINNER_MODE_DESCRIPTION =
   'A simpler workout screen: effort in plain words, fewer numbers and charts. Your plan stays the same.';
 
 /**
+ * One line next to "Beginner mode: on/off" wherever it is shown as a summary,
+ * so the state explains itself and says how to change it.
+ */
+export function beginnerModeSummaryLine(on: boolean): string {
+  return on
+    ? 'Simpler workout screen with effort in plain words. Turn it off under Change.'
+    : 'Turn it on under Change for a simpler workout screen with fewer numbers.';
+}
+
+/**
  * The stored choice wins; with none, beginners (novice experience, which is
  * also what "Under 1 year" and "No, food tracking" sign up as) start with it
  * on and everyone else off.

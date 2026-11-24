@@ -83,6 +83,7 @@ import { updateTodayWorkoutWidget, updateNutritionWidget } from '@/lib/integrati
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
 import type { TrainingStyle } from '@/lib/training/trainingStyle';
 import { fetchTrainingStyleData } from '@/lib/actions/dashboard';
+import { usePrefetchSettings } from '@/hooks/useSettingsQuery';
 import type { TrainingPhase, UpdatePhaseResult } from '@/lib/actions/phase';
 
 // Loading placeholder for lazily-loaded modal content
@@ -312,6 +313,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Food-only (said "food tracking", never lifted here): no workout entries.
   const { foodOnly } = useTrackingFocus();
   const beginnerMode = useBeginnerMode();
+  // Warm Settings behind the gear so its first open renders at once.
+  usePrefetchSettings();
   const supabase = createUntypedClient();
 
   const [isLoading, setIsLoading] = useState(!hasInitialData);

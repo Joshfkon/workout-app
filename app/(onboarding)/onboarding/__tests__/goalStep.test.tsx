@@ -148,7 +148,8 @@ describe('Onboarding goal step', () => {
     act(() => {
       fireEvent.click(screen.getByTestId('training-skip'));
     });
-    await waitFor(() => expect(screen.getByTestId('training-skip')).toHaveTextContent('Skipping…'));
+    await waitFor(() => expect(screen.getByTestId('training-skip')).toHaveTextContent('Using defaults…'));
+    expect(screen.getByTestId('training-skip-defaults')).toHaveTextContent(/^Skipped\. Skip keeps your goal/);
     expect(screen.getByTestId('training-skip')).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByTestId('training-continue')).toBeDisabled();
     await act(async () => release());
@@ -739,6 +740,33 @@ describe('Onboarding: experience is asked once (at sign-up)', () => {
     expect(screen.queryByText(/Intermediate/)).not.toBeInTheDocument();
   });
 
+  it('turns Beginner mode on for "Just started" even when the row still has the default level, and saves the level', async () => {
+    mockUserMetadata = { lifting_answer: 'under_6_months' };
+    usersRow = { goal: 'maintenance', experience: 'intermediate', onboarding_step: 'body_comp', onboarding_completed: false };
+    const user = await reachGoalStep('15', '30');
+    const line = screen.getByTestId('experience-summary-beginner');
+    expect(line).toHaveTextContent('Beginner mode: on');
+    // Explained in one line, with how to turn it off.
+    expect(line).toHaveTextContent(/Simpler workout screen.*Turn it off under Change/);
+    await finishGoal(user);
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(userUpdates.find((u) => 'goal' in u)).toMatchObject({ experience: 'novice' });
+    const prefs = userUpdates
+      .map((u) => u.preferences as Record<string, unknown> | undefined)
+      .find((p) => p && 'beginnerMode' in p);
+    expect(prefs?.beginnerMode).toBe(true);
+  });
+
+  it('leaves the stored level alone once setup is finished', async () => {
+    mockUserMetadata = { lifting_answer: 'under_6_months' };
+    usersRow = { goal: 'maintenance', experience: 'advanced', onboarding_step: 'complete', onboarding_completed: true };
+    const user = await reachGoalStep('15', '30');
+    expect(screen.getByTestId('experience-summary-beginner')).toHaveTextContent('Beginner mode: off');
+    await finishGoal(user);
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(userUpdates.find((u) => 'goal' in u)).not.toHaveProperty('experience');
+  });
+
   it('falls back to the stored level when sign-up was skipped, without claiming it was asked', async () => {
     usersRow = { goal: 'maintenance', experience: 'intermediate', onboarding_step: 'body_comp', onboarding_completed: false };
     await reachGoalStep('15', '30');
@@ -813,6 +841,14 @@ describe('Onboarding: optional training step (lifters)', () => {
     await user.click(screen.getByTestId('goal-continue'));
     await user.click(screen.getByTestId('training-days-6'));
     await user.click(screen.getByTestId('training-rate-aggressive_bulk'));
+    // Before tapping, Skip says which pace it uses (not the one picked) and its targets.
+    const skipStarter = starterTargets({
+      phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male', liftsWeights: true,
+      nutritionGoal: null, workoutsPerWeek: null,
+    })!;
+    expect(screen.getByTestId('training-skip-defaults')).toHaveTextContent(
+      `Skip uses the default pace, lean bulk (${skipStarter.targets.calories.toLocaleString()} kcal`
+    );
     await user.click(screen.getByTestId('training-skip'));
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(savedPrefs()).not.toHaveProperty('trainingDaysPerWeek');
