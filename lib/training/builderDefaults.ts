@@ -11,7 +11,7 @@ import {
   type StandardMuscleGroup,
 } from '@/types/schema';
 import type { StartingVolume, VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
-import { COARSE_MUSCLES, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
+import { COARSE_MUSCLES, STANDARD_TO_COARSE, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
 // The same head counter enforceNonDecreasingRamp holds non-decreasing.
 import {
   creditedSetsByGroup,
@@ -30,9 +30,65 @@ export interface BuilderHistoryDefaults {
   /** Sessions per week over the window (2–7), or null with too little history. */
   daysPerWeek: number | null;
   /** The split the history reads as, when it reads as one. */
-  splitKind: 'body_part' | 'ppl' | null;
+  splitKind: HistorySplitKind | null;
   /** One line for the builder, e.g. "From your last 4 weeks: 5 sessions a week, a body-part split." */
   summary: string | null;
+}
+
+/** The split shapes the builder can read from history. */
+export type HistorySplitKind = 'body_part' | 'ppl' | 'upper_lower' | 'full_body';
+
+const UPPER_GROUPS: ReadonlySet<CoarseMuscle> = new Set(['chest', 'back', 'shoulders', 'biceps', 'triceps', 'traps'] as CoarseMuscle[]);
+const LOWER_GROUPS: ReadonlySet<CoarseMuscle> = new Set(['quads', 'hamstrings', 'glutes', 'calves', 'adductors'] as CoarseMuscle[]);
+
+/** A session as upper-only, lower-only or both (abs and unknowns say nothing). */
+function sessionHalf(muscles: StandardMuscleGroup[]): 'upper' | 'lower' | 'full' | null {
+  let upper = false;
+  let lower = false;
+  for (const m of muscles) {
+    const g = STANDARD_TO_COARSE[m];
+    if (g && UPPER_GROUPS.has(g)) upper = true;
+    if (g && LOWER_GROUPS.has(g)) lower = true;
+  }
+  if (upper && lower) return 'full';
+  return upper ? 'upper' : lower ? 'lower' : null;
+}
+
+/**
+ * Upper/lower or full body from recent sessions, for the splits detectSplit
+ * (push/pull/legs, body-part) does not read. The builder recommended Full
+ * Body to a lifter whose history it could not name at all (UX panel round
+ * 22, Dre: "It recommended full body even though I run upper/lower"): only
+ * PPL and body-part histories reached the split default.
+ * - upper/lower: the last four sessions are each upper-only or lower-only,
+ *   with both kinds present;
+ * - full body: at least three of the last four train upper and lower body.
+ * Pure.
+ */
+export function detectBroadSplit(sessions: StandardMuscleGroup[][]): 'upper_lower' | 'full_body' | null {
+  const recent = sessions.slice(-4).map(sessionHalf);
+  if (recent.length < 4 || recent.some((h) => h === null)) return null;
+  if (recent.every((h) => h === 'upper' || h === 'lower') && recent.includes('upper') && recent.includes('lower')) {
+    return 'upper_lower';
+  }
+  if (recent.filter((h) => h === 'full').length >= 3) return 'full_body';
+  return null;
+}
+
+/** The builder split a history split kind maps to. */
+export function builderSplitFor(kind: HistorySplitKind | null | undefined): Split | null {
+  switch (kind) {
+    case 'body_part':
+      return 'Bro Split';
+    case 'ppl':
+      return 'PPL';
+    case 'upper_lower':
+      return 'Upper/Lower';
+    case 'full_body':
+      return 'Full Body';
+    default:
+      return null;
+  }
 }
 
 /**
@@ -55,8 +111,17 @@ export function builderDefaultsFromHistory(
   const weeks = Math.min(BUILDER_HISTORY_DAYS, Math.max(7, spanDays)) / 7;
   const perWeek = Math.min(7, Math.max(2, Math.round(sessions.length / weeks)));
   const split = detectSplit(sessions);
-  const splitKind = split?.kind ?? null;
-  const splitText = splitKind === 'body_part' ? ', a body-part split' : splitKind === 'ppl' ? ', push/pull/legs' : '';
+  const splitKind: HistorySplitKind | null = split?.kind ?? detectBroadSplit(sessions);
+  const splitText =
+    splitKind === 'body_part'
+      ? ', a body-part split'
+      : splitKind === 'ppl'
+        ? ', push/pull/legs'
+        : splitKind === 'upper_lower'
+          ? ', upper/lower'
+          : splitKind === 'full_body'
+            ? ', full body'
+            : '';
   return {
     daysPerWeek: perWeek,
     splitKind,
@@ -420,6 +485,36 @@ export function deloadSummary(weeks: PlanWeekSummary[]): DeloadSummary | null {
     loadPercent: d.intensityModifier === null ? null : Math.round(d.intensityModifier * 100),
     rir: d.rir,
   };
+}
+
+/** A deload share above this of the peak week is called out by name. */
+export const DELOAD_FLOOR_SHARE = 0.6;
+
+/**
+ * Which muscles the deload cuts by less than about half, and why (UX panel
+ * round 22, Dre: "quad and hamstring sets stay at 6 while the other muscles
+ * drop. It looks inconsistent and isn't explained"). Every exercise keeps at
+ * least one set in the deload — the same movements, lighter — so a muscle
+ * trained by several exercises can't fall all the way to half. Null when
+ * every muscle drops to about half or less. Pure.
+ */
+export function deloadFloorNote(weeks: PlanWeekSummary[]): string | null {
+  const deload = weeks.find((w) => w.isDeload);
+  const training = weeks.filter((w) => !w.isDeload);
+  if (!deload || training.length === 0) return null;
+  const held: string[] = [];
+  for (const muscle of Object.keys(deload.sets) as CoarseMuscle[]) {
+    const peak = Math.max(...training.map((w) => Math.round(w.sets[muscle] ?? 0)));
+    const sets = Math.round(deload.sets[muscle] ?? 0);
+    if (peak <= 0 || sets <= 0) continue;
+    if (sets > peak * DELOAD_FLOOR_SHARE) held.push(`${muscleDisplayName(muscle).toLowerCase()} ${peak} → ${sets}`);
+  }
+  if (held.length === 0) return null;
+  const lead = held.length === 1 ? 'One muscle drops' : 'Some muscles drop';
+  return (
+    `${lead} by less than half from its biggest week (${held.join(', ')}) because each exercise ` +
+    `keeps at least one set in the deload, so you keep practising the same movements at light loads.`
+  );
 }
 
 /**

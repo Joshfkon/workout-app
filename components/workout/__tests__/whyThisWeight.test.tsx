@@ -118,7 +118,7 @@ describe('SuggestionBanner "Why this weight?"', () => {
       />
     );
     const link = screen.getByTestId('why-this-weight');
-    expect(link).toHaveTextContent('Why this weight?');
+    expect(link).toHaveTextContent("How it's worked out");
     // Not tagged Pro: smart weight suggestions aren't gated (only the
     // mesocycle builder and AI coach are), so the label would be false.
     expect(screen.queryByTestId('pro-tag')).toBeNull();

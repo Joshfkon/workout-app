@@ -48,6 +48,7 @@ import {
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import {
   builderDefaultsFromHistory,
+  builderSplitFor,
   priorityVolumeAdjustments,
   plannedVolumeWithBands,
   deliveredSetsAtPeak,
@@ -61,6 +62,7 @@ import {
   rampLine,
   rirLine,
   deloadSummary,
+  deloadFloorNote,
   formatRir,
   rampExplanation,
   recoveryVolumeExplanation,
@@ -97,7 +99,7 @@ import { PlanBuildingIndicator } from '../_components/PlanBuildingIndicator';
 const CAP_WARNING = /-minute sessions hold fewer weekly sets/;
 
 export default function NewMesocyclePage() {
-  useDocumentTitle('New Mesocycle');
+  useDocumentTitle('New training block');
   const router = useRouter();
   const queryClient = useQueryClient();
   const { preferences } = useUserPreferences();
@@ -186,10 +188,12 @@ export default function NewMesocyclePage() {
   const [onboardingDefaults, setOnboardingDefaults] = useState<OnboardingScheduleDefaults | null>(null);
   const historyUsable = historyDefaults?.daysPerWeek != null;
   /** The builder split matching recent training, if it reads as one; else
-   *  the split the lifter named at onboarding. */
-  const historySplit: Split | null = historyUsable
-    ? historyDefaults?.splitKind === 'body_part' ? 'Bro Split' : historyDefaults?.splitKind === 'ppl' ? 'PPL' : null
-    : onboardingDefaults?.split ?? null;
+   *  the split the lifter named at onboarding. Upper/lower and full-body
+   *  histories count too, and a history that reads as no split falls back
+   *  to the onboarding answer (UX panel round 22: only PPL and body-part
+   *  histories reached the default, so an upper/lower lifter got Full Body). */
+  const historySplit: Split | null =
+    (historyUsable ? builderSplitFor(historyDefaults?.splitKind) : null) ?? onboardingDefaults?.split ?? null;
 
   // Preferred workout days
   const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
@@ -675,7 +679,7 @@ export default function NewMesocyclePage() {
       // Supabase errors are plain objects, not Error instances — describe them
       // explicitly so the user (and we) see what the database actually said.
       console.error('Mesocycle creation failed', err);
-      setError(describeSupabaseError(err, 'Failed to create mesocycle'));
+      setError(describeSupabaseError(err, 'Failed to create training block'));
       setIsLoading(false);
     }
   };
@@ -695,7 +699,7 @@ export default function NewMesocyclePage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-title font-bold text-ink">AI Mesocycle Builder</h1>
+          <h1 className="text-title font-bold text-ink">AI Training Block Builder</h1>
           <p className="text-ink-2 mt-1">Create scientifically-optimized training programs</p>
         </div>
         <UpgradePrompt feature="mesocycleBuilder" />
@@ -717,15 +721,15 @@ export default function NewMesocyclePage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-title font-bold text-ink">Create mesocycle</h1>
+          <h1 className="text-title font-bold text-ink">Create training block</h1>
           <div className="group relative">
             <button className="w-5 h-5 rounded-full bg-sep hover:bg-sep text-ink-2 text-caption flex items-center justify-center">
               ?
             </button>
             <div className="absolute left-0 top-7 w-72 p-3 bg-fill border border-sep rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-              <p className="text-subhead font-medium text-ink mb-1">What is a Mesocycle?</p>
+              <p className="text-subhead font-medium text-ink mb-1">What is a training block?</p>
               <p className="text-caption text-ink-2">
-                A <span className="text-action">mesocycle</span> is a training block lasting 4-8 weeks, designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
+                A <span className="text-action">training block</span> is a 4-8 week program designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
               </p>
               <p className="text-caption text-ink-3 mt-2">
                 Think of it as a &ldquo;chapter&rdquo; in your training story—focused, structured, and building toward the next phase.
@@ -756,7 +760,7 @@ export default function NewMesocyclePage() {
           <div>
             <p className="font-medium mb-1">Creating your first training program!</p>
             <p className="text-subhead text-on-action dark:text-action">
-              A mesocycle is a 4-8 week training block designed to progressively build your strength and muscle.
+              A training block is a 4-8 week program designed to progressively build your strength and muscle.
               We&apos;ll help you set up the perfect plan based on your goals and schedule.
             </p>
           </div>
@@ -773,7 +777,7 @@ export default function NewMesocyclePage() {
         <Card variant="elevated">
           <SplitChooser
             value={splitType}
-            recommended={useAiRecommendation ? recommendation?.splitType ?? null : null}
+            recommended={useAiRecommendation ? historySplit ?? recommendation?.splitType ?? null : null}
             matchesHistory={historySplit}
             sessionsPerWeek={plannedSessionsPerWeek}
             onChoose={chooseSplit}
@@ -1143,10 +1147,12 @@ export default function NewMesocyclePage() {
                     {/* The reason must describe the split on the badge; the
                         older recommendation's text described its own pick
                         (a Bro Split badge with an Arnold-split blurb). */}
-                    {fullProgram.split === recommendation?.splitType
-                      ? recommendation?.splitReason
-                      : historySplit === fullProgram.split
+                    {historySplit === fullProgram.split
+                      ? historyUsable
                         ? 'Matches your recent training.'
+                        : 'The split you told us you run.'
+                      : fullProgram.split === recommendation?.splitType
+                        ? recommendation?.splitReason
                         : 'Your choice of split.'}
                   </span>
                 </div>
@@ -1261,7 +1267,7 @@ export default function NewMesocyclePage() {
             </div>
 
             <Input
-              label="Mesocycle name"
+              label="Training block name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Hypertrophy Block 1"
@@ -1288,7 +1294,7 @@ export default function NewMesocyclePage() {
             )}
 
             <Slider
-              label="Mesocycle length"
+              label="Training block length"
               min={4}
               max={8}
               value={totalWeeks}
@@ -1632,6 +1638,11 @@ export default function NewMesocyclePage() {
                 {deloadLine && (
                   <p className="text-caption text-ink-2">
                     <span className="font-semibold text-ink">Deload:</span> {deloadLine}
+                  </p>
+                )}
+                {deloadFloorNote(planWeeks) && (
+                  <p className="text-caption text-ink-2" data-testid="builder-deload-floor-note">
+                    {deloadFloorNote(planWeeks)}
                   </p>
                 )}
                 <details className="text-caption text-ink-3 mb-2">

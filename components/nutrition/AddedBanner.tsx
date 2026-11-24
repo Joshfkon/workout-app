@@ -11,8 +11,12 @@ export interface QuickAddConfirmation {
   totals: string;
   /** Shown after Undo: "Removed White Rice (1 cup) from Dinner" */
   removed: string;
+  /** The amount that was logged, on its own line: "150 g · 248 kcal · 46 g protein". */
+  amount?: string;
   /** Removes what was just added. */
   onUndo?: () => Promise<void> | void;
+  /** Opens the logged entry to change its amount (single-food adds only). */
+  onEdit?: () => Promise<void> | void;
   /**
    * The add is shown (and counted in the totals) before the database answers.
    * This settles when the save lands; if it rejects the add has been rolled
@@ -71,6 +75,15 @@ export function AddedBanner({
     setPhase('undone');
   }
 
+  async function handleEdit() {
+    if (!confirmation.onEdit) return;
+    try {
+      await confirmation.onEdit();
+    } catch (err) {
+      console.error('[AddedBanner] edit failed:', err);
+    }
+  }
+
   if (phase === 'failed') {
     return (
       <div
@@ -98,20 +111,39 @@ export function AddedBanner({
         <p className="text-body font-semibold text-ink" data-testid={`${testIdPrefix}-added`}>
           {phase === 'undone' ? confirmation.removed : confirmation.added}
         </p>
+        {phase === 'added' && confirmation.amount && (
+          <p className="text-body font-medium text-ink tabular-nums" data-testid={`${testIdPrefix}-amount`}>
+            {confirmation.amount}
+          </p>
+        )}
         {phase === 'added' && (
           <p className="text-subhead text-ink-2 tabular-nums" data-testid={`${testIdPrefix}-totals`}>
             {confirmation.totals}
           </p>
         )}
       </div>
-      {phase === 'added' && confirmation.onUndo && (
-        <button
-          type="button"
-          onClick={() => void handleUndo()}
-          className="-my-1 flex-shrink-0 min-h-[44px] px-2 text-body font-semibold text-action hover:underline"
-        >
-          Undo
-        </button>
+      {phase === 'added' && (confirmation.onEdit || confirmation.onUndo) && (
+        <div className="-my-1 flex flex-shrink-0 flex-col items-end">
+          {confirmation.onEdit && (
+            <button
+              type="button"
+              onClick={() => void handleEdit()}
+              className="min-h-[44px] px-2 text-body font-semibold text-action hover:underline"
+              data-testid={`${testIdPrefix}-edit`}
+            >
+              Edit
+            </button>
+          )}
+          {confirmation.onUndo && (
+            <button
+              type="button"
+              onClick={() => void handleUndo()}
+              className="min-h-[44px] px-2 text-body font-semibold text-action hover:underline"
+            >
+              Undo
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -6,6 +6,8 @@ import {
   weeklySetsDigest,
   MEV_MRV_FIRST_LINE,
   MEV_MRV_LINE_HINT_ID,
+  SETS_COUNTING_RULE,
+  weeklySetsWindowLine,
 } from '../WeeklySetsCard';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import type { VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
@@ -60,7 +62,7 @@ describe('WeeklySetsCard', () => {
 
   it('shows each muscle against its range and a digest', () => {
     render(<WeeklySetsCard rows={rows} />);
-    expect(screen.getByText('Sets this week')).toBeInTheDocument();
+    expect(screen.getByText('Sets, last 7 days')).toBeInTheDocument();
     expect(screen.getByTestId('home-weekly-sets-digest')).toHaveTextContent(
       '2 muscles under their minimum (MEV) · 1 over its max (MRV)'
     );
@@ -77,6 +79,23 @@ describe('WeeklySetsCard', () => {
     expect(info).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByTestId('home-weekly-sets-key')).toHaveTextContent(/fewest hard sets a week that still grow a muscle/);
     expect(screen.getByTestId('home-weekly-sets-key')).toHaveTextContent(/most you can recover from/);
+  });
+
+  it('names the rolling 7-day window, the workouts in it, and how sets are counted (round 22, Dre)', () => {
+    const start = new Date(2026, 10, 18);
+    render(<WeeklySetsCard rows={rows} windowStart={start} workouts={2} plannedPerWeek={4} />);
+    expect(screen.getByTestId('home-weekly-sets-window')).toHaveTextContent(
+      'Last 7 days (since Wed, Nov 18): 2 workouts of the 4 a week your plan has, so some muscles read low until the rest are done.'
+    );
+    expect(screen.getByTestId('home-weekly-sets-rule')).toHaveTextContent(SETS_COUNTING_RULE);
+    expect(SETS_COUNTING_RULE).toMatch(/counts 1 for the muscle .* ½ for each muscle it also works/);
+    expect(weeklySetsWindowLine({ windowStart: start, workouts: 3 })).toBe('Last 7 days (since Wed, Nov 18): 3 workouts logged.');
+    expect(weeklySetsWindowLine({ windowStart: start, plannedPerWeek: 5 })).toBe(
+      'Last 7 days (since Wed, Nov 18). Your plan has 5 workouts a week.'
+    );
+    expect(weeklySetsWindowLine({ windowStart: start, workouts: 5, plannedPerWeek: 4 })).toBe(
+      'Last 7 days (since Wed, Nov 18): 5 workouts of the 4 a week your plan has.'
+    );
   });
 
   it('all-clear digest, and nothing at all with no data', () => {

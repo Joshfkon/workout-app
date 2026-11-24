@@ -75,6 +75,7 @@ import { getMuscleGroupProgression } from '@/services/progressionInsights';
 import { now as clockNow } from '@/lib/clock';
 import { parseLocalDay } from '@/lib/date/localDay';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePrefetchBuilderInputs } from '@/hooks/usePrefetchBuilderInputs';
 import {
   mesoProgress,
   toRecentWorkouts,
@@ -201,6 +202,9 @@ export default function TrainPage() {
     }
   }, []);
   const isFreestyle = data ? data.isFreestyle : cachedFreestyle;
+  // Train offers the block builder when there is no active block (or in
+  // freestyle): warm its inputs so it opens with data (UX panel round 22).
+  const prefetchBuilder = usePrefetchBuilderInputs(!!data && (!activeMeso || isFreestyle));
   useEffect(() => {
     if (!data) return;
     try {
@@ -615,12 +619,14 @@ export default function TrainPage() {
           <>
             <h2 className="text-title text-ink mt-1.5">No training plan</h2>
             <p className="text-subhead text-ink-2 mt-1">
-              Plan a mesocycle for smart progression and volume tracking
+              Plan a training block for smart progression and volume tracking
             </p>
             {(
               <div className="flex gap-2 mt-4">
                 <Link
                   href="/dashboard/mesocycle/new"
+                  onPointerDown={prefetchBuilder}
+                  onFocus={prefetchBuilder}
                   className="flex-1"
                 >
                   <StyledButton
@@ -628,7 +634,7 @@ export default function TrainPage() {
                     className="w-full text-body"
                   >
                     <span className="inline-flex items-center gap-2">
-                      Plan a mesocycle
+                      Plan a training block
                       <ProTag feature="mesocycleBuilder" tone="onAccent" />
                     </span>
                   </StyledButton>
@@ -660,6 +666,8 @@ export default function TrainPage() {
         // planner arrives (the panel's first tap here read as missed).
         <PendingLink
           href="/dashboard/mesocycle/new"
+                  onPointerDown={prefetchBuilder}
+                  onFocus={prefetchBuilder}
           className="flex items-center gap-3 rounded-card bg-card p-4 shadow-card transition-[background-color,transform] hover:bg-fill/70 active:scale-[0.99] active:bg-fill"
           pendingClassName="bg-fill"
           data-testid="train-plan-block"
@@ -672,7 +680,7 @@ export default function TrainPage() {
               <ProTag feature="mesocycleBuilder" />
             </span>
             <span className="block text-subhead text-ink-2">
-              A multi-week mesocycle: sets ramp toward your MRV, then a deload.
+              A multi-week program: sets ramp toward your MRV, then a deload.
             </span>
           </span>
           {pending ? (

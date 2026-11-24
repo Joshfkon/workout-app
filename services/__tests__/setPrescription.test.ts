@@ -290,7 +290,7 @@ describe('getAMRAPFrequency', () => {
   it('returns 28 days for push_cautiously exercises', () => {
     const result = getAMRAPFrequency('Dumbbell Rows');
     expect(result.frequencyDays).toBe(28);
-    expect(result.description).toContain('mesocycle');
+    expect(result.description).toContain('training block');
   });
 
   it('returns Infinity for protect exercises', () => {

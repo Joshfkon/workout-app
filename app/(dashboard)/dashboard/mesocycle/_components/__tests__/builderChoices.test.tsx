@@ -28,6 +28,14 @@ describe('SplitChooser', () => {
     render(<SplitChooser value="PPL" recommended="Upper/Lower" matchesHistory="PPL" sessionsPerWeek={6} onChoose={jest.fn()} />);
     expect(screen.getByTestId('builder-split-ppl')).toHaveTextContent('Your recent split');
   });
+
+  it('recommends the lifter’s own split and says so (round 22)', () => {
+    render(
+      <SplitChooser value="Upper/Lower" recommended="Upper/Lower" matchesHistory="Upper/Lower" sessionsPerWeek={4} onChoose={jest.fn()} />
+    );
+    expect(screen.getByTestId('builder-split-upperlower')).toHaveTextContent('Recommended · your split');
+    expect(screen.getByTestId('builder-split-fullbody')).not.toHaveTextContent('Recommended');
+  });
 });
 
 describe('StartingVolumeChooser', () => {

@@ -11,8 +11,8 @@ import type { FoodSearchResult, FoodSearchResultWithServings } from '@/services/
 import { searchFoodsAction, getFoodDetailsAction } from '@/lib/actions/food-search';
 import { friendlyUsdaError } from '@/lib/nutrition/usdaErrorMessage';
 import { searchUsdaWithRetry } from '@/lib/nutrition/usdaRetry';
-import { precheckWebCamera, NO_CAMERA_UP_FRONT } from '@/lib/nutrition/cameraPrecheck';
-import { Capacitor } from '@capacitor/core';
+import { NO_CAMERA_UP_FRONT } from '@/lib/nutrition/cameraPrecheck';
+import { useNoCamera } from '@/hooks/useNoCamera';
 import { AddedBanner, type QuickAddConfirmation } from './AddedBanner';
 import { lookupBarcode as lookupBarcodeOFF } from '@/services/openFoodFactsService';
 import { lookupBarcodeUsdaAction } from '@/lib/actions/nutrition';
@@ -598,17 +598,7 @@ export function AddFoodModal({
   // No camera (a desktop without a webcam): say so next to Scan barcode
   // before the tap, not only on the typed-number screen after it. Starts
   // false on the server and the first client render; set after mount.
-  const [noCamera, setNoCamera] = useState(false);
-  useEffect(() => {
-    if (!isOpen || Capacitor.isNativePlatform()) return undefined;
-    let cancelled = false;
-    void precheckWebCamera(typeof navigator !== 'undefined' ? navigator : undefined).then((issue) => {
-      if (!cancelled) setNoCamera(issue === 'missing');
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen]);
+  const noCamera = useNoCamera(isOpen);
 
   // Focus the search box: on open when asked (the Search quick action), and
   // whenever the Search tab is tapped. A request counter, not a boolean, so a

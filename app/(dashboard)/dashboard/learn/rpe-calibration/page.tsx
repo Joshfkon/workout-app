@@ -132,7 +132,7 @@ const safetyTiers: Array<{
     icon: IconAlertTriangle,
     iconClass: 'text-status-warn',
     title: 'Moderate risk',
-    body: 'Free weights that can be dropped, supported movements. Keep 1 rep in reserve normally, test at mesocycle end.',
+    body: 'Free weights that can be dropped, supported movements. Keep 1 rep in reserve normally, test at the end of the training block.',
     examples: 'Dumbbell bench, lunges, Romanian deadlifts, step-ups',
   },
   {

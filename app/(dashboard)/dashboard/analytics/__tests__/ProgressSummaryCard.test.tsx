@@ -12,6 +12,7 @@ import type { ProgressSummary } from '../progressSummary';
 
 const summary: ProgressSummary = {
   weight: 'Weight is down 2.8 lb over the last 30 days.',
+  weightPace: "That's \u22120.8 lb a week against your target of \u22121.0 lb a week: slower than your target.",
   weightMethod: 'Your weight trend uses all 8 weigh-ins from the last 30 days.',
   liftMethod: 'A lift is rising when its estimated max goes up more than 0.15% a week.',
   strength: 'Over the last 12 weeks, your 2 tracked lifts are holding steady.',
@@ -26,6 +27,7 @@ describe('ProgressSummaryCard', () => {
     const user = userEvent.setup();
     render(<ProgressSummaryCard summary={summary} />);
     expect(screen.getByTestId('progress-summary-weight')).toHaveTextContent('Weight is down 2.8 lb');
+    expect(screen.getByTestId('progress-summary-weight-pace')).toHaveTextContent(/against your target of .1.0 lb a week/);
     expect(screen.getByTestId('progress-summary-strength-context')).toHaveTextContent(/on a cut/);
 
     const help = screen.getByTestId('progress-trend-help');

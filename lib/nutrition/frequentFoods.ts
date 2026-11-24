@@ -114,6 +114,80 @@ export function addLoggedRowsToFrequentFoods(
   return Array.from(map.values());
 }
 
+/** How many recent-food chips the Eat page shows when it first renders. */
+export const QUICK_ADD_CHIP_LIMIT = 10;
+
+/**
+ * Candidates for Eat's one-tap chips: frequent foods merged across meals by
+ * name, logged at least twice, most-logged first. The first per-meal entry
+ * seen for a name supplies the portion a tap re-logs.
+ */
+export function rankQuickAddFoods(frequentFoods: FrequentFood[]): FrequentFood[] {
+  const byName = new Map<string, { food: FrequentFood; count: number }>();
+  for (const food of frequentFoods) {
+    const existing = byName.get(food.food_name);
+    if (existing) existing.count += food.times_logged;
+    else byName.set(food.food_name, { food, count: food.times_logged });
+  }
+  return Array.from(byName.values())
+    .filter((chip) => chip.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .map((chip) => chip.food);
+}
+
+/**
+ * The chip order for this visit. The first non-empty ranking is frozen;
+ * later rankings (a quick add bumps a food's count, a search add can push a
+ * new food past the threshold) never move or drop a chip that is already on
+ * screen. A new food only joins at the END, while there is room.
+ *
+ * Panel finding (r22, 6 of 6): "I meant to tap rice, but the chips
+ * reshuffled and the oatmeal chip sat where I tapped." The row was re-sorted
+ * by count after every add, so the chip just tapped jumped to the front and
+ * everything before it slid one place right, under the finger.
+ *
+ * Returns food names; `frozen` is the previous result (null before the first).
+ */
+export function stableChipOrder(
+  frozen: readonly string[] | null,
+  ranked: readonly FrequentFood[],
+  limit: number = QUICK_ADD_CHIP_LIMIT
+): string[] {
+  if (!frozen || frozen.length === 0) return ranked.slice(0, limit).map((f) => f.food_name);
+  // A frozen chip stays put even if it left the ranking: dropping it would
+  // slide every chip after it one place left.
+  const order = [...frozen];
+  const seen = new Set(order);
+  for (const food of ranked) {
+    if (order.length >= limit) break;
+    if (!seen.has(food.food_name)) {
+      order.push(food.food_name);
+      seen.add(food.food_name);
+    }
+  }
+  return order;
+}
+
+/** A chip's second line: "1 cup · 205 kcal". */
+export function quickAddChipDetail(food: FrequentFood): string {
+  const portion = frequentFoodPortion(food);
+  return `${formatPortion(portion.serving_size)} · ${Math.round(portion.calories).toLocaleString('en-US')} kcal`;
+}
+
+/**
+ * The amount line of an add confirmation: "150 g · 248 kcal · 46 g protein".
+ * Panel (r22, Dre): "little obvious confirmation of the portion size logged".
+ */
+export function addedAmountLine(food: {
+  serving_size: string | null | undefined;
+  calories: number | null | undefined;
+  protein: number | null | undefined;
+}): string {
+  const kcal = Math.round(food.calories ?? 0).toLocaleString('en-US');
+  const protein = Math.round(food.protein ?? 0);
+  return `${formatPortion(food.serving_size)} · ${kcal} kcal · ${protein} g protein`;
+}
+
 /**
  * The exact portion a one-tap add of this frequent food logs. Prefers the last
  * logged row; a FrequentFood without one (older cache) falls back to ONE

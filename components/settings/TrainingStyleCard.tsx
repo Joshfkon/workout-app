@@ -84,7 +84,7 @@ export function TrainingStyleCard({ userId }: { userId: string | null }) {
       <CardHeader>
         <CardTitle>Training style</CardTitle>
         <p className="text-body text-ink-2 mt-1">
-          Plan follows a mesocycle (a multi-week training block). Freestyle hides mesocycles: start
+          Plan follows a multi-week training block. Freestyle hides training blocks: start
           workouts as you go, and Home shows today&apos;s workout instead of a plan.
         </p>
       </CardHeader>

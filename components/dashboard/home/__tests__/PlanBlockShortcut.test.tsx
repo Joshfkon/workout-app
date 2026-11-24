@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PlanBlockShortcut } from '../PlanBlockShortcut';
 
 jest.mock('next/navigation', () => ({
@@ -10,7 +11,11 @@ jest.mock('next/navigation', () => ({
 describe('PlanBlockShortcut', () => {
   // UX panel round 21 (Dre): "The mesocycle builder isn't obvious from the dashboard."
   it('links Home straight to the training block builder', () => {
-    render(<PlanBlockShortcut />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanBlockShortcut />
+      </QueryClientProvider>
+    );
     const link = screen.getByTestId('home-plan-block');
     expect(link).toHaveAttribute('href', '/dashboard/mesocycle/new');
     expect(link).toHaveTextContent('Plan a training block');

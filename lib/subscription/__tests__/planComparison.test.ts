@@ -15,7 +15,7 @@ describe('plan comparison (from TIER_FEATURES)', () => {
     const rows = planComparisonRows();
     const row = (feature: string) => rows.find((r) => r.feature === feature);
     expect(row('Exercise history')).toEqual({ feature: 'Exercise history', free: true, pro: true, elite: true });
-    expect(row('AI mesocycle builder')).toEqual({ feature: 'AI mesocycle builder', free: false, pro: true, elite: true });
+    expect(row('AI training block builder')).toEqual({ feature: 'AI training block builder', free: false, pro: true, elite: true });
     expect(row('AI Coach (personalized advice)')).toMatchObject({ free: false, pro: false, elite: true });
   });
 

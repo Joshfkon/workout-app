@@ -31,7 +31,13 @@ jest.mock('../Sidebar', () => ({
 }));
 
 jest.mock('../BottomNavigation', () => ({
-  BottomNavigation: () => <div data-testid="bottom-nav">BottomNav</div>,
+  BottomNavigation: ({ onPendingChange }: { onPendingChange?: (href: string | null) => void }) => (
+    <div data-testid="bottom-nav">
+      <button type="button" onClick={() => onPendingChange?.('/dashboard/analytics')}>
+        tap-progress
+      </button>
+    </div>
+  ),
 }));
 
 jest.mock('@/components/workout/ResumeWorkoutBanner', () => ({
@@ -129,5 +135,31 @@ describe('DashboardLayoutClient', () => {
     expect(screen.queryByTestId('ai-consent-prompt')).not.toBeInTheDocument();
     expect(screen.queryByText('Allow AI features?')).not.toBeInTheDocument();
     expect(mockGetAiConsent).not.toHaveBeenCalled();
+  });
+
+  it('shows the tapped tab skeleton in place of the old page until it arrives (UX panel r22)', async () => {
+    usePathname.mockReturnValue('/dashboard');
+    const { rerender } = render(
+      <DashboardLayoutClient>
+        <div data-testid="page-content">Home page</div>
+      </DashboardLayoutClient>
+    );
+    expect(screen.queryByTestId('tab-pending-skeleton')).not.toBeInTheDocument();
+    const { fireEvent } = require('@testing-library/react');
+    fireEvent.click(screen.getByText('tap-progress'));
+    expect(screen.getByTestId('tab-pending-skeleton')).toHaveTextContent('Progress');
+    expect(screen.getByTestId('page-content')).not.toBeVisible();
+
+    // The Progress page arrives: the real page shows, the stand-in goes.
+    usePathname.mockReturnValue('/dashboard/analytics');
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <DashboardLayoutClient>
+          <div data-testid="page-content">Progress page</div>
+        </DashboardLayoutClient>
+      </QueryClientProvider>
+    );
+    expect(screen.queryByTestId('tab-pending-skeleton')).not.toBeInTheDocument();
+    expect(screen.getByTestId('page-content')).toBeVisible();
   });
 });

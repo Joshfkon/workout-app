@@ -78,7 +78,7 @@ const scienceConcepts: ScienceConcept[] = [
         },
         {
           heading: 'Practical application',
-          content: 'Start your mesocycle at or slightly above MEV, then progressively add sets each week toward MAV. When performance stalls or you notice MRV warning signs, it\'s time to deload. This "accumulate and dissipate" approach is the foundation of effective periodization.',
+          content: 'Start your training block at or slightly above MEV, then progressively add sets each week toward MAV. When performance stalls or you notice MRV warning signs, it\'s time to deload. This "accumulate and dissipate" approach is the foundation of effective periodization.',
         },
       ],
     },
@@ -88,7 +88,7 @@ const scienceConcepts: ScienceConcept[] = [
     source: 'Dr. Mike Israetel',
     icon: IconBolt,
     explanation: 'Not all exercises are equal. A machine fly gives great chest stimulus with minimal fatigue to recover from. A barbell bench press stimulates chest but also taxes shoulders, triceps, and CNS.',
-    application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in mesocycles when fatigue is high, saving low-SFR compounds for when you\'re fresh.',
+    application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in training blocks when fatigue is high, saving low-SFR compounds for when you\'re fresh.',
     deepDive: {
       title: 'Maximizing your training efficiency',
       sections: [
@@ -106,7 +106,7 @@ const scienceConcepts: ScienceConcept[] = [
         },
         {
           heading: 'Strategic exercise selection',
-          content: 'Early in a mesocycle when you\'re fresh, low-SFR compounds are fine—you can recover from them. As fatigue accumulates through the mesocycle, shifting toward higher-SFR exercises lets you maintain training stimulus while managing fatigue. This is why smart programs often swap barbell movements for machine variations as the mesocycle progresses.',
+          content: 'Early in a training block when you\'re fresh, low-SFR compounds are fine—you can recover from them. As fatigue accumulates through the training block, shifting toward higher-SFR exercises lets you maintain training stimulus while managing fatigue. This is why smart programs often swap barbell movements for machine variations as the training block progresses.',
         },
       ],
     },
@@ -116,7 +116,7 @@ const scienceConcepts: ScienceConcept[] = [
     source: 'Hypertrophy research',
     icon: IconStar,
     explanation: 'Exercises can be ranked by their hypertrophy effectiveness. S-tier exercises provide maximum muscle stimulus with favorable fatigue profiles and joint-friendly mechanics.',
-    application: 'Every exercise in our database is rated S/A/B/C. Your mesocycle is built with S-tier exercises prioritized, ensuring you\'re doing the most effective movements for muscle growth.',
+    application: 'Every exercise in our database is rated S/A/B/C. Your training block is built with S-tier exercises prioritized, ensuring you\'re doing the most effective movements for muscle growth.',
     deepDive: {
       title: 'The exercise tier system explained',
       sections: [
@@ -204,7 +204,7 @@ const scienceConcepts: ScienceConcept[] = [
     ],
     icon: IconGauge,
     explanation: 'RPE and RIR let you train to appropriate intensity based on how you feel that day, not a fixed percentage of your one-rep max (1RM) that ignores recovery state.',
-    application: 'Start mesocycles at 3 RIR (could do 3 more). Progress to 1 RIR by the end. Last sets can go to 0 RIR. This systematic approach ensures progressive overload without burning out.',
+    application: 'Start training blocks at 3 RIR (could do 3 more). Progress to 1 RIR by the end. Last sets can go to 0 RIR. This systematic approach ensures progressive overload without burning out.',
     deepDive: {
       title: 'Training by feel, backed by science',
       sections: [
@@ -222,7 +222,7 @@ const scienceConcepts: ScienceConcept[] = [
         },
         {
           heading: 'Programming with RPE/RIR',
-          content: 'A typical mesocycle progression: Week 1 at 3 RIR (moderate effort), Week 2-3 at 2 RIR, Week 4-5 at 1 RIR, with occasional 0 RIR sets on the last set of an exercise. This creates systematic overload while managing fatigue. Deload weeks return to 4+ RIR to dissipate accumulated fatigue.',
+          content: 'A typical training block progression: Week 1 at 3 RIR (moderate effort), Week 2-3 at 2 RIR, Week 4-5 at 1 RIR, with occasional 0 RIR sets on the last set of an exercise. This creates systematic overload while managing fatigue. Deload weeks return to 4+ RIR to dissipate accumulated fatigue.',
         },
       ],
     },
@@ -262,7 +262,7 @@ const scienceConcepts: ScienceConcept[] = [
     source: 'Dr. Greg Nuckols and others',
     icon: IconWaveSine,
     explanation: 'Instead of training heavy for weeks then light for weeks (linear periodization), DUP rotates intensity daily. Monday: strength (4-6 reps). Wednesday: hypertrophy (8-12). Friday: power.',
-    application: 'Our mesocycle builder can create DUP programs that hit each muscle with different stimuli each session, maximizing both strength and size adaptations.',
+    application: 'Our training block builder can create DUP programs that hit each muscle with different stimuli each session, maximizing both strength and size adaptations.',
     deepDive: {
       title: 'Why varying your training works',
       sections: [
@@ -558,7 +558,7 @@ export default function SciencePage() {
             href="/dashboard/mesocycle/new"
             className="inline-flex min-h-[44px] items-center justify-center rounded-button bg-action px-5 text-body font-semibold text-on-action"
           >
-            Create mesocycle
+            Create training block
           </Link>
           <Link
             href="/dashboard/nutrition"

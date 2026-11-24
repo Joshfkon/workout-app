@@ -75,6 +75,10 @@ export function MusclePrioritySettings({
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  // What the last save did, said beside the button (UX panel round 22, Dre:
+  // "Save priorities button looks disabled and I can't tell whether my
+  // priorities were saved").
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'error' | null>(null);
 
   // Load existing priorities
   useEffect(() => {
@@ -128,6 +132,7 @@ export function MusclePrioritySettings({
       return newMap;
     });
     setHasChanges(true);
+    setSaveStatus(null);
   }, []);
 
   const handleSave = async () => {
@@ -140,13 +145,14 @@ export function MusclePrioritySettings({
     );
 
     // Delete all existing priorities for this user first
-    await supabase
+    const { error: deleteError } = await supabase
       .from('user_muscle_priorities')
       .delete()
       .eq('user_id', userId);
 
     // Insert new priorities
-    if (prioritiesToSave.length > 0) {
+    let upsertError: unknown = null;
+    if (!deleteError && prioritiesToSave.length > 0) {
       const { error } = await supabase
         .from('user_muscle_priorities')
         .upsert(
@@ -158,14 +164,18 @@ export function MusclePrioritySettings({
           })),
           { onConflict: 'user_id,muscle_group' }
         );
-
-      if (error) {
-        console.error('Error saving muscle priorities:', error);
-      }
+      upsertError = error;
     }
 
-    setHasChanges(false);
     setIsSaving(false);
+    if (deleteError || upsertError) {
+      // Keep the changes so another tap retries; say it didn't save.
+      console.error('Error saving muscle priorities:', deleteError ?? upsertError);
+      setSaveStatus('error');
+      return;
+    }
+    setHasChanges(false);
+    setSaveStatus('saved');
 
     if (onSave) {
       onSave(Array.from(priorities.values()));
@@ -182,6 +192,7 @@ export function MusclePrioritySettings({
     });
     setPriorities(newMap);
     setHasChanges(true);
+    setSaveStatus(null);
   };
 
   if (isLoading) {
@@ -273,13 +284,30 @@ export function MusclePrioritySettings({
         <PrioritySummary priorities={priorities} />
 
         {/* Actions */}
-        <div className="flex justify-between pt-4 border-t border-sep">
-          <Button variant="ghost" onClick={handleReset} disabled={isSaving}>
-            Reset to default
-          </Button>
-          <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-            {isSaving ? 'Saving...' : 'Save priorities'}
-          </Button>
+        <div className="pt-4 border-t border-sep space-y-2">
+          <div className="flex justify-between gap-2">
+            <Button variant="ghost" onClick={handleReset} disabled={isSaving}>
+              Reset to default
+            </Button>
+            {/* Enabled whenever there is something to save; with nothing
+                changed it says so in words rather than sitting greyed out. */}
+            <Button onClick={handleSave} disabled={!hasChanges || isSaving} data-testid="save-priorities">
+              {isSaving ? 'Saving…' : hasChanges ? 'Save priorities' : saveStatus === 'saved' ? 'Saved' : 'No changes to save'}
+            </Button>
+          </div>
+          <p
+            role="status"
+            className={`text-caption ${saveStatus === 'error' ? 'text-status-bad' : saveStatus === 'saved' ? 'text-status-ok' : 'text-ink-2'}`}
+            data-testid="priorities-save-status"
+          >
+            {saveStatus === 'saved'
+              ? 'Priorities saved. Plans you build use them.'
+              : saveStatus === 'error'
+                ? 'Couldn’t save your priorities. Check your connection and tap Save again.'
+                : hasChanges
+                  ? 'You have unsaved changes.'
+                  : 'Change a muscle above, then save.'}
+          </p>
         </div>
       </CardContent>
     </Card>

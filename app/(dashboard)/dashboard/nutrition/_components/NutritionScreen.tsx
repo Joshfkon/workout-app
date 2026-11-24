@@ -11,6 +11,7 @@ import {
 import { buildPendingRows, dropPendingRows, reconcileSavedRows, totalsWith, isPendingFoodLogId } from '@/lib/nutrition/optimisticAdd';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useHydrated } from '@/hooks/useHydrated';
+import { useNoCamera } from '@/hooks/useNoCamera';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
@@ -85,12 +86,13 @@ import {
   addLoggedRowsToFrequentFoods,
   buildFrequentFoods,
   frequentFoodPortion,
-  quickAddMessage,
   addedToMealMessage,
   quickAddConfirmation,
   mealTypeForHour,
   dayTotalsLine,
   formatPortion,
+  rankQuickAddFoods,
+  addedAmountLine,
 } from '@/lib/nutrition/frequentFoods';
 import { now as clockNow } from '@/lib/clock';
 import type { QuickAddConfirmation } from '@/components/nutrition/QuickAddChips';
@@ -99,6 +101,7 @@ import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { computeScanPairPRatios } from '@/services/compositionSpace';
 import { StepTracking } from '@/components/nutrition/StepTracking';
+import { StepSyncActions } from '@/components/nutrition/StepSyncActions';
 import {
   getLocalDateString,
   formatDate,
@@ -283,6 +286,9 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     typeof window === 'undefined' ? null : getLocalDateString()
   );
   const isMounted = useHydrated();
+  // Eat's Scan tile says "type the number" before the tap on a device with
+  // no camera (log view only; the trends view has no Scan).
+  const noCamera = useNoCamera(view === 'log');
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
@@ -1126,15 +1132,34 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     const mealLabel = mealLabelFor(food.meal_type);
     const { dayTotals, saved } = addFoodsOptimistically([food]);
     replaceAddedToast(null);
-    return optimisticConfirmation(
-      {
-        added: quickAddMessage(name, food.serving_size, mealLabel),
-        removed: `Removed ${name} (${formatPortion(food.serving_size)}) from ${mealLabel}`,
-        failed: `Couldn’t save ${name}. Check your connection and try again.`,
-      },
-      dayTotals,
-      saved
-    );
+    return {
+      ...optimisticConfirmation(
+        {
+          // The amount has its own line below, so the headline doesn't repeat it.
+          added: `Added ${name} to ${mealLabel}`,
+          removed: `Removed ${name} (${formatPortion(food.serving_size)}) from ${mealLabel}`,
+          failed: `Couldn’t save ${name}. Check your connection and try again.`,
+        },
+        dayTotals,
+        saved
+      ),
+      // r22 panel (Dre): show the amount on its own line, and let it be
+      // changed right there, not only undone.
+      amount: addedAmountLine(food),
+      onEdit: () => editJustAdded(saved),
+    };
+  }
+
+  /**
+   * Edit from an add confirmation: wait for the row's real id (the add is
+   * optimistic), close the Add food sheet so the editor isn't behind it, and
+   * open the logged entry's editor.
+   */
+  async function editJustAdded(saved: Promise<FoodLogEntry[]>) {
+    const [row] = await saved;
+    if (!row) return;
+    setShowAddFood(false);
+    openEditFood(row);
   }
 
   /** "Add all" from a prior meal — one insert, one combined undo. */
@@ -1323,11 +1348,15 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     );
     return {
       ...confirmation,
+      // The amount has its own line, so the headline doesn't repeat it.
+      added: `Added ${name} to ${mealLabel}`,
+      amount: addedAmountLine(portion),
       saved,
       failed: `Couldn’t save ${name}. Check your connection and try again.`,
       onUndo: async () => {
         await undoQuickAdd(await saved);
       },
+      onEdit: () => editJustAdded(saved),
     };
   }
 
@@ -1844,21 +1873,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       ? Math.round(remainingCalories / emptyMealCount)
       : 0;
 
-  // Top frequent foods across meals for the one-tap chips row
-  const chipMap = new Map<string, { food: FrequentFood; count: number }>();
-  for (const food of frequentFoods) {
-    const existing = chipMap.get(food.food_name);
-    if (existing) {
-      existing.count += food.times_logged;
-    } else {
-      chipMap.set(food.food_name, { food, count: food.times_logged });
-    }
-  }
-  const frequentChips = Array.from(chipMap.values())
-    .filter((chip) => chip.count >= 2)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
-    .map((chip) => chip.food);
+  // Frequent foods across meals, most-logged first, for the one-tap chips
+  // row. QuickAddChips freezes this order for the visit so an add (which
+  // bumps a count) never reshuffles the chips under the finger.
+  const frequentChips = rankQuickAddFoods(frequentFoods);
 
   // Use unified weight utility - all weight operations now use lib/weightUtils.ts
 
@@ -2076,7 +2094,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       )}
 
       {/* Header: title left, date nav + settings right */}
-      <div className={isTrends ? 'hidden' : 'flex items-center justify-between gap-2'}>
+      <div className={isTrends ? 'hidden' : 'flex flex-wrap items-center justify-between gap-2'}>
         <h1 className="text-large-title text-ink">Eat</h1>
         <div className="flex items-center gap-1.5">
           <button
@@ -2125,10 +2143,16 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           <div className="relative">
             <button
               onClick={() => setShowSettingsMenu((open) => !open)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink-2 shadow-card hover:text-ink"
+              // A word, not a bare gear, and a 44px target: an icon-only
+              // settings button was "small for my eyes and I had to guess
+              // what it was" (UX panel r22, Frank).
+              className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-card px-3.5 text-subhead font-semibold text-ink shadow-card hover:brightness-110"
               aria-label="Nutrition options"
+              aria-expanded={showSettingsMenu}
+              data-testid="nutrition-options"
             >
-              <IconSettings size={18} aria-hidden="true" />
+              <IconSettings size={20} aria-hidden="true" />
+              Options
             </button>
             {showSettingsMenu && (
               <>
@@ -2191,6 +2215,16 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             {stepAdjustment.adjustment !== 0
               ? `Target ${stepAdjustment.adjustedCalories.toLocaleString()} kcal (base ${stepAdjustment.baseCalories.toLocaleString()}). ${stepAdjustment.reason}. `
               : `${stepAdjustment.reason}. `}
+            {/* No steps yet: offer a way to get them in (sync, connect or
+                type them), not only the settings link (user report). */}
+            {selectedDate && (stepAdjustment.daySteps == null || stepAdjustment.daySteps <= 0) && (
+              <>
+                <StepSyncActions
+                  date={selectedDate}
+                  userWeightKg={tdeeData?.currentWeight ? tdeeData.currentWeight / 2.20462 : 80}
+                />{' '}
+              </>
+            )}
             <button
               type="button"
               onClick={() => setShowActivitySettings(true)}
@@ -2234,6 +2268,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         onScan={() => openAddFood(chipMealType, 'barcode')}
         onSearch={() => openAddFood(chipMealType, 'search', { focusSearch: true })}
         onMeals={() => setShowSavedMeals(true)}
+        noCamera={noCamera}
       />
 
       {/* Recent-food chips: one tap logs the last-logged portion to the meal

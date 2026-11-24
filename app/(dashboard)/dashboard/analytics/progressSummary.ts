@@ -55,6 +55,16 @@ export interface ProgressSummaryInput {
    * line shouldn't show (beginner mode, food-only, no lifting).
    */
   volumeRows?: readonly VolumeRow[] | null;
+  /** Completed workouts in the weekly-sets window (useWeeklyVolume.workouts). */
+  volumeWorkouts?: number | null;
+  /** Sessions a week the active training block plans (null without one). */
+  plannedPerWeek?: number | null;
+  /**
+   * Target weekly weight change in the display unit (negative on a cut):
+   * the current phase's own target, else the goal's default. Null = no
+   * target (maintenance / no goal): no pace line.
+   */
+  targetRatePerWeek?: number | null;
   /**
    * The current phase, else users.goal ('cut' / 'bulk' / …). On a cut,
    * lifts holding steady is the result to hope for, and the card says so.
@@ -75,6 +85,12 @@ export interface ProgressSummary {
    * with no tracked lift. Behind the same info toggle.
    */
   liftMethod: string | null;
+  /**
+   * The weight line's weekly pace against the target rate, e.g. "That's
+   * −0.8 lb a week against your target of −1.0 lb a week: slower than
+   * your target." Null without a target or a weight trend.
+   */
+  weightPace: string | null;
   /** Goal-specific reading of the strength line (on a cut: holding is good); null otherwise. */
   strengthContext: string | null;
   /** e.g. "Over the last 12 weeks, 2 of your 3 tracked lifts are going up and none are slipping." */
@@ -245,7 +261,11 @@ export function earlyComparison(lifts: readonly EarlyLift[] | undefined): { bett
  * screen"). Same rows and zones as the WeeklySetsCard it links to. Null
  * when no muscle has a set in the window (a line of zeros says nothing).
  */
-export function volumeSentence(rows: readonly VolumeRow[] | null | undefined): string | null {
+export function volumeSentence(
+  rows: readonly VolumeRow[] | null | undefined,
+  workouts?: number | null,
+  plannedPerWeek?: number | null
+): string | null {
   if (!rows) return null;
   const coarse = rows.filter((r) => !r.isChild);
   if (!coarse.some((r) => r.sets > 0)) return null;
@@ -257,7 +277,47 @@ export function volumeSentence(rows: readonly VolumeRow[] | null | undefined): s
     below > 0 ? `${below} under the minimum (MEV)` : null,
     over > 0 ? `${over} over the max (MRV)` : null,
   ].filter(Boolean);
-  return `Sets per muscle, last 7 days: ${parts.join(', ')}.`;
+  // Say how many workouts the window holds (and what the plan has): "all
+  // under MEV" after 2 workouts is the window, not a miscount (UX panel r22).
+  const context =
+    workouts != null
+      ? ` (${workouts} workout${workouts === 1 ? '' : 's'}${plannedPerWeek && plannedPerWeek > 0 ? `; your plan has ${plannedPerWeek} a week` : ''})`
+      : '';
+  return `Sets per muscle, last 7 days${context}: ${parts.join(', ')}.`;
+}
+
+const MINUS = '\u2212';
+function signedRate(n: number): string {
+  const v = Math.abs(n).toFixed(1);
+  return v === '0.0' ? '0.0' : `${n < 0 ? MINUS : '+'}${v}`;
+}
+
+/**
+ * The weight trend's weekly rate against the target rate for a cut or a
+ * bulk (UX panel r22, Dre: "a 2.4 lb loss over 12 weeks with no context for
+ * cut pace or target rate"). Same fitted line as the weight sentence, so the
+ * two can't disagree. "On pace" within ±0.25 lb (0.1 kg) a week, the
+ * phase assessment's on-track band.
+ */
+export function weightPaceSentence(
+  weighIns: readonly WeighInEntry[],
+  units: 'lb' | 'kg',
+  now: Date,
+  windowDays: number,
+  target: number | null | undefined
+): string | null {
+  if (target == null || !Number.isFinite(target) || target === 0) return null;
+  const trend = weightTrendLine(weighInsInWindow(weighIns, units, windowDays, now));
+  if (!trend) return null;
+  const rate = trend.perWeek;
+  const band = units === 'lb' ? 0.25 : 0.1;
+  const verdict =
+    Math.abs(rate - target) <= band
+      ? 'on pace'
+      : Math.sign(rate) !== Math.sign(target) || Math.abs(rate) < Math.abs(target)
+        ? 'slower than your target'
+        : 'faster than your target';
+  return `That's ${signedRate(rate)} ${units} a week against your target of ${signedRate(target)} ${units} a week: ${verdict}.`;
 }
 
 /** Null when there is nothing to say on any side. */
@@ -268,11 +328,15 @@ export function buildProgressSummary({
   now,
   windowDays = SUMMARY_WEIGHT_WINDOW_DAYS,
   volumeRows,
+  volumeWorkouts,
+  plannedPerWeek,
+  targetRatePerWeek,
   goal,
 }: ProgressSummaryInput): ProgressSummary | null {
   const weight = weightSentence(weighIns, units, now, windowDays);
+  const weightPace = weight ? weightPaceSentence(weighIns, units, now, windowDays, targetRatePerWeek) : null;
   const strength = strengthSentence(liftTrends);
-  const volume = volumeSentence(volumeRows);
+  const volume = volumeSentence(volumeRows, volumeWorkouts, plannedPerWeek);
   if (!weight && !strength && !volume) return null;
   const weightMethod = weight ? SHORT_WEIGHT_RULE : null;
   const strengthNames = strength && liftTrends ? risingSlippingNames(liftTrends.lifts) : null;
@@ -280,6 +344,7 @@ export function buildProgressSummary({
   const confident = liftTrends ? liftTrends.rising + liftTrends.flat + liftTrends.down : 0;
   return {
     weight,
+    weightPace,
     weightMethod,
     liftMethod: tracked ? shortLiftRule(units) : null,
     strength,

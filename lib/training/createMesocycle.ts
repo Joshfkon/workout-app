@@ -231,7 +231,7 @@ export async function createMesocycle(
 
   if (deactivateError) {
     throw new Error(
-      `Couldn't close your current mesocycle: ${describeSupabaseError(deactivateError)}`
+      `Couldn't close your current training block: ${describeSupabaseError(deactivateError)}`
     );
   }
 
@@ -250,7 +250,7 @@ export async function createMesocycle(
   if (insertError || !mesocycle) {
     const describe =
       options?.describeInsertFailure ??
-      ((e: unknown) => describeSupabaseError(e, 'Failed to create mesocycle'));
+      ((e: unknown) => describeSupabaseError(e, 'Failed to create training block'));
     throw new Error(describe(insertError));
   }
 

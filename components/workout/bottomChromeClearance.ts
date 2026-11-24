@@ -6,6 +6,26 @@ import { useEffect, useState } from 'react';
 const CLEARANCE_GAP_PX = 8;
 /** Never scroll the element closer than this to the top of the screen. */
 const TOP_MARGIN_PX = 8;
+/**
+ * Only clear the logger this soon after the lifter tapped it (the toast that
+ * grows the stack arrives right after a logged set). Growth at any other time
+ * is the lifter scrolling: the pinned Log set bar joins the stack when the
+ * logger scrolls out of view, and clearing it then dragged them back down
+ * (user report: "if I scroll up to see my sets it autoscrolls me back down").
+ */
+export const CLEAR_AFTER_TAP_MS = 6000;
+
+/** Pure: should a stack growth at `now` scroll the logger clear? */
+export function shouldClearAfterGrowth(
+  now: number,
+  lastLoggerTapAt: number | null,
+  lastUserScrollAt: number | null
+): boolean {
+  if (lastLoggerTapAt == null || now - lastLoggerTapAt > CLEAR_AFTER_TAP_MS) return false;
+  // The lifter has scrolled since that tap: their position wins.
+  if (lastUserScrollAt != null && lastUserScrollAt >= lastLoggerTapAt) return false;
+  return true;
+}
 
 /**
  * How far to scroll down so `target` sits above a fixed bottom stack whose
@@ -36,7 +56,8 @@ export function scrollToClear(
  * lifter just tapped (UX panel round 20). Page bottom padding can't help
  * mid-page. So: whenever the stack gets taller, scroll by exactly the
  * overlap. Shrinking never scrolls back (the content was never moved under
- * the lifter's thumb in the first place).
+ * the lifter's thumb in the first place). Only right after a tap in the
+ * logger, and never once the lifter has scrolled (shouldClearAfterGrowth).
  */
 export function useKeepLoggerClearOfBottomChrome(
   selector = '[data-active-logger]'
@@ -47,11 +68,25 @@ export function useKeepLoggerClearOfBottomChrome(
   useEffect(() => {
     if (!stack || typeof ResizeObserver === 'undefined') return;
     let lastHeight = stack.getBoundingClientRect().height;
+    let lastLoggerTapAt: number | null = null;
+    let lastUserScrollAt: number | null = null;
+    const onPointerDown = (e: Event) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.(selector) || stack.contains(t as Node)) lastLoggerTapAt = Date.now();
+    };
+    // Finger or wheel scrolling only (not our own smooth scroll).
+    const onUserScroll = () => {
+      lastUserScrollAt = Date.now();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('touchmove', onUserScroll, { passive: true });
+    window.addEventListener('wheel', onUserScroll, { passive: true });
     const observer = new ResizeObserver(() => {
       const rect = stack.getBoundingClientRect();
       const grew = rect.height > lastHeight + 1;
       lastHeight = rect.height;
       if (!grew || rect.height === 0) return;
+      if (!shouldClearAfterGrowth(Date.now(), lastLoggerTapAt, lastUserScrollAt)) return;
       let scroll = 0;
       document.querySelectorAll<HTMLElement>(selector).forEach((el) => {
         if (stack.contains(el)) return;
@@ -60,7 +95,12 @@ export function useKeepLoggerClearOfBottomChrome(
       if (scroll > 0) window.scrollBy({ top: scroll, behavior: 'smooth' });
     });
     observer.observe(stack);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('touchmove', onUserScroll);
+      window.removeEventListener('wheel', onUserScroll);
+    };
   }, [stack, selector]);
   return setStack;
 }

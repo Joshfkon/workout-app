@@ -999,7 +999,7 @@ export class ProgramEngine {
       warnings: recoveryFactors.warnings,
       programNotes: [
         `Periodization: ${periodization.model}`,
-        `Mesocycle: ${periodization.mesocycleWeeks} weeks`,
+        `Training block: ${periodization.mesocycleWeeks} weeks`,
         `Deload: Week ${periodization.deloadFrequency + 1}`
       ]
     };
@@ -1030,7 +1030,7 @@ export class ProgramEngine {
     if (error || !data) {
       // Keep what the database said — a PostgrestError is a plain object, so
       // a bare rethrow elsewhere would reduce it to a generic message.
-      throw new Error(describeSupabaseError(error, 'Failed to create mesocycle'));
+      throw new Error(describeSupabaseError(error, 'Failed to create training block'));
     }
     
     return { mesocycleId: data.id, program };

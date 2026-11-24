@@ -573,7 +573,7 @@ export function compareProfileToResearch(profile: UserVolumeProfile): ResearchCo
     const reasons: string[] = [];
     if (tolerance && tolerance.dataPoints > 0) {
       reasons.push(
-        `Learned from ${tolerance.dataPoints} mesocycle${tolerance.dataPoints === 1 ? '' : 's'} of your training (${tolerance.confidence} confidence)`
+        `Learned from ${tolerance.dataPoints} training block${tolerance.dataPoints === 1 ? '' : 's'} of your training (${tolerance.confidence} confidence)`
       );
     }
     if (profile.trainingAge === 'novice') {
@@ -585,7 +585,7 @@ export function compareProfileToResearch(profile: UserVolumeProfile): ResearchCo
       reasons.push('Enhanced athlete mode — recoverable-volume ceiling raised');
     }
     if (reasons.length === 0) {
-      reasons.push('Research default — personalizes as you complete mesocycles');
+      reasons.push('Research default — personalizes as you complete training blocks');
     }
 
     return {

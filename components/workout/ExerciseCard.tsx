@@ -91,7 +91,7 @@ import {
 } from './whyThisWeight';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { injuryNoteFromReason } from '@/services/suggestedWorkout';
-import { plainWorkoutText } from '@/lib/beginnerMode';
+import { BEGINNER_WARMUP_EXPLAINER, plainWorkoutText } from '@/lib/beginnerMode';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
 import { velocityTargetFit, type VelocityTargetFit } from '@/services/shared/motion/setSummary';
@@ -4241,6 +4241,13 @@ export const ExerciseCard = memo(function ExerciseCard({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
+          {/* Beginner mode: say what warm-up sets are without a tap — the ⓘ
+              alone left "warm-up protocol" as jargon (UX panel round 22). */}
+          {beginner && !isWarmupExpanded && (
+            <p className="-mt-1 px-3 pb-3 text-caption text-ink-2" data-testid="warmup-explainer">
+              {BEGINNER_WARMUP_EXPLAINER}
+            </p>
+          )}
 
           {/* Warmup table - only show when expanded */}
           {isWarmupExpanded && (

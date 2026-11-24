@@ -77,11 +77,19 @@ beforeEach(() => {
 
 describe('HomeStartWorkout', () => {
   it('resumes an unfinished workout instead of starting another', async () => {
-    mockRows = { in_progress: [{ id: 'sess-9' }] };
+    mockRows = { in_progress: [{ id: 'sess-9', state: 'in_progress', started_at: new Date().toISOString(), mesocycle_id: null, exercise_blocks: [{ count: 4 }] }] };
     renderIt();
     const link = await screen.findByRole('link', { name: /resume workout/i });
     expect(link).toHaveAttribute('href', '/dashboard/workout/sess-9');
     expect(screen.queryByRole('button', { name: /start workout/i })).not.toBeInTheDocument();
+  });
+
+  it('never offers an empty leftover the workout screen would only bounce to Train (user report)', async () => {
+    const sixHoursAgo = new Date(Date.now() - 6 * 3600e3).toISOString();
+    mockRows = { in_progress: [{ id: 'old-empty', state: 'in_progress', started_at: sixHoursAgo, mesocycle_id: null, exercise_blocks: [{ count: 0 }] }] };
+    renderIt();
+    expect(await screen.findByRole('button', { name: 'Start today’s workout' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /resume workout/i })).not.toBeInTheDocument();
   });
 
   it('starts today’s recommended workout in one tap (auto-start sheet)', async () => {

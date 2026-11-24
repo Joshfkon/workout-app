@@ -143,7 +143,7 @@ describe('compareProfileToResearch', () => {
 
     expect(chest.status).toBe('higher');
     expect(chest.percentDiff).toBeGreaterThan(0);
-    expect(chest.reasons[0]).toMatch(/learned from 3 mesocycles/i);
+    expect(chest.reasons[0]).toMatch(/learned from 3 training blocks/i);
     expect(chest.reasons[0]).toMatch(/medium confidence/i);
     // Other muscles stay at research defaults with the default reason.
     const back = comparison.entries.find((e) => e.muscle === 'back')!;

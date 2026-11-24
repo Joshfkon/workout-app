@@ -6998,7 +6998,7 @@ export default function WorkoutPage() {
           isOpen={showClaimPrompt}
           onClose={handleDeclineClaim}
           onConfirm={handleConfirmClaim}
-          title="Count toward your mesocycle?"
+          title="Count toward your training block?"
           message={`This workout looks like ${claimCandidate?.dayName ?? 'your next planned session'}. Counting it advances your program to the next session — otherwise it stays an extra workout.`}
           confirmText="Count it"
           cancelText="Keep as extra"
@@ -7222,10 +7222,17 @@ export default function WorkoutPage() {
 
   // Up-next rows: non-active blocks with nothing logged yet (skipped ones
   // render greyed with an Undo). Everything else stays in the main list.
+  //
+  // While reordering, everything is ONE list in block order: two sections
+  // (with the "Up next" heading between them) made rows jump across the split
+  // and dropped exercises land somewhere other than where they were let go
+  // (user report). And an exercise placed ABOVE the current one stays in the
+  // main list where it was put, instead of reappearing down in Up next.
   const isBlockInMainList = (index: number) => {
     const b = blocks[index];
     if (!b) return false;
-    return index === currentBlockIndex || getSetsForBlock(b.id).length > 0;
+    if (isDraggingBlock) return true;
+    return index <= currentBlockIndex || getSetsForBlock(b.id).length > 0;
   };
   const upNextEntries = blocks
     .map((block, index) => ({ block, index }))
@@ -8400,6 +8407,8 @@ export default function WorkoutPage() {
                   {/* Drag handle - hold to reorder (wired to the existing block drag state) */}
                   <div
                     data-drag-handle
+                    role="button"
+                    aria-label={`Hold to reorder ${block.exercise.name}`}
                     className="text-ink-3 cursor-grab active:cursor-grabbing p-1.5 -m-1 touch-none flex-shrink-0"
                     onTouchStart={(e) => {
                       e.stopPropagation();

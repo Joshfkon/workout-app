@@ -147,6 +147,24 @@ export interface EarlyLift {
   firstReps?: number;
   latestWeightKg?: number;
   latestReps?: number;
+  /**
+   * Each workout's top set, oldest first (1–2 of them), so the card can
+   * draw the sessions that exist instead of no chart until a trend (UX panel
+   * r22, Maya: "only a basic comparison and no chart"). Optional: older
+   * persisted summaries lack it.
+   */
+  points?: EarlyLiftPoint[];
+}
+
+/** One workout's top set for an early (pre-trend) lift. */
+export interface EarlyLiftPoint {
+  /** Local day, YYYY-MM-DD. */
+  date: string;
+  weightKg: number;
+  /** Lift trends skip duration exercises, so these are real reps. */
+  topSetReps: number;
+  /** Estimated max of that set (kg), what the chart plots. */
+  e1rmKg: number;
 }
 
 export interface LiftTrendsSummary {
@@ -544,6 +562,12 @@ export function computeLiftTrends(
         firstReps: first.topSetReps,
         latestWeightKg: latest.topSetWeightKg,
         latestReps: latest.topSetReps,
+        points: byDate.map((snap) => ({
+          date: snap.sessionDate,
+          weightKg: snap.topSetWeightKg,
+          topSetReps: snap.topSetReps,
+          e1rmKg: snap.estimatedE1RM,
+        })),
       };
       return early;
     })

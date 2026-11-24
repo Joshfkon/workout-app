@@ -4,7 +4,11 @@ import type { ReactNode } from 'react';
 import { BottomNavigation } from '../BottomNavigation';
 
 let mockPathname = '/dashboard/train';
-jest.mock('next/navigation', () => ({ usePathname: () => mockPathname }));
+const mockPrefetch = jest.fn();
+jest.mock('next/navigation', () => ({
+  usePathname: () => mockPathname,
+  useRouter: () => ({ prefetch: mockPrefetch }),
+}));
 jest.mock('@/hooks/useKeyboardOpen', () => ({ useKeyboardOpen: () => false }));
 let mockFoodOnly = false;
 jest.mock('@/hooks/useTrackingFocus', () => ({

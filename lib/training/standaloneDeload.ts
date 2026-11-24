@@ -154,7 +154,7 @@ export function buildStandalonePerformance(
  */
 export function rewriteStandaloneReason(reason: string): string {
   return reason.replace(
-    'weeks since mesocycle start - overdue for deload',
+    'weeks since training block start - overdue for deload',
     'weeks of training without a break - overdue for a light week'
   );
 }
