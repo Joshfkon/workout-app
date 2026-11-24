@@ -53,6 +53,14 @@ describe('WorkoutStartPreview', () => {
     expect(screen.getAllByText('60').length).toBeGreaterThan(0);
     expect(screen.getByTestId('preview-reason')).toHaveTextContent('Suggested starting weight');
     expect(screen.getByTestId('preview-up-next')).toHaveTextContent('Cable Row');
+    // Set 1 can be logged right here, so the status leads with that, not a wait.
+    expect(screen.getByRole('status')).toHaveTextContent('Set 1 is ready to log');
+  });
+
+  it('says what it is waiting for when there is nothing to log yet', () => {
+    render(
+      <WorkoutStartPreview preview={preview} stage="saving" unit={null} earlySet={null} onLogFirstSet={jest.fn()} />
+    );
     expect(screen.getByRole('status')).toHaveTextContent('Saving your exercises');
   });
 
@@ -111,5 +119,6 @@ describe('WorkoutStartPreview', () => {
     expect(previewWeightInput(0, 'kg')).toBe('');
     expect(previewWeightInput(60, 'lb')).toBe('132.5');
     expect(previewStatusLine(null)).toMatch(/Getting the rest/);
+    expect(previewStatusLine('building', true)).toMatch(/^Set 1 is ready to log/);
   });
 });

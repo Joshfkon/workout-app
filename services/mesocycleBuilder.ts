@@ -49,7 +49,7 @@ import {
   resolvePrimaryMuscleCredits,
   SECONDARY_MUSCLE_CREDIT,
 } from '@/services/volumeTracker';
-import { groupCapScale, perSetCredits } from '@/services/shared/volumeCredit';
+import { groupCapScale, perSetCredits, perSetGroupCredits } from '@/services/shared/volumeCredit';
 import { resolveMuscleToStandard } from '@/types/schema';
 import {
   DEFAULT_VOLUME_LANDMARKS,
@@ -734,12 +734,15 @@ export function buildPeriodizationPlan(
   // and then deloads. Block periodization runs the other way (1.1 → 0.8 →
   // 0.6 of the sets into a heavy peak), a strength-peaking shape that cut an
   // off-season bodybuilder's chest from 11 to 8 sets over the block (UX
-  // panel, round 19). Other advanced goals keep block.
+  // panel, round 19). A cut is the same: a bodybuilder in a deficit keeps
+  // hypertrophy volume to hold muscle, and the block's 60% week put back,
+  // quads and hamstrings under MEV with a deload no lighter than week 4 (UX
+  // panel round 22). Maintenance and recomp keep block.
   if (profile.experience === 'novice' || profile.trainingAge < 1) {
     model = 'linear';
   } else if (profile.experience === 'intermediate' || profile.trainingAge < 3) {
     model = profile.goal === 'cut' ? 'weekly_undulating' : 'daily_undulating';
-  } else if (profile.goal === 'bulk') {
+  } else if (profile.goal === 'bulk' || profile.goal === 'cut') {
     model = 'linear';
   } else {
     model = 'block';
@@ -1823,15 +1826,46 @@ export function applyIndirectAwareAllocation(
   sessions: AllocatableSession[],
   targets: Record<string, { sets: number }>,
   /** Credit-projection currency — see the capped-projection gate above. */
-  projection?: CreditProjectionOptions
+  projection?: CreditProjectionOptions,
+  /**
+   * Training weeks: never take a set that leaves a muscle group under its
+   * MEV as the review and tracking count it (capped group credit). The trim
+   * measures in the uncapped projection (the gate above), where a pulldown
+   * set is ~1.5 back sets, so it could trim back to 9 tracked sets (MEV 10)
+   * while believing it sat at the 13-set target (UX panel round 22, Dre:
+   * "back, quads, hamstrings, calves and traps sit at or below MEV"). Off
+   * for a deload, which sits under MEV by design.
+   */
+  keepTrackedMev = false
 ): string[] {
   const notes: string[] = [];
   const trimmedByGroup = new Map<CoarseMuscle, number>();
   const blockedGroups = new Set<CoarseMuscle>();
+  // Tracked (capped) group credit of the week, and what one set of an
+  // exercise contributes to it.
+  const groupCreditsOf = (ex: AllocatableExercise) =>
+    perSetGroupCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? []);
+  const trackedTotals = (): Map<CoarseMuscle, number> => {
+    const totals = new Map<CoarseMuscle, number>();
+    for (const session of sessions) {
+      for (const ex of session.exercises) {
+        for (const { group, credit } of groupCreditsOf(ex)) {
+          totals.set(group, (totals.get(group) ?? 0) + ex.sets * credit);
+        }
+      }
+    }
+    return totals;
+  };
+  const keepsTrackedMev = (ex: AllocatableExercise, tracked: Map<CoarseMuscle, number>): boolean =>
+    groupCreditsOf(ex).every(({ group, credit }) => {
+      const mev = getEffectiveBand(group)?.mev ?? 0;
+      return (tracked.get(group) ?? 0) - credit >= mev - 1e-9;
+    });
 
   // Safety valve far above any real trim count (weekly sets are ~100).
   for (let iteration = 0; iteration < 300; iteration++) {
     const { direct, indirect } = creditWeek(sessions, projection);
+    const tracked = keepTrackedMev ? trackedTotals() : null;
 
     // Largest-overshoot group first, recomputed every iteration because a
     // trim also removes the trimmed exercise's OWN secondary credit from
@@ -1896,6 +1930,7 @@ export function applyIndirectAwareAllocation(
             // A trim that would DELETE the exercise must pass the
             // movement-pattern floor.
             if (ex.sets === 1 && !removalKeepsMovements(ex)) continue;
+            if (tracked && !keepsTrackedMev(ex, tracked)) continue;
             const credit = resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle).find(
               (c) => c.muscle === std
             );

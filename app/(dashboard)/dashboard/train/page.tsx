@@ -75,6 +75,7 @@ import { getMuscleGroupProgression } from '@/services/progressionInsights';
 import { now as clockNow } from '@/lib/clock';
 import { parseLocalDay } from '@/lib/date/localDay';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePrefetchBuilderInputs } from '@/hooks/usePrefetchBuilderInputs';
 import {
   mesoProgress,
   toRecentWorkouts,
@@ -201,6 +202,9 @@ export default function TrainPage() {
     }
   }, []);
   const isFreestyle = data ? data.isFreestyle : cachedFreestyle;
+  // Train offers the block builder when there is no active block (or in
+  // freestyle): warm its inputs so it opens with data (UX panel round 22).
+  const prefetchBuilder = usePrefetchBuilderInputs(!!data && (!activeMeso || isFreestyle));
   useEffect(() => {
     if (!data) return;
     try {
@@ -621,6 +625,8 @@ export default function TrainPage() {
               <div className="flex gap-2 mt-4">
                 <Link
                   href="/dashboard/mesocycle/new"
+                  onPointerDown={prefetchBuilder}
+                  onFocus={prefetchBuilder}
                   className="flex-1"
                 >
                   <StyledButton
@@ -660,6 +666,8 @@ export default function TrainPage() {
         // planner arrives (the panel's first tap here read as missed).
         <PendingLink
           href="/dashboard/mesocycle/new"
+                  onPointerDown={prefetchBuilder}
+                  onFocus={prefetchBuilder}
           className="flex items-center gap-3 rounded-card bg-card p-4 shadow-card transition-[background-color,transform] hover:bg-fill/70 active:scale-[0.99] active:bg-fill"
           pendingClassName="bg-fill"
           data-testid="train-plan-block"

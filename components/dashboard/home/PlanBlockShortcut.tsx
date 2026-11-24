@@ -11,11 +11,16 @@
 import { IconCalendarStats, IconChevronRight, IconLoader2 } from '@tabler/icons-react';
 import { PendingLink } from '@/components/dashboard/PendingLink';
 import { ProTag } from '@/components/subscription/ProTag';
+import { usePrefetchBuilderInputs } from '@/hooks/usePrefetchBuilderInputs';
 
 export function PlanBlockShortcut() {
+  // The builder opens with its data, not a skeleton (UX panel round 22).
+  const prefetchBuilder = usePrefetchBuilderInputs();
   return (
     <PendingLink
       href="/dashboard/mesocycle/new"
+      onPointerDown={prefetchBuilder}
+      onFocus={prefetchBuilder}
       className="flex min-h-[56px] items-center gap-3 rounded-card bg-card px-4 py-3 shadow-card transition-[background-color,transform] hover:bg-fill/70 active:scale-[0.99] active:bg-fill"
       pendingClassName="bg-fill"
       data-testid="home-plan-block"

@@ -54,7 +54,9 @@ export function SplitChooser({
                 <span className="font-semibold text-ink">{choice.label}</span>
                 {recommended === choice.split && (
                   <span className="rounded-full bg-status-ok/15 px-2 py-0.5 text-caption font-semibold text-status-ok">
-                    Recommended
+                    {/* The lifter's own split is the recommendation when
+                        there is one (UX panel round 22); say why. */}
+                    {matchesHistory === choice.split ? 'Recommended · your split' : 'Recommended'}
                   </span>
                 )}
                 {matchesHistory === choice.split && recommended !== choice.split && (

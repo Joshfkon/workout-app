@@ -12,6 +12,9 @@ import {
   rampLine,
   rirLine,
   deloadSummary,
+  deloadFloorNote,
+  detectBroadSplit,
+  builderSplitFor,
   rampExplanation,
   recoveryVolumeExplanation,
   headsOf,
@@ -330,5 +333,64 @@ describe('onboardingScheduleDefaults', () => {
     expect(onboardingScheduleDefaults({ trainingDaysPerWeek: '5', currentSplit: 'other' })).toEqual(none);
     expect(onboardingScheduleDefaults({ trainingDaysPerWeek: 9, currentSplit: 'toString' })).toEqual(none);
     expect(onboardingScheduleDefaults({ trainingDaysPerWeek: 4.5 }).daysPerWeek).toBeNull();
+  });
+});
+
+
+describe('upper/lower and full-body histories (UX panel round 22)', () => {
+  const upper = day('chest_upper', 'lats', 'biceps', 'triceps_long');
+  const lower = day('quads', 'hamstrings', 'gastrocnemius');
+  const full = day('chest_upper', 'quads', 'lats');
+
+  it('reads alternating upper and lower days as upper/lower', () => {
+    expect(detectBroadSplit([upper, lower, upper, lower])).toBe('upper_lower');
+    expect(builderDefaultsFromHistory([upper, lower, upper, lower, upper, lower], 14)).toMatchObject({
+      splitKind: 'upper_lower',
+      summary: expect.stringContaining('upper/lower'),
+    });
+    expect(builderSplitFor('upper_lower')).toBe('Upper/Lower');
+  });
+
+  it('reads mostly whole-body sessions as full body', () => {
+    expect(detectBroadSplit([full, full, upper, full])).toBe('full_body');
+    expect(builderSplitFor('full_body')).toBe('Full Body');
+  });
+
+  it('names nothing from a mixed or short history', () => {
+    expect(detectBroadSplit([upper, lower, full])).toBeNull();
+    expect(detectBroadSplit([upper, full, lower, full])).toBeNull();
+    expect(detectBroadSplit([upper, upper, upper, upper])).toBeNull();
+  });
+
+  it('still reads push/pull/legs and body-part histories first', () => {
+    expect(builderDefaultsFromHistory(bodyPartWeek).splitKind).toBe('body_part');
+  });
+});
+
+describe('deloadFloorNote', () => {
+  const week = (weekNumber: number, isDeload: boolean, sets: Record<string, number>) => ({
+    weekNumber,
+    isDeload,
+    volumeModifier: isDeload ? 0.5 : 1,
+    intensityModifier: null,
+    rir: null,
+    sets,
+    heads: {},
+  });
+
+  it('names the muscles the deload cuts by less than half, and why', () => {
+    const note = deloadFloorNote([
+      week(1, false, { chest: 10, quads: 8 }),
+      week(2, false, { chest: 12, quads: 10 }),
+      week(3, true, { chest: 6, quads: 7 }),
+    ]);
+    expect(note).toMatch(/quads 10 → 7/);
+    expect(note).not.toMatch(/chest/);
+    expect(note).toMatch(/each exercise keeps at least one set/);
+  });
+
+  it('says nothing when every muscle drops to about half', () => {
+    expect(deloadFloorNote([week(1, false, { chest: 12 }), week(2, true, { chest: 6 })])).toBeNull();
+    expect(deloadFloorNote([week(1, false, { chest: 12 })])).toBeNull();
   });
 });
