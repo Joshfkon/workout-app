@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { ContextCard } from '@/components/onboarding/ContextCard';
@@ -9,15 +9,15 @@ import { completeOnboarding, updateOnboardingStep } from '@/lib/onboarding/onboa
 import { BENCHMARK_LIFTS, type BenchmarkLift } from '@/services/coachingEngine';
 import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 
-function BenchmarkCard({ 
-  benchmark, 
-  isSelected, 
+function BenchmarkCard({
+  benchmark,
+  isSelected,
   onToggle,
   isRecommended,
   isAlternative
-}: { 
-  benchmark: BenchmarkLift; 
-  isSelected: boolean; 
+}: {
+  benchmark: BenchmarkLift;
+  isSelected: boolean;
   onToggle: () => void;
   isRecommended?: boolean;
   isAlternative?: boolean;
@@ -26,8 +26,8 @@ function BenchmarkCard({
     <button
       onClick={onToggle}
       className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-        isSelected 
-          ? 'bg-action/10 border-action' 
+        isSelected
+          ? 'bg-action/10 border-action'
           : 'bg-card border-sep hover:border-sep'
       }`}
     >
@@ -50,8 +50,8 @@ function BenchmarkCard({
           </div>
         </div>
         <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-          isSelected 
-            ? 'bg-action border-action' 
+          isSelected
+            ? 'bg-action border-action'
             : 'border-sep'
         }`}>
           {isSelected && (
@@ -65,37 +65,42 @@ function BenchmarkCard({
   );
 }
 
+/** The status line once Skip is tapped (either button). */
+const SKIPPED_STATUS =
+  'Skipped. Your first workouts will find your starting weights. Opening your dashboard…';
+
 function BenchmarksContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
-  
+
   const [isLoading, setIsLoading] = useState(false);
-  // Which skip button was tapped (the beginner one says so in its status).
-  const [isSkipping, setIsSkipping] = useState<false | 'skip' | 'beginner'>(false);
+  // Which Skip was tapped: the one at the top or the one by Start Testing.
+  const [isSkipping, setIsSkipping] = useState<false | 'top' | 'bottom'>(false);
+  const liftsRef = useRef<HTMLHeadingElement>(null);
   // Nothing preselected: testing is optional, and a preselected set made the
   // page open on "about 68 minutes". Recommended lifts carry a badge instead.
   const [selectedBenchmarks, setSelectedBenchmarks] = useState<string[]>([]);
-  
+
   const recommendedIds = ['bench_press', 'squat', 'deadlift', 'barbell_row'];
   const optionalIds = ['overhead_press', 'pullup'];
   const alternativeIds = ['leg_press'];
-  
+
   const toggleBenchmark = (id: string) => {
-    setSelectedBenchmarks(prev => 
-      prev.includes(id) 
+    setSelectedBenchmarks(prev =>
+      prev.includes(id)
         ? prev.filter(b => b !== id)
         : [...prev, id]
     );
   };
-  
+
   const estimatedTime = selectedBenchmarks.length * 17;
 
   // Skipping is a finished setup, not an abandoned one — otherwise the
   // "Complete your setup" card nags on every screen.
   // One tap: no confirm, and the button goes busy at once so a slow network
   // doesn't read as "nothing happened, tap again".
-  const skipTesting = async (how: 'skip' | 'beginner' = 'skip') => {
+  const skipTesting = async (how: 'top' | 'bottom' = 'top') => {
     if (isSkipping) return;
     setIsSkipping(how);
     try {
@@ -107,7 +112,7 @@ function BenchmarksContent() {
     }
     router.push('/dashboard');
   };
-  
+
   const handleContinue = async () => {
     if (!sessionId || selectedBenchmarks.length === 0 || isLoading || isSkipping) return;
 
@@ -119,18 +124,18 @@ function BenchmarksContent() {
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       // Update session with selected benchmarks
       await supabase
         .from('coaching_sessions')
         .update({ selected_benchmarks: selectedBenchmarks })
         .eq('id', sessionId);
-      
+
       // Track progress
       if (user) {
         await updateOnboardingStep(supabase, user.id, 'benchmarks');
       }
-      
+
       // Navigate to calibration
       router.push(`/onboarding/calibrate?session=${sessionId}`);
       navigating = true;
@@ -140,7 +145,7 @@ function BenchmarksContent() {
       if (!navigating) setIsLoading(false);
     }
   };
-  
+
   // Warm the dashboard route so Skip lands without a dead pause.
   useEffect(() => {
     router.prefetch?.('/dashboard');
@@ -152,13 +157,13 @@ function BenchmarksContent() {
       router.push('/onboarding');
     }
   }, [sessionId, router]);
-  
+
   if (!sessionId) return null;
-  
+
   return (
     <div className="space-y-6 animate-fade-in">
       <OnboardingSteps current="strength" />
-      
+
       <div className="text-center space-y-2">
         <span
           className="inline-block rounded-full bg-fill px-3 py-1 text-subhead font-semibold text-ink-2"
@@ -184,40 +189,37 @@ function BenchmarksContent() {
         </p>
       </div>
 
-      {/* Skipping comes before the details and the lift list: testing takes
-          about an hour at a gym, and many people sign up elsewhere or don't
-          lift barbells. Beginners get their own, plainly worded way out. */}
+      {/* Skip is THE primary button, full width, first (UX round 23: "only
+          a small 'Skip for now' link gets you past it", "I had to hunt for
+          the skip option"). Round 22's filled button read "I'm new to
+          lifting — skip", so an experienced lifter saw only a dim second
+          button and the header's small link. One Skip, for everyone, as
+          big as Continue; testing is the second choice. */}
       <div className="space-y-2">
         <Button
           className="w-full active:scale-[0.98]"
           size="lg"
-          onClick={() => skipTesting('beginner')}
-          isLoading={isSkipping === 'beginner'}
-          aria-busy={isSkipping === 'beginner'}
-          disabled={isLoading || (isSkipping !== false && isSkipping !== 'beginner')}
-          data-testid="skip-benchmarks-beginner"
+          onClick={() => skipTesting('top')}
+          isLoading={isSkipping === 'top'}
+          aria-busy={isSkipping === 'top'}
+          disabled={isLoading || (isSkipping !== false && isSkipping !== 'top')}
+          data-testid="skip-benchmarks"
         >
-          {isSkipping === 'beginner' ? 'Opening the app…' : 'I’m new to lifting — skip'}
+          {isSkipping === 'top' ? 'Opening the app…' : 'Skip the test — go to the app'}
         </Button>
         <Button
           variant="secondary"
           className="w-full active:scale-[0.98]"
           size="lg"
-          onClick={() => skipTesting('skip')}
-          isLoading={isSkipping === 'skip'}
-          aria-busy={isSkipping === 'skip'}
-          disabled={isLoading || (isSkipping !== false && isSkipping !== 'skip')}
-          data-testid="skip-benchmarks"
+          disabled={isLoading || isSkipping !== false}
+          onClick={() => liftsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          data-testid="benchmarks-show-lifts"
         >
-          {isSkipping === 'skip' ? 'Opening the app…' : 'Skip for now'}
+          Test my strength (~1 hour at a gym)
         </Button>
         {/* Said out loud and on screen the moment Skip is tapped. */}
         <p role="status" aria-live="polite" className="text-subhead text-ink-2 text-center min-h-[1.125rem]">
-          {isSkipping === 'beginner'
-            ? 'Skipped. Your first workouts will find your starting weights. Opening your dashboard…'
-            : isSkipping
-              ? 'Skipped. Finishing setup and opening your dashboard…'
-              : ''}
+          {isSkipping ? SKIPPED_STATUS : ''}
         </p>
       </div>
 
@@ -262,7 +264,9 @@ function BenchmarksContent() {
         <p className="text-subhead text-ink-2">You can test any time later from Progress.</p>
       </div>
 
-      <h2 className="text-headline font-semibold text-ink pt-2">Or pick lifts to test now</h2>
+      <h2 ref={liftsRef} className="text-headline font-semibold text-ink pt-2 scroll-mt-20" data-testid="benchmarks-lifts-heading">
+        Pick lifts to test now
+      </h2>
 
       {/* Context card explaining why we test strength */}
       <ContextCard
@@ -290,7 +294,7 @@ function BenchmarksContent() {
           ))}
         </div>
       </div>
-      
+
       {/* Optional lifts */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -308,7 +312,7 @@ function BenchmarksContent() {
           ))}
         </div>
       </div>
-      
+
       {/* Alternative lifts */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -327,7 +331,7 @@ function BenchmarksContent() {
           ))}
         </div>
       </div>
-      
+
       {/* Time estimate: only once lifts are picked, and only as one total (no
           per-lift minutes on the cards), so the page doesn't open on a time
           ask for something optional. It sits by the Start button so it
@@ -355,25 +359,17 @@ function BenchmarksContent() {
         </Card>
       )}
 
-      {/* Navigation */}
-      <div className="flex justify-between pt-4">
-        <Button 
-          variant="secondary"
-          onClick={() => router.push('/onboarding')}
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-          </svg>
-          Back
-        </Button>
-        
-        <Button 
-          size="lg" 
-          onClick={handleContinue} 
+      {/* Navigation: Start and Skip stacked, both full width, so the way
+          past this step is as big at the bottom as at the top. With no
+          lift picked, Skip is the filled one. */}
+      <div className="space-y-2 pt-4">
+        <Button
+          size="lg"
+          onClick={handleContinue}
           disabled={selectedBenchmarks.length === 0 || isLoading || isSkipping !== false}
           isLoading={isLoading}
           aria-busy={isLoading}
-          className="active:scale-[0.98]"
+          className="w-full active:scale-[0.98]"
           data-testid="start-benchmarks"
         >
           {isLoading
@@ -384,6 +380,26 @@ function BenchmarksContent() {
           <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
+        </Button>
+        <Button
+          variant={selectedBenchmarks.length === 0 ? 'primary' : 'secondary'}
+          size="lg"
+          className="w-full active:scale-[0.98]"
+          onClick={() => skipTesting('bottom')}
+          isLoading={isSkipping === 'bottom'}
+          aria-busy={isSkipping === 'bottom'}
+          disabled={isLoading || (isSkipping !== false && isSkipping !== 'bottom')}
+          data-testid="skip-benchmarks-bottom"
+        >
+          {isSkipping === 'bottom' ? 'Opening the app…' : 'Skip the test — go to the app'}
+        </Button>
+        <Button
+          variant="ghost"
+          className="w-full"
+          onClick={() => router.push('/onboarding')}
+          disabled={isLoading || isSkipping !== false}
+        >
+          Back
         </Button>
       </div>
 

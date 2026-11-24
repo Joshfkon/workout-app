@@ -60,9 +60,12 @@ export function calorieBasisLines(basis: StarterCalorieBasis, units: WeightUnit,
     const name = goalName ?? (adj < 0 ? 'Cut' : 'Bulk');
     let line = `${name}: ${adj < 0 ? '−' : '+'}${kcal(Math.abs(adj))} kcal a day, to ${adj < 0 ? 'lose' : 'gain'} ${pace}.`;
     if (basis.lossCap) {
-      const requested = Math.abs(basis.requestedPercentBW);
+      const requested = Math.round(Math.abs(basis.requestedPercentBW) * 100) / 100;
+      // Body fat skipped: the cap is the calculator's default, not a
+      // reading of theirs ("At 0% body fat" before UX round 23).
+      const at = basis.lossCap.bodyFatPercent > 0 ? `At ${basis.lossCap.bodyFatPercent}% body fat` : 'Without your body fat';
       line +=
-        ` At ${basis.lossCap.bodyFatPercent}% body fat the app holds loss to ${basis.lossCap.percentBW}% of body weight a week` +
+        ` ${at} the app holds loss to ${basis.lossCap.percentBW}% of body weight a week` +
         ` (not ${requested}%), so you keep muscle.`;
     }
     lines.push(line);
@@ -73,6 +76,21 @@ export function calorieBasisLines(basis: StarterCalorieBasis, units: WeightUnit,
       : `Target: ${kcal(basis.maintenanceKcal)} ${adj < 0 ? '−' : '+'} ${kcal(Math.abs(adj))} = ${kcal(basis.calculated)} kcal a day.`
   );
   return lines;
+}
+
+/**
+ * The sum in one short line, shown right under the numbers so the working is
+ * on screen with the target itself (UX round 23: Dre read the card's top
+ * line and Edit at the bottom of the screen, the breakdown sat below the
+ * fold). "2,963 maintenance − 285 for a moderate cut". Pure.
+ */
+export function calorieFormulaLine(basis: StarterCalorieBasis, goalName: string | null): string {
+  if (basis.setByHand) return `Set by you. Calculated: ${kcal(basis.calculated)} kcal.`;
+  const adj = Math.round(basis.adjustmentKcal);
+  const base = `~${kcal(basis.maintenanceKcal)} kcal you burn a day`;
+  if (Math.abs(adj) < 25) return `= ${base} (maintain)`;
+  const what = (goalName ?? (adj < 0 ? 'Cut' : 'Bulk')).toLowerCase();
+  return `${base} ${adj < 0 ? '−' : '+'} ${kcal(Math.abs(adj))} for ${what === 'your pace' ? 'your pace' : `a ${what}`}`;
 }
 
 /**
@@ -165,12 +183,16 @@ export function DailyTargetsCard({
           <p className="text-title font-bold text-ink tabular-nums">
             {calories.toLocaleString()} kcal · {Math.round(protein)} g protein
           </p>
+          <p className="text-subhead text-ink-2 tabular-nums" data-testid="targets-formula">
+            {calorieFormulaLine(calorieBasis, goalName)}
+          </p>
         </div>
         {canEdit && (
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}
             aria-expanded={editing}
+            aria-label={editing ? 'Done editing targets' : 'Edit calories and protein'}
             className="min-h-[44px] flex-shrink-0 rounded-full border border-action px-4 text-body font-semibold text-action active:scale-[0.97]"
             data-testid="targets-edit"
           >
@@ -178,6 +200,11 @@ export function DailyTargetsCard({
           </button>
         )}
       </div>
+      {canEdit && !editing && (
+        <p className="mt-1 text-caption text-ink-3" data-testid="targets-edit-hint">
+          Tap Edit to type your own calories or protein.
+        </p>
+      )}
 
       {editing && (
         <div className="mt-3 space-y-3 border-t border-sep pt-3" data-testid="targets-editor">

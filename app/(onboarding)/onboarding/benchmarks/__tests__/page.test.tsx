@@ -43,7 +43,7 @@ describe('Onboarding benchmarks page', () => {
     render(<BenchmarksPage />);
     const purpose = screen.getByTestId('benchmarks-purpose');
     expect(screen.getByTestId('benchmarks-optional-badge')).toHaveTextContent('Optional');
-    expect(screen.getByTestId('skip-benchmarks')).toHaveTextContent('Skip for now');
+    expect(screen.getByTestId('skip-benchmarks')).toHaveTextContent('Skip the test — go to the app');
     expect(purpose).toHaveTextContent(/warm-up sets and one hard set/);
     expect(purpose).toHaveTextContent(/starting weights we suggest/);
     const cost = screen.getByTestId('benchmarks-skip-cost');
@@ -69,12 +69,12 @@ describe('Onboarding benchmarks page', () => {
     expect(line).toHaveTextContent(/may be off for your first 1–2 workouts/);
     // Both lines come before the first button, and the why comes first.
     expect(why.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(line.compareDocumentPosition(screen.getByTestId('skip-benchmarks-beginner')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(screen.getByTestId('skip-benchmarks')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId('benchmarks-purpose')).toHaveTextContent(
       /strength trend line itself builds from the workouts you log/
     );
     // The step indicator says where this is in setup, in words.
-    expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 5 of 5: Strength test (optional)');
+    expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 4 of 4: Strength test (optional)');
   });
 
   it('tells an injured lifter not to test that area', () => {
@@ -122,14 +122,25 @@ describe('Onboarding benchmarks page', () => {
     expect(box.compareDocumentPosition(screen.getByRole('button', { name: /Bench Press/i })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('offers beginners their own skip, which finishes setup the same way', async () => {
+  it('Skip is the first, filled, full-width button, for everyone (UX round 23: "I had to hunt for the skip option")', () => {
+    render(<BenchmarksPage />);
+    const skip = screen.getByTestId('skip-benchmarks');
+    expect(screen.getAllByRole('button')[0]).toBe(skip);
+    expect(skip.className).toMatch(/w-full/);
+    // Not worded for beginners only: an experienced lifter skips with the same button.
+    expect(skip).not.toHaveTextContent(/new to lifting/);
+    expect(screen.queryByTestId('skip-benchmarks-beginner')).not.toBeInTheDocument();
+    expect(screen.getByTestId('benchmarks-show-lifts')).toHaveTextContent('Test my strength (~1 hour at a gym)');
+  });
+
+  it('has the same full-width Skip by Start Testing at the bottom, which finishes setup the same way', async () => {
     const user = userEvent.setup();
     render(<BenchmarksPage />);
-    const beginner = screen.getByTestId('skip-benchmarks-beginner');
-    expect(beginner).toHaveTextContent('I’m new to lifting — skip');
-    // The first button on the page.
-    expect(beginner.compareDocumentPosition(screen.getByTestId('skip-benchmarks')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await user.click(beginner);
+    const bottom = screen.getByTestId('skip-benchmarks-bottom');
+    expect(bottom).toHaveTextContent('Skip the test — go to the app');
+    expect(bottom.className).toMatch(/w-full/);
+    expect(screen.getByTestId('start-benchmarks').compareDocumentPosition(bottom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(bottom);
     expect(screen.getByRole('status')).toHaveTextContent(/Your first workouts will find your starting weights/);
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
     expect(mockComplete).toHaveBeenCalledTimes(1);
@@ -147,7 +158,7 @@ describe('Onboarding benchmarks page', () => {
     expect(skip).toHaveTextContent('Opening the app…');
     expect(skip).toHaveAttribute('aria-busy', 'true');
     expect(skip).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent(/Skipped\. Finishing setup/);
+    expect(screen.getByRole('status')).toHaveTextContent(/Skipped\. Your first workouts will find your starting weights/);
     expect(mockPush).not.toHaveBeenCalled();
     finish();
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));

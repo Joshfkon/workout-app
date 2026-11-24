@@ -278,14 +278,23 @@ export default function RegisterPage() {
                     role="radio"
                     aria-checked={checked}
                     data-testid={`experience-option-${option.value}`}
+                    aria-label={option.label}
+                    aria-describedby={`experience-${option.value}-desc`}
                     // Tapping the picked option again clears it (back to "skip").
                     onClick={() => setLiftingAnswer(checked ? null : option.value)}
-                    // "No" and "Just started" span the row; the year ranges pair up.
-                    className={`${index < 2 ? 'col-span-2 ' : ''}min-h-[48px] px-2 rounded-input border-2 text-headline font-medium transition-colors ${
+                    // "No", "Just started" and "Returning" span the row; the
+                    // year ranges pair up. Each says who it's for and what it
+                    // sets (UX round 23: unclear for a lifter back after a break).
+                    className={`${index < 3 ? 'col-span-2 ' : ''}min-h-[48px] px-3 py-2 text-left text-headline rounded-input border-2 transition-colors ${
                       checked ? 'border-action bg-action/10 text-ink' : 'border-sep bg-fill/50 text-ink-2 hover:text-ink'
                     }`}
                   >
-                    {option.label}
+                    <span className="block font-medium">
+                      {option.label}
+                    </span>
+                    <span id={`experience-${option.value}-desc`} className="block text-body font-normal text-ink-2">
+                      {option.description}
+                    </span>
                   </button>
                 );
               })}

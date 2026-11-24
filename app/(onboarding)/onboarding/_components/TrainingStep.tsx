@@ -13,6 +13,7 @@ import {
   SKIP_DEFAULT_SPLIT_LABEL,
   SPLIT_OPTIONS,
   TRAINING_DAY_OPTIONS,
+  cappedLossPercent,
   customChangeForGoal,
   formatRatePercent,
   formatWeeklyChange,
@@ -37,6 +38,11 @@ export interface TrainingStepProps {
   rateApplies: boolean;
   weightKg: number;
   units: WeightUnit;
+  /**
+   * The cut guardrail at the user's body fat (lossCapFor), so a pace above
+   * it says what the targets really use. Null = no cap to show (not a cut).
+   */
+  lossCap?: { percentBW: number; bodyFatPercent: number | null } | null;
   /** Daily targets with the current answers (null when they can't be worked out). */
   targets: { calories: number; protein: number } | null;
   /**
@@ -84,6 +90,7 @@ export function TrainingStep({
   rateApplies,
   weightKg,
   units,
+  lossCap = null,
   targets,
   skipTargets = null,
   targetsCard = null,
@@ -132,7 +139,11 @@ export function TrainingStep({
 
       <div role="radiogroup" aria-labelledby="training-days-label" className="space-y-2">
         <p id="training-days-label" className="text-headline font-semibold text-ink">
-          Days a week you lift
+          Days a week you lift <span className="font-normal text-ink-2">(optional)</span>
+        </p>
+        {/* Why, one line, at the question (UX round 23). */}
+        <p className="text-subhead text-ink-2" data-testid="training-days-why">
+          {TRAINING_DAYS_WHY}
         </p>
         <div className="flex flex-wrap gap-2">
           {TRAINING_DAY_OPTIONS.map((d) => {
@@ -156,7 +167,10 @@ export function TrainingStep({
 
       <div role="radiogroup" aria-labelledby="training-split-label" className="space-y-2">
         <p id="training-split-label" className="text-headline font-semibold text-ink">
-          Your split right now
+          Your split right now <span className="font-normal text-ink-2">(optional)</span>
+        </p>
+        <p className="text-subhead text-ink-2" data-testid="training-split-why">
+          {TRAINING_SPLIT_WHY}
         </p>
         {/* What each split's days look like, in plain words (UX panel
             round 21: "split and days step uses jargon"). */}
@@ -190,10 +204,20 @@ export function TrainingStep({
           </p>
           {rateApplies ? (
             <>
+              {goal === 'cut' && lossCap && rates.some((r) => cappedLossPercent(r.percentBW, lossCap) !== null) && (
+                <p className="text-subhead text-ink-2" data-testid="training-rate-cap-note">
+                  {lossCapNote(lossCap)}
+                </p>
+              )}
               <div role="radiogroup" aria-labelledby="training-rate-label" className="space-y-2">
                 {rates.map((r) => {
                   const selected = pickedRate === r.value;
                   const amount = rateAmountPerWeek(r.percentBW, weightKg, units);
+                  // Above the cap the targets use the cap: say so on the
+                  // option, so it agrees with the working below (UX round
+                  // 23: "about −0.43 kg" here, "about 0.26 kg" in the sum).
+                  const held = goal === 'cut' ? cappedLossPercent(r.percentBW, lossCap) : null;
+                  const heldAmount = held !== null ? rateAmountPerWeek(-held, weightKg, units) : null;
                   return (
                     <button
                       key={r.value}
@@ -221,8 +245,13 @@ export function TrainingStep({
                         <span className="block font-semibold text-ink">{r.name}</span>
                         <span className="block text-body text-ink-2">
                           {formatRatePercent(r.percentBW)}
-                          {amount ? ` (${amount})` : ''}
+                          {held === null && amount ? ` (${amount})` : ''}
                         </span>
+                        {held !== null && (
+                          <span className="block text-subhead text-ink-2" data-testid={`training-rate-held-${r.value}`}>
+                            Held to −{held}%{heldAmount ? ` (${heldAmount})` : ''} at your body fat
+                          </span>
+                        )}
                       </span>
                     </button>
                   );
@@ -329,6 +358,23 @@ export function TrainingStep({
       </p>
     </div>
   );
+}
+
+/** Why days a week is asked, under the question (UX round 23). */
+export const TRAINING_DAYS_WHY =
+  'Why we ask: your first plan is built for this many days, and your calorie target counts these workouts.';
+
+/** Why the split is asked, under the question (UX round 23). */
+export const TRAINING_SPLIT_WHY =
+  'Why we ask: your first plan keeps the split you already run, so your week doesn’t change overnight. Not sure? Leave it.';
+
+/**
+ * One line above the cut paces when the guardrail holds some of them down:
+ * faster options give the same target, and why. Pure.
+ */
+export function lossCapNote(cap: { percentBW: number; bodyFatPercent: number | null }): string {
+  const at = cap.bodyFatPercent ? `At ${cap.bodyFatPercent}% body fat` : 'Without your body fat';
+  return `${at} the app holds loss to ${cap.percentBW}% of body weight a week, so you keep muscle. Faster paces use that rate.`;
 }
 
 /** "Skip — use 4 upper/lower days": the plan default Skip leaves in place. Pure. */

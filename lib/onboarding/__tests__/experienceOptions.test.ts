@@ -16,6 +16,16 @@ describe('sign-up lifting experience options', () => {
     expect(experienceForLiftingAnswer('2_to_3_years')).toBe('intermediate');
     expect(experienceForLiftingAnswer('3_to_5_years')).toBe('advanced');
     expect(experienceForLiftingAnswer('5_plus_years')).toBe('advanced');
+    // Back after a long break: an existing level, not a new one (UX round 23).
+    expect(experienceForLiftingAnswer('returning')).toBe('intermediate');
+  });
+
+  it('describes every option, and says how a returning lifter is treated', () => {
+    for (const o of LIFTING_OPTIONS) expect(o.description.length).toBeGreaterThan(8);
+    const returning = LIFTING_OPTIONS.find((o) => o.value === 'returning')!;
+    expect(returning.label).toBe('Returning after a break');
+    expect(returning.description).toMatch(/Set up like 1–2 years/);
+    expect(experienceSummary('returning', 'intermediate')).toEqual({ label: 'Returning after a break (set up like 1–2 years)', fromSignUp: true });
   });
 
   it('keeps the previous default when skipped', () => {
@@ -24,11 +34,13 @@ describe('sign-up lifting experience options', () => {
   });
 
   it('starts with "just started" and has one option per answer, in order', () => {
-    expect(LIFTING_OPTIONS[1]).toEqual({ value: 'under_6_months', label: 'Just started (under 6 months)' });
+    expect(LIFTING_OPTIONS[1]).toMatchObject({ value: 'under_6_months', label: 'Just started (under 6 months)' });
     expect(new Set(LIFTING_OPTIONS.map((o) => o.value)).size).toBe(LIFTING_OPTIONS.length);
     // The experience level never goes down as the years go up.
     const order = { novice: 0, intermediate: 1, advanced: 2 } as const;
-    const levels = LIFTING_OPTIONS.slice(1).map((o) => order[experienceForLiftingAnswer(o.value)]);
+    const levels = LIFTING_OPTIONS.slice(1)
+      .filter((o) => o.value !== 'returning')
+      .map((o) => order[experienceForLiftingAnswer(o.value)]);
     expect([...levels].sort()).toEqual(levels);
   });
 });

@@ -12,26 +12,48 @@ import type { Experience } from '@/types/schema';
 export type LiftingAnswer =
   | 'no'
   | 'under_6_months'
+  | 'returning'
   | '6_to_12_months'
   | '1_to_2_years'
   | '2_to_3_years'
   | '3_to_5_years'
   | '5_plus_years';
 
-export const LIFTING_OPTIONS: { value: LiftingAnswer; label: string }[] = [
-  { value: 'no', label: 'No, food tracking' },
-  { value: 'under_6_months', label: 'Just started (under 6 months)' },
-  { value: '6_to_12_months', label: '6–12 months' },
-  { value: '1_to_2_years', label: '1–2 years' },
-  { value: '2_to_3_years', label: '2–3 years' },
-  { value: '3_to_5_years', label: '3–5 years' },
-  { value: '5_plus_years', label: '5+ years' },
+/**
+ * Each answer with one short line on who it's for and what it sets (UX
+ * panel round 22: "The experience level options weren't clear for someone
+ * coming back after a long break"). The lines say only what the mapped
+ * level really changes: starting weekly sets (DEFAULT_VOLUME_LANDMARKS by
+ * level) and Beginner mode (on for novice, lib/beginnerMode).
+ */
+export const LIFTING_OPTIONS: { value: LiftingAnswer; label: string; description: string }[] = [
+  { value: 'no', label: 'No, food tracking', description: 'Track food; log a workout any time.' },
+  {
+    value: 'under_6_months',
+    label: 'Just started (under 6 months)',
+    description: 'Beginner mode on: a simpler workout screen.',
+  },
+  {
+    value: 'returning',
+    label: 'Returning after a break',
+    description: 'A year or more off. Set up like 1–2 years; weights adjust to what you log.',
+  },
+  { value: '6_to_12_months', label: '6–12 months', description: 'Fewer sets, Beginner mode' },
+  { value: '1_to_2_years', label: '1–2 years', description: 'Medium weekly sets' },
+  { value: '2_to_3_years', label: '2–3 years', description: 'Medium weekly sets' },
+  { value: '3_to_5_years', label: '3–5 years', description: 'Most weekly sets' },
+  { value: '5_plus_years', label: '5+ years', description: 'Most weekly sets' },
 ];
 
 const EXPERIENCE_FOR_ANSWER: Record<LiftingAnswer, Experience> = {
   // Someone who doesn't lift yet starts as a novice if they ever do.
   no: 'novice',
   under_6_months: 'novice',
+  // Back after a long break: knows the lifts, has lost some conditioning.
+  // Intermediate (not advanced) starts the volume in the middle, with
+  // Beginner mode off; weight suggestions follow what they log. No new enum
+  // value (UX round 23).
+  returning: 'intermediate',
   '6_to_12_months': 'novice',
   '1_to_2_years': 'intermediate',
   '2_to_3_years': 'intermediate',
@@ -82,6 +104,8 @@ export function experienceSummary(
 ): { label: string; fromSignUp: boolean } | null {
   if (answer && answer !== 'no') {
     const option = LIFTING_OPTIONS.find((o) => o.value === answer);
+    // Onboarding shows it back, so it also says how a returning lifter is set up.
+    if (answer === 'returning') return { label: 'Returning after a break (set up like 1–2 years)', fromSignUp: true };
     return { label: option?.label ?? EXPERIENCE_RANGE_LABEL[EXPERIENCE_FOR_ANSWER[answer]], fromSignUp: true };
   }
   if (experience === 'novice' || experience === 'intermediate' || experience === 'advanced') {
