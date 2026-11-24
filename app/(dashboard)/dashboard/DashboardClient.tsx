@@ -50,6 +50,7 @@ import { statedTrackingFocus, type StatedTrackingFocus } from '@/lib/onboarding/
 import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import { startMesocycleWorkoutSession } from '@/lib/training/startMesocycleSession';
+import { prefetchWorkoutRoute, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
 import { fetchActiveMesocycle, type ActiveMesocycleRow } from '@/lib/training/fetchActiveMesocycle';
 import {
   applyDeloadToUpcomingWeek,
@@ -380,6 +381,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [standaloneDeload, setStandaloneDeload] = useState<DeloadRecommendation | null>(null);
   const [plannedLightWeekType, setPlannedLightWeekType] = useState<DeloadType | null>(null);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
+  const [startWorkoutStage, setStartWorkoutStage] = useState<WorkoutStartStage>('preparing');
   const [startWorkoutError, setStartWorkoutError] = useState<string | null>(null);
   // Full active mesocycle row with all fields for startMesocycleWorkoutSession
   const [fullActiveMeso, setFullActiveMeso] = useState<ActiveMesocycleRow | null>(null);
@@ -486,6 +488,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const handleStartWorkout = async () => {
     if (!activeMesocycle || !scheduledWorkout || isStartingWorkout) return;
     setIsStartingWorkout(true);
+    setStartWorkoutStage('preparing');
     setStartWorkoutError(null);
     try {
       // Fetch the full mesocycle row if we don't have it yet. The initial
@@ -504,7 +507,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         mesocycle: mesoForStart,
         todayWorkout: scheduledWorkout,
         completedSessions: activeMesocycle.workoutsCompleted,
+        onStage: (stage, id) => {
+          setStartWorkoutStage(stage);
+          // Start loading the workout screen while the blocks are built.
+          if (stage === 'building') prefetchWorkoutRoute(router, id);
+        },
       });
+      setStartWorkoutStage('opening');
       router.push(`/dashboard/workout/${sessionId}`);
     } catch (err) {
       console.error('Failed to start workout:', err);
@@ -1638,6 +1647,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         coachLine={coachLine}
         onStartWorkout={handleStartWorkout}
         isStarting={isStartingWorkout}
+        startStage={startWorkoutStage}
         freestyleActions={isFreestyle ? <FreestyleStartActions userId={userId} /> : undefined}
         foodFocus={foodFocus}
       />

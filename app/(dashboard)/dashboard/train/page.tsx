@@ -100,6 +100,7 @@ import {
   type StandardMuscleGroup,
 } from '@/types/schema';
 import type { FullProgramRecommendation, WorkoutDay } from '@/types/schema';
+import { WorkoutStartProgress, prefetchWorkoutRoute, workoutStartLabel, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
 
 // The readiness card (good-targets strip + body map + per-muscle rows) shares
 // the in-workout sheet's assembly. Lazy so that whole stack stays out of the
@@ -220,6 +221,7 @@ export default function TrainPage() {
   const [completedTodayCount, setCompletedTodayCount] = useState(0);
   const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [startStage, setStartStage] = useState<WorkoutStartStage>('preparing');
   const [showAiSheet, setShowAiSheet] = useState(false);
   const [showRepeatSheet, setShowRepeatSheet] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -519,6 +521,7 @@ export default function TrainPage() {
   const handleStartWorkout = async () => {
     if (!activeMeso || isStarting) return;
     setIsStarting(true);
+    setStartStage('preparing');
     setError(null);
     try {
       const { sessionId } = await startMesocycleWorkoutSession({
@@ -526,7 +529,12 @@ export default function TrainPage() {
         mesocycle: activeMeso,
         todayWorkout: todayWorkout ?? nextWorkoutInfo?.workout ?? null,
         completedSessions: mesoCompletedCount ?? undefined,
+        onStage: (stage, id) => {
+          setStartStage(stage);
+          if (stage === 'building') prefetchWorkoutRoute(router, id);
+        },
       });
+      setStartStage('opening');
       router.push(`/dashboard/workout/${sessionId}`);
     } catch (err) {
       console.error('Failed to start workout:', err);
@@ -680,7 +688,7 @@ export default function TrainPage() {
                 className="flex-[2] text-body"
               >
                 {isStarting
-                  ? 'Starting...'
+                  ? workoutStartLabel(startStage)
                   : inProgress
                     ? 'Continue workout'
                     : 'Start workout'}
@@ -695,6 +703,7 @@ export default function TrainPage() {
                 Preview
               </StyledButton>
             </div>
+            {isStarting && <WorkoutStartProgress stage={startStage} compact className="mt-2" />}
           </>
         ) : activeMeso ? (
           <>
@@ -713,7 +722,7 @@ export default function TrainPage() {
                 variant="secondary"
                 className="flex-1 text-body"
               >
-                {isStarting ? 'Starting...' : 'Train anyway'}
+                {isStarting ? workoutStartLabel(startStage) : 'Train anyway'}
               </StyledButton>
               <StyledButton
                 onClick={() => setShowPreview(true)}
@@ -724,6 +733,7 @@ export default function TrainPage() {
                 Preview {nextWorkoutInfo?.dayLabel === 'Tomorrow' ? 'tomorrow' : 'next'}
               </StyledButton>
             </div>
+            {isStarting && <WorkoutStartProgress stage={startStage} compact className="mt-2" />}
           </>
         ) : (
           <>
@@ -995,7 +1005,7 @@ export default function TrainPage() {
               variant="primary"
               className="w-full text-body"
             >
-              {isStarting ? 'Starting...' : todayWorkout ? 'Start workout' : 'Train anyway today'}
+              {isStarting ? workoutStartLabel(startStage) : todayWorkout ? 'Start workout' : 'Train anyway today'}
             </StyledButton>
             <Link
               href="/dashboard/mesocycle/plan"

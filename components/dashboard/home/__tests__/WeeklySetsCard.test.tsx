@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event';
 import { render, screen } from '@testing-library/react';
 import { WeeklySetsCard, pickWeeklySetsRows, weeklySetsDigest } from '../WeeklySetsCard';
 import type { VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
@@ -53,8 +54,22 @@ describe('WeeklySetsCard', () => {
   it('shows each muscle against its range and a digest', () => {
     render(<WeeklySetsCard rows={rows} />);
     expect(screen.getByText('Sets this week')).toBeInTheDocument();
-    expect(screen.getByTestId('home-weekly-sets-digest')).toHaveTextContent('2 below MEV · 1 over MRV');
+    expect(screen.getByTestId('home-weekly-sets-digest')).toHaveTextContent(
+      '2 muscles under their minimum (MEV) · 1 over its max (MRV)'
+    );
     expect(screen.getAllByTestId('home-weekly-sets-row')[0]).toHaveTextContent('Shoulders28 of 12–26');
+  });
+
+  it('explains MEV and MRV in plain words from the info button (round 19 jargon)', async () => {
+    const user = userEvent.setup();
+    render(<WeeklySetsCard rows={rows} />);
+    expect(screen.queryByTestId('home-weekly-sets-key')).not.toBeInTheDocument();
+    const info = screen.getByTestId('home-weekly-sets-info');
+    expect(info).toHaveAttribute('aria-expanded', 'false');
+    await user.click(info);
+    expect(info).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('home-weekly-sets-key')).toHaveTextContent(/fewest hard sets a week that still grow a muscle/);
+    expect(screen.getByTestId('home-weekly-sets-key')).toHaveTextContent(/most you can recover from/);
   });
 
   it('all-clear digest, and nothing at all with no data', () => {

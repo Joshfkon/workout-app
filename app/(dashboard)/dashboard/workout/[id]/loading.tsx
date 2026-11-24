@@ -14,6 +14,12 @@ export default function ActiveWorkoutLoading() {
         </div>
       </div>
 
+      {/* Words with the skeleton: the start flow hands off here, and a silent
+          skeleton read as "is it still working?" (UX panel round 19). */}
+      <p role="status" className="text-subhead text-ink-3">
+        Opening your workout…
+      </p>
+
       {/* Rest timer panel skeleton */}
       <div className="animate-pulse bg-card rounded-lg p-4">
         <div className="flex items-center justify-between">
