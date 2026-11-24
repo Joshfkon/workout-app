@@ -362,6 +362,83 @@ export function withHouseholdServing(
   };
 }
 
+/** Id of the everyday unit added by {@link withEverydayUnit}. */
+export const EVERYDAY_UNIT_ID = 'everyday';
+
+/**
+ * Offer an everyday measure ("palm-size portion", "scoop") ALONGSIDE grams
+ * for a food people usually weigh, without making it the default: the
+ * starting amount stays a weight, the unit picker and the "same as" line
+ * offer the everyday one. Same per-gram macros, so 1 palm-size portion (113 g)
+ * logs exactly what 113 g would.
+ *
+ * Panel finding (Vince, r19): "The default portion of 113 g isn't weighed in
+ * grams the way I'd log it."
+ */
+export function withEverydayUnit(
+  model: FoodAmountModel,
+  everyday: HouseholdServing | null | undefined
+): FoodAmountModel {
+  if (!everyday || !(everyday.grams > 0)) return model;
+  if (model.units.some((u) => u.id === EVERYDAY_UNIT_ID)) return model;
+  const gramUnit = model.units.find((u) => u.id === 'g');
+  if (!gramUnit) return model;
+  const g = everyday.grams;
+  const unit: ServingUnitDef = {
+    id: EVERYDAY_UNIT_ID,
+    kind: 'serving',
+    label: `${everyday.noun} (${trimNum(g)} g)`,
+    noun: everyday.noun,
+    gramsPerUnit: g,
+    perUnit: {
+      calories: gramUnit.perUnit.calories * g,
+      protein: gramUnit.perUnit.protein * g,
+      carbs: gramUnit.perUnit.carbs * g,
+      fat: gramUnit.perUnit.fat * g,
+    },
+  };
+  return { ...model, units: [...model.units, unit] };
+}
+
+export interface EquivalentAmount {
+  unitId: string;
+  amount: number;
+  /** "4 oz", "1 palm-size portion", "2 large egg" */
+  label: string;
+}
+
+/**
+ * The same amount in the food's other units, for a "Same as 4 oz · 1
+ * palm-size portion" line under a weight. Only from a weight unit (a serving
+ * unit already shows its grams), only to units with a known gram weight, and
+ * rounded to amounts people use: whole grams, half ounces, quarter servings.
+ * A serving equivalent under a quarter is left out.
+ */
+export function equivalentAmounts(
+  model: FoodAmountModel,
+  amountInput: string | number,
+  unitId: string
+): EquivalentAmount[] {
+  const unit = getUnit(model, unitId);
+  const amount = typeof amountInput === 'number' ? amountInput : parseFloat(amountInput);
+  if (unit.kind !== 'weight' || !unit.gramsPerUnit || !Number.isFinite(amount) || amount <= 0) return [];
+  const grams = unit.gramsPerUnit * amount;
+  const out: EquivalentAmount[] = [];
+  for (const other of model.units) {
+    if (other.id === unit.id || !other.gramsPerUnit || other.gramsPerUnit <= 0) continue;
+    const raw = grams / other.gramsPerUnit;
+    let rounded: number;
+    if (other.kind === 'weight') {
+      rounded = other.id === 'oz' ? Math.round(raw * 2) / 2 : Math.round(raw);
+    } else {
+      rounded = Math.round(raw * 4) / 4;
+    }
+    if (rounded <= 0) continue;
+    out.push({ unitId: other.id, amount: rounded, label: `${trimNum(rounded)} ${other.noun}` });
+  }
+  return out;
+}
+
 export interface ServingOption {
   noun: string;
   grams: number | null;

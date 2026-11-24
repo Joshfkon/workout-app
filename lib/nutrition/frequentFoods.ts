@@ -175,6 +175,17 @@ export function addedToMealMessage(
   totals: { calories: number; protein: number },
   targets: { calories?: number | null; protein?: number | null } = {}
 ): string {
+  return `Added to ${mealLabel} · ${dayTotalsLine(totals, targets)}`;
+}
+
+/**
+ * The day's running calories and protein against the goal:
+ * "1,640 / 2,400 kcal · 120 / 180 g protein" (no goal → "1,640 kcal · …").
+ */
+export function dayTotalsLine(
+  totals: { calories: number; protein: number },
+  targets: { calories?: number | null; protein?: number | null } = {}
+): string {
   const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
   const kcal = targets.calories && targets.calories > 0
     ? `${fmt(totals.calories)} / ${fmt(targets.calories)} kcal`
@@ -182,5 +193,38 @@ export function addedToMealMessage(
   const protein = targets.protein && targets.protein > 0
     ? `${fmt(totals.protein)} / ${fmt(targets.protein)} g protein`
     : `${fmt(totals.protein)} g protein`;
-  return `Added to ${mealLabel} · ${kcal} · ${protein}`;
+  return `${kcal} · ${protein}`;
+}
+
+/**
+ * Confirmation shown under the quick-add chips after a one-tap add: what was
+ * added, how much, to which meal, and where the day now stands.
+ *
+ * Panel finding (3 of 6): "there was little feedback that the food was
+ * added … I wasn't sure the add worked."
+ */
+export function quickAddConfirmation(
+  foodName: string,
+  servingSize: string | null | undefined,
+  mealLabel: string,
+  dayTotals: { calories: number; protein: number },
+  targets: { calories?: number | null; protein?: number | null } = {}
+): { added: string; totals: string; removed: string } {
+  return {
+    added: quickAddMessage(foodName, servingSize, mealLabel),
+    totals: `Day total ${dayTotalsLine(dayTotals, targets)}`,
+    removed: `Removed ${foodName} (${formatPortion(servingSize)}) from ${mealLabel}`,
+  };
+}
+
+/**
+ * The time-of-day meal a quick add defaults to: before 11:00 breakfast,
+ * before 15:00 lunch, before 20:00 dinner, then snacks. `hour` is the local
+ * hour (0–23), read from lib/clock by the caller.
+ */
+export function mealTypeForHour(hour: number): MealType {
+  if (hour < 11) return 'breakfast';
+  if (hour < 15) return 'lunch';
+  if (hour < 20) return 'dinner';
+  return 'snack';
 }

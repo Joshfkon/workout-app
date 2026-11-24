@@ -277,21 +277,41 @@ export function classifyCameraError(err: unknown): CameraIssue {
   return 'failed';
 }
 
-const CAMERA_ISSUE_COPY: Record<CameraIssue, string> = {
-  denied: 'Camera access is off — type the barcode number instead',
-  missing: 'No camera available here — type the barcode number instead',
-  failed: "The camera didn't start — type the barcode number instead",
-};
+/**
+ * Headline when the camera can't start. Phrased as the next step, not as a
+ * failure: a typed number gets the same lookup a scan does.
+ *
+ * Panel finding (5 of 6): "said no camera was available and asked me to type
+ * the number instead … it was a dead end", "I couldn't tell whether it would
+ * find a food from typed digits".
+ */
+export const CAMERA_ISSUE_HEADLINE = 'Type the barcode number';
 
 /**
- * Second line under the headline: what would happen with a camera, so a
- * desktop or no-permission visit doesn't read as "Scan has no camera".
+ * Second line under the headline: why the camera isn't in use, said softly,
+ * and (for 'missing') what would happen on a phone, so a desktop visit
+ * doesn't read as "Scan is broken".
  */
 const CAMERA_ISSUE_DETAIL: Record<CameraIssue, string> = {
-  denied: 'To scan, allow camera access for this app in your settings, then try again.',
-  missing: 'On a phone, Scan opens the camera. Here, use the number printed under the bars.',
-  failed: "It's the number printed under the bars.",
+  denied:
+    'Camera access is off for this app. You can allow it in your settings and try again, or type the number instead.',
+  missing:
+    "There's no camera to scan with here (on a phone, Scan opens the camera). The number printed under the bars works just as well.",
+  failed: "The camera didn't start this time. The number printed under the bars works just as well.",
 };
+
+/** What a typed number does: the same lookup a scan runs. */
+export const TYPED_BARCODE_LOOKUP_NOTE =
+  "We look the number up in the food database, just like a scan, and show you the food before it's added.";
+
+/**
+ * Retrying the camera only helps when something can change: access was
+ * refused (it can be allowed) or the start failed (it may work now). With no
+ * camera at all a retry is a dead button, so it is hidden.
+ */
+export function canRetryCamera(issue: CameraIssue): boolean {
+  return issue !== 'missing';
+}
 
 /**
  * Before asking for the camera on the web: if the browser can list devices
@@ -336,8 +356,8 @@ function CameraUnavailablePanel({
 }) {
   return (
     <div className="p-4 space-y-3" data-testid="barcode-manual-first">
-      <p className="text-body font-semibold text-ink" role="status">{CAMERA_ISSUE_COPY[issue]}</p>
-      <p className="text-caption text-ink-2" data-testid="barcode-camera-issue-detail">
+      <p className="text-headline font-semibold text-ink" role="status">{CAMERA_ISSUE_HEADLINE}</p>
+      <p className="text-subhead text-ink-2" data-testid="barcode-camera-issue-detail">
         {CAMERA_ISSUE_DETAIL[issue]}
       </p>
       <input
@@ -352,13 +372,18 @@ function CameraUnavailablePanel({
         placeholder="e.g. 0123456789012"
         className="w-full px-3 py-3 bg-fill rounded-lg text-ink text-body placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action"
       />
+      <p className="text-caption text-ink-2" data-testid="barcode-typed-lookup-note">
+        {TYPED_BARCODE_LOOKUP_NOTE}
+      </p>
       <Button onClick={onLookup} disabled={!manualBarcode.trim()} size="lg" className="w-full">
         Look up barcode
       </Button>
       <div className="flex items-center justify-center gap-4 pt-1 text-subhead">
-        <button type="button" onClick={onRetryCamera} className="text-action hover:underline">
-          Try the camera again
-        </button>
+        {canRetryCamera(issue) && (
+          <button type="button" onClick={onRetryCamera} className="text-action hover:underline">
+            Try the camera again
+          </button>
+        )}
         {onTakePhoto && (
           <button type="button" onClick={onTakePhoto} className="text-action hover:underline">
             Take a photo

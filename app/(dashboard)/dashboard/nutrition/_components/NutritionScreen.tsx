@@ -68,7 +68,17 @@ import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
 import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
 import { setMacroAutoUpdateEnabled } from '@/lib/actions/nutrition';
 import { customFoodFieldsFromScan } from '@/lib/nutrition/scannedCustomFood';
-import { addLoggedRowsToFrequentFoods, buildFrequentFoods, frequentFoodPortion, quickAddMessage, addedToMealMessage } from '@/lib/nutrition/frequentFoods';
+import {
+  addLoggedRowsToFrequentFoods,
+  buildFrequentFoods,
+  frequentFoodPortion,
+  quickAddMessage,
+  addedToMealMessage,
+  quickAddConfirmation,
+  mealTypeForHour,
+} from '@/lib/nutrition/frequentFoods';
+import { now as clockNow } from '@/lib/clock';
+import type { QuickAddConfirmation } from '@/components/nutrition/QuickAddChips';
 import { addLocalDays } from '@/lib/date/localDay';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -120,6 +130,9 @@ export type NutritionView = 'log' | 'trends';
 
 export const NUTRITION_TRENDS_HREF = '/dashboard/nutrition/trends';
 
+/** localStorage key: Weight & trends' "More: energy burn & steps" is open. */
+const TRENDS_MORE_KEY = 'ht:trendsMoreOpen:v1';
+
 /** Legacy ?tab=weight / ?tab=insights links now live at the trends route. */
 export function isLegacyTrendsTab(value: string | null): boolean {
   return value === 'weight' || value === 'insights';
@@ -146,11 +159,7 @@ function getMealConfig(customNames?: MealNames | null) {
 
 /** Time-of-day default meal (Describe / frequent chips / saved meals) */
 function getMealTypeForNow(): MealType {
-  const hour = new Date().getHours();
-  if (hour < 11) return 'breakfast';
-  if (hour < 15) return 'lunch';
-  if (hour < 20) return 'dinner';
-  return 'snack';
+  return mealTypeForHour(clockNow().getHours());
 }
 
 // Convert food names to proper title case (fix ALL CAPS from USDA/databases)
@@ -296,6 +305,24 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // in the Add food sheet). Quick-log chips follow it; until the user picks
   // one, they follow the time of day. null = no explicit choice yet.
   const [quickMeal, setQuickMeal] = useState<MealType | null>(null);
+  // Weight & trends: the metabolism details disclosure. Closed by default;
+  // remembered per viewer (a convenience: storage may be unavailable).
+  const [trendsMoreOpen, setTrendsMoreOpenState] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TRENDS_MORE_KEY) === '1') setTrendsMoreOpenState(true);
+    } catch {
+      /* storage unavailable: stay closed */
+    }
+  }, []);
+  const setTrendsMoreOpen = (open: boolean) => {
+    setTrendsMoreOpenState(open);
+    try {
+      window.localStorage.setItem(TRENDS_MORE_KEY, open ? '1' : '0');
+    } catch {
+      /* storage unavailable: not remembered */
+    }
+  };
   const [showDescribeMeal, setShowDescribeMeal] = useState(false);
   // Meal type a reminder deep-linked into Describe for (?describe=lunch).
   const [describeMealType, setDescribeMealType] = useState<MealType | null>(null);
@@ -1131,7 +1158,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
    * user's last chosen meal, else the time-appropriate one), with an undo
    * toast naming that meal so it's never a silent guess.
    */
-  async function handleQuickLogFrequent(food: FrequentFood, mealType: MealType, mealLabel: string) {
+  async function handleQuickLogFrequent(
+    food: FrequentFood,
+    mealType: MealType,
+    mealLabel: string
+  ): Promise<QuickAddConfirmation> {
     // Re-log the last portion exactly as logged, so the chip's label
     // ("Oatmeal · 1 cup") is what lands in the log.
     const portion = frequentFoodPortion(food);
@@ -1150,10 +1181,22 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     applyInsertedEntries([inserted]);
     mutateRecentFoodsCache((prev) => [inserted, ...prev]);
     flagJustAdded([inserted]);
-    addToast('success', quickAddMessage(toTitleCase(food.food_name), portion.serving_size, mealLabel), 5000, {
-      label: 'Undo',
-      onClick: () => { void undoQuickAdd([inserted]); },
-    });
+    // Confirmed inline under the chips (what, how much, which meal, where the
+    // day now stands), not by a toast that would sit over the meal cards.
+    // dailyTotals is this render's (pre-insert) day, so add the new row.
+    return {
+      ...quickAddConfirmation(
+        toTitleCase(food.food_name),
+        portion.serving_size,
+        mealLabel,
+        {
+          calories: dailyTotals.calories + (inserted.calories || 0),
+          protein: dailyTotals.protein + (inserted.protein || 0),
+        },
+        { calories: effectiveTargets?.calories ?? null, protein: effectiveTargets?.protein ?? null }
+      ),
+      onUndo: () => undoQuickAdd([inserted]),
+    };
   }
 
   async function handleDeleteFood(id: string) {
@@ -1709,6 +1752,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       ? true
       : Math.sign(weightTrendRate.perWeek) === Math.sign(weightTrendRate.target);
   const signedRate = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}`;
+  // The burn the "Your metabolism" card shows (interval estimate first), so
+  // the trends explanation and the card quote the same number.
+  const trendsBurnKcal =
+    tdeeData?.intervalEstimate?.estimatedTDEE ?? tdeeData?.bestEstimate?.estimatedTDEE ?? null;
 
   // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
@@ -1986,8 +2033,9 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         onMeals={() => setShowSavedMeals(true)}
       />
 
-      {/* Recent-food chips: one tap logs to the meal named above them; the
-          chip itself confirms ("Added to Dinner") and the meal card lights up. */}
+      {/* Recent-food chips: one tap logs the last-logged portion to the meal
+          named above them; a line under the row confirms what was added, to
+          which meal, with the day's total and Undo, and the meal card lights up. */}
       <QuickAddChips
         foods={frequentChips}
         mealType={chipMealType}
@@ -1995,6 +2043,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         meals={mealConfig}
         onMealChange={setQuickMeal}
         onAdd={(food) => handleQuickLogFrequent(food, chipMealType, chipMealLabel)}
+        mealIsTimeDefault={quickMeal === null}
         formatName={toTitleCase}
       />
 
@@ -2394,9 +2443,44 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       {isTrends && (
       <div className="space-y-4">
 
-      {/* Nutrition Trends Graph */}
-      <NutritionTrendGraph targets={nutritionTargets} />
+      {/* Nutrition Trends Graph, with what "under goal" means and how logged
+          intake vs estimated burn compares with the weight trend above. */}
+      <NutritionTrendGraph
+        targets={nutritionTargets}
+        estimatedBurnKcal={trendsBurnKcal}
+        burnSettling={tdeeData?.intervalEstimate ? tdeeData.intervalEstimate.confidence !== 'stable' : true}
+        observedWeightPerWeek={weightTrendRate?.perWeek ?? null}
+        weightUnit={weightUnit}
+      />
 
+      {/* Metabolism details (burn estimate, how it's worked out, steps) sit
+          behind one disclosure: the page leads with weight and rate.
+          Panel finding (r19): "cluttered with metabolism details I didn't need". */}
+      <button
+        type="button"
+        onClick={() => setTrendsMoreOpen(!trendsMoreOpen)}
+        aria-expanded={trendsMoreOpen}
+        aria-controls="trends-more"
+        className="flex w-full items-center justify-between gap-3 rounded-2xl bg-card p-4 text-left shadow-card hover:bg-fill transition-colors"
+        data-testid="trends-more-toggle"
+      >
+        <span className="min-w-0">
+          <span className="block text-body font-semibold text-ink">More: energy burn &amp; steps</span>
+          <span className="block text-caption text-ink-2">
+            {trendsBurnKcal
+              ? `Estimated burn ~${Math.round(trendsBurnKcal).toLocaleString('en-US')} kcal a day, how it's worked out, and steps`
+              : "How your daily burn is worked out, and steps"}
+          </span>
+        </span>
+        <IconChevronRight
+          size={20}
+          aria-hidden="true"
+          className={`flex-shrink-0 text-ink-3 transition-transform ${trendsMoreOpen ? 'rotate-90' : ''}`}
+        />
+      </button>
+
+      {trendsMoreOpen && (
+      <div id="trends-more" className="space-y-4" data-testid="trends-more">
       {/* Step Tracking */}
       {(() => {
         // Calculate userWeightKg from current weight or weight entries
@@ -2450,6 +2534,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           weightUnit={weightUnit}
           showFfmi={!foodOnly}
         />
+      )}
+      </div>
       )}
 
       </div>

@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import {
   computeServing,
+  equivalentAmounts,
   getUnit,
   round2,
   DEFAULT_WEIGHT_CHIPS,
@@ -38,6 +39,8 @@ interface ServingAmountEditorProps {
   hidePreview?: boolean;
   /** testid prefix so add vs edit surfaces can be asserted independently. */
   testIdPrefix?: string;
+  /** The user's weight preference; 'kg' leaves ounces out of "Same as". */
+  weightUnits?: 'lb' | 'kg' | null;
 }
 
 function chipLabel(model: FoodAmountModel, unitId: string, amount: number): string {
@@ -53,6 +56,7 @@ export function ServingAmountEditor({
   recentAmounts = [],
   hidePreview = false,
   testIdPrefix = 'serving',
+  weightUnits = null,
 }: ServingAmountEditorProps) {
   const unit = getUnit(model, value.unitId);
 
@@ -86,6 +90,17 @@ export function ServingAmountEditor({
     const grams = round2(unit.gramsPerUnit * shownAmount);
     return `${round2(shownAmount)}${sep}${unit.noun} · ${grams >= 10 ? Math.round(grams) : grams} g`;
   })();
+
+  // "Same as 4 oz · 1 palm-size portion" under a weight, so someone who
+  // doesn't think in grams can read (or switch to) their own unit.
+  // Metric users don't think in ounces: leave oz out of the line for them.
+  const equivalents = useMemo(
+    () =>
+      equivalentAmounts(model, value.amount, value.unitId).filter(
+        (eq) => !(weightUnits === 'kg' && eq.unitId === 'oz')
+      ),
+    [model, value.amount, value.unitId, weightUnits]
+  );
 
   const setAmount = (amount: string) => onChange({ ...value, amount });
   const setUnit = (unitId: string) => onChange({ ...value, unitId });
@@ -158,6 +173,29 @@ export function ServingAmountEditor({
           {model.units.some((u) => u.kind === 'weight') && (
             <span> · switch the unit to enter grams</span>
           )}
+        </p>
+      )}
+
+      {/* The same amount in everyday units, one tap to switch to it */}
+      {equivalents.length > 0 && (
+        <p
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-2"
+          data-testid={`${testIdPrefix}-equivalents`}
+        >
+          <span>Same as</span>
+          {equivalents.map((eq, i) => (
+            <span key={eq.unitId} className="flex items-center gap-2">
+              {i > 0 && <span aria-hidden="true">·</span>}
+              <button
+                type="button"
+                onClick={() => onChange({ amount: eq.amount.toString(), unitId: eq.unitId })}
+                aria-label={`Switch to ${eq.label}`}
+                className="font-medium text-action hover:underline"
+              >
+                {eq.label}
+              </button>
+            </span>
+          ))}
         </p>
       )}
 
