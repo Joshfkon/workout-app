@@ -10,6 +10,7 @@ import {
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { EstMaxMethod } from './EstMaxMethod';
 import { liftRateRule, liftStatusRule } from './trendHelp';
+import { rangePhrase } from '@/app/(dashboard)/dashboard/analytics/progressRange';
 import {
   earlyLiftChange,
   estMaxExample,
@@ -82,6 +83,12 @@ export { EST_MAX_EXPLAINER } from './EstMaxMethod';
  * down (UX panel r19: the "flat" threshold wasn't stated). Plain words, the
  * real threshold (trendHelp), behind the card's one info toggle.
  */
+/** "Last 12 weeks" / "Last year" — the page's shared range, as a caption. */
+export function rangeHeading(windowDays: number): string {
+  const phrase = rangePhrase(windowDays).replace(/^over the last /, '');
+  return `Last ${phrase}`;
+}
+
 export function rateExplainer(weeks: number, units: 'lb' | 'kg'): string {
   return `${liftRateRule(weeks)} ${liftStatusRule(units)}`;
 }
@@ -117,10 +124,10 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
   return (
     <section id="lift-trends" className="scroll-mt-4 space-y-4">
       <div className="rounded-card bg-card p-4 shadow-card" data-testid="lift-trends-summary">
-        <p className="text-caption text-ink-2">Last {weeks} weeks</p>
+        <p className="text-caption text-ink-2">{rangeHeading(summary.windowDays)}</p>
         <p className="mt-0.5 text-headline text-ink">
           {confident > 0
-            ? `${summary.rising} of ${confident} lifts rising`
+            ? `${summary.rising} of ${confident} lifts going up`
             : rebuilding > 0
               ? 'Your lift trends are rebuilding'
               : tooEarly > 0

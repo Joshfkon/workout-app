@@ -26,11 +26,17 @@ import {
 import {
   CUT_STRENGTH_NOTE,
   isCutGoal,
-  liftStatusRule,
-  weightTrendRule,
+  SHORT_WEIGHT_RULE,
+  shortLiftRule,
 } from '@/components/analytics/trendHelp';
+import { rangePhrase } from './progressRange';
+import type { VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
-/** Same window the weight chart opens on (its default 30d range). */
+/**
+ * Fallback weight window when the caller passes none. The page passes its
+ * shared range (./progressRange), the same window the lift trends use, so
+ * weight and strength are always read over one period.
+ */
 export const SUMMARY_WEIGHT_WINDOW_DAYS = 30;
 
 export interface ProgressSummaryInput {
@@ -39,6 +45,16 @@ export interface ProgressSummaryInput {
   liftTrends: LiftTrendsSummary | null | undefined;
   units: 'lb' | 'kg';
   now: Date;
+  /**
+   * The page's shared range in days (./progressRange). Weight is read over
+   * it; strength already is (the lift-trend query is fetched over it).
+   */
+  windowDays?: number;
+  /**
+   * This week's sets per muscle (the WeeklySetsCard rows) — null when the
+   * line shouldn't show (beginner mode, food-only, no lifting).
+   */
+  volumeRows?: readonly VolumeRow[] | null;
   /**
    * The current phase, else users.goal ('cut' / 'bulk' / …). On a cut,
    * lifts holding steady is the result to hope for, and the card says so.
@@ -67,6 +83,11 @@ export interface ProgressSummary {
   strengthNames: string | null;
   /** Each lift behind the strength sentence (expandable list). */
   lifts: LiftBreakdownRow[];
+  /**
+   * Weekly sets per muscle vs MEV–MRV in one line, e.g. "Sets per muscle,
+   * last 7 days: 6 in range, 2 under the minimum (MEV)." Null without rows.
+   */
+  volume: string | null;
 }
 
 /** One lift in the strength breakdown: first vs latest best set, and its direction. */
@@ -136,14 +157,15 @@ export function liftBreakdown(
 export function weightSentence(
   weighIns: readonly WeighInEntry[],
   units: 'lb' | 'kg',
-  now: Date
+  now: Date,
+  windowDays: number = SUMMARY_WEIGHT_WINDOW_DAYS
 ): string | null {
-  const points = weighInsInWindow(weighIns, units, SUMMARY_WEIGHT_WINDOW_DAYS, now);
+  const points = weighInsInWindow(weighIns, units, windowDays, now);
   const trend = weightTrendLine(points);
   if (!trend) return null;
   const change = trend.fitEnd - trend.fitStart;
   const amount = Math.abs(change).toFixed(1);
-  const span = `over the last ${SUMMARY_WEIGHT_WINDOW_DAYS} days`;
+  const span = rangePhrase(windowDays);
   if ((!trend.isNegative && !trend.isPositive) || amount === '0.0') return `Weight is steady ${span}.`;
   return `Weight is ${change < 0 ? 'down' : 'up'} ${amount} ${units} ${span}.`;
 }
@@ -152,8 +174,8 @@ export function strengthSentence(summary: LiftTrendsSummary | null | undefined):
   if (!summary) return null;
   const { rising, flat, down, rebuilding } = summary;
   const confident = rising + flat + down;
-  const weeks = Math.round(summary.windowDays / 7);
-  const lead = `Over the last ${weeks} weeks,`;
+  const phrase = rangePhrase(summary.windowDays);
+  const lead = `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)},`;
 
   if (confident > 0) {
     if (confident === 1) {
@@ -216,34 +238,54 @@ export function earlyComparison(lifts: readonly EarlyLift[] | undefined): { bett
   return compared > 0 ? { better, compared } : null;
 }
 
-/** Null when there is nothing to say on either side. */
+/**
+ * Weekly sets per muscle against MEV–MRV in one plain line for the summary
+ * card, so an advanced lifter sees volume where he looks first (UX panel
+ * r21, Vince: "No weekly sets per muscle against MEV/MRV on the Progress
+ * screen"). Same rows and zones as the WeeklySetsCard it links to. Null
+ * when no muscle has a set in the window (a line of zeros says nothing).
+ */
+export function volumeSentence(rows: readonly VolumeRow[] | null | undefined): string | null {
+  if (!rows) return null;
+  const coarse = rows.filter((r) => !r.isChild);
+  if (!coarse.some((r) => r.sets > 0)) return null;
+  const inRange = coarse.filter((r) => r.zone === 'in_zone' && r.sets > 0).length;
+  const below = coarse.filter((r) => r.zone === 'below_mev' && r.warnable).length;
+  const over = coarse.filter((r) => r.zone === 'over_mrv').length;
+  const parts = [
+    `${inRange} ${inRange === 1 ? 'muscle' : 'muscles'} in range`,
+    below > 0 ? `${below} under the minimum (MEV)` : null,
+    over > 0 ? `${over} over the max (MRV)` : null,
+  ].filter(Boolean);
+  return `Sets per muscle, last 7 days: ${parts.join(', ')}.`;
+}
+
+/** Null when there is nothing to say on any side. */
 export function buildProgressSummary({
   weighIns,
   liftTrends,
   units,
   now,
+  windowDays = SUMMARY_WEIGHT_WINDOW_DAYS,
+  volumeRows,
   goal,
 }: ProgressSummaryInput): ProgressSummary | null {
-  const weight = weightSentence(weighIns, units, now);
+  const weight = weightSentence(weighIns, units, now, windowDays);
   const strength = strengthSentence(liftTrends);
-  if (!weight && !strength) return null;
-  const weightMethod = weight
-    ? weightTrendRule(
-        units,
-        weighInsInWindow(weighIns, units, SUMMARY_WEIGHT_WINDOW_DAYS, now).length,
-        SUMMARY_WEIGHT_WINDOW_DAYS
-      )
-    : null;
+  const volume = volumeSentence(volumeRows);
+  if (!weight && !strength && !volume) return null;
+  const weightMethod = weight ? SHORT_WEIGHT_RULE : null;
   const strengthNames = strength && liftTrends ? risingSlippingNames(liftTrends.lifts) : null;
   const tracked = liftTrends && strength ? liftTrends.lifts.length > 0 : false;
   const confident = liftTrends ? liftTrends.rising + liftTrends.flat + liftTrends.down : 0;
   return {
     weight,
     weightMethod,
-    liftMethod: tracked ? liftStatusRule(units) : null,
+    liftMethod: tracked ? shortLiftRule(units) : null,
     strength,
     strengthContext: strength && confident > 0 && isCutGoal(goal) ? CUT_STRENGTH_NOTE : null,
     strengthNames,
     lifts: strength ? liftBreakdown(liftTrends, units) : [],
+    volume,
   };
 }

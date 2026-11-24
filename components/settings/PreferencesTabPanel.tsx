@@ -165,7 +165,7 @@ export function UnitsCard({
         <div data-testid="units-weight-row">
           <div className="flex items-center justify-between gap-3 mb-2">
             <p className="text-body font-medium text-ink">
-              Weight <span className="text-caption text-ink-3 font-normal">(lifts, body weight)</span>
+              Weight <span className="text-subhead text-ink-2 font-normal">(lifts, body weight)</span>
             </p>
             <FieldSavePill field="units" status={saveStatus} />
           </div>
@@ -178,13 +178,14 @@ export function UnitsCard({
               { value: 'lb', label: 'lb' },
             ]}
             className="w-full"
+            size="lg"
           />
           <FieldSaveError field="units" status={saveStatus} />
         </div>
         <div data-testid="units-length-row">
           <div className="flex items-center justify-between gap-3 mb-2">
             <p className="text-body font-medium text-ink">
-              Length <span className="text-caption text-ink-3 font-normal">(height, body measurements)</span>
+              Length <span className="text-subhead text-ink-2 font-normal">(height, body measurements)</span>
             </p>
             <FieldSavePill field="lengthUnits" status={saveStatus} />
           </div>
@@ -197,6 +198,7 @@ export function UnitsCard({
               { value: 'in', label: 'inches' },
             ]}
             className="w-full"
+            size="lg"
           />
           <FieldSaveError field="lengthUnits" status={saveStatus} />
         </div>

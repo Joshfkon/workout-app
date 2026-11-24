@@ -10,6 +10,7 @@ import {
   type ProgressionPace,
 } from '@/services/progressionInsights';
 import { MIN_TREND_SPAN_DAYS, type PlateauGoal } from '@/services/plateauDetector';
+import { rangePhrase } from '@/app/(dashboard)/dashboard/analytics/progressRange';
 
 interface MuscleProgressionCardProps {
   groups: MuscleGroupProgression[];
@@ -114,18 +115,20 @@ export function muscleProgressionSubtitle(
   windowDays?: number
 ): string {
   const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
-  const weeks = windowDays ? Math.round(windowDays / 7) : null;
-  const over = weeks ? ` over the last ${weeks} weeks` : '';
-  const average =
-    " A muscle's rate is the average of its lifts, weighted by sets. Tap a muscle to see each lift.";
+  const over = windowDays ? ` ${rangePhrase(windowDays)}` : '';
+  const lead = `How fast each muscle's lifts are getting stronger${over}.`;
+  const average = ' Each muscle averages its lifts; tap one to see them.';
   if (normalizedGoal === 'cut') {
-    return `How fast each muscle's lifts are getting stronger${over}. You're eating less to lose fat, so holding strength counts as on track.${average}`;
+    return `${lead} You're eating less to lose fat, so holding steady is on track.${average}`;
   }
   if (normalizedGoal === 'maintenance') {
-    return `How fast each muscle's lifts are getting stronger${over}. You're eating to hold your weight, so holding strength counts as on track.${average}`;
+    return `${lead} You're eating to hold your weight, so holding steady is on track.${average}`;
   }
-  return `How fast each muscle's lifts are getting stronger${over}, vs the ~${expectedPct}% a week expected at your level.${average}`;
+  return `${lead} About ${expectedPct}% a week is normal at your level.${average}`;
 }
+
+/** The card's heading, in plain words (UX panel r21, Maya: "Strength by muscle" read as jargon). */
+export const MUSCLE_PROGRESSION_TITLE = 'Which muscles are getting stronger';
 
 /**
  * "Progression by muscle group" — how each muscle's lifts are trending vs
@@ -174,7 +177,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays 
   return (
     <Card id="muscle-progression" padding="none" className="scroll-mt-4">
       <div className="p-4 border-b border-sep">
-        <h3 className="font-medium text-ink">Strength by muscle</h3>
+        <h3 className="font-medium text-ink">{MUSCLE_PROGRESSION_TITLE}</h3>
         <p className="text-caption text-ink-2 mt-0.5">{subtitle}</p>
       </div>
       <ul className="divide-y divide-sep">
