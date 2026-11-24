@@ -36,6 +36,7 @@ import {
 } from '@/lib/body/bodyLog';
 import { cmToIn, inToCm, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { useLengthUnit } from '@/hooks/useLengthUnit';
+import { useInvalidateTrackingReminders } from '@/hooks/useTrackingReminders';
 
 export type BodyLogSegment = 'weight' | 'measurements' | 'dexa';
 
@@ -90,6 +91,8 @@ export function LogBodyDataSheet({
   const [error, setError] = useState<string | null>(null);
   // Tape unit: the user's length setting (follows the weight unit until set).
   const tapeUnit = useLengthUnit(preferredUnit);
+  // A weigh-in or tape entry can clear Home's "due" nudge.
+  const invalidateTrackingReminders = useInvalidateTrackingReminders();
 
   // ---------------- Weight ----------------
   const [weightValue, setWeightValue] = useState(
@@ -246,6 +249,7 @@ export function LogBodyDataSheet({
         });
         onSaved?.({ kind: 'dexa', date: scanDate });
       }
+      invalidateTrackingReminders();
       resetAndClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save. Please try again.';

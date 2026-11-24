@@ -66,7 +66,9 @@ import {
   dismissStandaloneDeloadRecommendation,
   fetchStandaloneDeloadRecommendation,
 } from '@/lib/training/standaloneDeload';
-import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard, useHealthGlance, TodayCard, TodaySheet, NudgeCard, pickHomeNudge } from '@/components/dashboard/home';
+import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard, useHealthGlance, TodayCard, TodaySheet, NudgeCard, pickHomeNudge, TrackingDueCard } from '@/components/dashboard/home';
+import { useTrackingReminders } from '@/hooks/useTrackingReminders';
+import type { TrackingKind } from '@/services/trackingReminders';
 import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
@@ -374,6 +376,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
   // Which quick-log modal is open (the old scroll-to detail cards were removed).
   const [activeModal, setActiveModal] = useState<QuickLogModal | null>(null);
+  // Which segment the body-data sheet opens on (the tracking nudge's
+  // "Measure" opens it on tape measurements).
+  const [bodyLogSegment, setBodyLogSegment] = useState<'weight' | 'measurements'>('weight');
+
+  // Overdue weigh-in / measurements / progress photos (Home nudge).
+  const trackingReminders = useTrackingReminders(userId);
 
   // Pending deload recommendation on the active mesocycle (Phase 1.4).
   // Fetched separately from the main dashboard load so the cached initial
@@ -1598,9 +1606,20 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     />
   ) : null;
 
+  const trackingDue = trackingReminders.due ?? [];
+  const logTracking = (kind: TrackingKind) => {
+    if (kind === 'photo') {
+      router.push('/dashboard/progress-photos?add=1');
+      return;
+    }
+    setBodyLogSegment(kind === 'measure' ? 'measurements' : 'weight');
+    setActiveModal('weight');
+  };
+
   const nudge = pickHomeNudge({
     deload: !!deloadCard,
     checkin: needsCheckIn,
+    tracking: trackingDue.length > 0,
     // Under-minimum muscle volume isn't news to someone who doesn't lift here.
     volume: !foodFocus && !!(rampBanner || atrophyCard),
     waist: !!userId,
@@ -1623,6 +1642,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           </Button>
         }
       />
+    ) : nudge === 'tracking' ? (
+      <TrackingDueCard items={trackingDue} onLog={logTracking} onSnooze={trackingReminders.snooze} />
     ) : nudge === 'volume' ? (
       <NudgeCard
         tone="warn"
@@ -1717,7 +1738,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       {/* Quick log chips, right under the hero: logging is the most
           frequent thing done on Home, so it sits above the glance cards. */}
       <QuickLogRow
-        onLogWeight={() => setActiveModal('weight')}
+        onLogWeight={() => {
+          setBodyLogSegment('weight');
+          setActiveModal('weight');
+        }}
         onLogWater={userId ? () => setActiveModal('water') : undefined}
         onLogFood={() => router.push(addFoodHref())}
         onLogSleep={userId ? () => setActiveModal('sleep') : undefined}
@@ -1790,7 +1814,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               showFfmi={!foodOnly}
               sleep={{ entries: sleepEntries, lastNight, sevenDayAvgHours }}
               onLogSleep={userId && !healthConnected ? () => setActiveModal('sleep') : undefined}
-              onLogWeight={() => setActiveModal('weight')}
+              onLogWeight={() => {
+                setBodyLogSegment('weight');
+                setActiveModal('weight');
+              }}
               phase={normalizedGoal}
               eatingWindow={eatingWindow}
             />
@@ -1805,6 +1832,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         <LogBodyDataSheet
           isOpen
           onClose={() => setActiveModal(null)}
+          initialSegment={bodyLogSegment}
           preferredUnit={weightUnit}
           onSaved={handleBodyDataSaved}
         />

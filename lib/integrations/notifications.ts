@@ -200,21 +200,39 @@ export async function scheduleMealReminders(
   options: { requestPermission?: boolean } = {}
 ): Promise<boolean> {
   if (!isNativePlatform()) return false;
+  const { MEAL_REMINDER_ID_BASE, MEAL_REMINDER_ID_COUNT } = await import('@/services/mealReminders');
+  return scheduleReminderBatch(
+    Array.from({ length: MEAL_REMINDER_ID_COUNT }, (_, i) => MEAL_REMINDER_ID_BASE + i),
+    planned,
+    options
+  );
+}
+
+/**
+ * Cancel every id in `ids`, then schedule `planned` (one-shot local
+ * notifications that open `url` when tapped). Shared by the meal and the
+ * tracking/workout reminders. Native only. Returns false when permission is
+ * missing or scheduling failed.
+ */
+export async function scheduleReminderBatch(
+  ids: number[],
+  planned: Array<{ id: number; fireAt: Date; title: string; body: string; url: string }>,
+  options: { requestPermission?: boolean } = {}
+): Promise<boolean> {
+  if (!isNativePlatform()) return false;
   try {
-    const { MEAL_REMINDER_ID_BASE, MEAL_REMINDER_ID_COUNT } = await import('@/services/mealReminders');
-    await LocalNotifications.cancel({
-      notifications: Array.from({ length: MEAL_REMINDER_ID_COUNT }, (_, i) => ({
-        id: MEAL_REMINDER_ID_BASE + i,
-      })),
-    });
-    if (planned.length === 0) return true;
+    await LocalNotifications.cancel({ notifications: ids.map((id) => ({ id })) });
 
     // Background re-syncs never pop the permission sheet; only the explicit
-    // "turn on" tap asks (requestPermission).
-    const granted = options.requestPermission
-      ? await ensureNotificationPermission()
-      : (await LocalNotifications.checkPermissions())?.display === 'granted';
-    if (!granted) return false;
+    // "turn on" tap asks (requestPermission) — and it asks even when nothing
+    // is due this week, or the first reminder could never be delivered.
+    if (options.requestPermission) {
+      if (!(await ensureNotificationPermission())) return false;
+    }
+    if (planned.length === 0) return true;
+    if (!options.requestPermission && (await LocalNotifications.checkPermissions())?.display !== 'granted') {
+      return false;
+    }
 
     await LocalNotifications.schedule({
       notifications: planned.map((reminder) => ({
@@ -228,7 +246,7 @@ export async function scheduleMealReminders(
     });
     return true;
   } catch (error) {
-    console.warn('[Notifications] Failed to schedule meal reminders:', error);
+    console.warn('[Notifications] Failed to schedule reminders:', error);
     return false;
   }
 }

@@ -39,6 +39,10 @@ export const PERSISTED_QUERY_PREFIXES = [
   // no signal still pre-selects targets. Keys are local-day anchored, so a
   // snapshot never outlives its day. Values must stay JSON-plain.
   'muscle-readiness-history',
+  // Home's "weigh-in / measurements / photos due" nudge (last-logged dates +
+  // reminder prefs). Persisted so a warm start paints the same nudge instead
+  // of swapping it in after the fetch; refetched on every Home visit.
+  'tracking-reminders',
 ] as const;
 
 export function shouldPersistQueryKey(queryKey: readonly unknown[]): boolean {

@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, SegmentedControl, Slider, Tog
 import { EatingWindowSettings } from '@/components/settings/EatingWindowSettings';
 import { BloodPressureSettings } from '@/components/settings/BloodPressureSettings';
 import { MealReminderSettings } from '@/components/settings/MealReminderSettings';
+import { TrackingReminderSettings } from '@/components/settings/TrackingReminderSettings';
 import { EducationPreferencesCard } from '@/components/settings/EducationPreferencesCard';
 import { TextSizeControl } from '@/components/settings/TextSizeControl';
 import { BEGINNER_MODE_DESCRIPTION, BEGINNER_MODE_TITLE } from '@/lib/beginnerMode';
@@ -359,15 +360,16 @@ export function PreferencesTabPanel({
       {/* Eating window (drives nutrition pacing verdicts) */}
       <EatingWindowSettings />
 
-      {/* Health reminders (blood pressure daily nudge — opt-in) */}
+      {/* Reminders: progress check-ins + training days, meals, blood pressure */}
       <Card>
         <CardHeader>
           <CardTitle>Reminders</CardTitle>
           <p className="text-body text-ink-2 mt-1">
-            Optional nudges to log meals and health metrics
+            Nudges to keep your check-ins, training days and meals on track
           </p>
         </CardHeader>
         <CardContent className="space-y-5">
+          <TrackingReminderSettings />
           <MealReminderSettings />
           <BloodPressureSettings />
         </CardContent>
