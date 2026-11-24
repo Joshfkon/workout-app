@@ -206,11 +206,37 @@ describe('target meal', () => {
 });
 
 describe('scan from the search bar', () => {
-  it('the scan icon in the search bar opens the barcode scanner', async () => {
+  const realMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+  afterEach(() => {
+    if (realMediaDevices) Object.defineProperty(navigator, 'mediaDevices', realMediaDevices);
+    else delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+  });
+
+  it('a labelled Scan barcode button beside the search box opens the barcode scanner', async () => {
     const user = userEvent.setup();
     renderAdd();
-    await user.click(screen.getByRole('button', { name: 'Scan a barcode' }));
+    await user.click(screen.getByRole('button', { name: 'Scan barcode' }));
     expect(await screen.findByTestId('fake-barcode-scanner')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Scan/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('says up front, before the tap, when there is no camera', async () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { enumerateDevices: () => Promise.resolve([{ kind: 'audioinput' }]) },
+    });
+    renderAdd();
+    expect(await screen.findByTestId('search-scan-no-camera')).toHaveTextContent(/type the number/);
+  });
+
+  it('says nothing extra when a camera is there', async () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { enumerateDevices: () => Promise.resolve([{ kind: 'videoinput' }]) },
+    });
+    renderAdd();
+    await screen.findByRole('button', { name: 'Scan barcode' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('search-scan-no-camera')).not.toBeInTheDocument();
   });
 });

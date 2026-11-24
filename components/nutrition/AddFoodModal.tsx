@@ -10,6 +10,10 @@ import { Select } from '@/components/ui/Select';
 import type { FoodSearchResult, FoodSearchResultWithServings } from '@/services/usdaService';
 import { searchFoodsAction, getFoodDetailsAction } from '@/lib/actions/food-search';
 import { friendlyUsdaError } from '@/lib/nutrition/usdaErrorMessage';
+import { searchUsdaWithRetry } from '@/lib/nutrition/usdaRetry';
+import { precheckWebCamera, NO_CAMERA_UP_FRONT } from '@/lib/nutrition/cameraPrecheck';
+import { Capacitor } from '@capacitor/core';
+import { AddedBanner, type QuickAddConfirmation } from './AddedBanner';
 import { lookupBarcode as lookupBarcodeOFF } from '@/services/openFoodFactsService';
 import { lookupBarcodeUsdaAction } from '@/lib/actions/nutrition';
 import dynamic from 'next/dynamic';
@@ -109,6 +113,9 @@ interface ScannedProduct {
 const USDA_ONE_TAP_UNITS = new Set(['g', 'oz']);
 export type AddFoodTab = 'search' | 'barcode' | 'label' | 'manual';
 
+/** How long the in-sheet "Added …" confirmation stays (it has an Undo). */
+export const SHEET_CONFIRMATION_MS = 8000;
+
 interface AddFoodModalProps {
   /** Opens "Describe a meal" (AI) — shown as a shortcut in the sheet. */
   onOpenDescribe?: () => void;
@@ -164,9 +171,9 @@ interface AddFoodModalProps {
    * Instant re-log of a recent/prior-meal food WITHOUT closing the sheet (so the
    * user can grab several). The parent shows the undo toast + updates totals.
    */
-  onQuickAdd?: (food: QuickAddFood) => Promise<void>;
+  onQuickAdd?: (food: QuickAddFood) => Promise<QuickAddConfirmation | void>;
   /** Batch variant for a meal's "Add all" — one combined undo. */
-  onQuickAddMany?: (foods: QuickAddFood[]) => Promise<void>;
+  onQuickAddMany?: (foods: QuickAddFood[]) => Promise<QuickAddConfirmation | void>;
   /**
    * The user's weight preference. Imperial users see a gram default's ounce
    * equivalent ("113 g · about 4 oz, ..."); metric users a plain picture.
@@ -588,6 +595,21 @@ export function AddFoodModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultMealType]);
 
+  // No camera (a desktop without a webcam): say so next to Scan barcode
+  // before the tap, not only on the typed-number screen after it. Starts
+  // false on the server and the first client render; set after mount.
+  const [noCamera, setNoCamera] = useState(false);
+  useEffect(() => {
+    if (!isOpen || Capacitor.isNativePlatform()) return undefined;
+    let cancelled = false;
+    void precheckWebCamera(typeof navigator !== 'undefined' ? navigator : undefined).then((issue) => {
+      if (!cancelled) setNoCamera(issue === 'missing');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
   // Focus the search box: on open when asked (the Search quick action), and
   // whenever the Search tab is tapped. A request counter, not a boolean, so a
   // second request while already focused still runs. Keyed on the open
@@ -624,7 +646,9 @@ export function AddFoodModal({
     let cancelled = false;
     setIsSearchingUsda(true);
     setUsdaError('');
-    searchFoodsAction(debouncedQuery)
+    // Rate limits and network blips usually clear in seconds: retry quietly
+    // (still "Searching USDA…") before saying anything.
+    searchUsdaWithRetry(() => searchFoodsAction(debouncedQuery), { isCancelled: () => cancelled })
       .then((result) => {
         if (cancelled) return;
         if (result.error && result.foods.length === 0) {
@@ -896,12 +920,31 @@ export function AddFoodModal({
     doneTimerRef.current = setTimeout(() => setDoneKey(null), 2000);
   };
 
+  // The parent's confirmation for the last one-tap add (food, amount, meal,
+  // the day's new calories and protein, Undo), shown at the top of the list,
+  // under the search box: where the eye is right after tapping a +. The
+  // page's own toast sat over the sheet and carried no totals (r21 panel).
+  const [sheetConfirmation, setSheetConfirmation] = useState<QuickAddConfirmation | null>(null);
+  const sheetConfirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (sheetConfirmationTimerRef.current) clearTimeout(sheetConfirmationTimerRef.current);
+  }, []);
+  const showSheetConfirmation = (next: QuickAddConfirmation | void) => {
+    if (!next) return;
+    setSheetConfirmation(next);
+    if (sheetConfirmationTimerRef.current) clearTimeout(sheetConfirmationTimerRef.current);
+    sheetConfirmationTimerRef.current = setTimeout(() => setSheetConfirmation(null), SHEET_CONFIRMATION_MS);
+  };
+  useEffect(() => {
+    if (!isOpen) setSheetConfirmation(null);
+  }, [isOpen]);
+
   // Instant quick-add — does NOT close the sheet, so several can be grabbed.
   const handleQuickAdd = async (entry: LoggedPortion, rowKey: string) => {
     if (!onQuickAdd) return;
     setQuickAddingKey(rowKey);
     try {
-      await onQuickAdd(snapshotOf(entry));
+      showSheetConfirmation(await onQuickAdd(snapshotOf(entry)));
       flashDone(rowKey);
     } catch {
       setError('Failed to add food. Please try again.');
@@ -922,7 +965,7 @@ export function AddFoodModal({
     setQuickAddingKey(rowKey);
     setError('');
     try {
-      await onQuickAdd({
+      const confirmation = await onQuickAdd({
         food_name: food.name,
         serving_size: oneTap.servingSize,
         servings: oneTap.servings,
@@ -935,6 +978,7 @@ export function AddFoodModal({
         food_id: food.food_id,
       });
       recordLastUsedServingForKeys(food.foodKeys, oneTap.portion.amount, oneTap.portion.unitId);
+      showSheetConfirmation(confirmation);
       flashDone(rowKey);
     } catch {
       setError('Failed to add food. Please try again.');
@@ -988,7 +1032,7 @@ export function AddFoodModal({
     setQuickAddingKey(`all:${meal.key}`);
     try {
       if (onQuickAddMany) {
-        await onQuickAddMany(foods);
+        showSheetConfirmation(await onQuickAddMany(foods));
       } else if (onQuickAdd) {
         for (const food of foods) await onQuickAdd(food);
       }
@@ -1265,33 +1309,48 @@ export function AddFoodModal({
           <div className="space-y-4">
             {!hasSelection && (
               <>
-                <Input
-                  ref={searchInputRef}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search your foods, common foods, and USDA..."
-                  aria-label="Search foods"
-                  className="w-full"
-                  leftIcon={<IconSearch size={16} aria-hidden="true" />}
-                  rightIcon={
-                    // Scan lives in the search bar too, where people look for it.
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTab('barcode');
-                        clearSelection();
-                      }}
-                      aria-label="Scan a barcode"
-                      data-testid="search-scan-barcode"
-                      className="-mr-1 w-8 h-8 rounded-full flex items-center justify-center text-action hover:bg-action/15 transition-colors"
-                    >
-                      <IconScan size={18} aria-hidden="true" />
-                    </button>
-                  }
-                />
-                <p className="text-caption text-ink-2 -mt-2" data-testid="add-food-portion-hint">
-                  Tap a food to choose how much before it&apos;s added. + adds the portion shown.
-                </p>
+                {/* Scan barcode sits beside the box, labelled in words (r21
+                    panel, 4 of 6: "the barcode scan entry point is a
+                    separate tab ... I had to hunt for it"). */}
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      ref={searchInputRef}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search your foods, common foods, and USDA..."
+                      aria-label="Search foods"
+                      className="w-full"
+                      leftIcon={<IconSearch size={16} aria-hidden="true" />}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('barcode');
+                      clearSelection();
+                    }}
+                    data-testid="search-scan-barcode"
+                    className="flex-shrink-0 min-h-[44px] px-3 rounded-[10px] bg-action/15 text-action text-subhead font-semibold flex items-center gap-1.5 hover:bg-action/25 transition-colors"
+                  >
+                    <IconScan size={18} aria-hidden="true" />
+                    Scan barcode
+                  </button>
+                </div>
+                {noCamera && (
+                  <p className="text-caption text-ink-2 -mt-2" data-testid="search-scan-no-camera">
+                    {NO_CAMERA_UP_FRONT}
+                  </p>
+                )}
+                <div role="status" aria-live="polite" data-testid="add-food-added-status">
+                  {sheetConfirmation ? (
+                    <AddedBanner confirmation={sheetConfirmation} testIdPrefix="add-food-added" />
+                  ) : (
+                    <p className="text-caption text-ink-2 -mt-2" data-testid="add-food-portion-hint">
+                      Tap a food to choose how much before it&apos;s added. + adds the portion shown.
+                    </p>
+                  )}
+                </div>
               </>
             )}
 
