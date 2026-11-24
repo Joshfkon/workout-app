@@ -58,14 +58,21 @@ describe('Onboarding benchmarks page', () => {
     expect(screen.getByText(/Nothing here affects food tracking/)).toBeInTheDocument();
   });
 
-  it('leads with one beginner-friendly sentence on what it is for and what skipping costs (UX round 21)', () => {
+  it('leads with the why and the skip cost, one line each, before any button (UX round 22)', () => {
     render(<BenchmarksPage />);
+    const why = screen.getByTestId('benchmarks-why');
     const line = screen.getByTestId('benchmarks-one-line');
-    expect(line).toHaveTextContent(/starts your weight suggestions closer to your real strength/);
-    expect(line).toHaveTextContent(/Skip it and they start from estimates, then adjust after your first 1–2 workouts/);
-    expect(screen.getByText(/Progress tracking works the same either way/)).toBeInTheDocument();
-    // Before Skip, which stays the first button.
-    expect(line.compareDocumentPosition(screen.getByTestId('skip-benchmarks')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(why).toHaveTextContent(/Why: it starts your weight suggestions at your real strength/);
+    // Dre: entered lifts start tracking strength on Progress.
+    expect(why).toHaveTextContent(/show on Progress from day one as your starting strength/);
+    expect(line).toHaveTextContent(/If you skip: that.s fine, especially if you.re new/);
+    expect(line).toHaveTextContent(/may be off for your first 1–2 workouts/);
+    // Both lines come before the first button, and the why comes first.
+    expect(why.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(screen.getByTestId('skip-benchmarks-beginner')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('benchmarks-purpose')).toHaveTextContent(
+      /strength trend line itself builds from the workouts you log/
+    );
     // The step indicator says where this is in setup, in words.
     expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 5 of 5: Strength test (optional)');
   });
@@ -105,16 +112,27 @@ describe('Onboarding benchmarks page', () => {
     expect(mockPush).toHaveBeenCalledTimes(1);
   });
 
-  it('puts what the tests are for and what skipping changes in a bulleted box above everything else', () => {
+  it('keeps the details in a bulleted box after the skip buttons and above every lift', () => {
     render(<BenchmarksPage />);
     const box = screen.getByTestId('benchmarks-purpose');
     expect(box.querySelectorAll('li').length).toBeGreaterThanOrEqual(4);
     expect(box).toHaveTextContent(/What a test does:/);
     expect(box).toHaveTextContent(/If you skip:/);
-    // Above Skip and above every lift card.
-    for (const later of [screen.getByTestId('skip-benchmarks'), screen.getByRole('button', { name: /Bench Press/i })]) {
-      expect(box.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    }
+    expect(screen.getByTestId('skip-benchmarks').compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(box.compareDocumentPosition(screen.getByRole('button', { name: /Bench Press/i })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('offers beginners their own skip, which finishes setup the same way', async () => {
+    const user = userEvent.setup();
+    render(<BenchmarksPage />);
+    const beginner = screen.getByTestId('skip-benchmarks-beginner');
+    expect(beginner).toHaveTextContent('I’m new to lifting — skip');
+    // The first button on the page.
+    expect(beginner.compareDocumentPosition(screen.getByTestId('skip-benchmarks')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(beginner);
+    expect(screen.getByRole('status')).toHaveTextContent(/Your first workouts will find your starting weights/);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard'));
+    expect(mockComplete).toHaveBeenCalledTimes(1);
   });
 
   it('Skip shows it is working the moment it is tapped', async () => {

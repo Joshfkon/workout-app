@@ -478,7 +478,12 @@ export function calculateTDEE(stats: UserStats, activity: ActivityConfig): numbe
   return Math.round(tdee);
 }
 
-function getLossRateCap(bodyFatPercent?: number): number {
+/**
+ * Fastest loss the calculator allows, % of body weight a week: leaner =
+ * slower, to protect muscle. Exported so onboarding can say why a lean
+ * lifter's cut is smaller than the pace picked.
+ */
+export function getLossRateCap(bodyFatPercent?: number): number {
   if (!bodyFatPercent || bodyFatPercent <= 0) return GUARDRAILS.DEFAULT_LOSS_RATE_CAP;
   for (const tier of GUARDRAILS.LOSS_RATE_BY_BF) {
     if (bodyFatPercent <= tier.maxBF) return tier.maxLossPercent;
@@ -1101,12 +1106,15 @@ export function getGoalOptions(): Array<{ value: Goal; label: string; descriptio
 
 export function getActivityOptions(): Array<{ value: ActivityLevel; label: string; description: string }> {
   return [
-    { value: "sedentary", label: "Sedentary", description: "Desk job, little exercise" },
-    { value: "light", label: "Lightly Active", description: "Light exercise 1–3 days/week" },
-    { value: "moderate", label: "Moderately Active", description: "Moderate exercise 3–5 days/week" },
-    { value: "active", label: "Very Active", description: "Hard exercise 6–7 days/week" },
-    { value: "very_active", label: "Extremely Active", description: "Very hard exercise + physical job" },
-    { value: "athlete", label: "Athlete", description: "Professional/competitive athlete" },
+    // Daily life OUTSIDE workouts: calculateTDEE adds workout energy on top
+    // of BMR × this multiplier, so these must not describe exercise (the old
+    // "Moderate exercise 3–5 days/week" wording double-counted workouts).
+    { value: "sedentary", label: "Sedentary", description: "Mostly sitting, under ~5,000 steps a day" },
+    { value: "light", label: "Lightly Active", description: "Desk job plus some walking, ~5,000–8,000 steps" },
+    { value: "moderate", label: "Moderately Active", description: "On your feet a lot, ~8,000–12,000 steps" },
+    { value: "active", label: "Very Active", description: "Physical job or 12,000+ steps a day" },
+    { value: "very_active", label: "Extremely Active", description: "Hard physical labour most of the day" },
+    { value: "athlete", label: "Athlete", description: "Training twice a day plus an active job" },
   ];
 }
 

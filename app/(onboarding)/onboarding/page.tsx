@@ -15,6 +15,8 @@ import type { StandingInjuryArea } from '@/lib/training/standingInjuries';
 import { GoalStep } from './_components/GoalStep';
 import { earlierGoalAnswer, type GoalPreselection } from '@/lib/onboarding/goalPreselection';
 import { TrainingStep } from './_components/TrainingStep';
+import { targetsGoalName } from './_components/DailyTargetsCard';
+import { HeightField, cmToFeetInches, feetInchesToCm } from './_components/HeightField';
 import {
   EMPTY_TRAINING_SETUP,
   customChangeForGoal,
@@ -39,22 +41,8 @@ import type { LengthUnit, WeightUnit } from '@/types/schema';
 import { lengthUnitForWeightUnit, resolveLengthUnit } from '@/lib/units/lengthUnits';
 
 // Unit conversion helpers
-const cmToInches = (cm: number) => cm / 2.54;
-const inchesToCm = (inches: number) => inches * 2.54;
 const kgToLbs = (kg: number) => kg * 2.20462;
 const lbsToKg = (lbs: number) => lbs / 2.20462;
-
-// Convert total inches to feet and inches
-const inchesToFeetInches = (totalInches: number) => {
-  const feet = Math.floor(totalInches / 12);
-  const inches = Math.round(totalInches % 12);
-  return { feet, inches };
-};
-
-// Convert feet and inches to total inches
-const feetInchesToInches = (feet: number, inches: number) => {
-  return feet * 12 + inches;
-};
 
 // Body fat visual reference with clickable values
 const BODY_FAT_OPTIONS = {
@@ -117,6 +105,10 @@ export default function OnboardingBodyCompPage() {
   const [isSavingUnits, setIsSavingUnits] = useState(false);
   const units = selectedUnits;
   const lengthUnit = selectedLength;
+  // Height has its own cm / ft & in toggle on the body step; it starts on
+  // the length unit picked first and only changes how height is typed.
+  const [heightUnitPicked, setHeightUnitPicked] = useState<LengthUnit | null>(null);
+  const heightUnit = heightUnitPicked ?? lengthUnit;
 
   const [isLoading, setIsLoading] = useState(false);
   const [existingDexa, setExistingDexa] = useState<{
@@ -156,6 +148,8 @@ export default function OnboardingBodyCompPage() {
   const goalTouched = useRef(false);
   // Protein typed on the goal step (g a day); null = the calculated figure.
   const [proteinOverride, setProteinOverride] = useState<number | null>(null);
+  // Calories typed on the targets card (kcal a day); null = the calculated figure.
+  const [calorieOverride, setCalorieOverride] = useState<number | null>(null);
   // Optional "areas to go easy on", saved as body areas in
   // users.preferences.injuryAreas (lib/training/standingInjuries), never
   // injury_history. null = unanswered, which leaves the stored value alone.
@@ -218,18 +212,24 @@ export default function OnboardingBodyCompPage() {
   
   // Convert display values to metric for calculations
   const getHeightCm = () => {
-    if (lengthUnit === 'in') {
-      // Imperial: use feet + inches
-      const feet = parseFloat(heightFeet) || 0;
-      const inches = parseFloat(heightInches) || 0;
-      if (feet === 0 && inches === 0) return 0;
-      const totalInches = feetInchesToInches(feet, inches);
-      return inchesToCm(totalInches);
-    } else {
-      // Metric: use cm
-      if (!heightDisplay) return 0;
-      return parseFloat(heightDisplay);
+    if (heightUnit === 'in') return feetInchesToCm(heightFeet, heightInches);
+    if (!heightDisplay) return 0;
+    return parseFloat(heightDisplay) || 0;
+  };
+  // Switching the height unit carries the number across.
+  const switchHeightUnit = (next: LengthUnit) => {
+    if (next === heightUnit) return;
+    const cm = getHeightCm();
+    if (next === 'in') {
+      if (cm > 0) {
+        const { feet, inches } = cmToFeetInches(cm);
+        setHeightFeet(String(feet));
+        setHeightInches(String(inches));
+      }
+    } else if (cm > 0) {
+      setHeightDisplay(String(Math.round(cm)));
     }
+    setHeightUnitPicked(next);
   };
   
   const getWeightKg = () => {
@@ -246,14 +246,14 @@ export default function OnboardingBodyCompPage() {
   useEffect(() => {
     if (step !== 'body-comp' || savedHeightCm == null || heightPrefilled.current) return;
     heightPrefilled.current = true;
-    if (lengthUnit === 'in') {
-      const { feet, inches } = inchesToFeetInches(cmToInches(savedHeightCm));
+    if (heightUnit === 'in') {
+      const { feet, inches } = cmToFeetInches(savedHeightCm);
       setHeightFeet((current) => current || String(feet));
       setHeightInches((current) => current || String(inches));
     } else {
       setHeightDisplay((current) => current || String(savedHeightCm));
     }
-  }, [step, savedHeightCm, lengthUnit]);
+  }, [step, savedHeightCm, heightUnit]);
 
   // Computed values
   const [bodyComp, setBodyComp] = useState<{
@@ -355,7 +355,7 @@ export default function OnboardingBodyCompPage() {
       setBodyComp(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heightDisplay, heightFeet, heightInches, weightDisplay, bodyFatPercent, useDexa, existingDexa, sex, units, lengthUnit]);
+  }, [heightDisplay, heightFeet, heightInches, weightDisplay, bodyFatPercent, useDexa, existingDexa, sex, units, heightUnit]);
   
   const handleUseDexa = () => {
     if (existingDexa) {
@@ -412,8 +412,17 @@ export default function OnboardingBodyCompPage() {
       bodyFatPercent: ownBodyFat(),
       weeklyChangeKg: customKg,
       proteinG: proteinOverride,
+      caloriesKcal: calorieOverride,
     });
   };
+  /** Props for the targets card (breakdown + Edit), shared by the goal and training steps. */
+  const targetsCardFor = (s: NonNullable<ReturnType<typeof starterFor>>) => ({
+    calorieBasis: s.calories,
+    proteinBasis: s.protein,
+    goalName: targetsGoalName(s.settings.goal, s.targetWeightChangePerWeek !== null),
+    calorieOverride,
+    proteinOverride,
+  });
   const starter = starterFor(null);
   const createStarterTargets = !existingTargets && !hasMacroSettings;
 
@@ -494,9 +503,10 @@ export default function OnboardingBodyCompPage() {
           const saved = await saveMacroSettings({
             ...starter.settings,
             target_weight_change_per_week: starter.targetWeightChangePerWeek,
-            // A hand-set protein is a hand-set target: the adaptive sync
-            // must not recalculate it away (setMacroAutoUpdateEnabled's rule).
-            ...(starter.protein.setByHand ? { auto_update_enabled: false } : {}),
+            // A hand-set protein or calorie figure is a hand-set target: the
+            // adaptive sync must not recalculate it away
+            // (setMacroAutoUpdateEnabled's rule).
+            ...(starter.protein.setByHand || starter.calories.setByHand ? { auto_update_enabled: false } : {}),
           });
           if (saved.success) {
             const { error: targetsError } = await supabase
@@ -760,6 +770,16 @@ export default function OnboardingBodyCompPage() {
         weightKg={useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg()}
         units={units}
         targets={trainingStarter ? trainingStarter.targets : null}
+        targetsCard={
+          trainingStarter && sex
+            ? {
+                ...targetsCardFor(trainingStarter),
+                sex,
+                onCaloriesChange: setCalorieOverride,
+                onProteinChange: setProteinOverride,
+              }
+            : null
+        }
         skipTargets={createStarterTargets && starter ? starter.targets : null}
         busy={trainingBusy ?? (isLoading ? 'continue' : null)}
         onBack={() => setStep('goal')}
@@ -803,12 +823,14 @@ export default function OnboardingBodyCompPage() {
                   calories: starter.targets.calories,
                   protein: starter.targets.protein,
                   kind: 'new',
-                  proteinBasis: starter.protein,
+                  ...targetsCardFor(starter),
                 }
               : null
         }
         units={units}
+        sex={sex}
         onProteinChange={setProteinOverride}
+        onCaloriesChange={setCalorieOverride}
         targetsNeedAge={createStarterTargets && !getAge()}
         ageDisplay={ageDisplay}
         onAgeChange={setAgeDisplay}
@@ -924,46 +946,17 @@ export default function OnboardingBodyCompPage() {
               hint="Used to work out your daily calorie target."
             />
             
-            {lengthUnit === 'in' ? (
-              <div>
-                <label className="block text-body font-medium text-ink mb-2">Height</label>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      value={heightFeet}
-                      onChange={(e) => setHeightFeet(e.target.value)}
-                      placeholder="5"
-                      min={3}
-                      max={8}
-                    />
-                    <span className="text-caption text-ink-3 mt-1 block text-center">feet</span>
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      value={heightInches}
-                      onChange={(e) => setHeightInches(e.target.value)}
-                      placeholder="9"
-                      min={0}
-                      max={11}
-                    />
-                    <span className="text-caption text-ink-3 mt-1 block text-center">inches</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <Input
-                label="Height (cm)"
-                type="number"
-                value={heightDisplay}
-                onChange={(e) => setHeightDisplay(e.target.value)}
-                placeholder="175"
-                min={100}
-                max={250}
-              />
-            )}
-            
+            <HeightField
+              unit={heightUnit}
+              onUnitChange={switchHeightUnit}
+              cm={heightDisplay}
+              onCmChange={setHeightDisplay}
+              feet={heightFeet}
+              onFeetChange={setHeightFeet}
+              inches={heightInches}
+              onInchesChange={setHeightInches}
+            />
+
             <Input
               label={`Weight (${units === 'lb' ? 'lbs' : 'kg'})`}
               type="number"
@@ -981,11 +974,12 @@ export default function OnboardingBodyCompPage() {
             />
 
             <div>
+              {/* Why it's asked, right at the field, in terms of what it sets
+                  (UX panel round 21). */}
               <p className="text-subhead text-ink-2 mb-2" data-testid="body-fat-why">
-                Body fat % is how much of your weight is fat. We use it to split your weight into muscle
-                and fat, so we can suggest a goal, size your protein and track muscle, not just weight.
-                Use a smart scale or scan reading if you have one; otherwise tap the look closest to yours
-                below. Optional: you can skip it.
+                <span className="font-medium text-ink">Why we ask:</span> it splits your weight into lean
+                mass and fat. Your protein target is set from your lean mass, and so is your resting
+                calorie burn. A scale or scan reading is best; a look-alike guess below is fine. Optional: you can skip it.
               </p>
               <Input
                 label="Body fat %"

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { IconCheck, IconChevronDown, IconInfoCircle } from '@tabler/icons-react';
 import { Button, Input, Toggle } from '@/components/ui';
+import { DailyTargetsCard } from './DailyTargetsCard';
 import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 import {
   BEGINNER_MODE_DESCRIPTION,
@@ -11,7 +12,7 @@ import {
 } from '@/lib/beginnerMode';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import { preselectionNote, type GoalPreselection } from '@/lib/onboarding/goalPreselection';
-import { PROTEIN_EDIT_RANGE, type StarterProteinBasis } from '@/lib/nutrition/phaseTargets';
+import type { StarterCalorieBasis, StarterProteinBasis } from '@/lib/nutrition/phaseTargets';
 import type { WeightUnit } from '@/types/schema';
 import { STANDING_INJURY_OPTIONS, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
@@ -53,11 +54,6 @@ const FOOD_GOAL_DESCRIPTIONS: Record<TrainingGoal, string> = {
   bulk: 'Gain weight slowly.',
 };
 
-/** Where the daily numbers come from, in one plain line. */
-export const TARGETS_SOURCE_COPY =
-  'Calories: your estimated daily burn (from your weight, height, age, sex and a typical activity level), ' +
-  'set a little lower to lose fat or a little higher to build muscle.';
-
 /** Daily targets shown under the goal: new ones for this goal, or ones the user already has. */
 export interface GoalStepTargets {
   calories: number;
@@ -65,31 +61,13 @@ export interface GoalStepTargets {
   kind: 'new' | 'existing';
   /** How the protein figure was reached (new targets only). */
   proteinBasis?: StarterProteinBasis;
-}
-
-/**
- * How protein is set, in one plain line with the user's own numbers. Pure
- * (exported for tests). The rule is the macro calculator's: 1 g per lb of
- * lean mass (1.1 on a cut), lean mass from body fat when given.
- */
-export function proteinBasisLine(basis: StarterProteinBasis, units: WeightUnit): string {
-  const lean =
-    units === 'lb'
-      ? `${Math.round(basis.leanMassKg * 2.20462)} lb`
-      : `${Math.round(basis.leanMassKg)} kg`;
-  const perUnit =
-    units === 'lb'
-      ? `${basis.perLbLeanMass.toFixed(1)} g per lb of lean mass`
-      : `${(basis.perLbLeanMass * 2.20462).toFixed(1)} g per kg of lean mass`;
-  const leanFrom = basis.fromBodyFat ? 'from your body fat' : 'estimated, since body fat was skipped';
-  const total = `about ${basis.perKgBodyWeight.toFixed(1)} g per kg of body weight`;
-  if (basis.setByHand) {
-    return `Protein: set by you (${total}). The calculated figure was ${basis.calculated} g: ${perUnit}, lean mass ${lean} (${leanFrom}).`;
-  }
-  return (
-    `Protein: ${perUnit}${basis.perLbLeanMass > 1 ? ' (higher while losing fat, to protect muscle)' : ''}. ` +
-    `Your lean mass is ${lean} (${leanFrom}), so ${total}.`
-  );
+  /** How the calorie figure was reached (new targets only). */
+  calorieBasis?: StarterCalorieBasis;
+  /** The pace's name for the breakdown ("Moderate cut"); null = maintenance. */
+  goalName?: string | null;
+  /** Hand-set values (null = calculated). */
+  calorieOverride?: number | null;
+  proteinOverride?: number | null;
 }
 
 export interface GoalStepProps {
@@ -105,6 +83,10 @@ export interface GoalStepProps {
   units?: WeightUnit;
   /** A protein figure typed by the user (g a day); null = back to calculated. */
   onProteinChange?: (grams: number | null) => void;
+  /** A calorie figure typed by the user (kcal a day); null = back to calculated. */
+  onCaloriesChange?: (kcal: number | null) => void;
+  /** Needed for the calorie floor when editing. */
+  sex?: 'male' | 'female' | null;
   /** Body-fat-based suggestion (never from a "Not sure" guess). */
   recommended: 'bulk' | 'cut' | null;
   bodyFatPercent: number;
@@ -145,6 +127,8 @@ export function GoalStep({
   preselection = null,
   units = 'kg',
   onProteinChange,
+  onCaloriesChange,
+  sex = null,
   recommended,
   bodyFatPercent,
   injuryAreas,
@@ -256,7 +240,22 @@ export function GoalStep({
         </p>
       )}
 
-      {dailyTargets ? (
+      {dailyTargets && dailyTargets.kind === 'new' && dailyTargets.calorieBasis && dailyTargets.proteinBasis && sex ? (
+        <DailyTargetsCard
+          calories={dailyTargets.calories}
+          protein={dailyTargets.protein}
+          calorieBasis={dailyTargets.calorieBasis}
+          proteinBasis={dailyTargets.proteinBasis}
+          goalName={dailyTargets.goalName ?? null}
+          units={units}
+          sex={sex}
+          calorieOverride={dailyTargets.calorieOverride ?? null}
+          proteinOverride={dailyTargets.proteinOverride ?? null}
+          onCaloriesChange={onCaloriesChange}
+          onProteinChange={onProteinChange}
+          footnote="Change them any time in Eat."
+        />
+      ) : dailyTargets ? (
         <div className="rounded-card bg-card p-4 shadow-card" data-testid="goal-daily-targets">
           <p className="text-subhead text-ink-2">
             {dailyTargets.kind === 'new' ? 'Your daily targets' : 'Your current daily targets'}
@@ -269,19 +268,6 @@ export function GoalStep({
               ? 'Worked out from your goal, weight, height and age. Change them any time in Eat.'
               : 'Kept as they are. Change them any time in Eat.'}
           </p>
-          {dailyTargets.kind === 'new' && (
-            <p className="text-caption text-ink-2 mt-1" data-testid="goal-targets-source">
-              {TARGETS_SOURCE_COPY}
-            </p>
-          )}
-          {dailyTargets.kind === 'new' && dailyTargets.proteinBasis && (
-            <ProteinEditor
-              protein={dailyTargets.protein}
-              basis={dailyTargets.proteinBasis}
-              units={units}
-              onProteinChange={onProteinChange}
-            />
-          )}
         </div>
       ) : targetsNeedAge ? (
         <p className="text-subhead text-ink-2" data-testid="goal-targets-need-age">
@@ -531,66 +517,5 @@ export function injuryEffectLine(areas: readonly StandingInjuryArea[]): string {
     `What this changes: exercises that load your ${list} are swapped for gentler ones or flagged ` +
     `before you start, and the muscles around it still get trained. Each workout's check-in starts ` +
     `with it marked as mild, so on a good day you can clear it.`
-  );
-}
-
-/**
- * The protein figure, how it was worked out, and an optional edit. Editing
- * keeps calories and moves carbs (lib/nutrition/phaseTargets withProteinOverride).
- */
-function ProteinEditor({
-  protein,
-  basis,
-  units,
-  onProteinChange,
-}: {
-  protein: number;
-  basis: StarterProteinBasis;
-  units: WeightUnit;
-  onProteinChange?: (grams: number | null) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState('');
-  const value = Number(text);
-  const invalid =
-    text.trim() !== '' &&
-    !(Number.isFinite(value) && value >= PROTEIN_EDIT_RANGE.min && value <= PROTEIN_EDIT_RANGE.max);
-  return (
-    <div className="mt-2 border-t border-sep pt-2 space-y-2" data-testid="goal-protein-basis">
-      <p className="text-subhead text-ink-2">{proteinBasisLine(basis, units)}</p>
-      {onProteinChange &&
-        (editing ? (
-          <div className="space-y-1">
-            <Input
-              label="Protein (g a day)"
-              type="number"
-              inputMode="numeric"
-              value={text}
-              placeholder={String(basis.calculated)}
-              onChange={(e) => {
-                const next = e.target.value;
-                setText(next);
-                const n = Number(next);
-                if (next.trim() === '') onProteinChange(null);
-                else if (Number.isFinite(n) && n >= PROTEIN_EDIT_RANGE.min && n <= PROTEIN_EDIT_RANGE.max) {
-                  onProteinChange(n);
-                }
-              }}
-              error={invalid ? `Enter ${PROTEIN_EDIT_RANGE.min}–${PROTEIN_EDIT_RANGE.max} g.` : undefined}
-              hint={`Calories stay the same; carbs make room. Leave empty to use ${basis.calculated} g.`}
-              data-testid="goal-protein-input"
-            />
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="min-h-[44px] text-body font-medium text-action"
-            data-testid="goal-protein-edit"
-          >
-            Change protein ({protein} g)
-          </button>
-        ))}
-    </div>
   );
 }
