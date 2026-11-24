@@ -26,6 +26,8 @@ import {
   parseServingWeight,
   modelFromLoggedEntry,
   withHouseholdServing,
+  withEverydayUnit,
+  EVERYDAY_UNIT_ID,
   isHouseholdNoun,
   type FoodAmountModel,
 } from '@/lib/nutrition/servingScaling';
@@ -40,6 +42,7 @@ import {
   defaultPortion,
   describeDefaultPortion,
   typicalPortionForSystemFood,
+  everydayUnitForSystemFood,
   type DefaultPortion,
   type TypicalPortion,
 } from '@/lib/nutrition/portionDefaults';
@@ -336,17 +339,23 @@ function buildScannedModel(product: ScannedProduct): FoodAmountModel {
   );
 }
 
-/** System foods are per-100g; add the household unit people count in, if any. */
+/**
+ * System foods are per-100g; add the household unit people count in, if any
+ * (it becomes the default). A weighed food with no household unit gets an
+ * everyday measure ("palm-size portion") offered alongside grams instead.
+ */
 function buildSystemModel(food: SystemFood): FoodAmountModel {
-  return withHouseholdServing(
+  const household = householdServingForSystemFood(food.name);
+  const model = withHouseholdServing(
     weightBasedModel({
       calories: food.calories_per_100g,
       protein: food.protein_per_100g,
       carbs: food.carbs_per_100g,
       fat: food.fat_per_100g,
     }),
-    householdServingForSystemFood(food.name)
+    household
   );
+  return household ? model : withEverydayUnit(model, everydayUnitForSystemFood(food));
 }
 
 /**
@@ -968,9 +977,13 @@ export function AddFoodModal({
   const mealLabel = mealNames?.[mealType]?.trim() || MEAL_LABELS[mealType];
   // No household serving to default to (only grams, or a bare "100 g"
   // option): say so, so a 100 g default never reads like a real portion.
+  // An everyday measure ("palm-size portion") is a picture, not the food's
+  // serving, so it doesn't count.
   const noStandardServing =
     !!activeSelection &&
-    !activeSelection.model.units.some((u) => u.kind === 'serving' && isHouseholdNoun(u.noun));
+    !activeSelection.model.units.some(
+      (u) => u.kind === 'serving' && u.id !== EVERYDAY_UNIT_ID && isHouseholdNoun(u.noun)
+    );
   const showUsdaSection = debouncedQuery.length >= 3;
   // Where the starting amount came from, shown only while it is still the
   // starting amount (an edited amount is the user's own).
@@ -1122,6 +1135,7 @@ export function AddFoodModal({
                       onChange={setAmountValue}
                       recentAmounts={recentAmounts}
                       testIdPrefix="add-food"
+                      weightUnits={units ?? null}
                     />
 
                     {portionSourceLine && (
@@ -1541,6 +1555,7 @@ export function AddFoodModal({
                     onChange={setAmountValue}
                     recentAmounts={recentAmounts}
                     testIdPrefix="add-food"
+                    weightUnits={units ?? null}
                   />
                   {portionSourceLine && (
                     <p className="text-caption text-ink-2 mt-2" data-testid="add-food-portion-source">

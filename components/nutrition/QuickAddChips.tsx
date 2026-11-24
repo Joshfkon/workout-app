@@ -6,8 +6,22 @@ import { Chip } from '@/components/ui';
 import { formatPortion, frequentFoodPortion } from '@/lib/nutrition/frequentFoods';
 import type { FrequentFood, MealType } from '@/types/nutrition';
 
-/** How long a tapped chip reads "Added" before it goes back to the food. */
+/** How long a tapped chip shows its check mark before it goes back to "+". */
 export const QUICK_ADD_CONFIRM_MS = 1600;
+/** How long the confirmation line under the row stays (it has an Undo). */
+export const QUICK_ADD_STATUS_MS = 8000;
+
+/** What a successful one-tap add reports back, shown under the chips. */
+export interface QuickAddConfirmation {
+  /** "Added White Rice (1 cup) to Dinner" */
+  added: string;
+  /** "Day total 283 / 1,872 kcal · 11 / 144 g protein" */
+  totals: string;
+  /** Shown after Undo: "Removed White Rice (1 cup) from Dinner" */
+  removed: string;
+  /** Removes what was just added. */
+  onUndo?: () => Promise<void> | void;
+}
 
 interface QuickAddChipsProps {
   foods: FrequentFood[];
@@ -15,17 +29,29 @@ interface QuickAddChipsProps {
   mealLabel: string;
   meals: Array<{ type: MealType; label: string }>;
   onMealChange: (meal: MealType) => void;
-  /** Logs the food to `mealType`. Rejects on a failed save (no "Added"). */
-  onAdd: (food: FrequentFood) => Promise<void>;
+  /**
+   * Logs the food to `mealType`. Rejects on a failed save (no confirmation).
+   * May resolve with a confirmation to show under the row.
+   */
+  onAdd: (food: FrequentFood) => Promise<QuickAddConfirmation | void>;
+  /** True while `mealType` is the time-of-day default (not a meal the user picked). */
+  mealIsTimeDefault?: boolean;
   /** Display name for a food (e.g. title-casing ALL-CAPS database names). */
   formatName?: (name: string) => string;
 }
 
 /**
- * Eat's one-tap row of the user's recent foods. The header says what the
- * row is and where a tap goes ("Foods you log most — tap to add to Dinner"); a
- * tapped chip turns into "✓ Added" for a moment, so the confirmation is
- * where the finger is (the Undo toast still announces it via role=status).
+ * Eat's one-tap row of the user's recent foods.
+ *
+ * - The header says where a tap goes ("tap to add to Dinner"), and that the
+ *   meal was picked for the time of day until the user changes it.
+ * - Each chip shows the portion it will log: the amount the user logged
+ *   LAST time for that food (see frequentFoodPortion), not a fixed serving,
+ *   and the row says so.
+ * - After a tap the chip shows a check, and a line under the row says what
+ *   was added, how much, to which meal, and the day's running total, with
+ *   Undo. It sits in the flow (no toast over the meal cards) and is a polite
+ *   live region, so screen readers hear it too.
  */
 export function QuickAddChips({
   foods,
@@ -34,35 +60,65 @@ export function QuickAddChips({
   meals,
   onMealChange,
   onAdd,
+  mealIsTimeDefault = false,
   formatName = (name) => name,
 }: QuickAddChipsProps) {
   const [addedName, setAddedName] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirmation, setConfirmation] = useState<QuickAddConfirmation | null>(null);
+  const [undone, setUndone] = useState(false);
+  const chipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
     () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (chipTimerRef.current) clearTimeout(chipTimerRef.current);
+      if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
     },
     []
   );
 
   if (foods.length === 0) return null;
 
+  function showStatus(next: QuickAddConfirmation | null, isUndone = false) {
+    setConfirmation(next);
+    setUndone(isUndone);
+    if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+    statusTimerRef.current = setTimeout(() => {
+      setConfirmation(null);
+      setUndone(false);
+    }, QUICK_ADD_STATUS_MS);
+  }
+
   async function handleTap(food: FrequentFood) {
+    let result: QuickAddConfirmation | void;
     try {
-      await onAdd(food);
+      result = await onAdd(food);
     } catch (err) {
       console.error('[QuickAddChips] quick add failed:', err);
       return;
     }
     setAddedName(food.food_name);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setAddedName(null), QUICK_ADD_CONFIRM_MS);
+    if (chipTimerRef.current) clearTimeout(chipTimerRef.current);
+    chipTimerRef.current = setTimeout(() => setAddedName(null), QUICK_ADD_CONFIRM_MS);
+    if (result) showStatus(result);
+  }
+
+  async function handleUndo() {
+    const current = confirmation;
+    if (!current?.onUndo) return;
+    try {
+      await current.onUndo();
+    } catch (err) {
+      console.error('[QuickAddChips] undo failed:', err);
+      return;
+    }
+    setAddedName(null);
+    showStatus({ ...current, onUndo: undefined }, true);
   }
 
   return (
     <div data-testid="quick-add-row">
-      <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 px-1 text-subhead text-ink-2">
+      <div className="mb-0.5 flex flex-wrap items-center gap-x-1.5 px-1 text-subhead text-ink-2">
         <span id="quick-add-label">Foods you log most — tap to add to</span>
         <select
           aria-labelledby="quick-add-label"
@@ -76,6 +132,10 @@ export function QuickAddChips({
           ))}
         </select>
       </div>
+      <p className="mb-1.5 px-1 text-caption text-ink-3" data-testid="quick-add-explainer">
+        Each adds the amount you logged last time
+        {mealIsTimeDefault ? ` · ${mealLabel} picked for the time of day` : ''}
+      </p>
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
         {foods.map((food) => {
           const name = formatName(food.food_name);
@@ -85,24 +145,44 @@ export function QuickAddChips({
             <Chip
               key={food.food_name}
               onClick={() => void handleTap(food)}
-              title={`${name} · ${portion}`}
+              title={`${name} · ${portion} · adds to ${mealLabel}`}
               aria-label={`Log ${name}, ${portion}, to ${mealLabel}`}
               icon={added ? <IconCheck size={16} /> : <IconPlus size={16} />}
               className={`max-w-[16rem] ${added ? 'bg-status-ok/15 text-status-ok [&>span]:text-status-ok' : ''}`}
               data-testid="quick-add-chip"
               data-added={added ? 'true' : undefined}
             >
-              {added ? (
-                <span data-testid="quick-add-chip-added">Added to {mealLabel}</span>
-              ) : (
-                <>
-                  <span className="truncate">{name}</span>
-                  <span className="flex-shrink-0 text-subhead text-ink-2" data-testid="quick-add-chip-portion">· {portion}</span>
-                </>
-              )}
+              <span className="truncate">{name}</span>
+              <span className="flex-shrink-0 text-subhead text-ink-2" data-testid="quick-add-chip-portion">· {portion}</span>
             </Chip>
           );
         })}
+      </div>
+      <div role="status" aria-live="polite" data-testid="quick-add-status">
+        {confirmation && (
+          <div className="mt-1.5 flex items-start gap-2 rounded-lg bg-status-ok/10 px-3 py-2">
+            <IconCheck size={16} className="mt-0.5 flex-shrink-0 text-status-ok" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-subhead font-medium text-ink" data-testid="quick-add-status-added">
+                {undone ? confirmation.removed : confirmation.added}
+              </p>
+              {!undone && (
+                <p className="text-caption text-ink-2" data-testid="quick-add-status-totals">
+                  {confirmation.totals}
+                </p>
+              )}
+            </div>
+            {!undone && confirmation.onUndo && (
+              <button
+                type="button"
+                onClick={() => void handleUndo()}
+                className="flex-shrink-0 text-subhead font-medium text-action hover:underline"
+              >
+                Undo
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
