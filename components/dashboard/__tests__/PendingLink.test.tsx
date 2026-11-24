@@ -81,10 +81,13 @@ describe('PendingLink', () => {
 });
 
 describe('Home gear', () => {
-  it('is a 44px target that acknowledges the first tap', () => {
+  it('is a labelled 48px target that acknowledges the first tap', () => {
     render(<GlanceHeader greeting="Good morning" todayLabel="Mon, Nov 23" />);
     const gear = screen.getByTestId('home-settings');
-    expect(gear).toHaveClass('h-11', 'w-11');
+    // Visible word, not just an icon (round 20, Frank), and the link's name.
+    expect(gear).toHaveTextContent('Settings');
+    expect(screen.getByRole('link', { name: /^Settings/ })).toBe(gear);
+    expect(gear).toHaveClass('min-h-12');
     fireEvent.click(gear);
     expect(gear).toHaveAttribute('aria-busy', 'true');
   });

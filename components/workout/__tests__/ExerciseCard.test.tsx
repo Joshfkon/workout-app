@@ -3497,7 +3497,7 @@ describe('ExerciseCard round 10: AMRAP note, why-this-weight, beginner wording',
     );
     await user.click(screen.getByTestId('why-this-weight'));
     const summary = screen.getByTestId('why-this-weight-summary');
-    expect(summary).toHaveTextContent(/^Your last set: 100 kg × 10, 2 reps left → /);
+    expect(summary).toHaveTextContent(/^Your last set: 100 kg × 10, and you could have done 2 more reps\. /);
     expect(summary.textContent).not.toMatch(JARGON);
   });
 });
@@ -3517,7 +3517,7 @@ describe('ExerciseCard round 11: the reason is on the strip, no tap', () => {
       />
     );
     expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-      /^Last time 100 kg × 10, 2 reps left → (\+1 rep|one weight step up|same weight|weight up|weight down)/
+      /^Last time 100 kg × 10 — you could have done 2 more reps, so (try 1 more rep today|one weight step up today|same weight today|a bit more weight today|a bit less weight today)/
     );
     // The link stays for the full sheet.
     expect(screen.getByTestId('why-this-weight')).toBeInTheDocument();
@@ -3542,7 +3542,7 @@ describe('ExerciseCard round 11: the reason is on the strip, no tap', () => {
       />
     );
     const line = screen.getByTestId('suggestion-source');
-    expect(line).toHaveTextContent(/^Last (set|time) 100 kg × 10, 2 reps left → /);
+    expect(line).toHaveTextContent(/^Last (set|time) 100 kg × 10 — you could have done 2 more reps, so /);
     expect(line.textContent).not.toMatch(/\bRIR\b|e1RM|AMRAP/);
   });
 });

@@ -9,7 +9,13 @@
  * happens here — the rule is named, never re-derived, and today's numbers are
  * the banner's own labels.
  *
- *   "Last time: 65 lbs × 13, 2 reps left → you had room, so +1 rep today: 65 lbs × 14."
+ *   "Last time: 65 lbs × 13, and you could have done 2 more reps. You had room,
+ *    so try 1 more rep today: 65 lbs × 14."
+ *
+ * Plain words, no shorthand: "2 reps left → +1 rep" read as jargon to a
+ * beginner (UX panel round 20, 3 of 6), who also couldn't tell where the
+ * prefilled rep count came from — so the line says what "left" meant and
+ * what today's number is.
  */
 
 /** The rule that produced today's numbers, as the card's branch named it. */
@@ -57,16 +63,17 @@ const BECAUSE_PHRASE: Record<WhyBecause, string> = {
   matched: 'right on your target',
 };
 
-function repsLeft(rir: number): string {
+/** The logged effort in plain words: how many more reps the lifter had. */
+function couldHaveDone(rir: number): string {
   const r = Math.max(0, rir);
-  if (r === 0) return 'nothing left';
-  if (r >= 4) return '4+ reps left';
+  if (r === 0) return 'you couldn’t have done another rep';
+  if (r >= 4) return 'you could have done 4 or more reps';
   const n = Number.isInteger(r) ? String(r) : r.toFixed(1);
-  return `${n} rep${n === '1' ? '' : 's'} left`;
+  return `you could have done ${n} more rep${n === '1' ? '' : 's'}`;
 }
 
 const RULE_PHRASE: Record<WhyRule, string> = {
-  add_rep: 'you had room, so +1 rep today',
+  add_rep: 'you had room, so try 1 more rep today',
   add_load: 'you topped the rep range with room to spare, so one weight step up today',
   load_lever: 'more reps wouldn’t beat it at that weight, so one weight step up today',
   hold: 'same weight today',
@@ -111,30 +118,30 @@ export function whyThisWeightSummary(why: WhyThisWeight | null | undefined, toda
   if (!why.ref || !why.refSet) return `${capitalize(rule)}: ${today}.`;
 
   const label = why.ref === 'last_session' ? 'Last time' : 'Your last set';
-  const effort = why.refRir != null ? `, ${repsLeft(why.refRir)}` : '';
+  const effort = why.refRir != null ? `, and ${couldHaveDone(why.refRir)}` : '';
   const because = why.because ? `${BECAUSE_PHRASE[why.because]}, so ` : '';
-  return `${label}: ${why.refSet}${effort} → ${because}${rule}: ${today}.`;
+  return `${label}: ${why.refSet}${effort}. ${capitalize(because + rule)}: ${today}.`;
 }
 
-/** The rule in a few words, for the one-line strip reason. */
+/** The rule in a few plain words, for the one-line strip reason. */
 const RULE_SHORT: Partial<Record<WhyRule, string>> = {
-  add_rep: '+1 rep',
-  add_load: 'one weight step up',
-  load_lever: 'one weight step up',
-  hold: 'same weight',
-  rounded_up: 'rounded up to the nearest plate, same reps',
-  load_up: 'weight up',
-  load_down: 'weight down',
-  lighter_for_range: 'lighter to stay in range',
-  capped: 'capped at today’s best',
-  reps_to_beat: 'reps set to beat it',
+  add_rep: 'try 1 more rep today',
+  add_load: 'one weight step up today',
+  load_lever: 'one weight step up today',
+  hold: 'same weight today',
+  rounded_up: 'same reps, rounded up to the nearest plate',
+  load_up: 'a bit more weight today',
+  load_down: 'a bit less weight today',
+  lighter_for_range: 'a bit lighter to stay in your rep range',
+  capped: 'capped at your best today',
+  reps_to_beat: 'reps set to beat it today',
 };
 
 /**
  * The one-line reason shown ON the suggestion strip (no tap), for first-time
  * lifts and for progressions off a logged set:
  *
- *   "Last time 65 lbs × 13, 2 reps left → +1 rep"
+ *   "Last time 65 lbs × 13 — you could have done 2 more reps, so try 1 more rep today"
  *   "First time on this lift: starting guess from your Bench Press"
  *
  * Same inputs as the sheet summary, shorter. Null for rules whose existing
@@ -150,8 +157,8 @@ export function whyThisWeightLine(why: WhyThisWeight | null | undefined): string
   const short = RULE_SHORT[why.rule];
   if (!short || !why.ref || !why.refSet) return null;
   const label = why.ref === 'last_session' ? 'Last time' : 'Last set';
-  const effort = why.refRir != null ? `, ${repsLeft(why.refRir)}` : '';
-  return `${label} ${why.refSet}${effort} → ${short}`;
+  const effort = why.refRir != null ? ` — ${couldHaveDone(why.refRir)}` : '';
+  return `${label} ${why.refSet}${effort}, so ${short}`;
 }
 
 function capitalize(s: string): string {

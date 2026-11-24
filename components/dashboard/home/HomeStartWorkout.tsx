@@ -86,29 +86,35 @@ export function HomeStartWorkout({
   }
 
   const startButton = compact ? (
+    // Still one quiet card, but its button is the same one-tap "Start today's
+    // workout" as everywhere else on Home. It used to open the options sheet,
+    // so a first workout took Start → AI-suggested → Start (UX panel round 20,
+    // Frank: "several ways to start a workout, and several taps"). The other
+    // ways sit under it as a plain link.
     <div
-      className="flex items-center gap-3 rounded-card bg-card shadow-card px-4 py-3"
+      className="rounded-card bg-card shadow-card px-4 py-3 space-y-2"
       data-testid="home-compact-workout-entry"
     >
-      <div className="min-w-0 flex-1">
-        <div className="text-body font-semibold text-ink">Lifting too?</div>
+      <div className="text-body font-semibold text-ink">Lifting too?</div>
+      <StartTodaysWorkoutButton />
+      <div className="flex flex-wrap items-center justify-between gap-x-4">
+        <button
+          type="button"
+          onClick={() => setShowOptions(true)}
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-subhead text-action font-semibold"
+          data-testid="home-start-workout"
+        >
+          <IconBarbell size={16} aria-hidden="true" />
+          Other ways to start
+        </button>
         <Link
           href="/dashboard/mesocycle/new"
-          className="inline-flex items-center gap-1.5 text-subhead text-ink-2 hover:text-ink transition-colors"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-subhead text-ink-2 hover:text-ink transition-colors"
         >
           Or build a program
           <ProTag feature="mesocycleBuilder" />
         </Link>
       </div>
-      <button
-        type="button"
-        onClick={() => setShowOptions(true)}
-        className={COMPACT_BUTTON}
-        data-testid="home-start-workout"
-      >
-        <IconBarbell size={16} aria-hidden="true" />
-        Start workout
-      </button>
     </div>
   ) : (
     // One tap starts today's recommended workout; every other way to start

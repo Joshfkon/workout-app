@@ -876,19 +876,22 @@ export function SetLoggerRow({
 
       {/* Row 2: effort chips (labeled, full-width) + set type + feedback sheet
           trigger. Asked in plain words; "RIR" stays in the accessible names. */}
-      <p className="pl-1 text-caption text-ink-2" id={`effort-q-${setNumber}`}>
-        {beginner ? 'How did that set feel?' : 'How many more could you have done?'}
-        {!rirTouched && !rirFromSensor && (
-          // The chip starts on the target effort so logging stays one tap; say
-          // so, or an untouched chip reads as an answer the lifter never gave.
-          <span className="text-ink-3" data-testid="rir-preset-note">
-            {' '}
-            {beginner
-              ? 'Set to today’s target — tap if it felt different.'
-              : `Preset to your target (${RIR_CHIP_TEXT[clampToChip(targetRir)]}) — tap to change.`}
-          </span>
-        )}
+      <p className="pl-1 text-subhead font-medium text-ink" id={`effort-q-${setNumber}`}>
+        {beginner ? 'After the set: how did it feel?' : 'After the set: how many more could you have done?'}
       </p>
+      {!rirTouched && !rirFromSensor && (
+        // The chip starts on the target effort so logging stays one tap; say
+        // so, and why, on its own line — an untouched chip read as an answer
+        // the lifter never gave, and the inline grey note was missed (UX
+        // panel round 20, 3 of 6: "a preselected answer, unexplained").
+        <p className="-mt-1 pl-1 text-caption text-ink-2" data-testid="rir-preset-note">
+          {beginner
+            ? `We picked today’s target (“${
+                BEGINNER_EFFORT_CHOICES.find((c) => c.rir === beginnerEffortChoiceFor(targetRir))?.label ?? 'A couple more'
+              }”) so logging is one tap. If the set felt harder or easier, tap that answer first.`
+            : `Preset to your target (${RIR_CHIP_TEXT[clampToChip(targetRir)]}) so logging is one tap. Tap another if the set felt different.`}
+        </p>
+      )}
       <div
         className="flex items-stretch gap-1.5 large-text:flex-wrap"
         role="group"

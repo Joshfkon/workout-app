@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TodayCard, type TodayCardProps } from '../TodayCard';
+import { TodayCard, kcalLeftLine, TARGET_EXPLAINER_HREF, type TodayCardProps } from '../TodayCard';
 import { NudgeCard, pickHomeNudge } from '../NudgeCard';
 import { QuickLogRow } from '../QuickLogRow';
 import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
@@ -43,12 +43,30 @@ describe('TodayCard', () => {
   it('summarises Eat, Recovery and This week in one line each', () => {
     render(<TodayCard {...props()} />);
     expect(screen.getByRole('link', { name: /Eat/ })).toHaveAttribute('href', '/dashboard/nutrition');
-    expect(screen.getByText('1,240 left')).toBeInTheDocument();
+    expect(screen.getByText('1,240 kcal left of your 2,450 target today')).toBeInTheDocument();
     expect(screen.getByText('95 g protein to go · on pace')).toBeInTheDocument();
     expect(screen.getByText('7.5h sleep')).toBeInTheDocument();
     expect(screen.getByText('8,412 steps · HRV 12% below usual')).toBeInTheDocument();
     expect(screen.getByText('2 behind')).toBeInTheDocument();
     expect(screen.getByText('3 lifts rising · 182.4 lb, −0.6 lb/wk')).toBeInTheDocument();
+  });
+
+  it('says what the calorie figure is and links to how the target was worked out (round 20, Sam)', () => {
+    render(<TodayCard {...props()} />);
+    expect(screen.getByTestId('today-kcal-left')).toHaveTextContent('1,240 kcal left of your 2,450 target today');
+    const link = screen.getByRole('link', { name: 'How your calorie target was worked out' });
+    expect(link).toHaveAttribute('href', TARGET_EXPLAINER_HREF);
+    expect(TARGET_EXPLAINER_HREF).toBe('/dashboard/nutrition?explain=target');
+  });
+
+  it('has no target link before targets are set', () => {
+    render(<TodayCard {...props({ nutritionTargets: null })} />);
+    expect(screen.queryByTestId('today-target-explainer')).toBeNull();
+  });
+
+  it('kcalLeftLine rounds and names the target', () => {
+    expect(kcalLeftLine(26.4, 3200)).toBe('3,174 kcal left of your 3,200 target today');
+    expect(kcalLeftLine(3300, 3200)).toBe('100 kcal over your 3,200 target today');
   });
 
   it('opens the details sheet from Recovery and This week', () => {
@@ -63,7 +81,7 @@ describe('TodayCard', () => {
     const { rerender } = render(
       <TodayCard {...props({ nutritionTotals: { calories: 2600, protein: 190, carbs: 0, fat: 0 } })} />
     );
-    expect(screen.getByText('150 over')).toBeInTheDocument();
+    expect(screen.getByText('150 kcal over your 2,450 target today')).toBeInTheDocument();
     expect(screen.getByText('Protein target hit · on pace')).toBeInTheDocument();
     rerender(<TodayCard {...props({ nutritionTargets: null })} />);
     expect(screen.getByText('Set calorie and protein targets')).toBeInTheDocument();

@@ -1,6 +1,13 @@
 import userEvent from '@testing-library/user-event';
 import { render, screen } from '@testing-library/react';
-import { WeeklySetsCard, pickWeeklySetsRows, weeklySetsDigest } from '../WeeklySetsCard';
+import {
+  WeeklySetsCard,
+  pickWeeklySetsRows,
+  weeklySetsDigest,
+  MEV_MRV_FIRST_LINE,
+  MEV_MRV_LINE_HINT_ID,
+} from '../WeeklySetsCard';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
 import type { VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 const row = (muscle: string, sets: number, mev: number, mrv: number, over: Partial<VolumeRow> = {}): VolumeRow =>
@@ -76,5 +83,27 @@ describe('WeeklySetsCard', () => {
     expect(weeklySetsDigest([row('chest', 12, 8, 22)])).toBe('Every trained muscle is in its range');
     const { container } = render(<WeeklySetsCard rows={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  describe('first-run explanation (round 20, Sam)', () => {
+    beforeEach(() => useEducationStore.setState({ dismissedHints: [] }));
+
+    it('explains MEV–MRV in one plain line without a tap, until dismissed; the key stays', async () => {
+      const user = userEvent.setup();
+      render(<WeeklySetsCard rows={rows} />);
+      expect(screen.getByTestId('home-weekly-sets-first-line')).toHaveTextContent(MEV_MRV_FIRST_LINE);
+      await user.click(screen.getByTestId('home-weekly-sets-first-line-dismiss'));
+      expect(screen.queryByTestId('home-weekly-sets-first-line')).toBeNull();
+      expect(useEducationStore.getState().dismissedHints).toContain(MEV_MRV_LINE_HINT_ID);
+      // The info key is still one tap away.
+      await user.click(screen.getByTestId('home-weekly-sets-info'));
+      expect(screen.getByTestId('home-weekly-sets-key')).toBeInTheDocument();
+    });
+
+    it('stays hidden once dismissed', () => {
+      useEducationStore.setState({ dismissedHints: [MEV_MRV_LINE_HINT_ID] });
+      render(<WeeklySetsCard rows={rows} />);
+      expect(screen.queryByTestId('home-weekly-sets-first-line')).toBeNull();
+    });
   });
 });
