@@ -9,7 +9,7 @@ import {
   type MuscleGroupProgression,
   type ProgressionPace,
 } from '@/services/progressionInsights';
-import type { PlateauGoal } from '@/services/plateauDetector';
+import { MIN_TREND_SPAN_DAYS, type PlateauGoal } from '@/services/plateauDetector';
 
 interface MuscleProgressionCardProps {
   groups: MuscleGroupProgression[];
@@ -52,8 +52,9 @@ function paceHasRate(pace: ProgressionPace): boolean {
   return pace !== 'insufficient_data' && pace !== 'calibrating';
 }
 
-function formatWeeklyPct(pct: number): string {
-  return `${pct >= 0 ? '+' : ''}${pct}%/wk`;
+/** "+1.2% per week" — plain words, not "%/wk" (UX panel r20: jargon). */
+export function formatWeeklyPct(pct: number): string {
+  return `${pct >= 0 ? '+' : ''}${pct}% per week`;
 }
 
 /**
@@ -73,8 +74,10 @@ export function buildingSummaryText(groups: MuscleGroupProgression[]): {
     name: muscleDisplayName(g.muscleGroup),
     sessions: g.insights.reduce((best, i) => Math.max(best, i.sessionsAnalyzed), 0),
   }));
+  // A lift with its workouts but no rate yet: they're too close together in
+  // time (progressionInsights' span gate), not short of workouts.
   const parts = counted.map((c) =>
-    c.sessions >= min ? `${c.name} settling` : `${c.name} ${c.sessions} of ${min}`
+    c.sessions >= min ? `${c.name} needs its workouts spread over ${MIN_TREND_SPAN_DAYS}+ days` : `${c.name} ${c.sessions} of ${min}`
   );
   const short = counted.filter((c) => c.sessions < min);
   let next = '';
@@ -209,7 +212,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays 
                     )}
                     {group.plateauedCount > 0 && (
                       <span className="whitespace-nowrap text-caption text-status-warn">
-                        {group.plateauedCount} plateaued
+                        {group.plateauedCount} stalled
                       </span>
                     )}
                   </span>
@@ -264,9 +267,9 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays 
             data-testid="muscle-progression-calibrating-summary"
           >
             <span className="font-medium text-ink-2">
-              {calibratingGroups.length} calibrating
+              {calibratingGroups.length} rebuilding
             </span>{' '}
-            after program change — {calibratingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
+            after a program change — {calibratingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
             Rates return after 2–3 sessions on the new program.
           </li>
         )}

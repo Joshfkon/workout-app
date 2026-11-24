@@ -92,6 +92,16 @@ describe('getExerciseProgression', () => {
     expect(result.lastSessionDelta).toEqual({ weightKg: 2.5, reps: 0 });
   });
 
+  it('gives no rate or pace when the workouts are too close together in time', () => {
+    // Three sessions on one day fit a slope of exactly 0 — not a stall.
+    const sameDay = buildSnapshots('ex-1', 3, 100, 1).map((s) => ({ ...s, sessionDate: '2026-06-29' }));
+    const result = getExerciseProgression({ exerciseId: 'ex-1', snapshots: sameDay, experience: 'novice' });
+    expect(result.pace).toBe('insufficient_data');
+    expect(result.weeklyChangePct).toBe(0);
+    expect(result.confidence).toBe('insufficient');
+    expect(result.sessionsAnalyzed).toBe(3);
+  });
+
   it('classifies a fast-gaining novice as ahead', () => {
     // 2%/week actual vs 1%/week expected -> ratio 2.0
     const snapshots = buildSnapshots('ex-1', 8, 100, 2);
@@ -348,9 +358,9 @@ describe('display helpers', () => {
     expect(getPaceDisplay('ahead')).toEqual({ label: 'Ahead of pace', tone: 'positive' });
     expect(getPaceDisplay('on_track')).toEqual({ label: 'On track', tone: 'neutral' });
     expect(getPaceDisplay('behind')).toEqual({ label: 'Behind pace', tone: 'warning' });
-    expect(getPaceDisplay('plateaued')).toEqual({ label: 'Plateaued', tone: 'negative' });
+    expect(getPaceDisplay('plateaued')).toEqual({ label: 'Stalled', tone: 'negative' });
     expect(getPaceDisplay('insufficient_data')).toEqual({
-      label: 'Building history',
+      label: 'Too early',
       tone: 'muted',
     });
   });
@@ -459,7 +469,7 @@ describe('program-boundary confidence gating', () => {
   });
 
   it('maps calibrating pace to a muted label', () => {
-    expect(getPaceDisplay('calibrating')).toEqual({ label: 'Calibrating', tone: 'muted' });
+    expect(getPaceDisplay('calibrating')).toEqual({ label: 'Rebuilding', tone: 'muted' });
   });
 });
 
@@ -509,7 +519,7 @@ describe('muscle rollup weighting and sanity ceiling', () => {
     const quads = groups.find((g) => g.muscleGroup === 'quads')!;
     expect(quads.pace).toBe('insufficient_data');
     expect(quads.avgWeeklyChangePct).toBe(0);
-    expect(getPaceDisplay(quads.pace).label).toBe('Building history');
+    expect(getPaceDisplay(quads.pace).label).toBe('Too early');
   });
 
   it('clamps and flags a physiologically implausible group rate that survives all filters', () => {

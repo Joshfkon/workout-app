@@ -1319,6 +1319,8 @@ export interface ExerciseTrend {
   discontinuityDate?: string | null;
   /** Points the reported slope was actually fitted on. */
   pointsUsed?: number;
+  /** Days between the first and last point the slope was fitted on. */
+  spanDays?: number;
 }
 
 /**

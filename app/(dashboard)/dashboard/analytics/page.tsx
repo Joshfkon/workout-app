@@ -1937,7 +1937,7 @@ function AnalyticsPageContent() {
                           <div>
                             <h4 className="font-medium text-ink">{lift.lift}</h4>
                             <p className="text-subhead text-ink-2">
-                              Est. max: {displayWeight(lift.estimated1RM)} {weightUnit}
+                              Estimated max: {displayWeight(lift.estimated1RM)} {weightUnit}
                             </p>
                           </div>
                           <Badge variant={getStrengthLevelBadgeVariant(lift.strengthLevel)}>

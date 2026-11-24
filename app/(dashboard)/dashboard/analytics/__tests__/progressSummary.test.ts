@@ -57,6 +57,12 @@ describe('weightSentence', () => {
 });
 
 describe('strengthSentence', () => {
+  it('says there is not enough data, not a verdict, when no lift has a real rate yet', () => {
+    expect(strengthSentence(trends({ tooEarly: 2 }))).toBe(
+      "Not enough data for a strength trend yet. A trend needs the lift in at least 3 workouts, spread over at least 10 days, so one good or bad day can't fake a change."
+    );
+  });
+
   it('counts confident lifts only', () => {
     expect(strengthSentence(trends({ rising: 3 }))).toBe('Over the last 12 weeks, all 3 of your tracked lifts are going up.');
     expect(strengthSentence(trends({ rising: 2, flat: 1 }))).toBe(
@@ -149,7 +155,7 @@ describe('buildProgressSummary', () => {
     expect(s?.weightMethod).toMatch(/Less than 0\.05 kg a week either way counts as steady\.$/);
     // liftTrends FLAT_BAND_PCT = 0.15 %/wk.
     expect(s?.liftMethod).toBe(
-      "A lift is rising when its est. max goes up more than 0.15% a week, down when it drops more than 0.15% a week, and flat in between (on a 100 kg lift, that's less than 0.15 kg a week either way)."
+      "A lift is rising when its estimated max goes up more than 0.15% a week, down when it drops more than 0.15% a week, and flat in between (on a 100 kg lift, that's less than 0.15 kg a week either way)."
     );
   });
 

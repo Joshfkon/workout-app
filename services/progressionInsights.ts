@@ -15,7 +15,7 @@
  */
 
 import type { Experience, ExercisePerformanceSnapshot } from '@/types/schema';
-import { analyzeExerciseTrend, detectPlateau, type PlateauGoal } from './plateauDetector';
+import { analyzeExerciseTrend, detectPlateau, MIN_TREND_SPAN_DAYS, type PlateauGoal } from './plateauDetector';
 
 // ============================================
 // CONSTANTS
@@ -313,6 +313,28 @@ export function getExerciseProgression(
     };
   }
 
+  // Workouts too close together in time (or too few usable points) fit a
+  // rate that is noise — exactly 0 when they share a day. Same gate as the
+  // lift list's "not enough data yet": no rate, no pace verdict.
+  if (
+    trend.confidence === 'insufficient' ||
+    (trend.spanDays !== undefined && trend.spanDays < MIN_TREND_SPAN_DAYS)
+  ) {
+    return {
+      exerciseId,
+      pace: 'insufficient_data',
+      weeklyChangePct: 0,
+      weeklyChangeKg: 0,
+      expectedWeeklyPct,
+      currentE1RM,
+      isPlateaued: false,
+      sessionsAnalyzed: sorted.length,
+      confidence: 'insufficient',
+      workingSetsAnalyzed,
+      lastSessionDelta,
+    };
+  }
+
   const weeklyChangeKg = trend.weeklyChange;
   const weeklyChangePct =
     currentE1RM > 0 ? Math.round((weeklyChangeKg / currentE1RM) * 1000) / 10 : 0;
@@ -526,11 +548,11 @@ export function getPaceDisplay(pace: ProgressionPace): PaceDisplay {
     case 'behind':
       return { label: 'Behind pace', tone: 'warning' };
     case 'plateaued':
-      return { label: 'Plateaued', tone: 'negative' };
+      return { label: 'Stalled', tone: 'negative' };
     case 'calibrating':
-      return { label: 'Calibrating', tone: 'muted' };
+      return { label: 'Rebuilding', tone: 'muted' };
     case 'insufficient_data':
-      return { label: 'Building history', tone: 'muted' };
+      return { label: 'Too early', tone: 'muted' };
   }
 }
 

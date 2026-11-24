@@ -15,6 +15,13 @@ jest.mock('@/hooks/useUserPreferences', () => ({
 }));
 let mockQuery: { data: LiftTrendsSummary | null | undefined; isPending: boolean };
 jest.mock('@/hooks/useLiftTrends', () => ({ useLiftTrends: () => mockQuery }));
+// Recharts needs a real layout (ResizeObserver); the chart's data shaping is
+// tested in LiftMaxChart.test. Here: which points it is handed.
+jest.mock('../LiftMaxChart', () => ({
+  LiftMaxChart: ({ points }: { points: { date: string }[] }) => (
+    <div data-testid="lift-max-chart">{points.map((p) => p.date).join(',')}</div>
+  ),
+}));
 
 const bench: LiftTrend = {
   exerciseId: 'bench',
@@ -99,6 +106,35 @@ describe('LiftDetailScreen', () => {
       'href',
       '/dashboard/history?exercise=bench'
     );
+  });
+
+  it('charts estimated max over time, leaving out the trend outliers', () => {
+    mockQuery = { data: summary, isPending: false };
+    render(<LiftDetailScreen seriesKey="bench" />);
+    expect(screen.getByText('Estimated max over time')).toBeInTheDocument();
+    expect(screen.getByTestId('lift-max-chart')).toHaveTextContent('2026-10-04,2026-10-25,2026-11-01');
+    expect(screen.getByTestId('lift-change-line')).toHaveTextContent('Change per week: +0.8% per week');
+  });
+
+  it('says why there is no weekly change yet instead of a 0.0%', () => {
+    const early = {
+      ...bench,
+      excludedDates: [],
+      weeklyChangePct: 0,
+      direction: 'flat',
+      sessionCount: 3,
+      notEnoughData: { reason: 'short_span', workoutsNeeded: 1, spanDays: 0, readyOn: '2026-11-11' },
+    } as LiftTrend;
+    mockQuery = { data: { ...summary, lifts: [early] }, isPending: false };
+    render(<LiftDetailScreen seriesKey="bench" />);
+    const line = screen.getByTestId('lift-change-line');
+    expect(line).toHaveTextContent('Change per week: not enough data yet');
+    expect(line).not.toHaveTextContent('0.0%');
+    const why = screen.getByTestId('lift-not-enough-why');
+    expect(why).toHaveTextContent('Your 3 workouts with this lift were all on the same day');
+    expect(why).toHaveTextContent('at least 3 workouts, spread over at least 10 days');
+    expect(why).toHaveTextContent('All its sets in one workout count once.');
+    expect(screen.queryByText('Too early')).toBeInTheDocument();
   });
 
   it('says so when the lift is no longer trended', () => {

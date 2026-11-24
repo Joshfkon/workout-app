@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ListGroup, Sparkline } from '@/components/ui';
+import { today as clockToday } from '@/lib/clock';
 import {
   MIN_SESSIONS_FOR_TREND,
   type LiftTrend,
@@ -17,10 +18,13 @@ import {
   liftHref,
   moreWorkouts,
   nextTrendHint,
+  notEnoughDataLine,
   risingSlippingNames,
   setLabel,
   signedPct,
   statusOf,
+  TREND_RULE,
+  WORKOUT_COUNTS_RULE,
   workoutsUntilTrend,
 } from './liftTrendFormat';
 
@@ -41,7 +45,11 @@ interface LiftTrendsCardProps {
  * then the estimate and the weekly change. Separate pieces so each wraps at
  * phone width instead of running under the trend line.
  */
-function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { best: string | null; max: string; change: string } {
+function subtitleParts(
+  lift: LiftTrend,
+  units: 'lb' | 'kg',
+  today: string
+): { best: string | null; max: string; change: string } {
   const latest = lift.history[lift.history.length - 1];
   // Modality-safe: lift trends skip duration_based exercises (liftTrends.ts).
   const best =
@@ -49,7 +57,7 @@ function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { best: string | nu
       ? `Latest best set ${setLabel(latest.topSetWeightKg, latest.topSetReps, units)}`
       : null;
   // The set is on its own line, so the estimate is just labelled as one.
-  const max = estMaxLabel(lift.currentE1RMKg, null, units).replace(/^Est\. max/, 'est. max');
+  const max = estMaxLabel(lift.currentE1RMKg, null, units).replace(/^Estimated max/, 'estimated max');
   // A calibrating lift shows NO rate — a fitted slope over a program boundary
   // or an equipment change is noise with a decimal point.
   if (lift.lowConfidence) {
@@ -59,6 +67,9 @@ function subtitleParts(lift: LiftTrend, units: 'lb' | 'kg'): { best: string | nu
       change: lift.calibrationReason === 'equipment_change' ? 'equipment changed — rebuilding' : 'new program — rebuilding',
     };
   }
+  // Too few workouts, or too close together, for a real rate: say so and
+  // what's needed, never "0.0% per week" (UX panel r20: read as a stall).
+  if (lift.notEnoughData) return { best, max, change: notEnoughDataLine(lift.notEnoughData, today) };
   return { best, max, change: signedPct(lift.weeklyChangePct) };
 }
 
@@ -85,6 +96,8 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
   const confident = summary.rising + summary.flat + summary.down;
   const weeks = Math.round(summary.windowDays / 7);
   const rebuilding = summary.rebuilding;
+  const tooEarly = summary.tooEarly ?? 0;
+  const today = clockToday();
   const liftNames = risingSlippingNames(summary.lifts);
   const earlyLifts = summary.earlyLifts ?? [];
   // No trend anywhere yet: name the lift closest to one and how many more
@@ -106,9 +119,13 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
       <div className="rounded-card bg-card p-4 shadow-card" data-testid="lift-trends-summary">
         <p className="text-caption text-ink-2">Last {weeks} weeks</p>
         <p className="mt-0.5 text-headline text-ink">
-          {confident > 0 ? `${summary.rising} of ${confident} lifts rising` : rebuilding > 0
+          {confident > 0
+            ? `${summary.rising} of ${confident} lifts rising`
+            : rebuilding > 0
               ? 'Your lift trends are rebuilding'
-              : 'No strength trends yet'}
+              : tooEarly > 0
+                ? 'Not enough data for trends yet'
+                : 'No strength trends yet'}
         </p>
         {confident > 0 && liftNames && (
           <p className="mt-0.5 text-subhead text-ink-2" data-testid="lift-trends-names">
@@ -120,6 +137,13 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
             {firstTrendHint} A trend needs the lift in {MIN_SESSIONS_FOR_TREND} separate workouts.
           </p>
         )}
+        {/* Lifts with their workouts but no real rate yet: say why and what
+            counts, instead of a row of 0.0% (UX panel r20). */}
+        {tooEarly > 0 && (
+          <p className="mt-1 text-subhead text-ink-2" data-testid="lift-too-early-note">
+            {tooEarly} lift{tooEarly === 1 ? ' has' : 's have'} no trend yet. {TREND_RULE} {WORKOUT_COUNTS_RULE}
+          </p>
+        )}
         {summary.lifts.length > 0 && (
           <EstMaxMethod
             className="mt-1"
@@ -127,12 +151,14 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
             rate={rateExplainer(weeks, units)}
           />
         )}
-        {confident + rebuilding > 0 && (
+        {confident + rebuilding + tooEarly > 0 && (
           <div className="mt-2.5 flex gap-[3px]" aria-hidden="true">
             {summary.rising > 0 && <div className="h-2 rounded-full bg-status-ok" style={{ flex: summary.rising }} />}
             {summary.flat > 0 && <div className="h-2 rounded-full bg-ink-3" style={{ flex: summary.flat }} />}
             {summary.down > 0 && <div className="h-2 rounded-full bg-status-warn" style={{ flex: summary.down }} />}
-            {rebuilding > 0 && <div className="h-2 rounded-full bg-fill" style={{ flex: rebuilding }} />}
+            {rebuilding + tooEarly > 0 && (
+              <div className="h-2 rounded-full bg-fill" style={{ flex: rebuilding + tooEarly }} />
+            )}
           </div>
         )}
         {attention && (
@@ -154,6 +180,12 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
         <div className="space-y-2" data-testid="lift-early-bests">
           <p className="px-1 text-subhead text-ink-2">
             Your best set on each lift so far, and first vs latest where you have two.
+          </p>
+          {/* Why a lift is "1 more workout" from a trend, and what counts
+              (UX panel r20: "the reason isn't explained … what counts as a
+              workout"). */}
+          <p className="px-1 text-subhead text-ink-2" data-testid="lift-trend-rule">
+            {TREND_RULE} {WORKOUT_COUNTS_RULE}
           </p>
           <ListGroup>
             {earlyLifts.map((l) => {
@@ -185,6 +217,10 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
       ) : summary.lifts.length === 0 ? (
         <LiftTrendsEmptyState weeks={weeks} startedLifting={summary.insufficientData > 0} />
       ) : (
+        <div className="space-y-2">
+        <p className="px-1 text-subhead text-ink-2" data-testid="lift-tap-hint">
+          Tap a lift to see its estimated max over time.
+        </p>
         <ListGroup>
           {summary.lifts.map((lift) => {
             const status = statusOf(lift);
@@ -206,7 +242,7 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
                     )}
                   </span>
                   {(() => {
-                    const parts = subtitleParts(lift, units);
+                    const parts = subtitleParts(lift, units, today);
                     return (
                       <>
                         {parts.best && (
@@ -231,12 +267,13 @@ export function LiftTrendsCard({ summary, units, attentionNames = [], onSeeIdeas
             );
           })}
         </ListGroup>
+        </div>
       )}
 
       {summary.insufficientData > 0 && summary.lifts.length > 0 && (
-        <p className="px-1 text-subhead text-ink-2">
+        <p className="px-1 text-subhead text-ink-2" data-testid="lift-insufficient-note">
           {summary.insufficientData} more lift{summary.insufficientData === 1 ? ' has' : 's have'} no trend yet: each
-          needs {MIN_SESSIONS_FOR_TREND} separate workouts.
+          needs {MIN_SESSIONS_FOR_TREND} separate workouts. {WORKOUT_COUNTS_RULE}
         </p>
       )}
 

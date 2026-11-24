@@ -1,16 +1,36 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconBulb, IconChevronLeft, IconInfoCircle } from '@tabler/icons-react';
-import { InfoTooltip, ListGroup, PageSkeleton, Sparkline } from '@/components/ui';
+import { InfoTooltip, ListGroup, PageSkeleton } from '@/components/ui';
 import { formatWeight } from '@/lib/utils';
 import { useLiftTrends } from '@/hooks/useLiftTrends';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { LiftTrend, LiftTrendPoint } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import type { PlateauDetectionResult } from '@/services/plateauDetector';
-import { estMaxExample, historyHref, loggedLoad, setLabel, shortDay, signedPct, statusOf } from './liftTrendFormat';
+import {
+  estMaxExample,
+  historyHref,
+  loggedLoad,
+  notEnoughDataWhy,
+  setLabel,
+  shortDay,
+  signedPct,
+  statusOf,
+  WORKOUT_COUNTS_RULE,
+} from './liftTrendFormat';
 import { EstMaxMethod } from './EstMaxMethod';
+
+/**
+ * The estimated-max chart. Recharts loads only when a lift screen opens; the
+ * placeholder holds the chart's exact height so nothing jumps.
+ */
+const LiftMaxChart = dynamic(() => import('./LiftMaxChart').then((m) => m.LiftMaxChart), {
+  ssr: false,
+  loading: () => <div className="h-48 animate-pulse rounded bg-fill" data-testid="lift-max-chart-loading" />,
+});
 
 const PROGRESS_HREF = '/dashboard/analytics';
 
@@ -124,9 +144,6 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
   // the real line. Fall back to everything if that would leave nothing.
   const fitted = points.filter((p) => !lift.excludedDates.includes(p.date));
   const charted = fitted.length >= 2 ? fitted : points;
-  const values = charted.map((p) => p.e1rmKg);
-  const min = values.length ? Math.min(...values) : 0;
-  const max = values.length ? Math.max(...values) : 0;
   const best = bestPoint(lift);
   const latest = points.length > 0 ? points[points.length - 1] : null;
   // `?? null`: a summary persisted before lifts carried `plateau`. A
@@ -162,28 +179,32 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
                 Estimated from your last best set: {setLabel(latest.topSetWeightKg, latest.topSetReps, units)}
               </p>
             )}
-            <p className="text-subhead text-ink-2">
-              {lift.lowConfidence ? 'Trend rebuilding' : signedPct(lift.weeklyChangePct)} · {lift.sessionCount} sessions
+            <p className="text-subhead text-ink-2" data-testid="lift-change-line">
+              {lift.lowConfidence
+                ? 'Trend rebuilding'
+                : lift.notEnoughData
+                  ? 'Change per week: not enough data yet'
+                  : `Change per week: ${signedPct(lift.weeklyChangePct)}`}{' '}
+              · {lift.sessionCount} workout{lift.sessionCount === 1 ? '' : 's'}
             </p>
           </div>
           <span className={`rounded-full px-2.5 py-1 text-caption font-semibold ${status.pill}`}>{status.label}</span>
         </div>
-        <EstMaxMethod className="mt-1" example={estMaxExample(latest, units, 'Your last best set')} />
-        <Sparkline values={values} width={320} height={110} colorClassName="stroke-action" className="mt-4 w-full" />
-        {values.length >= 2 && (
-          <div className="mt-1 flex justify-between text-caption text-ink-3 tabular-nums">
-            <span>{shortDay(charted[0].date)}</span>
-            <span>
-              {formatWeight(min, units)}–{formatWeight(max, units)}
-            </span>
-            <span>{shortDay(charted[charted.length - 1].date)}</span>
-          </div>
+        {/* Why there's no rate yet, and what counts (UX panel r20: a
+            0.0% read as a real stall, and "what counts as a workout"). */}
+        {!lift.lowConfidence && lift.notEnoughData && (
+          <p className="mt-2 text-subhead text-ink" data-testid="lift-not-enough-why">
+            {notEnoughDataWhy(lift.notEnoughData, lift.sessionCount)} {WORKOUT_COUNTS_RULE}
+          </p>
         )}
+        <EstMaxMethod className="mt-1" example={estMaxExample(latest, units, 'Your last best set')} />
+        <p className="mt-3 text-subhead font-semibold text-ink">Estimated max over time</p>
+        <LiftMaxChart points={charted} units={units} />
       </div>
 
       {plateau && <PlateauIdeas plateau={plateau} units={units} />}
 
-      <ListGroup title="Best sets">
+      <ListGroup title="Best set each workout">
         {[...points].reverse().map((p) => {
           const outlier = lift.excludedDates.includes(p.date);
           const isBest = best?.date === p.date;
@@ -198,7 +219,7 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
                   {loggedLoad(p.topSetWeightKg, units)} × {p.topSetReps}
                 </span>
                 <span className="block text-subhead text-ink-2">
-                  Est. max {formatWeight(p.e1rmKg, units)}{outlier ? ' · left out of trend' : ''}
+                  Estimated max {formatWeight(p.e1rmKg, units)}{outlier ? ' · left out of trend' : ''}
                 </span>
               </span>
               {isBest && (
@@ -222,7 +243,7 @@ export function LiftDetailScreen({ seriesKey }: { seriesKey: string }) {
       <p className="flex gap-2 px-1 text-subhead text-ink-2">
         <IconInfoCircle size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
         <span>
-          Each session&apos;s best set is the one with the highest estimated max (e1RM): the most you could lift for one
+          Each workout&apos;s best set is the one with the highest estimated max: the most you could lift for one
           rep, worked out from that set&apos;s weight, reps and effort.
         </span>
       </p>

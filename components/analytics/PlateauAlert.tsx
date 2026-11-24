@@ -102,7 +102,7 @@ export function PlateauAlert({
               No progress in {formatWeeks(result.weeksSinceProgress)}
               {hasValidE1RM && (
                 <>
-                  {' '}• Current E1RM:{' '}
+                  {' '}• Estimated max now:{' '}
                   <span className="font-mono text-ink">
                     {formatWeight(result.currentE1RM, safeUnits)}
                   </span>
