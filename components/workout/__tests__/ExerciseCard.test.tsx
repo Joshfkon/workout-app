@@ -3645,10 +3645,79 @@ describe('ExerciseCard round 18: every set says why, predict then score, form gu
     expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
       'Empty bar — a safe start; add weight if 10 reps feel easy'
     );
+    // The exercise's own cues open in place; the full guide is one more tap.
     await user.click(screen.getByTestId('exercise-how-to'));
+    expect(screen.getByTestId('exercise-how-to-cues')).toHaveTextContent('Keep shoulder blades retracted');
+    expect(screen.getByTestId('exercise-how-to-cues')).toHaveTextContent('Set up with eyes under the bar');
+    expect(onHowToClick).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId('exercise-how-to-full'));
     expect(onHowToClick).toHaveBeenCalledTimes(1);
     // The prefilled numbers show they can be typed over.
     expect(screen.getByTestId('logger-weight-edit-hint')).toBeInTheDocument();
     expect(screen.getByTestId('logger-reps-edit-hint')).toBeInTheDocument();
+  });
+
+  it('without form cues in the data, "How to do it" opens the guide instead of inventing any', async () => {
+    const user = userEvent.setup();
+    const onHowToClick = jest.fn();
+    render(
+      <ExerciseCard
+        {...defaultProps}
+        exercise={createMockExercise({ formCues: [], setupNote: '' })}
+        isActive={true}
+        previousSets={[]}
+        onHowToClick={onHowToClick}
+      />
+    );
+    await user.click(screen.getByTestId('exercise-how-to'));
+    expect(onHowToClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('exercise-how-to-cues')).not.toBeInTheDocument();
+  });
+
+  // UX panel round 21 (Maya, Sam): "no explanation of where the suggested
+  // weight comes from". A first-run beginner — no history at all — gets a
+  // plain reason on the strip itself, not only behind "Why this weight?".
+  describe('first-run beginner: a reason right under the numbers', () => {
+    beforeEach(() => {
+      useUserStore.setState({
+        user: {
+          id: 'u1',
+          experience: 'novice',
+          preferences: { units: 'kg', beginnerMode: true },
+          volumeLandmarks: {},
+        } as unknown as import('@/types/schema').User,
+      });
+    });
+
+    it('names the basis of an estimated start', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exercise={createMockExercise({ name: 'Leg Press' })}
+          block={createMockBlock({ targetRepRange: [10, 15] as [number, number], targetWeightKg: 0 })}
+          isActive={true}
+          previousSets={[]}
+          coldStartSuggestion={{ weightKg: 60, reason: 'starting point', explanation: 'Profile.' }}
+        />
+      );
+      const strip = screen.getByTestId('suggestion-strip');
+      expect(strip).toContainElement(screen.getByTestId('suggestion-source'));
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/First time on this lift/);
+    });
+
+    it('says how to pick a weight when there is no number to explain', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exercise={createMockExercise({ name: 'Leg Press' })}
+          block={createMockBlock({ targetRepRange: [10, 15] as [number, number], targetWeightKg: 0 })}
+          isActive={true}
+          previousSets={[]}
+        />
+      );
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+        /No history yet — pick a weight you could lift ~\d+ times/
+      );
+    });
   });
 });

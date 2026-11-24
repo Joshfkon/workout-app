@@ -695,6 +695,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   );
 
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  // Inline "How to do it": the exercise's own form cues, opened in place.
+  const [showHowTo, setShowHowTo] = useState(false);
   const [jointPickerSetId, setJointPickerSetId] = useState<string | null>(null);
   // Warmup checkmarks live in the workout store (persisted) so switching
   // exercises, remounting, or reloading never wipes them; they expire only
@@ -3305,7 +3307,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         );
       } else {
         reason = 'enter your working weight to calibrate';
-        sourceLine = 'No history yet — log a set and suggestions learn from it';
+        // No number to explain: say how to pick one, in plain words (a
+        // first-run beginner otherwise saw an empty weight and no reason).
+        sourceLine = `No history yet — ${coldStartPickLine}. Suggestions learn from what you log`;
         explanation.push('Log a first set and future suggestions will anchor to it.');
       }
     }
@@ -5259,19 +5263,54 @@ export const ExerciseCard = memo(function ExerciseCard({
               )}
               {/* Form guide: for a beginner, or any lift with no history
                   here — the panel's beginners found no form guidance. */}
-              {onHowToClick && (beginner || previousSets.length === 0) && (
-                <div className="-mb-1 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={onHowToClick}
-                    data-testid="exercise-how-to"
-                    className="-my-2 inline-flex min-h-[44px] items-center gap-1 px-1 text-subhead font-semibold text-action active:opacity-70"
-                  >
-                    <IconBook size={15} aria-hidden="true" />
-                    How to do it
-                  </button>
-                </div>
-              )}
+              {/* With form cues in the exercise data, the link opens them
+                  right here (UX panel round 21, Maya: "no guidance on form
+                  for a beginner" — the guide was a tap into another sheet
+                  she never opened); the full guide stays one more tap away.
+                  Without cues it opens the guide as before. Never invented:
+                  only the exercise's own cues and setup note show. */}
+              {onHowToClick && (beginner || previousSets.length === 0) && (() => {
+                const cues = (exercise.formCues ?? []).filter((c) => c && c.trim()).slice(0, 3);
+                const setup = exercise.setupNote?.trim() || null;
+                const hasInline = cues.length > 0;
+                return (
+                  <div className="-mb-1">
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={hasInline ? () => setShowHowTo((v) => !v) : onHowToClick}
+                        aria-expanded={hasInline ? showHowTo : undefined}
+                        data-testid="exercise-how-to"
+                        className="-my-2 inline-flex min-h-[44px] items-center gap-1 px-1 text-subhead font-semibold text-action active:opacity-70"
+                      >
+                        <IconBook size={15} aria-hidden="true" />
+                        How to do it
+                      </button>
+                    </div>
+                    {hasInline && showHowTo && (
+                      <div
+                        className="mt-2 rounded-lg bg-fill/60 px-3 py-2"
+                        data-testid="exercise-how-to-cues"
+                      >
+                        {setup && <p className="text-subhead text-ink-2">{setup}</p>}
+                        <ul className={`space-y-0.5 ${setup ? 'mt-1' : ''}`}>
+                          {cues.map((cue) => (
+                            <li key={cue} className="text-subhead text-ink">• {cue}</li>
+                          ))}
+                        </ul>
+                        <button
+                          type="button"
+                          onClick={onHowToClick}
+                          className="mt-1 inline-flex min-h-[44px] items-center text-subhead font-medium text-action"
+                          data-testid="exercise-how-to-full"
+                        >
+                          Full guide and video
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <SuggestionBanner
                 weightLabel={
                   latestCall?.heldByVelocity

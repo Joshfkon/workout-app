@@ -73,7 +73,8 @@ import {
   insertTodayAdhocSession,
   newClientSessionId,
 } from '@/app/(dashboard)/dashboard/workout/_lib/adhocSession';
-import { runNavigateFirstStart } from '@/lib/training/pendingWorkoutStart';
+import { runNavigateFirstStart, type PendingWorkoutPreviewExercise } from '@/lib/training/pendingWorkoutStart';
+import { estimateRepsForWeight, recommendSessionStart } from '@/services/setRecommender';
 import { markGymChosen } from '@/lib/geo/gymChoice';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import {
@@ -929,7 +930,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
           router.push(destinationFor(id));
         },
         onStage: setStartStage,
-        start: async ({ sessionReady, stage }) => {
+        start: async ({ sessionReady, stage, preview }) => {
           let sessionId: string;
           let isNewSession: boolean;
           let sessionInsert: Promise<string> | null = null;
@@ -968,6 +969,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
           }
 
           const blocks = [];
+          const previewExercises: PendingWorkoutPreviewExercise[] = [];
           for (const pick of plan.exercises) {
             const exercise = exerciseById.get(pick.exerciseId);
             if (!exercise) continue;
@@ -1045,9 +1047,50 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
               suggestion_reason: reason,
               warmup_protocol: { sets: warmupSets },
             });
+            // A lift with history opens from its last best set, through the
+            // engine's own session-start rule (the stored target above is the
+            // profile estimate; the workout card re-anchors on history).
+            const lastTop = hasCompletedLift(exercise.id, lastCompletedAt)
+              ? lastTopSets.get(exercise.id) ?? null
+              : null;
+            const fromHistory =
+              lastTop && exercise.exercise_type !== 'duration_based' && !exercise.is_bodyweight
+                ? recommendSessionStart({
+                    prevWeightKg: lastTop.weightKg,
+                    prevReps: lastTop.repCount,
+                    targetRepRange: repRange,
+                    targetRir: pick.targetRir,
+                  })
+                : null;
+            previewExercises.push({
+              exerciseId: exercise.id,
+              name: exercise.name,
+              targetSets: pick.sets,
+              repRange: [repRange[0], repRange[1]],
+              targetRir: pick.targetRir,
+              weightKg: fromHistory && fromHistory.weightKg > 0 ? fromHistory.weightKg : suggestedWeight,
+              // Reps at that load from the same set's capacity (Epley, at the
+              // target effort): the card's own "245 × 9", not the range floor.
+              prefillReps: fromHistory && lastTop && fromHistory.weightKg > 0
+                ? estimateRepsForWeight(fromHistory.weightKg, {
+                    lastWeightKg: lastTop.weightKg,
+                    lastReps: lastTop.repCount,
+                    lastRir: pick.targetRir,
+                    setsCompletedThisExercise: 0,
+                    targetRepRange: repRange,
+                    targetRir: pick.targetRir,
+                  }) ?? getSetReps(fromHistory, null) ?? undefined
+                : undefined,
+              lastTopSet: lastTop ?? undefined,
+              loggable: !exercise.is_bodyweight && exercise.exercise_type !== 'duration_based',
+            });
           }
 
           if (blocks.length === 0) throw new Error('No exercises to start');
+          // The workout screen shows the first exercise from this while the
+          // rows below are written and it loads (only for a new session: a
+          // reused one already has exercises ahead of these).
+          if (isNewSession) preview({ exercises: previewExercises });
           rememberDuration(aiDuration);
 
           // The blocks reference the session row: its insert must land first.

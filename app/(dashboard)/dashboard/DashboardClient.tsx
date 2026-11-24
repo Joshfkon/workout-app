@@ -70,6 +70,7 @@ import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector
 import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
+import { PlanBlockShortcut } from '@/components/dashboard/home/PlanBlockShortcut';
 import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCard';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { useLiveHeroWorkout } from '@/hooks/useLiveHeroWorkout';
@@ -545,7 +546,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       // built there, instead of Home waiting ~8 round trips for the whole
       // build and only then starting the route load.
       await runNavigateFirstStart({
-        start: ({ sessionReady, stage }) =>
+        start: ({ sessionReady, stage, preview }) =>
           startMesocycleWorkoutSession({
             supabase,
             mesocycle: meso,
@@ -556,6 +557,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               if (s === 'building') sessionReady(id);
               stage(s);
             },
+            onPreview: preview,
           }),
         navigate: (id) => {
           setStartWorkoutStage('opening');
@@ -1704,6 +1706,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           opens the start options. Food-focused users get it as a compact
           row below the logging chips instead. */}
       {!foodFocus && !foodOnly && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
+
+      {/* No active block: the builder one tap from Home. The no-plan hero
+          already offers "Build a program", and the food-focused row carries
+          its own link, so neither repeats it. */}
+      {!foodFocus && !foodOnly && !!userId && !activeMesocycle && heroVariant !== 'no-plan' && (
+        <PlanBlockShortcut />
+      )}
 
       {/* Quick log chips, right under the hero: logging is the most
           frequent thing done on Home, so it sits above the glance cards. */}
