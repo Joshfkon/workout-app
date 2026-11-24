@@ -82,6 +82,8 @@ describe('formatPortion', () => {
     ['150g', '150 g'],
     ['6 oz', '6 oz'],
     ['1 large egg (50g)', '1 large egg · 50 g'],
+    ['2 large egg (100g)', '2 large eggs · 100 g'],
+    ['2 tbsp (32g)', '2 tbsp · 32 g'],
     ['2 serving (60g)', '2 servings · 60 g'],
     ['1 serving', '1 serving'],
     ['1 cup', '1 cup'],

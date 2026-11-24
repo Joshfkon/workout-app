@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { SegmentedControl, Chip } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
@@ -41,7 +41,9 @@ import {
 import {
   defaultPortion,
   describeDefaultPortion,
+  oneTapPortion,
   typicalPortionForSystemFood,
+  type OneTapPortion,
   everydayUnitForSystemFood,
   type DefaultPortion,
   type TypicalPortion,
@@ -86,7 +88,7 @@ const LabelScanner = dynamic(
   }
 );
 import type { LabelScanPrefill } from './LabelScanner';
-import { IconSearch, IconScan, IconTextScan2, IconPencil, IconX, IconToolsKitchen2, IconPlus, IconChevronRight, IconClock, IconSparkles, IconBookmark } from '@tabler/icons-react';
+import { IconSearch, IconScan, IconTextScan2, IconPencil, IconX, IconToolsKitchen2, IconPlus, IconChevronRight, IconClock, IconSparkles, IconBookmark, IconCheck } from '@tabler/icons-react';
 import type { MealType, CustomFood, FrequentFood, SystemFood, FoodLogEntry, MealNames, FoodSource } from '@/types/nutrition';
 
 interface ScannedProduct {
@@ -130,6 +132,14 @@ interface AddFoodModalProps {
   onMealTypeChange?: (mealType: MealType) => void;
   /** Tab to open on (Scan quick action opens 'barcode') */
   initialTab?: AddFoodTab;
+  /**
+   * Put the cursor in the search box when the sheet opens on Search. The
+   * Search quick action sets it: the user came to type, so one tap must be
+   * enough (r20 panel, 6 of 6: "I had to try again before I could type").
+   * "Log food" / "Add food" leave it off so the Recent list isn't hidden
+   * behind the keyboard.
+   */
+  focusSearch?: boolean;
   /** Called when a scanned barcode isn't found and the user wants to create a custom food */
   onCreateCustomFood?: (barcode: string) => void;
   /** Called with parsed nutrition-label fields for review in the create-food form */
@@ -221,16 +231,22 @@ function QuickAddSectionLabel({ children, mealLabel }: { children: React.ReactNo
   );
 }
 
-/** A round quick-add (+) affordance shared by Recent + Meals rows. */
+/**
+ * A round quick-add (+) affordance shared by Recent, Meals and search rows.
+ * After a successful add it turns into a green check for a moment (`done`),
+ * so the tap visibly landed even with the sheet still open.
+ */
 function QuickAddButton({
   onClick,
   disabled,
   loading,
+  done,
   label,
 }: {
   onClick: () => void;
   disabled?: boolean;
   loading?: boolean;
+  done?: boolean;
   label: string;
 }) {
   return (
@@ -239,14 +255,87 @@ function QuickAddButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex-shrink-0 w-8 h-8 rounded-full bg-action/15 text-action flex items-center justify-center hover:bg-action/25 transition-colors disabled:opacity-40"
+      data-done={done ? 'true' : undefined}
+      className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${
+        done ? 'bg-status-ok text-white' : 'bg-action/15 text-action hover:bg-action/25'
+      }`}
     >
       {loading ? (
         <span className="w-3.5 h-3.5 border-2 border-action/40 border-t-action rounded-full animate-spin" />
+      ) : done ? (
+        <IconCheck size={18} stroke={3} aria-hidden="true" />
       ) : (
         <IconPlus size={16} aria-hidden="true" />
       )}
     </button>
+  );
+}
+
+/**
+ * A searched food (common, your custom, or USDA): tap the body to choose an
+ * amount, or + to add the portion shown in one tap (its last-used or typical
+ * serving, see oneTapPortion). Without a real portion to default to, the row
+ * shows its reference numbers and has no + (the editor asks how much).
+ */
+function SearchFoodRow({
+  name,
+  oneTap,
+  fallbackSubtitle,
+  fallbackNumbers,
+  trailingTag,
+  onSelect,
+  onQuickAdd,
+  adding,
+  done,
+  disabled,
+  mealLabel,
+  testId,
+}: {
+  name: string;
+  oneTap: OneTapPortion | null;
+  fallbackSubtitle: string;
+  fallbackNumbers?: string;
+  trailingTag?: string;
+  onSelect: () => void;
+  onQuickAdd?: () => void;
+  adding: boolean;
+  done: boolean;
+  disabled: boolean;
+  mealLabel: string;
+  testId: string;
+}) {
+  const subtitle = oneTap
+    ? `${oneTap.label} · ${Math.round(oneTap.macros.calories)} cal · ${Math.round(oneTap.macros.protein)}g P`
+    : fallbackSubtitle;
+  return (
+    <div className="flex items-center gap-2 bg-fill/50 rounded-lg pr-2" data-testid={testId}>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex-1 min-w-0 p-2 text-left rounded-lg hover:bg-fill transition-colors flex items-center gap-2"
+      >
+        <FoodEmojiAvatar name={name} size="sm" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-subhead text-ink truncate">{name}</span>
+          <span className="block text-caption text-ink-2 truncate" data-testid="search-row-portion">
+            {subtitle}
+          </span>
+        </span>
+        {!oneTap && fallbackNumbers && (
+          <span className="text-caption text-ink-2 flex-shrink-0">{fallbackNumbers}</span>
+        )}
+        {trailingTag && <span className="text-caption text-ink-3 flex-shrink-0">{trailingTag}</span>}
+      </button>
+      {oneTap && onQuickAdd && (
+        <QuickAddButton
+          onClick={onQuickAdd}
+          disabled={disabled}
+          loading={adding}
+          done={done}
+          label={`Quick-add ${name}, ${oneTap.label}, to ${mealLabel}`}
+        />
+      )}
+    </div>
   );
 }
 
@@ -260,6 +349,7 @@ function RecentFoodRow({
   onSelect,
   onQuickAdd,
   adding,
+  done = false,
   disabled,
   mealLabel,
 }: {
@@ -267,6 +357,7 @@ function RecentFoodRow({
   onSelect: () => void;
   onQuickAdd: () => void;
   adding: boolean;
+  done?: boolean;
   disabled: boolean;
   mealLabel: string;
 }) {
@@ -296,6 +387,7 @@ function RecentFoodRow({
         onClick={onQuickAdd}
         disabled={disabled}
         loading={adding}
+        done={done}
         label={`Quick-add ${recent.food_name}, ${portion}, to ${mealLabel}`}
       />
     </div>
@@ -371,29 +463,6 @@ function systemRowPortion(food: SystemFood): { label: string; calories: number; 
   return { label, calories: macros.calories, protein: macros.protein };
 }
 
-/** A tappable Common foods row showing the portion its numbers are for. */
-function SystemFoodRow({ food, onSelect }: { food: SystemFood; onSelect: () => void }) {
-  const portion = systemRowPortion(food);
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="w-full p-2 bg-fill/50 hover:bg-fill rounded-lg text-left transition-colors flex justify-between items-center gap-2"
-      data-testid="system-food-row"
-    >
-      <span className="flex items-center gap-2 min-w-0">
-        <FoodEmojiAvatar name={food.name} size="sm" />
-        <span className="min-w-0">
-          <span className="block text-subhead text-ink truncate">{food.name}</span>
-          <span className="block text-caption text-ink-2">per {portion.label}</span>
-        </span>
-      </span>
-      <span className="text-caption text-ink-2 flex-shrink-0">
-        {portion.calories} cal | {portion.protein}g P
-      </span>
-    </button>
-  );
-}
 
 function buildCustomModel(food: CustomFood): FoodAmountModel {
   if (food.is_per_weight && food.reference_amount && food.calories_per_ref != null) {
@@ -428,6 +497,7 @@ export function AddFoodModal({
   defaultMealType,
   onMealTypeChange,
   initialTab,
+  focusSearch = false,
   onCreateCustomFood,
   onLabelScanned,
   customFoods = [],
@@ -495,7 +565,9 @@ export function AddFoodModal({
   // Scanned product state
   const [scannedProduct, setScannedProduct] = useState<ScannedProduct | null>(null);
 
-  // Reset meal type + tab when modal opens
+  // Reset meal type + tab when modal opens. Only on the open transition:
+  // picking a meal inside the sheet feeds back into defaultMealType, and that
+  // must not throw the user back to the first tab or the Recent view.
   useEffect(() => {
     if (isOpen) {
       setMealType(defaultMealType);
@@ -504,7 +576,33 @@ export function AddFoodModal({
       setExpandedMeals(new Set());
       setMealsVisibleDays(MEALS_INITIAL_DAYS);
     }
-  }, [isOpen, defaultMealType, initialTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+  // The page's meal can still change while open (it follows the sheet's own
+  // picker); keep the sheet's meal in step without resetting anything else.
+  useEffect(() => {
+    if (isOpen) setMealType(defaultMealType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultMealType]);
+
+  // Focus the search box: on open when asked (the Search quick action), and
+  // whenever the Search tab is tapped. A request counter, not a boolean, so a
+  // second request while already focused still runs. Keyed on the open
+  // transition only: changing the meal inside the sheet must not refocus.
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
+  useEffect(() => {
+    if (isOpen && focusSearch && (initialTab ?? 'search') === 'search') {
+      setSearchFocusRequest((n) => n + 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+  useEffect(() => {
+    if (searchFocusRequest === 0) return undefined;
+    // After the sheet has painted (the input exists and is laid out).
+    const frame = requestAnimationFrame(() => searchInputRef.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [searchFocusRequest]);
 
   // Debounce the unified search input (300ms)
   useEffect(() => {
@@ -783,17 +881,101 @@ export function AddFoodModal({
     food_id: entry.food_id ?? undefined,
   });
 
+  // A row's + turns into a check for a moment after its add lands.
+  const [doneKey, setDoneKey] = useState<string | null>(null);
+  const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
+  }, []);
+  const flashDone = (rowKey: string) => {
+    setDoneKey(rowKey);
+    if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
+    doneTimerRef.current = setTimeout(() => setDoneKey(null), 2000);
+  };
+
   // Instant quick-add — does NOT close the sheet, so several can be grabbed.
   const handleQuickAdd = async (entry: LoggedPortion, rowKey: string) => {
     if (!onQuickAdd) return;
     setQuickAddingKey(rowKey);
     try {
       await onQuickAdd(snapshotOf(entry));
+      flashDone(rowKey);
     } catch {
       setError('Failed to add food. Please try again.');
     } finally {
       setQuickAddingKey(null);
     }
+  };
+
+  // + on a searched food: its one-tap portion (last used, else its serving or
+  // typical count), the same amount the editor would open on. Remembered as
+  // the last-used amount, like an add from the editor.
+  const handleOneTapAdd = async (
+    food: { name: string; foodKeys: string[]; source: FoodSource; food_id?: string },
+    oneTap: OneTapPortion,
+    rowKey: string
+  ) => {
+    if (!onQuickAdd) return;
+    setQuickAddingKey(rowKey);
+    setError('');
+    try {
+      await onQuickAdd({
+        food_name: food.name,
+        serving_size: oneTap.servingSize,
+        servings: oneTap.servings,
+        calories: oneTap.macros.calories,
+        protein: oneTap.macros.protein,
+        carbs: oneTap.macros.carbs,
+        fat: oneTap.macros.fat,
+        meal_type: mealType,
+        source: food.source as QuickAddFood['source'],
+        food_id: food.food_id,
+      });
+      recordLastUsedServingForKeys(food.foodKeys, oneTap.portion.amount, oneTap.portion.unitId);
+      flashDone(rowKey);
+    } catch {
+      setError('Failed to add food. Please try again.');
+    } finally {
+      setQuickAddingKey(null);
+    }
+  };
+
+  /** Common food → its one-tap portion (or null: open the editor). */
+  const systemOneTap = (food: SystemFood) => {
+    const keys = foodKeysFor({ id: food.id, name: food.name });
+    return {
+      keys,
+      oneTap: oneTapPortion(buildSystemModel(food), {
+        lastUsed: getLastUsedServingForKeys(keys),
+        typicalGrams: typicalPortionForSystemFood(food)?.grams ?? null,
+      }),
+    };
+  };
+
+  const renderSystemRow = (food: SystemFood) => {
+    const { keys, oneTap } = systemOneTap(food);
+    const rowKey = `sys:${food.id}`;
+    const fallback = systemRowPortion(food);
+    return (
+      <SearchFoodRow
+        key={food.id}
+        name={food.name}
+        oneTap={oneTap}
+        fallbackSubtitle={`per ${fallback.label}`}
+        fallbackNumbers={`${fallback.calories} cal | ${fallback.protein}g P`}
+        onSelect={() => handleSelectSystemFood(food)}
+        onQuickAdd={
+          onQuickAdd && oneTap
+            ? () => void handleOneTapAdd({ name: food.name, foodKeys: keys, source: 'manual' }, oneTap, rowKey)
+            : undefined
+        }
+        adding={quickAddingKey === rowKey}
+        done={doneKey === rowKey}
+        disabled={isSubmitting || quickAddingKey !== null}
+        mealLabel={mealLabel}
+        testId="system-food-row"
+      />
+    );
   };
 
   // "Add all" for a prior meal — copies every item into the selected meal.
@@ -1042,6 +1224,7 @@ export function AddFoodModal({
               onClick={() => {
                 setActiveTab(tab.id);
                 clearSelection();
+                if (tab.id === 'search') setSearchFocusRequest((n) => n + 1);
               }}
               className={`flex-1 min-w-0 h-9 px-1 rounded-[8px] text-subhead text-ink whitespace-nowrap flex items-center justify-center gap-1.5 transition-colors ${
                 activeTab === tab.id ? 'bg-card font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]' : 'font-medium'
@@ -1080,6 +1263,7 @@ export function AddFoodModal({
             {!hasSelection && (
               <>
                 <Input
+                  ref={searchInputRef}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search your foods, common foods, and USDA..."
@@ -1270,6 +1454,7 @@ export function AddFoodModal({
                                     onClick={() => handleQuickAdd(entry, `meal-item:${entry.id}`)}
                                     disabled={isSubmitting || quickAddingKey !== null}
                                     loading={quickAddingKey === `meal-item:${entry.id}`}
+                                    done={doneKey === `meal-item:${entry.id}`}
                                     label={`Add ${entry.food_name}, ${formatPortion(entry.serving_size)}, to ${mealLabel}`}
                                   />
                                 </div>
@@ -1326,6 +1511,7 @@ export function AddFoodModal({
                           onSelect={() => handleSelectRecent(recent.entry)}
                           onQuickAdd={() => handleQuickAdd(recent.entry, recent.key)}
                           adding={quickAddingKey === recent.key}
+                          done={doneKey === recent.key}
                           disabled={isSubmitting || quickAddingKey !== null}
                           mealLabel={mealLabel}
                         />
@@ -1373,45 +1559,64 @@ export function AddFoodModal({
                               onClick={() => handleAddFrequentFood(food, rowKey)}
                               disabled={isSubmitting || quickAddingKey !== null}
                               loading={quickAddingKey === rowKey}
+                              done={doneKey === rowKey}
                               label={`Quick-add ${food.food_name}, ${portionText}, to ${mealLabel}`}
                             />
                           </div>
                         );
                       })}
-                      {filteredCustomFoods.map((food) => (
-                        <button
-                          key={food.id}
-                          onClick={() => handleSelectCustomFood(food)}
-                          className="w-full p-2 bg-fill/50 hover:bg-fill rounded-lg text-left transition-colors flex justify-between items-center"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <FoodEmojiAvatar name={food.food_name} size="sm" />
-                            <div className="min-w-0">
-                              <p className="text-subhead font-medium text-ink truncate">{food.food_name}</p>
-                              <p className="text-caption text-ink-2">
-                                {food.is_per_weight
-                                  ? `${food.calories_per_ref} cal per ${food.reference_amount}${food.reference_unit || 'g'}`
-                                  : `${food.calories} cal · ${food.serving_size}`}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-caption text-ink-2 flex-shrink-0">Custom</span>
-                        </button>
-                      ))}
+                      {filteredCustomFoods.map((food) => {
+                        const keys = foodKeysFor({ id: food.id, name: food.food_name });
+                        const oneTap = oneTapPortion(buildCustomModel(food), {
+                          lastUsed: getLastUsedServingForKeys(keys),
+                        });
+                        const rowKey = `custom:${food.id}`;
+                        return (
+                          <SearchFoodRow
+                            key={food.id}
+                            name={food.food_name}
+                            oneTap={oneTap}
+                            fallbackSubtitle={
+                              food.is_per_weight
+                                ? `${food.calories_per_ref} cal per ${food.reference_amount}${food.reference_unit || 'g'}`
+                                : `${food.calories} cal · ${food.serving_size}`
+                            }
+                            trailingTag="Custom"
+                            onSelect={() => handleSelectCustomFood(food)}
+                            onQuickAdd={
+                              onQuickAdd && oneTap
+                                ? () =>
+                                    void handleOneTapAdd(
+                                      { name: food.food_name, foodKeys: keys, source: 'custom' },
+                                      oneTap,
+                                      rowKey
+                                    )
+                                : undefined
+                            }
+                            adding={quickAddingKey === rowKey}
+                            done={doneKey === rowKey}
+                            disabled={isSubmitting || quickAddingKey !== null}
+                            mealLabel={mealLabel}
+                            testId="custom-food-row"
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </section>
 
                 {/* Common foods: system foods */}
                 <section>
-                  <SectionLabel>Common foods</SectionLabel>
+                  {onQuickAdd ? (
+                    <QuickAddSectionLabel mealLabel={mealLabel}>Common foods</QuickAddSectionLabel>
+                  ) : (
+                    <SectionLabel>Common foods</SectionLabel>
+                  )}
                   {filteredSystemFoods.length === 0 ? (
                     <p className="text-subhead text-ink-2 py-1">No matches in common foods</p>
                   ) : debouncedQuery ? (
                     <div className="space-y-1">
-                      {filteredSystemFoods.map((food) => (
-                        <SystemFoodRow key={food.id} food={food} onSelect={() => handleSelectSystemFood(food)} />
-                      ))}
+                      {filteredSystemFoods.map(renderSystemRow)}
                     </div>
                   ) : (
                     Object.entries(groupedSystemFoods).map(([category, foods]) => (
@@ -1420,9 +1625,7 @@ export function AddFoodModal({
                           {CATEGORY_LABELS[category] || category}
                         </p>
                         <div className="space-y-1">
-                          {foods.slice(0, 6).map((food) => (
-                            <SystemFoodRow key={food.id} food={food} onSelect={() => handleSelectSystemFood(food)} />
-                          ))}
+                          {foods.slice(0, 6).map(renderSystemRow)}
                         </div>
                       </div>
                     ))
@@ -1457,24 +1660,41 @@ export function AddFoodModal({
                     <p className="text-subhead text-ink-2 py-1">No USDA results</p>
                   ) : (
                     <div className="space-y-1">
-                      {usdaResults.map((food, idx) => (
-                        <button
-                          key={food.foodId ?? idx}
-                          onClick={() => handleSelectFood(food)}
-                          className="w-full p-2 bg-fill/50 hover:bg-fill rounded-lg text-left transition-colors flex justify-between items-center gap-2"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <FoodEmojiAvatar name={food.name} size="sm" />
-                            <div className="min-w-0">
-                              <p className="text-subhead text-ink truncate">{food.name}</p>
-                              <p className="text-caption text-ink-2">{food.servingSize}</p>
-                            </div>
-                          </div>
-                          <span className="text-caption text-ink-2 flex-shrink-0">
-                            {food.calories} cal | {food.protein}g P
-                          </span>
-                        </button>
-                      ))}
+                      {usdaResults.map((food, idx) => {
+                        const keys = foodKeysFor({ foodId: food.foodId, name: food.name });
+                        // A USDA result carries only a generic serving until its
+                        // details load, so + only for a food you've logged before.
+                        const oneTap = oneTapPortion(buildUsdaModel(food), {
+                          lastUsed: getLastUsedServingForKeys(keys),
+                          requireLast: true,
+                        });
+                        const rowKey = `usda:${food.foodId ?? idx}`;
+                        return (
+                          <SearchFoodRow
+                            key={food.foodId ?? idx}
+                            name={food.name}
+                            oneTap={oneTap}
+                            fallbackSubtitle={food.servingSize}
+                            fallbackNumbers={`${food.calories} cal | ${food.protein}g P`}
+                            onSelect={() => void handleSelectFood(food)}
+                            onQuickAdd={
+                              onQuickAdd && oneTap
+                                ? () =>
+                                    void handleOneTapAdd(
+                                      { name: food.name, foodKeys: keys, source: 'usda', food_id: food.foodId },
+                                      oneTap,
+                                      rowKey
+                                    )
+                                : undefined
+                            }
+                            adding={quickAddingKey === rowKey}
+                            done={doneKey === rowKey}
+                            disabled={isSubmitting || quickAddingKey !== null}
+                            mealLabel={mealLabel}
+                            testId="usda-food-row"
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </section>

@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AddFoodModal } from '../AddFoodModal';
 import { MacroSummaryCard } from '../MacroSummaryCard';
@@ -26,6 +26,45 @@ function renderSheet(props: Partial<React.ComponentProps<typeof AddFoodModal>> =
     <AddFoodModal isOpen onClose={jest.fn()} onAdd={jest.fn()} defaultMealType="dinner" {...props} />
   );
 }
+
+describe('Search takes one tap (r20 panel, 6 of 6: "my first tap on Search did nothing")', () => {
+  // The sheet focuses the box on the next frame, after it has painted.
+  const flushFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+  it('opened from the Search quick action, the cursor is already in the search box', async () => {
+    renderSheet({ focusSearch: true, initialTab: 'search' });
+    await act(flushFrame);
+    expect(screen.getByLabelText('Search foods')).toHaveFocus();
+  });
+
+  it('opened from "Log food" / "Add food", the Recent list is not hidden behind a keyboard', async () => {
+    renderSheet();
+    await act(flushFrame);
+    expect(screen.getByLabelText('Search foods')).not.toHaveFocus();
+  });
+
+  it('tapping the Search tab puts the cursor in the box', async () => {
+    const user = userEvent.setup();
+    renderSheet({ initialTab: 'manual' });
+    await user.click(screen.getByRole('tab', { name: 'Search' }));
+    await act(flushFrame);
+    expect(screen.getByLabelText('Search foods')).toHaveFocus();
+  });
+
+  it('changing the meal while open does not throw the user back to another tab', async () => {
+    const user = userEvent.setup();
+    const onMealTypeChange = jest.fn();
+    const { rerender } = renderSheet({ initialTab: 'search', onMealTypeChange });
+    await user.click(screen.getByRole('tab', { name: 'Manual' }));
+    await user.click(screen.getByRole('radio', { name: 'Lunch' }));
+    // The page follows the sheet's meal and passes it back down.
+    rerender(
+      <AddFoodModal isOpen onClose={jest.fn()} onAdd={jest.fn()} defaultMealType="lunch" initialTab="search" onMealTypeChange={onMealTypeChange} />
+    );
+    expect(screen.getByRole('tab', { name: 'Manual' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('radio', { name: 'Lunch' })).toHaveAttribute('aria-checked', 'true');
+  });
+});
 
 describe('Add food sheet', () => {
   it('picks the meal with a segmented control, defaulting to the one passed in', async () => {

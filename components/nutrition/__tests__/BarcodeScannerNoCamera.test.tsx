@@ -58,6 +58,25 @@ describe('BarcodeScanner without a camera', () => {
     expect(screen.queryByText('Start camera scanner')).not.toBeInTheDocument();
   });
 
+  it('labels itself as the typed-number fallback and says what the camera scan does', async () => {
+    mockStart.mockRejectedValue(new Error('NotFoundError: Requested device not found'));
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    expect(await screen.findByTestId('barcode-fallback-tag')).toHaveTextContent(
+      'Typed-number fallback: this device has no camera'
+    );
+    expect(screen.getByTestId('barcode-camera-explainer')).toHaveTextContent(
+      /With a camera, Scan opens it full screen.*no typing/
+    );
+  });
+
+  it('names the reason in the fallback tag when access is off', async () => {
+    mockStart.mockRejectedValue(Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' }));
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    expect(await screen.findByTestId('barcode-fallback-tag')).toHaveTextContent('camera access is off');
+  });
+
   it('hides "Try the camera again" when there is no camera to retry', async () => {
     mockStart.mockRejectedValue(new Error('NotFoundError: Requested device not found'));
     render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
@@ -166,8 +185,10 @@ describe('BarcodeScanner on a computer without a webcam', () => {
         await screen.findByText('Type the barcode number')
       ).toBeInTheDocument();
       expect(screen.getByTestId('barcode-camera-issue-detail')).toHaveTextContent(
-        'on a phone, Scan opens the camera'
+        "There's no camera on this device"
       );
+      expect(screen.getByTestId('barcode-fallback-tag')).toHaveTextContent('Typed-number fallback');
+      expect(screen.getByTestId('barcode-camera-explainer')).toHaveTextContent('With a camera, Scan opens it');
       expect(screen.getByLabelText('Barcode number')).toBeInTheDocument();
       expect(mockStart).not.toHaveBeenCalled();
     } finally {

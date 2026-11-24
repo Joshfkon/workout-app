@@ -1,6 +1,7 @@
 'use client';
 
 import { mealFromAddParam } from '@/lib/nutrition/addFoodLink';
+import { JUST_ADDED_MS, rowNeedsScroll } from '@/lib/nutrition/addConfirmation';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useHydrated } from '@/hooks/useHydrated';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
@@ -15,8 +16,14 @@ import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 
+// The Add food sheet is this page's main action, so it is imported
+// statically (its camera/label scanners stay lazy inside it). As a lazy chunk
+// it opened a beat after Search / Log food were tapped: the page was already
+// tappable, the persona tapped Search again, and the sheet arriving
+// mid-tap swallowed it (r20 panel, 6 of 6: "my first tap on Search did
+// nothing ... search turned out to be already open").
+import { AddFoodModal, type AddFoodTab } from '@/components/nutrition/AddFoodModal';
 // Dynamic imports for heavy modals - reduces initial bundle size
-const AddFoodModal = dynamic(() => import('@/components/nutrition/AddFoodModal').then(m => ({ default: m.AddFoodModal })), { ssr: false });
 const WeightLogModal = dynamic(() => import('@/components/nutrition/WeightLogModal').then(m => ({ default: m.WeightLogModal })), { ssr: false });
 const WeightHistoryModal = dynamic(() => import('@/components/nutrition/WeightHistoryModal').then(m => ({ default: m.WeightHistoryModal })), { ssr: false });
 const NutritionTargetsModal = dynamic(() => import('@/components/nutrition/NutritionTargetsModal').then(m => ({ default: m.NutritionTargetsModal })), { ssr: false });
@@ -40,7 +47,6 @@ import type {
 } from '@/types/nutrition';
 import type { ParsedMealItem } from '@/lib/actions/nutrition-ai';
 import type { SavedMeal, SavedMealItem } from '@/components/nutrition/SavedMealsModal';
-import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
 import type { LabelScanPrefill } from '@/components/nutrition/LabelScanner';
 import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
 import { FoodEmojiAvatar } from '@/components/nutrition/FoodEmoji';
@@ -300,6 +306,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
   const [addFoodTab, setAddFoodTab] = useState<AddFoodTab>('search');
+  // Opened from the Search quick action: the sheet puts the cursor in the box.
+  const [addFoodFocusSearch, setAddFoodFocusSearch] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<MealType>(getMealTypeForNow);
   // The meal the user last chose (opening a meal card, or switching the meal
   // in the Add food sheet). Quick-log chips follow it; until the user picks
@@ -399,22 +407,37 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Food-only users (hooks/useTrackingFocus) get no FFMI in the projections.
   const { foodOnly } = useTrackingFocus();
 
-  // Rows a quick-add just created: briefly tinted + slid in inside their meal
-  // (alongside the Undo toast), so a one-tap add is unmistakable.
+  // Rows a quick-add just created: tinted, check-marked and labelled "Added
+  // just now" inside their meal (alongside the Undo), so a one-tap add is
+  // unmistakable where the eye goes (r20 panel, 4 of 6: "confirmation ... not
+  // obvious"). Long enough to read at a glance, not just a flash.
   const [justAddedIds, setJustAddedIds] = useState<Set<string>>(() => new Set());
   const justAddedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last "Added ..." toast, so a newer add can clear it: an old toast
+  // carried the old day total and sat over the row that had just landed.
+  const addedToastIdRef = useRef<string | null>(null);
+  const replaceAddedToast = useCallback((id: string | null) => {
+    if (addedToastIdRef.current) dismissToast(addedToastIdRef.current);
+    addedToastIdRef.current = id;
+  }, [dismissToast]);
   const flagJustAdded = useCallback((rows: FoodLogEntry[]) => {
     if (rows.length === 0) return;
     setJustAddedIds(new Set(rows.map((r) => r.id)));
     if (justAddedTimerRef.current) clearTimeout(justAddedTimerRef.current);
-    justAddedTimerRef.current = setTimeout(() => setJustAddedIds(new Set()), 2400);
-    // Bring the new row into view once it has rendered (no-op if visible).
+    justAddedTimerRef.current = setTimeout(() => setJustAddedIds(new Set()), JUST_ADDED_MS);
+    // Bring the new row into view once it has rendered. "nearest" parked it
+    // at the bottom edge, under the tab bar and the toast; centre it unless
+    // it is already comfortably on screen.
     requestAnimationFrame(() => {
       const id = rows[0].id;
       const el = Array.from(document.querySelectorAll<HTMLElement>('[data-food-entry-id]')).find(
         (node) => node.dataset.foodEntryId === id
       );
-      el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rowNeedsScroll(rect, window.innerHeight)) {
+        el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      }
     });
   }, []);
   useEffect(() => () => {
@@ -948,7 +971,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     // Same confirmation as the one-tap adds, plus where the day now stands:
     // "Added to Dinner · 1,640 / 2,400 kcal · 120 / 180 g protein".
     // dailyTotals is this render's (pre-insert) day, so add the new row.
-    addToast(
+    replaceAddedToast(null);
+    addedToastIdRef.current = addToast(
       'success',
       addedToMealMessage(
         mealLabelFor(food.meal_type),
@@ -1007,10 +1031,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     applyInsertedEntries([inserted]);
     mutateRecentFoodsCache((prev) => [inserted, ...prev]);
     flagJustAdded([inserted]);
-    addToast('success', quickAddMessage(toTitleCase(food.food_name), food.serving_size, mealLabelFor(food.meal_type)), 5000, {
-      label: 'Undo',
-      onClick: () => { void undoQuickAdd([inserted]); },
-    });
+    replaceAddedToast(
+      addToast('success', quickAddMessage(toTitleCase(food.food_name), food.serving_size, mealLabelFor(food.meal_type)), 5000, {
+        label: 'Undo',
+        onClick: () => { void undoQuickAdd([inserted]); },
+      })
+    );
   }
 
   /** "Add all" from a prior meal — one insert per item, one combined undo. */
@@ -1020,10 +1046,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     applyInsertedEntries(inserted);
     mutateRecentFoodsCache((prev) => [...inserted, ...prev]);
     flagJustAdded(inserted);
-    addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'} to ${mealLabelFor(foods[0].meal_type)}`, 6000, {
-      label: 'Undo',
-      onClick: () => { void undoQuickAdd(inserted); },
-    });
+    replaceAddedToast(
+      addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'} to ${mealLabelFor(foods[0].meal_type)}`, 6000, {
+        label: 'Undo',
+        onClick: () => { void undoQuickAdd(inserted); },
+      })
+    );
   }
 
   /** The user's name for a meal slot ("Lunch", or their custom name). */
@@ -1181,6 +1209,9 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     applyInsertedEntries([inserted]);
     mutateRecentFoodsCache((prev) => [inserted, ...prev]);
     flagJustAdded([inserted]);
+    // An earlier add's toast still on screen has the old day total and covers
+    // the meal cards: clear it, this add is confirmed inline.
+    replaceAddedToast(null);
     // Confirmed inline under the chips (what, how much, which meal, where the
     // day now stands), not by a toast that would sit over the meal cards.
     // dailyTotals is this render's (pre-insert) day, so add the new row.
@@ -1591,12 +1622,13 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     void queryClient.invalidateQueries({ queryKey: NUTRITION_GLOBAL_KEY });
   }
 
-  function openAddFood(mealType: MealType, tab: AddFoodTab = 'search') {
+  function openAddFood(mealType: MealType, tab: AddFoodTab = 'search', opts: { focusSearch?: boolean } = {}) {
     void ensureSystemFoodsLoaded();
     setRecentsEnabled(true); // latch on the recents/meals query
     setSelectedMealType(mealType);
     setQuickMeal(mealType);
     setAddFoodTab(tab);
+    setAddFoodFocusSearch(Boolean(opts.focusSearch));
     setShowAddFood(true);
   }
 
@@ -2029,7 +2061,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       <NutritionQuickActions
         onDescribe={() => setShowDescribeMeal(true)}
         onScan={() => openAddFood(chipMealType, 'barcode')}
-        onSearch={() => openAddFood(chipMealType, 'search')}
+        onSearch={() => openAddFood(chipMealType, 'search', { focusSearch: true })}
         onMeals={() => setShowSavedMeals(true)}
       />
 
@@ -2078,13 +2110,14 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
               {/* Header: "{Meal}: {kcal} cals" + macro breakdown + overflow menu */}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="text-headline text-ink truncate">
+                  {/* Wraps rather than truncates: the "Added" mark must not be cut off. */}
+                  <h3 className="text-headline text-ink break-words">
                     {meal.label}
                     {hasEntries && (
                       <span className="text-subhead font-normal text-ink-2 tabular-nums"> · {mealCalories.toLocaleString()} kcal</span>
                     )}
                     {mealJustAdded && (
-                      <span className="ml-1.5 text-subhead font-medium text-status-ok" data-testid="meal-just-added">
+                      <span className="ml-1.5 whitespace-nowrap text-body font-semibold text-status-ok" data-testid="meal-just-added">
                         <IconCheck size={14} className="inline -mt-0.5" aria-hidden="true" /> Added
                       </span>
                     )}
@@ -2162,11 +2195,21 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                         data-food-entry-id={entry.id}
                         data-just-added={justAddedIds.has(entry.id) ? 'true' : undefined}
                         className={`w-full flex items-center justify-between gap-4 py-2 px-1 rounded-input active:bg-fill transition-colors text-left ${
-                          justAddedIds.has(entry.id) ? 'motion-safe:animate-row-added motion-reduce:bg-status-ok/15' : ''
+                          justAddedIds.has(entry.id) ? 'bg-status-ok/15 motion-safe:animate-row-added' : ''
                         }`}
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
-                          <FoodEmojiAvatar name={entry.food_name} />
+                          {justAddedIds.has(entry.id) ? (
+                            // The avatar becomes a check while the row is new.
+                            <span
+                              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-status-ok text-white"
+                              aria-hidden="true"
+                            >
+                              <IconCheck size={20} stroke={3} />
+                            </span>
+                          ) : (
+                            <FoodEmojiAvatar name={entry.food_name} />
+                          )}
                           <div className="min-w-0">
                             <div className="text-body text-ink truncate">
                               {toTitleCase(entry.food_name)}
@@ -2174,6 +2217,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                             <div className="text-subhead text-ink-2 truncate">
                               {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
                             </div>
+                            {justAddedIds.has(entry.id) && (
+                              <div className="text-body font-semibold text-status-ok" data-testid="food-row-just-added">
+                                Added just now
+                              </div>
+                            )}
                           </div>
                         </div>
                         <span className="text-body text-ink flex-shrink-0 tabular-nums">
@@ -2572,6 +2620,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         defaultMealType={selectedMealType}
         onMealTypeChange={(m) => { setSelectedMealType(m); setQuickMeal(m); }}
         initialTab={addFoodTab}
+        focusSearch={addFoodFocusSearch}
         onOpenDescribe={() => {
           setShowAddFood(false);
           setDescribeMealType(selectedMealType);

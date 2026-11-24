@@ -95,8 +95,11 @@ describe('QuickAddChips', () => {
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith(yogurt);
     expect(screen.getByTestId('quick-add-chip')).toHaveAttribute('data-added', 'true');
-    // The chip keeps its name (no width jump that scrolls it off screen).
+    // The chip keeps its name (no width jump that scrolls it off screen) and
+    // says "Added" in place of the portion while the check shows.
     expect(screen.getByText('Greek yogurt')).toBeInTheDocument();
+    expect(screen.getByTestId('quick-add-chip-added')).toHaveTextContent('Added');
+    expect(screen.queryByTestId('quick-add-chip-portion')).not.toBeInTheDocument();
     expect(screen.getByTestId('quick-add-status-added')).toHaveTextContent('Added Greek yogurt (170 g) to Dinner');
     expect(screen.getByTestId('quick-add-status-totals')).toHaveTextContent(
       'Day total 283 / 1,872 kcal · 28 / 144 g protein'
