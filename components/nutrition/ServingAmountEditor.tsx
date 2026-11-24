@@ -131,7 +131,7 @@ export function ServingAmountEditor({
           onChange={(e) => setAmount(e.target.value)}
           aria-label="Amount"
           data-testid={`${testIdPrefix}-amount`}
-          className="flex-1 min-w-0 px-3 py-2.5 text-headline font-medium text-center bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
+          className="flex-1 min-w-[52px] px-1 py-2.5 text-headline font-medium text-center bg-card rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
         />
         <button
           type="button"
@@ -148,7 +148,7 @@ export function ServingAmountEditor({
             onChange={(e) => setUnit(e.target.value)}
             aria-label="Unit"
             data-testid={`${testIdPrefix}-unit`}
-            className="px-3 py-2.5 bg-card rounded-lg text-ink text-subhead focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
+            className="min-w-[88px] max-w-[50%] px-2 py-2.5 bg-card rounded-lg text-ink text-subhead focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
           >
             {model.units.map((u) => (
               <option key={u.id} value={u.id}>

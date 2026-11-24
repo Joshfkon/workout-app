@@ -26,3 +26,13 @@ export async function precheckWebCamera(
 /** Said next to Scan barcode, before the tap, when the device has no camera. */
 export const NO_CAMERA_UP_FRONT =
   'No camera on this device, so Scan barcode lets you type the number printed under the bars instead.';
+
+/**
+ * Said under Eat's quick actions (Describe / Scan / Search / Meals), before
+ * Scan is tapped, when the device has no camera. r22 panel (3 of 6): "The
+ * Scan button gave no hint that a typed-number fallback exists" — the r22
+ * line only lived inside the Add food sheet, and personas tapped the page's
+ * Scan tile, which opens the sheet straight on the typed-number screen.
+ */
+export const NO_CAMERA_SCAN_TILE =
+  'No camera on this device, so Scan lets you type the number printed under the barcode instead.';

@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { IconCheck, IconPlus } from '@tabler/icons-react';
 import { Chip } from '@/components/ui';
 import { AddedBanner, type QuickAddConfirmation } from './AddedBanner';
-import { formatPortion, frequentFoodPortion } from '@/lib/nutrition/frequentFoods';
+import {
+  QUICK_ADD_CHIP_LIMIT,
+  formatPortion,
+  frequentFoodPortion,
+  quickAddChipDetail,
+  stableChipOrder,
+} from '@/lib/nutrition/frequentFoods';
 import type { FrequentFood, MealType } from '@/types/nutrition';
 
 /** How long a tapped chip shows its check mark before it goes back to "+". */
@@ -30,6 +36,8 @@ interface QuickAddChipsProps {
   mealIsTimeDefault?: boolean;
   /** Display name for a food (e.g. title-casing ALL-CAPS database names). */
   formatName?: (name: string) => string;
+  /** Most chips shown (the first render's top N; new foods fill gaps up to it). */
+  limit?: number;
 }
 
 /**
@@ -54,6 +62,7 @@ export function QuickAddChips({
   onAdd,
   mealIsTimeDefault = false,
   formatName = (name) => name,
+  limit = QUICK_ADD_CHIP_LIMIT,
 }: QuickAddChipsProps) {
   const [addedName, setAddedName] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<QuickAddConfirmation | null>(null);
@@ -68,7 +77,19 @@ export function QuickAddChips({
     []
   );
 
-  if (foods.length === 0) return null;
+  // Freeze the order on the first non-empty render of this visit; new foods
+  // may join at the end, nothing moves (see stableChipOrder). The last-known
+  // food per name is kept so a frozen chip never vanishes mid-visit.
+  const knownRef = useRef(new Map<string, FrequentFood>());
+  const orderRef = useRef<string[] | null>(null);
+  for (const food of foods) knownRef.current.set(food.food_name, food);
+  const order = stableChipOrder(orderRef.current, foods, limit);
+  if (order.length > 0) orderRef.current = order;
+  const chips = order
+    .map((name) => knownRef.current.get(name))
+    .filter((food): food is FrequentFood => food !== undefined);
+
+  if (chips.length === 0) return null;
 
   function showStatus(next: QuickAddConfirmation) {
     setConfirmation(next);
@@ -112,28 +133,42 @@ export function QuickAddChips({
         Each adds the amount you logged last time
         {mealIsTimeDefault ? ` · ${mealLabel} picked for the time of day` : ''}
       </p>
+      {/* Fixed-width two-line chips in a frozen order: a tap changes a
+          chip's colour and second line, never its size or position, so the
+          next tap lands on the chip that was under the finger. */}
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-        {foods.map((food) => {
+        {chips.map((food) => {
           const name = formatName(food.food_name);
           const portion = formatPortion(frequentFoodPortion(food).serving_size);
+          const detail = quickAddChipDetail(food);
           const added = addedName === food.food_name;
           return (
             <Chip
               key={food.food_name}
               onClick={() => void handleTap(food)}
-              title={`${name} · ${portion} · adds to ${mealLabel}`}
-              aria-label={`Log ${name}, ${portion}, to ${mealLabel}`}
+              title={`${name} · ${detail} · adds to ${mealLabel}`}
+              aria-label={`Log ${name}, ${detail}, to ${mealLabel}`}
               icon={added ? <IconCheck size={16} /> : <IconPlus size={16} />}
-              className={`max-w-[16rem] ${added ? 'bg-status-ok/15 text-status-ok [&>span]:text-status-ok' : ''}`}
+              className={`h-auto min-h-[52px] w-[12.5rem] items-center py-1.5 text-left ${
+                added ? 'bg-status-ok/15 text-status-ok [&>span]:text-status-ok' : ''
+              }`}
               data-testid="quick-add-chip"
+              data-food={food.food_name}
+              data-portion={portion}
               data-added={added ? 'true' : undefined}
             >
-              <span className="truncate">{name}</span>
-              {added ? (
-                <span className="flex-shrink-0 font-semibold" data-testid="quick-add-chip-added">· Added to {mealLabel}</span>
-              ) : (
-                <span className="flex-shrink-0 text-subhead text-ink-2" data-testid="quick-add-chip-portion">· {portion}</span>
-              )}
+              <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                <span className="truncate">{name}</span>
+                {added ? (
+                  <span className="truncate text-subhead font-semibold" data-testid="quick-add-chip-added">
+                    Added to {mealLabel}
+                  </span>
+                ) : (
+                  <span className="truncate text-subhead font-normal text-ink-2 tabular-nums" data-testid="quick-add-chip-portion">
+                    {detail}
+                  </span>
+                )}
+              </span>
             </Chip>
           );
         })}
