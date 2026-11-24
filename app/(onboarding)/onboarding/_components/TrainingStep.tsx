@@ -1,14 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import { IconCheck } from '@tabler/icons-react';
-import { Button } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
+import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 import { ProTag } from '@/components/subscription/ProTag';
 import type { Goal as NutritionGoal } from '@/lib/nutrition/macroCalculator';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import {
   SPLIT_OPTIONS,
   TRAINING_DAY_OPTIONS,
+  customChangeForGoal,
   formatRatePercent,
+  formatWeeklyChange,
+  parseCustomRate,
   rateAmountPerWeek,
   rateOptionsForGoal,
   type TrainingSetupAnswers,
@@ -69,26 +74,26 @@ export function TrainingStep({
   onContinue,
 }: TrainingStepProps) {
   const rates = rateOptionsForGoal(goal);
-  const pickedRate = answers.rate ?? defaultRate;
+  // A typed pace (kg or lb a week) replaces the preset levels while set.
+  const customKg = customChangeForGoal(goal, answers.weeklyChangeKg);
+  const pickedRate = customKg !== null ? null : (answers.rate ?? defaultRate);
   const isBusy = busy !== null;
-  const skipLine = skipDefaultsLine({ goal, defaultRate, rateApplies, skipTargets });
+  // ONE figure on screen: the targets line is what Continue saves; Skip's
+  // line quotes a number only when it's that same number.
+  const answersChangeTargets =
+    !!targets && !!skipTargets &&
+    (targets.calories !== skipTargets.calories || Math.round(targets.protein) !== Math.round(skipTargets.protein));
+  const skipLine = skipDefaultsLine({ goal, defaultRate, rateApplies, skipTargets, answersChangeTargets });
+  const [customText, setCustomText] = useState(() =>
+    customKg !== null
+      ? String(Math.round(Math.abs(units === 'lb' ? customKg * 2.20462 : customKg) * 100) / 100)
+      : ''
+  );
+  const custom = parseCustomRate(customText, units, goal, weightKg);
 
   return (
     <div className="max-w-md mx-auto space-y-6 animate-fade-in" data-testid="onboarding-training-step">
-      <div className="flex items-center justify-center gap-2 mb-8" aria-hidden="true">
-        {[1, 2, 3, 4].map((s) => (
-          <div key={s} className="flex items-center">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
-                s <= 2 ? 'bg-action text-on-action' : 'bg-fill text-ink-3'
-              }`}
-            >
-              {s}
-            </div>
-            {s < 4 && <div className={`w-12 h-0.5 ${s < 2 ? 'bg-action' : 'bg-fill'}`} />}
-          </div>
-        ))}
-      </div>
+      <OnboardingSteps current="training" />
 
       <div className="text-center">
         <h1 className="text-large-title font-bold text-ink mb-2">How do you train now?</h1>
@@ -172,7 +177,10 @@ export function TrainingStep({
                       role="radio"
                       aria-checked={selected}
                       data-testid={`training-rate-${r.value}`}
-                      onClick={() => onChange({ ...answers, rate: r.value })}
+                      onClick={() => {
+                        setCustomText('');
+                        onChange({ ...answers, rate: r.value, weeklyChangeKg: null });
+                      }}
                       className={`w-full text-left p-3 rounded-xl border-2 flex items-start gap-3 transition-colors active:scale-[0.99] ${
                         selected ? 'bg-action/10 border-action' : 'bg-card border-sep'
                       }`}
@@ -196,15 +204,34 @@ export function TrainingStep({
                   );
                 })}
               </div>
-              {targets && (
-                <p className="text-subhead text-ink-2" data-testid="training-rate-targets">
-                  Daily targets at this pace:{' '}
-                  <span className="font-semibold text-ink tabular-nums">
-                    {targets.calories.toLocaleString()} kcal · {Math.round(targets.protein)} g protein
-                  </span>
-                  . Change them any time in Eat.
-                </p>
-              )}
+              {/* The pace in the user's own unit (UX round 21: "I wanted
+                  0.25 kg/wk and couldn't set it directly"), % alongside. */}
+              <div className="space-y-1" data-testid="training-rate-custom">
+                <Input
+                  label={`Or set your own pace (${units} a week)`}
+                  type="number"
+                  inputMode="decimal"
+                  step="0.05"
+                  min={0}
+                  value={customText}
+                  placeholder={units === 'lb' ? '0.5' : '0.25'}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    setCustomText(text);
+                    const parsed = parseCustomRate(text, units, goal, weightKg);
+                    const next = parsed.ok ? parsed.weeklyChangeKg : null;
+                    if (next !== answers.weeklyChangeKg) onChange({ ...answers, weeklyChangeKg: next });
+                  }}
+                  error={!custom.ok && custom.error ? custom.error : undefined}
+                  data-testid="training-rate-custom-input"
+                />
+                {custom.ok && (
+                  <p className="text-subhead text-ink-2" data-testid="training-rate-custom-percent">
+                    {goal === 'bulk' ? 'Gain' : 'Lose'} {formatWeeklyChange(custom.weeklyChangeKg, units).replace(/^[+−]/, '')}
+                    {' '}= {custom.percentBW}% of your body weight a week.
+                  </p>
+                )}
+              </div>
             </>
           ) : (
             <p className="text-body text-ink-2" data-testid="training-rate-kept">
@@ -212,6 +239,17 @@ export function TrainingStep({
             </p>
           )}
         </div>
+      )}
+
+      {rateApplies && targets && (
+        <p className="text-subhead text-ink-2" data-testid="training-rate-targets">
+          Your daily targets:{' '}
+          <span className="font-semibold text-ink tabular-nums">
+            {targets.calories.toLocaleString()} kcal · {Math.round(targets.protein)} g protein
+          </span>
+          {answersChangeTargets ? ', updated for your answers above' : ''}. This is what Continue
+          saves; change them any time in Eat.
+        </p>
       )}
 
       <div className="flex items-center justify-between gap-2 pt-2">
@@ -268,14 +306,25 @@ export function skipDefaultsLine({
   defaultRate,
   rateApplies,
   skipTargets,
+  answersChangeTargets = false,
 }: {
   goal: TrainingGoal | null;
   defaultRate: NutritionGoal | null;
   rateApplies: boolean;
   skipTargets: { calories: number; protein: number } | null;
+  /**
+   * The answers on screen give different targets from Skip's. Skip then
+   * names what it drops instead of quoting a second calorie figure (UX panel
+   * round 20: "3,206 on the targets line but 3,158 in the skip text").
+   */
+  answersChangeTargets?: boolean;
 }): string {
   const rateName = rateOptionsForGoal(goal).find((r) => r.value === defaultRate)?.name ?? null;
   const plan = 'your first plan starts from your goal and experience.';
+  if (answersChangeTargets) {
+    const pace = rateName ? `the default pace (${rateName.toLowerCase()}) and ` : '';
+    return `Skip drops your answers above: your targets go back to ${pace}4 workouts a week, and ${plan} Change either any time.`;
+  }
   if (rateApplies && rateName) {
     const targets = skipTargets
       ? ` (${skipTargets.calories.toLocaleString()} kcal · ${Math.round(skipTargets.protein)} g protein a day)`

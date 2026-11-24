@@ -486,7 +486,12 @@ function getLossRateCap(bodyFatPercent?: number): number {
   return GUARDRAILS.DEFAULT_LOSS_RATE_CAP;
 }
 
-function getLeanMassLbs(stats: UserStats): number {
+/**
+ * Lean body mass in lb: from body fat when known, else a typical-adult
+ * estimate (20% men, 28% women). Exported so onboarding can say how its
+ * protein figure was reached.
+ */
+export function getLeanMassLbs(stats: Pick<UserStats, 'weightKg' | 'sex' | 'bodyFatPercent'>): number {
   const bw = kgToLbs(stats.weightKg);
   if (stats.bodyFatPercent && stats.bodyFatPercent > 0) {
     return bw * (1 - stats.bodyFatPercent / 100);
@@ -505,6 +510,14 @@ function getCarbFloor(activity: ActivityConfig): { grams: number; tag: string } 
   if (w >= 6) return { grams: GUARDRAILS.MIN_CARBS_LIFT_6P, tag: "lifting 6+ days/wk" };
   if (w >= 4) return { grams: GUARDRAILS.MIN_CARBS_LIFT_4_5, tag: "lifting 4–5 days/wk" };
   return { grams: GUARDRAILS.MIN_CARBS_LIFT_2_3, tag: "lifting 2–3 days/wk" };
+}
+
+/**
+ * Protein before any medication multiplier, in g per lb of lean body mass:
+ * 1.1 on a cut (protects muscle in a deficit), else 1.0, the "lifting floor".
+ */
+export function baseProteinPerLbLeanMass(goal: Goal): number {
+  return goal.includes("cut") ? 1.1 : 1.0;
 }
 
 /**
@@ -542,10 +555,8 @@ function allocateMacros(
   const bwLbs = kgToLbs(stats.weightKg);
   const lbm = getLeanMassLbs(stats);
 
-  const isCut = goal.includes("cut");
-
   // Protein target (then clamp) - THIS IS PROTECTED
-  const base = isCut ? 1.1 : 1.0;
+  const base = baseProteinPerLbLeanMass(goal);
   const requestedPPerLb = base * peptideCfg.proteinMultiplier;
 
   const pPerLb = clamp(

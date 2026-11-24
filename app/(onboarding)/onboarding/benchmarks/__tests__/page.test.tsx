@@ -48,13 +48,26 @@ describe('Onboarding benchmarks page', () => {
     expect(purpose).toHaveTextContent(/starting weights we suggest/);
     const cost = screen.getByTestId('benchmarks-skip-cost');
     expect(cost).toHaveTextContent(/start from estimates \(your experience and body weight\)/);
-    expect(cost).toHaveTextContent(/adjust after your first sessions/);
+    expect(cost).toHaveTextContent(/adjust after your first 1–2 sessions/);
+    expect(cost).toHaveTextContent(/progress charts work the same/);
     expect(cost).toHaveTextContent(/Strength percentiles stay off until you test\./);
     const skip = screen.getByTestId('skip-benchmarks');
     const start = screen.getByRole('button', { name: /Pick lifts to test/ });
     // Skip comes before any lift choice in the page.
     expect(skip.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText(/Nothing here affects food tracking/)).toBeInTheDocument();
+  });
+
+  it('leads with one beginner-friendly sentence on what it is for and what skipping costs (UX round 21)', () => {
+    render(<BenchmarksPage />);
+    const line = screen.getByTestId('benchmarks-one-line');
+    expect(line).toHaveTextContent(/starts your weight suggestions closer to your real strength/);
+    expect(line).toHaveTextContent(/Skip it and they start from estimates, then adjust after your first 1–2 workouts/);
+    expect(screen.getByText(/Progress tracking works the same either way/)).toBeInTheDocument();
+    // Before Skip, which stays the first button.
+    expect(line.compareDocumentPosition(screen.getByTestId('skip-benchmarks')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The step indicator says where this is in setup, in words.
+    expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 5 of 5: Strength test (optional)');
   });
 
   it('tells an injured lifter not to test that area', () => {

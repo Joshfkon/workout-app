@@ -6,15 +6,19 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, ExplainedTerm, SegmentedControl } from '@/components/ui';
 import { ContextCard } from '@/components/onboarding/ContextCard';
+import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { updateOnboardingStep, completeOnboarding, confirmedOnboardingGoal, type TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import type { StandingInjuryArea } from '@/lib/training/standingInjuries';
 import { GoalStep } from './_components/GoalStep';
+import { earlierGoalAnswer, type GoalPreselection } from '@/lib/onboarding/goalPreselection';
 import { TrainingStep } from './_components/TrainingStep';
 import {
   EMPTY_TRAINING_SETUP,
+  customChangeForGoal,
+  nearestRateForChange,
   rateForGoal,
   trainingPreferencesPatch,
   trainingSetupFromPreferences,
@@ -140,11 +144,18 @@ export default function OnboardingBodyCompPage() {
   const [useDexa, setUseDexa] = useState(false);
   const [showBodyFatGuide, setShowBodyFatGuide] = useState(false);
   // Training goal (users.goal). Preselected to Maintain so Continue works in
-  // one tap. A goal saved by this step earlier (re-entering onboarding) is
-  // restored instead; see confirmedOnboardingGoal. Registration's
-  // 'maintenance' placeholder isn't treated as a saved choice.
+  // one tap (the product owner keeps a preselection), and the goal step says
+  // so out loud. An earlier answer wins over the default: a goal saved by
+  // this step before (re-entering onboarding; see confirmedOnboardingGoal),
+  // else the direction of food targets already set up in Eat
+  // (macro_settings.goal). Registration's 'maintenance' placeholder isn't
+  // treated as a choice.
   const [goal, setGoal] = useState<TrainingGoal | null>('maintenance');
+  // Where the preselected goal came from; null once the user picks one.
+  const [goalSource, setGoalSource] = useState<GoalPreselection | null>('default');
   const goalTouched = useRef(false);
+  // Protein typed on the goal step (g a day); null = the calculated figure.
+  const [proteinOverride, setProteinOverride] = useState<number | null>(null);
   // Optional "areas to go easy on", saved as body areas in
   // users.preferences.injuryAreas (lib/training/standingInjuries), never
   // injury_history. null = unanswered, which leaves the stored value alone.
@@ -281,7 +292,7 @@ export default function OnboardingBodyCompPage() {
 
       const [{ data: targetsRow }, { data: macroSettingsRow }] = await Promise.all([
         supabase.from('nutrition_targets').select('calories, protein').eq('user_id', user.id).maybeSingle(),
-        supabase.from('macro_settings').select('user_id').eq('user_id', user.id).maybeSingle(),
+        supabase.from('macro_settings').select('user_id, goal').eq('user_id', user.id).maybeSingle(),
       ]);
       if (targetsRow?.calories) {
         setExistingTargets({ calories: targetsRow.calories, protein: targetsRow.protein ?? 0 });
@@ -311,10 +322,14 @@ export default function OnboardingBodyCompPage() {
       }
       setExperienceShown(experienceSummary(liftingAnswer, signUpLevel.experience));
       if (!trainingTouched.current) setTrainingAnswers(trainingSetupFromPreferences(prefs));
-      const savedGoal = confirmedOnboardingGoal(userData);
-      if (savedGoal) {
-        // Don't overwrite a pick the user made while this was loading.
-        if (!goalTouched.current) setGoal(savedGoal);
+      const earlier = earlierGoalAnswer(
+        confirmedOnboardingGoal(userData),
+        (macroSettingsRow as { goal?: string | null } | null)?.goal ?? null
+      );
+      // Don't overwrite a pick the user made while this was loading.
+      if (earlier && !goalTouched.current) {
+        setGoal(earlier.goal);
+        setGoalSource(earlier.source);
       }
     }
     
@@ -365,19 +380,40 @@ export default function OnboardingBodyCompPage() {
   // this step shows is exactly what Eat starts with.
   // `training` = the optional training step's answers (null = skipped or not
   // asked): the picked pace and days a week feed the same calculation.
-  const starterFor = (training: TrainingSetupAnswers | null) =>
-    goal
-      ? starterTargets({
-          phase: goal,
-          weightKg: useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg(),
-          heightCm: getHeightCm(),
-          age: getAge(),
-          sex,
-          liftsWeights: !foodFocus,
-          nutritionGoal: training ? rateForGoal(goal, training.rate) : null,
-          workoutsPerWeek: training?.daysPerWeek ?? null,
-        })
-      : null;
+  // The user's own body fat (DEXA, typed, or picked from the guide), never
+  // the skip placeholder: protein follows their lean mass (the calculator's
+  // rule, as in Eat) instead of an assumed 20% / 28%.
+  const ownBodyFat = (): number | null => {
+    if (useDexa && existingDexa) return existingDexa.body_fat_percent;
+    if (bfEstimated) return null;
+    const bf = parseFloat(bodyFatPercent);
+    return bf > 0 && bf < 100 ? bf : null;
+  };
+  // ONE function for every calorie/protein figure in setup: the goal step's
+  // card, the training step's line, what Skip uses and what gets saved.
+  const starterFor = (training: TrainingSetupAnswers | null) => {
+    if (!goal) return null;
+    const weightKg = useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg();
+    const customKg = training ? customChangeForGoal(goal, training.weeklyChangeKg) : null;
+    return starterTargets({
+      phase: goal,
+      weightKg,
+      heightCm: getHeightCm(),
+      age: getAge(),
+      sex,
+      liftsWeights: !foodFocus,
+      nutritionGoal:
+        customKg !== null
+          ? nearestRateForChange(goal, customKg, weightKg)
+          : training
+            ? rateForGoal(goal, training.rate)
+            : null,
+      workoutsPerWeek: training?.daysPerWeek ?? null,
+      bodyFatPercent: ownBodyFat(),
+      weeklyChangeKg: customKg,
+      proteinG: proteinOverride,
+    });
+  };
   const starter = starterFor(null);
   const createStarterTargets = !existingTargets && !hasMacroSettings;
 
@@ -455,7 +491,13 @@ export default function OnboardingBodyCompPage() {
       // always calculate them later).
       if (createStarterTargets && starter && !profileError) {
         try {
-          const saved = await saveMacroSettings({ ...starter.settings, target_weight_change_per_week: null });
+          const saved = await saveMacroSettings({
+            ...starter.settings,
+            target_weight_change_per_week: starter.targetWeightChangePerWeek,
+            // A hand-set protein is a hand-set target: the adaptive sync
+            // must not recalculate it away (setMacroAutoUpdateEnabled's rule).
+            ...(starter.protein.setByHand ? { auto_update_enabled: false } : {}),
+          });
           if (saved.success) {
             const { error: targetsError } = await supabase
               .from('nutrition_targets')
@@ -555,24 +597,8 @@ export default function OnboardingBodyCompPage() {
   if (step === 'units') {
     return (
       <div className="max-w-md mx-auto space-y-8 animate-fade-in">
-        {/* Progress indicator */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
-                s === 1 
-                  ? 'bg-action text-on-action' 
-                  : 'bg-fill text-ink-3'
-              }`}>
-                {s}
-              </div>
-              {s < 4 && (
-                <div className="w-12 h-0.5 bg-fill" />
-              )}
-            </div>
-          ))}
-        </div>
-        
+        <OnboardingSteps current="units" foodFocus={foodFocus} />
+
         <div className="text-center">
           <h1 className="text-large-title font-bold text-ink mb-2">Welcome to HyperTrack!</h1>
           <p className="text-ink-2 mb-6">
@@ -762,7 +788,9 @@ export default function OnboardingBodyCompPage() {
         onGoalChange={(g) => {
           goalTouched.current = true;
           setGoal(g);
+          setGoalSource(null);
         }}
+        preselection={goalSource}
         recommended={recommended}
         bodyFatPercent={bf}
         injuryAreas={injuryAreas}
@@ -771,9 +799,16 @@ export default function OnboardingBodyCompPage() {
           existingTargets
             ? { ...existingTargets, kind: 'existing' }
             : createStarterTargets && starter
-              ? { calories: starter.targets.calories, protein: starter.targets.protein, kind: 'new' }
+              ? {
+                  calories: starter.targets.calories,
+                  protein: starter.targets.protein,
+                  kind: 'new',
+                  proteinBasis: starter.protein,
+                }
               : null
         }
+        units={units}
+        onProteinChange={setProteinOverride}
         targetsNeedAge={createStarterTargets && !getAge()}
         ageDisplay={ageDisplay}
         onAgeChange={setAgeDisplay}
@@ -797,24 +832,10 @@ export default function OnboardingBodyCompPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Progress indicator */}
-      <div className="flex items-center justify-center gap-2 mb-8">
-        {[1, 2, 3, 4].map((s) => (
-          <div key={s} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
-              s <= 2 
-                ? 'bg-action text-on-action' 
-                : 'bg-fill text-ink-3'
-            }`}>
-              {s}
-            </div>
-            {s < 4 && (
-              <div className={`w-12 h-0.5 ${s < 2 ? 'bg-action' : 'bg-fill'}`} />
-            )}
-          </div>
-        ))}
+      <div className="max-w-md mx-auto">
+        <OnboardingSteps current="body" foodFocus={foodFocus} showLaterNote />
       </div>
-      
+
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">Body composition</h1>
         <p className="text-ink-2">
@@ -960,56 +981,33 @@ export default function OnboardingBodyCompPage() {
             />
 
             <div>
-              <p className="text-caption text-ink-2 mb-2" data-testid="body-fat-why">
+              <p className="text-subhead text-ink-2 mb-2" data-testid="body-fat-why">
                 Body fat % is how much of your weight is fat. We use it to split your weight into muscle
-                and fat, so we can suggest a goal and track muscle, not just weight. To estimate it, use a
-                smart scale or scan reading, or compare yourself to the visual guide. Optional: you can
-                skip it.
+                and fat, so we can suggest a goal, size your protein and track muscle, not just weight.
+                Use a smart scale or scan reading if you have one; otherwise tap the look closest to yours
+                below. Optional: you can skip it.
               </p>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Input
-                    label="Body fat %"
-                    type="number"
-                    value={useDexa && existingDexa ? String(existingDexa.body_fat_percent) : bodyFatPercent}
-                    onChange={(e) => {
-                      setUseDexa(false);
-                      setBfEstimated(false);
-                      setBodyFatPercent(e.target.value);
-                    }}
-                    placeholder="15"
-                    min={3}
-                    max={60}
-                    step={0.5}
-                    disabled={useDexa}
-                    // A filled-in estimate must not look typed: muted italic
-                    // text and a dashed border until the user changes it.
-                    className={!useDexa && bfEstimated ? 'border-dashed italic text-ink-2' : undefined}
-                    aria-describedby={!useDexa && bfEstimated ? 'body-fat-estimate-note' : undefined}
-                    data-estimated={!useDexa && bfEstimated ? 'true' : undefined}
-                    hint={
-                      useDexa
-                        ? 'Using DEXA scan data'
-                        : bfEstimated
-                          ? undefined
-                          : "Know your number? Type it in. Otherwise use the visual guide, or skip."
-                    }
-                  />
-                </div>
-                {!useDexa && (
-                  <Button 
-                    type="button"
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setShowBodyFatGuide(!showBodyFatGuide)}
-                    className="mb-1"
-                    // The guide's pictures and typical values depend on sex.
-                    disabled={!sex}
-                  >
-                    {showBodyFatGuide ? 'Hide guide' : 'Visual guide'}
-                  </Button>
-                )}
-              </div>
+              <Input
+                label="Body fat %"
+                type="number"
+                value={useDexa && existingDexa ? String(existingDexa.body_fat_percent) : bodyFatPercent}
+                onChange={(e) => {
+                  setUseDexa(false);
+                  setBfEstimated(false);
+                  setBodyFatPercent(e.target.value);
+                }}
+                placeholder="15"
+                min={3}
+                max={60}
+                step={0.5}
+                disabled={useDexa}
+                // A filled-in estimate must not look typed: muted italic
+                // text and a dashed border until the user changes it.
+                className={!useDexa && bfEstimated ? 'border-dashed italic text-ink-2' : undefined}
+                aria-describedby={!useDexa && bfEstimated ? 'body-fat-estimate-note' : undefined}
+                data-estimated={!useDexa && bfEstimated ? 'true' : undefined}
+                hint={useDexa ? 'Using DEXA scan data' : undefined}
+              />
               {!useDexa && bfEstimated && (
                 <p
                   id="body-fat-estimate-note"
@@ -1024,112 +1022,82 @@ export default function OnboardingBodyCompPage() {
                 </p>
               )}
               {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && !sex && (
-                <p className="mt-2 text-caption text-ink-2" data-testid="body-fat-needs-sex">
-                  Pick your sex above to use the visual guide or to skip this.
+                <p className="mt-2 text-subhead text-ink-2" data-testid="body-fat-needs-sex">
+                  Pick your sex above to see the look-alike guide or to skip this.
                 </p>
               )}
-              {!useDexa && !bfEstimated && !(parseFloat(bodyFatPercent) > 0) && sex && (
-                <button
-                  type="button"
-                  className="mt-2 text-subhead font-medium text-action"
-                  data-testid="body-fat-not-sure"
-                  onClick={() => {
-                    // Typical adult values; flagged so nothing downstream
-                    // presents a verdict built on a guess.
-                    setBodyFatPercent(typicalBodyFat(sex));
-                    setBfEstimated(true);
-                    setShowBodyFatGuide(false);
-                  }}
-                >
-                  I don’t know — skip
-                </button>
-              )}
-              
-              {/* Body fat visual guide */}
-              {!useDexa && showBodyFatGuide && sex && (
-                <div className="mt-3 p-4 bg-fill/50 rounded-lg border border-sep">
-                  <p className="text-body font-medium text-ink mb-3">
-                    Tap a body fat level that looks closest to you ({sex === 'male' ? 'Male' : 'Female'}):
+
+              {/* The visual guide, right under the field whenever there's no
+                  number yet (UX panel round 20: "body fat was asked without
+                  any help for estimating it" while the guide hid behind a
+                  button). The four looks are always there; photos on a tap. */}
+              {!useDexa && sex && (showBodyFatGuide || bfEstimated || !(parseFloat(bodyFatPercent) > 0)) && (
+                <div className="mt-3 p-3 bg-fill/50 rounded-lg border border-sep" data-testid="body-fat-guide">
+                  <p className="text-body font-medium text-ink mb-2">
+                    Not sure? Tap the look closest to yours:
                   </p>
-                  
-                  {sex === 'male' ? (
-                    <>
-                      {/* Visual guide image for males */}
-                      <div className="rounded-lg overflow-hidden mb-3 relative">
-                        <Image 
-                          src="/images/body-fat-guide-male.png" 
-                          alt="Male body fat percentage visual guide"
-                          width={600}
-                          height={600}
-                          className="w-full h-auto"
-                          priority
-                        />
-                      </div>
-                      
-                      {/* Clickable options */}
-                      <div className="grid grid-cols-4 gap-2">
-                        {BODY_FAT_OPTIONS.male.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => {
-                              setBodyFatPercent(String(option.value));
-                              setBfEstimated(false);
-                              setShowBodyFatGuide(false);
-                            }}
-                            className={`p-2 rounded-lg text-center transition-all ${
-                              bodyFatPercent === String(option.value)
-                                ? 'bg-action text-on-action'
-                                : 'bg-sep hover:bg-sep text-ink'
-                            }`}
-                          >
-                            <p className="text-headline font-bold">{option.label}</p>
-                            <p className="text-caption opacity-75">{option.description}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {/* Visual guide image for females */}
-                      <div className="rounded-lg overflow-hidden mb-3 relative">
-                        <Image 
-                          src="/images/body-fat-guide-female.png" 
-                          alt="Female body fat percentage visual guide"
-                          width={600}
-                          height={600}
-                          className="w-full h-auto"
-                          priority
-                        />
-                      </div>
-                      
-                      {/* Clickable options */}
-                      <div className="grid grid-cols-4 gap-2">
-                        {BODY_FAT_OPTIONS.female.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => {
-                              setBodyFatPercent(String(option.value));
-                              setBfEstimated(false);
-                              setShowBodyFatGuide(false);
-                            }}
-                            className={`p-2 rounded-lg text-center transition-all ${
-                              bodyFatPercent === String(option.value)
-                                ? 'bg-action text-on-action'
-                                : 'bg-sep hover:bg-sep text-ink'
-                            }`}
-                          >
-                            <p className="text-headline font-bold">{option.label}</p>
-                            <p className="text-caption opacity-75">{option.description}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </>
+                  {showBodyFatGuide && (
+                    <div className="rounded-lg overflow-hidden mb-3 relative">
+                      <Image
+                        src={sex === 'male' ? '/images/body-fat-guide-male.png' : '/images/body-fat-guide-female.png'}
+                        alt={`${sex === 'male' ? 'Male' : 'Female'} body fat percentage visual guide`}
+                        width={600}
+                        height={600}
+                        className="w-full h-auto"
+                        priority
+                      />
+                    </div>
                   )}
-                  
-                  <p className="text-caption text-ink-3 mt-3 text-center">
-                    Don&apos;t worry about being exact — an estimate is fine!
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {BODY_FAT_OPTIONS[sex].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setBodyFatPercent(String(option.value));
+                          setBfEstimated(false);
+                          setShowBodyFatGuide(false);
+                        }}
+                        className={`min-h-[44px] p-2 rounded-lg text-center transition-all ${
+                          !bfEstimated && bodyFatPercent === String(option.value)
+                            ? 'bg-action text-on-action'
+                            : 'bg-sep hover:bg-sep text-ink'
+                        }`}
+                      >
+                        <p className="text-headline font-bold">{option.label}</p>
+                        <p className="text-subhead opacity-80">{option.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowBodyFatGuide((v) => !v)}
+                      className="min-h-[44px] text-subhead font-medium text-action"
+                      data-testid="body-fat-photos"
+                      aria-expanded={showBodyFatGuide}
+                    >
+                      {showBodyFatGuide ? 'Hide example photos' : 'See example photos'}
+                    </button>
+                    {!bfEstimated && !(parseFloat(bodyFatPercent) > 0) && (
+                      <button
+                        type="button"
+                        className="min-h-[44px] text-subhead font-medium text-action"
+                        data-testid="body-fat-not-sure"
+                        onClick={() => {
+                          // Typical adult values; flagged so nothing downstream
+                          // presents a verdict built on a guess.
+                          setBodyFatPercent(typicalBodyFat(sex));
+                          setBfEstimated(true);
+                          setShowBodyFatGuide(false);
+                        }}
+                      >
+                        I don’t know — skip
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-subhead text-ink-2 mt-1">
+                    An estimate is fine. You can add a real number later on the Body composition page.
                   </p>
                 </div>
               )}
@@ -1146,7 +1114,7 @@ export default function OnboardingBodyCompPage() {
             {bodyComp && bfEstimated ? (
               <p className="text-body text-ink-2" data-testid="body-comp-estimated">
                 You skipped body fat, so we&apos;re using a typical value and leaving out the muscle-mass rating for now.
-                Add your real number later in Settings and we&apos;ll fill this in.
+                Add your real number later on the Body composition page and we&apos;ll fill this in.
               </p>
             ) : bodyComp ? (
               <div className="space-y-6">

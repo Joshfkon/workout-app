@@ -7,6 +7,7 @@ import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { completeOnboarding, updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
 import { BENCHMARK_LIFTS, type BenchmarkLift } from '@/services/coachingEngine';
+import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 
 function BenchmarkCard({ 
   benchmark, 
@@ -155,27 +156,7 @@ function BenchmarksContent() {
   
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Progress indicator */}
-      <div className="flex items-center justify-center gap-2 mb-8">
-        {[1, 2, 3, 4].map((step) => (
-          <div key={step} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
-              step <= 2 
-                ? 'bg-action text-on-action' 
-                : 'bg-fill text-ink-3'
-            }`}>
-              {step < 2 ? (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : step}
-            </div>
-            {step < 4 && (
-              <div className={`w-12 h-0.5 ${step < 2 ? 'bg-action' : 'bg-fill'}`} />
-            )}
-          </div>
-        ))}
-      </div>
+      <OnboardingSteps current="strength" />
       
       <div className="text-center space-y-2">
         <span
@@ -185,7 +166,16 @@ function BenchmarksContent() {
           Optional
         </span>
         <h1 className="text-large-title font-bold text-ink">Test your strength?</h1>
-        <p className="text-body text-ink-2">You don&apos;t need this to start. Most people skip it.</p>
+        {/* The purpose in one plain sentence, before anything else (UX panel
+            round 20: three of six skipped it without knowing what it was for). */}
+        <p className="text-headline font-normal text-ink" data-testid="benchmarks-one-line">
+          It starts your weight suggestions closer to your real strength. Skip it and they start
+          from estimates, then adjust after your first 1–2 workouts.
+        </p>
+        <p className="text-body text-ink-2">
+          You don&apos;t need it to start, and most people skip it. Progress tracking works the same
+          either way.
+        </p>
       </div>
 
       {/* What this is for and what skipping changes, as a short list at the
@@ -211,9 +201,10 @@ function BenchmarksContent() {
           <ul className="list-disc pl-5 space-y-1">
             <li>
               Weight suggestions start from estimates (your experience and body weight) and adjust
-              after your first sessions.
+              after your first 1–2 sessions.
             </li>
             <li>Strength percentiles stay off until you test.</li>
+            <li>Your workout history and progress charts work the same.</li>
             <li>Everything else works the same. Not lifting? Nothing here affects food tracking.</li>
           </ul>
         </div>
