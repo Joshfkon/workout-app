@@ -84,13 +84,12 @@ jest.mock('@/hooks/useUserPreferences', () => ({
 async function reachGoalStep(bodyFat = '15', age = '') {
   const user = userEvent.setup();
   render(<OnboardingBodyCompPage />);
-  await user.click(screen.getByTestId('units-continue'));
   await user.click(await screen.findByRole('radio', { name: 'Male' }));
   await user.type(screen.getByLabelText('Height (cm)'), '180');
   await user.type(screen.getByLabelText('Weight (kg)'), '80');
   if (age) await user.type(screen.getByLabelText('Age (optional)'), age);
-  await user.type(screen.getByLabelText('Body fat %'), bodyFat);
-  await user.click(screen.getByRole('button', { name: /Continue/ }));
+  await user.type(screen.getByLabelText('Body fat % (optional)'), bodyFat);
+  await user.click(screen.getByTestId('body-continue'));
   await screen.findByText("What's your goal right now?");
   return user;
 }
@@ -279,13 +278,21 @@ describe('Onboarding goal step: plain goal labels', () => {
   });
 
   it('leads with plain labels (gym term in brackets), one plain line each, Maintain preselected', async () => {
-    await reachGoalStep();
+    // 18% body fat: the default 0.5% cut is within the leanness cap.
+    await reachGoalStep('18');
     expect(screen.getByTestId('goal-option-cut')).toHaveTextContent(
       'Lose fat (cut)Eat a little less than you burn to lose about 0.5% of your body weight a week, keeping your muscle.'
     );
     expect(screen.getByTestId('goal-option-bulk')).toHaveTextContent(/^Build muscle \(bulk\)/);
     expect(screen.getByTestId('goal-option-maintenance')).toHaveTextContent(/^Maintainpreselected.+getting back into it\.$/);
     expect(screen.getByTestId('goal-option-maintenance')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('a lean lifter\'s "Lose fat" line gives the slower pace the targets really use (Dre, UX round 23)', async () => {
+    await reachGoalStep('12', '31');
+    expect(screen.getByTestId('goal-option-cut')).toHaveTextContent(
+      /lose about 0\.3% of your body weight a week\. That.s slower than the usual 0\.5% because you.re already lean/
+    );
   });
 
   it('says out loud that Maintain is preselected and how to change it, until a goal is tapped (UX round 21)', async () => {
@@ -312,7 +319,7 @@ describe('Onboarding goal step: plain goal labels', () => {
 
   it('shows the step in words, moving forward on each screen', async () => {
     await reachGoalStep();
-    expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 3 of 5: Goal');
+    expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 2 of 4: Goal');
     expect(screen.getByTestId('onboarding-later-note')).toHaveTextContent(/filled in later/);
   });
 });
@@ -482,18 +489,17 @@ describe('Onboarding body fat', () => {
   it('says what it is, why it is asked and how to estimate it, and lets the user skip', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
-    await user.click(screen.getByTestId('units-continue'));
     const why = await screen.findByTestId('body-fat-why');
     // Why, in terms of what it sets (UX round 22): protein and the burn estimate.
     expect(why).toHaveTextContent(/Why we ask: it splits your weight into lean mass and fat/);
     expect(why).toHaveTextContent(/protein target is set from your lean mass, and so is your resting calorie burn/);
     expect(why).toHaveTextContent(/look-alike guess below is fine/);
-    expect(why).toHaveTextContent(/skip it/);
+    expect(why).toHaveTextContent(/Don.t know it\? Leave it empty and we use a typical value for now/);
 
     await user.click(screen.getByRole('radio', { name: 'Female' }));
     expect(screen.getByTestId('body-fat-not-sure')).toHaveTextContent('I don’t know — skip');
     await user.click(screen.getByTestId('body-fat-not-sure'));
-    const field = screen.getByLabelText('Body fat %');
+    const field = screen.getByLabelText('Body fat % (optional)');
     expect(field).toHaveValue(32);
     // The filled value is marked as an estimate, not left looking typed.
     const note = screen.getByTestId('body-fat-estimate-note');
@@ -511,30 +517,28 @@ describe('Onboarding body fat', () => {
   it('follows a sex change, and drops the estimate mark once the user types a value', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
-    await user.click(screen.getByTestId('units-continue'));
     await user.click(await screen.findByRole('radio', { name: 'Female' }));
     await user.click(screen.getByTestId('body-fat-not-sure'));
 
     await user.click(screen.getByRole('radio', { name: 'Male' }));
-    expect(screen.getByLabelText('Body fat %')).toHaveValue(22);
+    expect(screen.getByLabelText('Body fat % (optional)')).toHaveValue(22);
     expect(screen.getByTestId('body-fat-estimate-note')).toHaveTextContent(/22%, about average for men, for now\./);
 
-    await user.clear(screen.getByLabelText('Body fat %'));
-    await user.type(screen.getByLabelText('Body fat %'), '18');
+    await user.clear(screen.getByLabelText('Body fat % (optional)'));
+    await user.type(screen.getByLabelText('Body fat % (optional)'), '18');
     expect(screen.queryByTestId('body-fat-estimate-note')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Body fat %')).not.toHaveAttribute('data-estimated');
-    expect(screen.getByLabelText('Body fat %').className).not.toMatch(/italic/);
+    expect(screen.getByLabelText('Body fat % (optional)')).not.toHaveAttribute('data-estimated');
+    expect(screen.getByLabelText('Body fat % (optional)').className).not.toMatch(/italic/);
   });
 
   it('drops the estimate mark when a level is picked from the visual guide', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
-    await user.click(screen.getByTestId('units-continue'));
     await user.click(await screen.findByRole('radio', { name: 'Female' }));
     await user.click(screen.getByTestId('body-fat-not-sure'));
     await user.click(screen.getByRole('button', { name: /^25%/ }));
 
-    expect(screen.getByLabelText('Body fat %')).toHaveValue(25);
+    expect(screen.getByLabelText('Body fat % (optional)')).toHaveValue(25);
     expect(screen.queryByTestId('body-fat-estimate-note')).not.toBeInTheDocument();
   });
 });
@@ -549,7 +553,6 @@ describe('Onboarding body fat: the guide is in plain sight (UX round 21)', () =>
   it('shows the look-alike levels under the field as soon as sex is picked, photos one tap away', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
-    await user.click(screen.getByTestId('units-continue'));
     expect(screen.queryByTestId('body-fat-guide')).not.toBeInTheDocument();
     await user.click(await screen.findByRole('radio', { name: 'Male' }));
     const guide = screen.getByTestId('body-fat-guide');
@@ -560,7 +563,7 @@ describe('Onboarding body fat: the guide is in plain sight (UX round 21)', () =>
     expect(within(guide).getByRole('img')).toHaveAttribute('alt', 'Male body fat percentage visual guide');
     // Picking a look fills the field and folds the guide away.
     await user.click(within(guide).getByRole('button', { name: /^12%/ }));
-    expect(screen.getByLabelText('Body fat %')).toHaveValue(12);
+    expect(screen.getByLabelText('Body fat % (optional)')).toHaveValue(12);
     expect(screen.queryByTestId('body-fat-guide')).not.toBeInTheDocument();
   });
 });
@@ -578,7 +581,6 @@ describe('Onboarding body composition: age', () => {
   it('asks for age with the basics, before body fat, and says why', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
-    await user.click(screen.getByTestId('units-continue'));
     const age = await screen.findByLabelText('Age (optional)');
     const sex = screen.getByRole('radio', { name: 'Female' });
 
@@ -587,8 +589,11 @@ describe('Onboarding body composition: age', () => {
     expect(follows(sex, age)).toBe(true);
     expect(follows(age, screen.getByLabelText('Weight (kg)'))).toBe(true);
     expect(follows(age, screen.getByTestId('body-fat-why'))).toBe(true);
-    expect(follows(age, screen.getByLabelText('Body fat %'))).toBe(true);
-    expect(screen.getByText('Used to work out your daily calorie target.')).toBeInTheDocument();
+    expect(follows(age, screen.getByLabelText('Body fat % (optional)'))).toBe(true);
+    // Why it's optional and what skipping it costs (UX round 23).
+    expect(
+      screen.getByText(/Optional, but your daily calorie target needs it: your resting burn changes with age\. Skip it and you can set calories later in Eat\./)
+    ).toBeInTheDocument();
   });
 
   it('saves the age typed here through the one users update', async () => {
@@ -600,31 +605,54 @@ describe('Onboarding body composition: age', () => {
   });
 });
 
-describe('Onboarding units step', () => {
+describe('Onboarding units, on the first (body) screen (UX round 23: one screen fewer)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockStoredUnits = 'lb';
+    usersRow = { goal: 'maintenance', onboarding_step: null, onboarding_completed: false };
   });
 
-  it('treats the highlighted unit as selected, so Continue works without a tap', async () => {
+  /** Sex, height and weight in whatever units are showing; body fat left empty. */
+  async function fillBasics(user: ReturnType<typeof userEvent.setup>, metricHeight: boolean) {
+    await user.click(screen.getByRole('radio', { name: 'Male' }));
+    if (metricHeight) {
+      await user.type(screen.getByLabelText('Height (cm)'), '180');
+    } else {
+      await user.type(screen.getByLabelText('Height, feet'), '5');
+      await user.type(screen.getByLabelText('Height, inches'), '11');
+    }
+  }
+
+  it('opens on units, text size and the body questions together; Continue saves the units shown', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
+    expect(screen.getByTestId('onboarding-units')).toBeInTheDocument();
+    expect(screen.getByTestId('onboarding-text-size')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Male' })).toBeInTheDocument();
+    expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 1 of 4: Units and your body');
+    expect(screen.queryByTestId('units-continue')).not.toBeInTheDocument();
 
     expect(screen.getByRole('radio', { name: /Imperial/ })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('radio', { name: /Metric/ })).toHaveAttribute('aria-checked', 'false');
-    await user.click(screen.getByTestId('units-continue'));
+    await fillBasics(user, false);
+    await user.type(screen.getByLabelText('Weight (lbs)'), '180');
+    await user.click(screen.getByTestId('body-continue'));
 
     expect(mockUpdatePreference).toHaveBeenCalledWith('units', 'lb');
     expect(mockUpdatePreference).toHaveBeenCalledWith('lengthUnits', 'in');
-    expect(await screen.findByText('Body composition', { selector: 'h1' })).toBeInTheDocument();
+    expect(await screen.findByText("What's your goal right now?")).toBeInTheDocument();
   });
 
-  it('saves the unit the user switched to', async () => {
+  it('saves the unit the user switched to, and carries a typed weight across', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
+    await user.type(screen.getByLabelText('Weight (lbs)'), '176.4');
     await user.click(screen.getByRole('radio', { name: /Metric/ }));
     expect(screen.getByRole('radio', { name: /Metric/ })).toHaveAttribute('aria-checked', 'true');
-    await user.click(screen.getByTestId('units-continue'));
+    // 176.4 lb is 80 kg: the number follows the unit instead of being re-read.
+    expect(screen.getByLabelText('Weight (kg)')).toHaveValue(80);
+    await fillBasics(user, true);
+    await user.click(screen.getByTestId('body-continue'));
     expect(mockUpdatePreference).toHaveBeenCalledWith('units', 'kg');
     expect(mockUpdatePreference).toHaveBeenCalledWith('lengthUnits', 'cm');
   });
@@ -642,21 +670,44 @@ describe('Onboarding units step', () => {
     // A mixed choice is neither preset.
     expect(screen.getByRole('radio', { name: /Imperial/ })).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByRole('radio', { name: /Metric/ })).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByTestId('units-continue')).toHaveTextContent('Continue with kg & inches');
+    // Height is asked in feet + inches, weight in kg.
+    expect(screen.getByLabelText('Height, feet')).toBeInTheDocument();
+    expect(screen.getByLabelText('Weight (kg)')).toBeInTheDocument();
 
-    await user.click(screen.getByTestId('units-continue'));
+    await fillBasics(user, false);
+    await user.type(screen.getByLabelText('Weight (kg)'), '80');
+    await user.click(screen.getByTestId('body-continue'));
     expect(mockUpdatePreference).toHaveBeenCalledWith('units', 'kg');
     expect(mockUpdatePreference).toHaveBeenCalledWith('lengthUnits', 'in');
-    // Height is asked in feet + inches, weight in kg.
-    expect(await screen.findByLabelText('Height, feet')).toBeInTheDocument();
-    expect(screen.getByLabelText('Height, inches')).toBeInTheDocument();
-    expect(screen.getByLabelText('Weight (kg)')).toBeInTheDocument();
   });
 
+  it('switching the length unit carries a typed height across', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    await fillBasics(user, false);
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Length units' })).getByRole('radio', { name: 'cm' }));
+    expect(screen.getByLabelText('Height (cm)')).toHaveValue(180);
+  });
+
+  it('body fat is optional for real: left empty, Continue uses a typical value marked as an estimate', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    await user.click(screen.getByRole('radio', { name: /Metric/ }));
+    await fillBasics(user, true);
+    await user.type(screen.getByLabelText('Weight (kg)'), '80');
+    expect(screen.getByTestId('body-continue')).toBeEnabled();
+    expect(screen.getByTestId('body-fat-empty-note')).toHaveTextContent('Continue uses a typical 22% for now');
+    expect(screen.queryByTestId('body-comp-missing')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('body-continue'));
+    await screen.findByText("What's your goal right now?");
+    // Back on the body screen, the estimate is marked as one.
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByLabelText('Body fat % (optional)')).toHaveValue(22);
+    expect(screen.getByTestId('body-fat-estimate-note')).toBeInTheDocument();
+  });
   it('asks height as one field with a cm / ft & in toggle that carries the number across (UX round 22)', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
-    await user.click(screen.getByTestId('units-continue'));
     const toggle = await screen.findByRole('radiogroup', { name: 'Height unit' });
     expect(within(toggle).getByRole('radio', { name: 'ft & in' })).toHaveAttribute('aria-checked', 'true');
     // Typing the feet digit moves straight on to inches: one tap for the pair.
@@ -684,13 +735,12 @@ describe('Onboarding body composition: sex', () => {
   it('has no preselected sex and asks for it before Continue', async () => {
     const user = userEvent.setup();
     render(<OnboardingBodyCompPage />);
-    await user.click(screen.getByTestId('units-continue'));
 
     expect(await screen.findByRole('radio', { name: 'Male' })).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByRole('radio', { name: 'Female' })).toHaveAttribute('aria-checked', 'false');
     await user.type(screen.getByLabelText('Height (cm)'), '170');
     await user.type(screen.getByLabelText('Weight (kg)'), '65');
-    await user.type(screen.getByLabelText('Body fat %'), '25');
+    await user.type(screen.getByLabelText('Body fat % (optional)'), '25');
     expect(screen.getByTestId('body-comp-missing')).toHaveTextContent(/sex/);
 
     await user.click(screen.getByRole('radio', { name: 'Female' }));
@@ -1060,6 +1110,41 @@ describe('Onboarding: protein is explained and editable, and a pace can be typed
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(mockSaveMacroSettings).toHaveBeenCalledWith(expect.objectContaining({ auto_update_enabled: false }));
     expect(targetInserts[targetInserts.length - 1]).toMatchObject({ calories: 2300, protein: before.targets.protein });
+  });
+
+  it('shows the sum right under the numbers and names what Edit changes (Dre, UX round 23)', async () => {
+    const user = await reachGoalStep('12', '31');
+    await user.click(screen.getByTestId('goal-option-cut'));
+    const s = starterTargets({ phase: 'cut', weightKg: 80, heightCm: 180, age: 31, sex: 'male', bodyFatPercent: 12 })!;
+    const formula = screen.getByTestId('targets-formula');
+    expect(formula).toHaveTextContent(
+      `~${s.calories.maintenanceKcal.toLocaleString('en-US')} kcal you burn a day − ${Math.abs(Math.round(s.calories.adjustmentKcal)).toLocaleString('en-US')} for a moderate cut`
+    );
+    expect(screen.getByRole('button', { name: 'Edit calories and protein' })).toBeInTheDocument();
+    expect(screen.getByTestId('targets-edit-hint')).toHaveTextContent('Tap Edit to type your own calories or protein.');
+  });
+
+  it('cut paces above the leanness cap say what the targets use, so they agree with the sum (Dre, UX round 23)', async () => {
+    const user = await reachGoalStep('12', '31');
+    await user.click(screen.getByTestId('goal-option-cut'));
+    await user.click(screen.getByTestId('goal-continue'));
+    expect(screen.getByTestId('training-rate-cap-note')).toHaveTextContent(
+      'At 12% body fat the app holds loss to 0.3% of body weight a week, so you keep muscle. Faster paces use that rate.'
+    );
+    // 0.3% of 80 kg = 0.24 kg a week, on the moderate and aggressive options.
+    expect(screen.getByTestId('training-rate-held-moderate_cut')).toHaveTextContent('Held to −0.3% (about −0.24 kg a week) at your body fat');
+    expect(screen.getByTestId('training-rate-held-aggressive_cut')).toBeInTheDocument();
+    expect(screen.queryByTestId('training-rate-held-slow_cut')).not.toBeInTheDocument();
+    expect(screen.getByTestId('training-rate-targets')).toHaveTextContent(/to lose about 0\.24 kg a week/);
+  });
+
+  it('says why days and split are asked, and that both are optional (UX round 23)', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-continue'));
+    expect(screen.getByText(/Days a week you lift/)).toHaveTextContent('Days a week you lift (optional)');
+    expect(screen.getByTestId('training-days-why')).toHaveTextContent(/first plan is built for this many days/);
+    expect(screen.getByText(/Your split right now/)).toHaveTextContent('Your split right now (optional)');
+    expect(screen.getByTestId('training-split-why')).toHaveTextContent(/keeps the split you already run/);
   });
 
   it('shows the working on the training step, including the lean-lifter loss cap (Dre, UX round 22)', async () => {

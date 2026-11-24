@@ -41,6 +41,11 @@ const GOAL_OPTIONS: { value: TrainingGoal; label: string; term?: string; descrip
   },
 ];
 
+/** The "Lose fat" line when the leanness guardrail holds the pace down. Pure. */
+export function cutDescriptionHeld(heldPercent: number): string {
+  return `Eat a little less than you burn to lose about ${heldPercent}% of your body weight a week. That’s slower than the usual 0.5% because you’re already lean, so you keep your muscle.`;
+}
+
 // Food-only users (said "No, food tracking" at sign-up): the same goals,
 // labelled and described without muscle or training.
 const FOOD_GOAL_LABELS: Record<TrainingGoal, string> = {
@@ -90,6 +95,12 @@ export interface GoalStepProps {
   /** Body-fat-based suggestion (never from a "Not sure" guess). */
   recommended: 'bulk' | 'cut' | null;
   bodyFatPercent: number;
+  /**
+   * The default cut's 0.5% a week held lower at this body fat (the % the
+   * targets really use), or null when it isn't (lossCapFor). Lets the "Lose
+   * fat" line agree with the targets card under it (UX round 23).
+   */
+  cutHeldPercent?: number | null;
   /** null = question not answered (optional); [] = "None". */
   injuryAreas: StandingInjuryArea[] | null;
   onInjuryAreasChange: (areas: StandingInjuryArea[] | null) => void;
@@ -131,6 +142,7 @@ export function GoalStep({
   sex = null,
   recommended,
   bodyFatPercent,
+  cutHeldPercent = null,
   injuryAreas,
   onInjuryAreasChange,
   dailyTargets = null,
@@ -218,7 +230,11 @@ export function GoalStep({
                   )}
                 </span>
                 <span className="block text-body text-ink-2 mt-1">
-                  {foodFocus ? FOOD_GOAL_DESCRIPTIONS[option.value] : option.description}
+                  {foodFocus
+                    ? FOOD_GOAL_DESCRIPTIONS[option.value]
+                    : option.value === 'cut' && cutHeldPercent !== null
+                      ? cutDescriptionHeld(cutHeldPercent)
+                      : option.description}
                 </span>
               </span>
             </button>

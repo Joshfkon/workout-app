@@ -9,11 +9,12 @@ import { IconCheck } from '@tabler/icons-react';
  * moves forward (UX panel round 20: the dots sat on 2 for four screens).
  */
 
-export type OnboardingStepKey = 'units' | 'body' | 'goal' | 'training' | 'strength';
+export type OnboardingStepKey = 'body' | 'goal' | 'training' | 'strength';
 
 const STEP_LABELS: Record<OnboardingStepKey, string> = {
-  units: 'Units',
-  body: 'Your body',
+  // Units and text size share this screen (UX panel round 22: "Setup is too
+  // long, many screens"; units had a screen of its own).
+  body: 'Units and your body',
   goal: 'Goal',
   training: 'How you train',
   strength: 'Strength test (optional)',
@@ -21,7 +22,7 @@ const STEP_LABELS: Record<OnboardingStepKey, string> = {
 
 /** Food-only users finish at the goal step. Pure (exported for tests). */
 export function onboardingStepKeys(foodFocus: boolean): OnboardingStepKey[] {
-  return foodFocus ? ['units', 'body', 'goal'] : ['units', 'body', 'goal', 'training', 'strength'];
+  return foodFocus ? ['body', 'goal'] : ['body', 'goal', 'training', 'strength'];
 }
 
 export function OnboardingSteps({

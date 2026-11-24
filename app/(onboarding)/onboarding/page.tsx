@@ -1,6 +1,6 @@
 'use client';
 
-import { IconApple, IconBarbell, IconChartLine, IconCheck, IconRuler2, IconSparkles, IconWorld } from '@tabler/icons-react';
+import { IconCheck, IconRuler2, IconWorld } from '@tabler/icons-react';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -19,7 +19,9 @@ import { targetsGoalName } from './_components/DailyTargetsCard';
 import { HeightField, cmToFeetInches, feetInchesToCm } from './_components/HeightField';
 import {
   EMPTY_TRAINING_SETUP,
+  cappedLossPercent,
   customChangeForGoal,
+  lossCapFor,
   nearestRateForChange,
   rateForGoal,
   trainingPreferencesPatch,
@@ -39,6 +41,7 @@ import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
 import { saveMacroSettings } from '@/lib/actions/nutrition';
 import type { LengthUnit, WeightUnit } from '@/types/schema';
 import { lengthUnitForWeightUnit, resolveLengthUnit } from '@/lib/units/lengthUnits';
+import { AGE_WHY, convertWeightText } from '@/lib/onboarding/bodyStep';
 
 // Unit conversion helpers
 const kgToLbs = (kg: number) => kg * 2.20462;
@@ -46,17 +49,24 @@ const lbsToKg = (lbs: number) => lbs / 2.20462;
 
 // Body fat visual reference with clickable values
 const BODY_FAT_OPTIONS = {
+  // Plain descriptions of what you'd see in a mirror, and a softer end of
+  // the range (UX round 23: "the body fat options were hard to judge, so I
+  // had to guess", from a lifter two years off who isn't lean).
   male: [
-    { value: 9, label: '9%', description: 'Hard abs' },
-    { value: 12, label: '12%', description: 'Faint abs' },
-    { value: 15, label: '15%', description: 'Flat stomach' },
-    { value: 20, label: '20%', description: 'Soft everything' },
+    { value: 9, label: '9%', description: 'Abs clearly visible' },
+    { value: 12, label: '12%', description: 'Abs show in good light' },
+    { value: 15, label: '15%', description: 'Flat stomach, no abs' },
+    { value: 20, label: '20%', description: 'Some belly, soft waist' },
+    { value: 25, label: '25%', description: 'Belly sticks out a little' },
+    { value: 30, label: '30%', description: 'Round belly, wide waist' },
   ],
   female: [
     { value: 16, label: '16%', description: 'Very lean, visible abs' },
     { value: 20, label: '20%', description: 'Athletic, toned' },
-    { value: 25, label: '25%', description: 'Average, feminine shape' },
-    { value: 32, label: '32%', description: 'Higher body fat' },
+    { value: 25, label: '25%', description: 'Flat-ish stomach, some curves' },
+    { value: 32, label: '32%', description: 'Soft stomach and hips' },
+    { value: 38, label: '38%', description: 'Rounder stomach and hips' },
+    { value: 44, label: '44%', description: 'Round stomach, full hips' },
   ]
 };
 
@@ -69,9 +79,27 @@ export default function OnboardingBodyCompPage() {
   const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
   
-  // Step state: 'units' -> 'body-comp' -> 'goal' -> 'training' (lifters only,
-  // optional). Nothing is saved until the last of these is left.
-  const [step, setStep] = useState<'units' | 'body-comp' | 'goal' | 'training'>('units');
+  // Step state: 'body-comp' (units, text size and body) -> 'goal' ->
+  // 'training' (lifters only, optional). Units had a screen of their own
+  // until UX round 23 ("Setup is too long, many screens"); they now sit at
+  // the top of the body screen and are saved by its Continue.
+  const [step, setStep] = useState<'body-comp' | 'goal' | 'training'>('body-comp');
+  // Each step opens at its top: the first screen is long now, and Continue
+  // sits at its foot.
+  const firstStepRender = useRef(true);
+  useEffect(() => {
+    if (firstStepRender.current) {
+      firstStepRender.current = false;
+      return;
+    }
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      try {
+        window.scrollTo({ top: 0 });
+      } catch {
+        // jsdom: scrollTo isn't implemented.
+      }
+    }
+  }, [step]);
   // The highlighted unit IS the selection: Continue saves whatever is shown
   // as picked, no extra tap needed. It starts from the stored preference
   // (default Imperial) and follows it if that loads late, until the user
@@ -89,20 +117,26 @@ export default function OnboardingBodyCompPage() {
     if (preferences.units) setSelectedUnits(preferences.units);
     setSelectedLength(storedLength);
   }, [preferences.units, storedLength]);
-  const pickSystem = (u: WeightUnit) => {
-    unitsTouched.current = true;
-    setSelectedUnits(u);
-    setSelectedLength(lengthUnitForWeightUnit(u));
-  };
+  // Units now share the screen with the weight and height fields, so a unit
+  // switch carries a number already typed across (80 kg -> 176.4 lb) rather
+  // than silently re-reading it in the new unit.
   const pickWeight = (u: WeightUnit) => {
     unitsTouched.current = true;
+    if (u !== selectedUnits) {
+      setWeightDisplay((current) => convertWeightText(current, selectedUnits, u));
+    }
     setSelectedUnits(u);
   };
   const pickLength = (l: LengthUnit) => {
     unitsTouched.current = true;
+    // Height follows the length unit unless its own toggle was used.
+    if (heightUnitPicked === null) carryHeightTo(l);
     setSelectedLength(l);
   };
-  const [isSavingUnits, setIsSavingUnits] = useState(false);
+  const pickSystem = (u: WeightUnit) => {
+    pickWeight(u);
+    pickLength(lengthUnitForWeightUnit(u));
+  };
   const units = selectedUnits;
   const lengthUnit = selectedLength;
   // Height has its own cm / ft & in toggle on the body step; it starts on
@@ -185,29 +219,30 @@ export default function OnboardingBodyCompPage() {
     setInjuryAreas((current) => current ?? preferences.injuryAreas);
   }, [preferences.injuryAreas]);
   
-  // Save unit preference and proceed
-  const handleUnitsConfirm = async () => {
-    if (isSavingUnits) return;
-    setIsSavingUnits(true);
+  // The first screen's Continue: save the units shown as picked, mark the
+  // body step done, then go on to the goal.
+  const [isSavingBody, setIsSavingBody] = useState(false);
+  const handleBodyContinue = async () => {
+    if (isSavingBody) return;
+    setIsSavingBody(true);
     try {
       // One after the other: each is a read-merge-write of users.preferences.
       await updatePreference('units', selectedUnits);
       await updatePreference('lengthUnits', selectedLength);
 
-      // Track progress
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await updateOnboardingStep(supabase, user.id, 'units');
+        await updateOnboardingStep(supabase, user.id, 'body_comp');
       }
     } catch (err) {
       // Progress tracking is best-effort; the unit is already applied locally.
-      console.error('Error saving units step:', err);
+      console.error('Error saving the units and body step:', err);
     } finally {
-      setIsSavingUnits(false);
+      setIsSavingBody(false);
     }
 
-    setStep('body-comp');
+    setStep('goal');
   };
   
   // Convert display values to metric for calculations
@@ -219,6 +254,11 @@ export default function OnboardingBodyCompPage() {
   // Switching the height unit carries the number across.
   const switchHeightUnit = (next: LengthUnit) => {
     if (next === heightUnit) return;
+    carryHeightTo(next);
+    setHeightUnitPicked(next);
+  };
+  function carryHeightTo(next: LengthUnit) {
+    if (next === heightUnit) return;
     const cm = getHeightCm();
     if (next === 'in') {
       if (cm > 0) {
@@ -229,8 +269,7 @@ export default function OnboardingBodyCompPage() {
     } else if (cm > 0) {
       setHeightDisplay(String(Math.round(cm)));
     }
-    setHeightUnitPicked(next);
-  };
+  }
   
   const getWeightKg = () => {
     if (!weightDisplay) return 0;
@@ -589,7 +628,14 @@ export default function OnboardingBodyCompPage() {
     void handleContinue(skip ? null : trainingAnswers);
   };
   
-  const canContinue = bodyComp !== null && bodyComp.ffmi > 0;
+  // Body fat is optional for real (UX round 23: it was labelled optional
+  // but Continue stayed off until "I don't know — skip" was found): left
+  // empty, Continue applies the same skip, a typical value marked as an
+  // estimate. A typed number that makes no sense still blocks.
+  const bodyFatLeftEmpty = !(useDexa && existingDexa) && bodyFatPercent.trim() === '';
+  const basicsGiven =
+    !!sex && getHeightCm() > 0 && ((useDexa && !!existingDexa) || getWeightKg() > 0);
+  const canContinue = (bodyComp !== null && bodyComp.ffmi > 0) || (bodyFatLeftEmpty && basicsGiven);
   // Women's FFMI runs ~3 points lower; the scale bar shifts with it.
   const ffmiScaleMin = sex === 'female' ? 12 : 15;
 
@@ -600,161 +646,9 @@ export default function OnboardingBodyCompPage() {
     if (!(getHeightCm() > 0)) missingBodyComp.push('height');
     if (!(useDexa && existingDexa) && !(getWeightKg() > 0)) missingBodyComp.push('weight');
     const bfValue = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
-    if (!(bfValue > 0 && bfValue < 100)) missingBodyComp.push('body-fat estimate');
+    if (!bodyFatLeftEmpty && !(bfValue > 0 && bfValue < 100)) missingBodyComp.push('body-fat estimate');
   }
   
-  // Unit selection step
-  if (step === 'units') {
-    return (
-      <div className="max-w-md mx-auto space-y-8 animate-fade-in">
-        <OnboardingSteps current="units" foodFocus={foodFocus} />
-
-        <div className="text-center">
-          <h1 className="text-large-title font-bold text-ink mb-2">Welcome to HyperTrack!</h1>
-          <p className="text-ink-2 mb-6">
-            Your AI-powered hypertrophy training and nutrition companion.
-          </p>
-          
-          {/* Feature highlights */}
-          <div className="grid grid-cols-2 gap-3 mb-6 text-left">
-            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
-              <IconBarbell size={20} className="text-action" aria-hidden="true" />
-              <p className="text-body font-medium text-ink mt-1">Smart workouts</p>
-              <p className="text-caption text-ink-3">AI mesocycle planning</p>
-            </div>
-            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
-              <IconApple size={20} className="text-action" aria-hidden="true" />
-              <p className="text-body font-medium text-ink mt-1">Nutrition tracking</p>
-              <p className="text-caption text-ink-3">300K+ food database</p>
-            </div>
-            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
-              <IconSparkles size={20} className="text-action" aria-hidden="true" />
-              <p className="text-body font-medium text-ink mt-1">AI coaching</p>
-              <p className="text-caption text-ink-3">Personalized advice</p>
-            </div>
-            <div className="p-3 bg-fill/50 rounded-lg border border-sep">
-              <IconChartLine size={20} className="text-action" aria-hidden="true" />
-              <p className="text-body font-medium text-ink mt-1">Body analytics</p>
-              <p className="text-caption text-ink-3">DEXA & FFMI tracking</p>
-            </div>
-          </div>
-          
-          <p className="text-ink-2">
-            First, which units do you use? Pick a system, or set weight and length separately.
-          </p>
-        </div>
-        
-        <Card>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-2 gap-4" role="radiogroup" aria-label="Units">
-              {([
-                { value: 'lb' as const, title: 'Imperial', detail: 'lb & inches', Icon: IconRuler2 },
-                { value: 'kg' as const, title: 'Metric', detail: 'kg & cm', Icon: IconWorld },
-              ]).map(({ value, title, detail, Icon }) => {
-                // A system is "picked" only while both choices match it.
-                const checked = selectedUnits === value && selectedLength === lengthUnitForWeightUnit(value);
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={checked}
-                    aria-label={`${title} (${detail})`}
-                    data-testid={`units-option-${value}`}
-                    onClick={() => pickSystem(value)}
-                    className={`relative p-6 rounded-xl border-2 transition-all ${
-                      checked ? 'border-action bg-action/10' : 'border-sep hover:border-sep bg-fill/50'
-                    }`}
-                  >
-                    {checked && (
-                      <span
-                        aria-hidden="true"
-                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-action text-on-action flex items-center justify-center"
-                      >
-                        <IconCheck size={13} stroke={3} />
-                      </span>
-                    )}
-                    <div className="text-center">
-                      <Icon size={36} className="mx-auto mb-2 text-action" aria-hidden="true" />
-                      <div className="text-title font-bold text-ink">{title}</div>
-                      <div className="text-body text-ink-2 mt-1">{detail}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* The two choices on their own, always visible: e.g. kg on the
-                bar but inches for height and the tape. */}
-            <div className="mt-5 space-y-3" data-testid="units-separate">
-              <div>
-                <p className="text-subhead font-medium text-ink mb-1.5">
-                  Weight <span className="text-caption text-ink-3 font-normal">(lifts, body weight)</span>
-                </p>
-                <SegmentedControl<WeightUnit>
-                  label="Weight units"
-                  value={selectedUnits}
-                  onChange={pickWeight}
-                  options={[
-                    { value: 'kg', label: 'kg' },
-                    { value: 'lb', label: 'lb' },
-                  ]}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <p className="text-subhead font-medium text-ink mb-1.5">
-                  Length <span className="text-caption text-ink-3 font-normal">(height, body measurements)</span>
-                </p>
-                <SegmentedControl<LengthUnit>
-                  label="Length units"
-                  value={selectedLength}
-                  onChange={pickLength}
-                  options={[
-                    { value: 'cm', label: 'cm' },
-                    { value: 'in', label: 'inches' },
-                  ]}
-                  className="w-full"
-                />
-              </div>
-            </div>
-            
-            <p className="text-caption text-ink-3 text-center mt-4">
-              You can change these anytime in Settings
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Text size: asked up front so everything after it is readable.
-            Applies on tap (the preview and this whole page grow with it)
-            and saves itself; Default unless the user picks otherwise. */}
-        <Card data-testid="onboarding-text-size">
-          <CardContent className="p-6 space-y-3">
-            <div>
-              <p className="text-headline text-ink">Text size</p>
-              <p className="text-subhead text-ink-2 mt-0.5">Pick what&apos;s easiest to read.</p>
-            </div>
-            <TextSizeControl preview />
-          </CardContent>
-        </Card>
-        
-        <Button
-          onClick={handleUnitsConfirm}
-          className="w-full"
-          size="lg"
-          isLoading={isSavingUnits}
-          aria-busy={isSavingUnits}
-          data-testid="units-continue"
-        >
-          Continue with {selectedUnits} &amp; {selectedLength === 'in' ? 'inches' : 'cm'}
-          <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
-        </Button>
-      </div>
-    );
-  }
-
   if (step === 'training') {
     const trainingStarter = starterFor(trainingAnswers);
     return (
@@ -769,6 +663,7 @@ export default function OnboardingBodyCompPage() {
         rateApplies={createStarterTargets}
         weightKg={useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg()}
         units={units}
+        lossCap={goal === 'cut' ? lossCapFor(ownBodyFat()) : null}
         targets={trainingStarter ? trainingStarter.targets : null}
         targetsCard={
           trainingStarter && sex
@@ -813,6 +708,7 @@ export default function OnboardingBodyCompPage() {
         preselection={goalSource}
         recommended={recommended}
         bodyFatPercent={bf}
+        cutHeldPercent={cappedLossPercent(-0.5, lossCapFor(ownBodyFat()))}
         injuryAreas={injuryAreas}
         onInjuryAreasChange={setInjuryAreas}
         dailyTargets={
@@ -859,17 +755,122 @@ export default function OnboardingBodyCompPage() {
       </div>
 
       <div className="text-center mb-6">
-        <h1 className="text-large-title font-bold text-ink mb-2">Body composition</h1>
+        <h1 className="text-large-title font-bold text-ink mb-2">Welcome to HyperTrack</h1>
         <p className="text-ink-2">
-          Let&apos;s understand your body composition to personalize your training.
+          First, your units and a few numbers about you. They set your food targets and your
+          starting training.
         </p>
       </div>
 
-      {/* Context card explaining why we need this data */}
+      {/* Units and text size, once a screen of their own (UX round 23:
+          "Setup is too long, many screens"). Text size stays on the very
+          first screen so everything after it is readable. */}
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card data-testid="onboarding-units">
+          <CardContent className="p-4 space-y-4">
+            <div>
+              <p className="text-headline text-ink">Units</p>
+              <p className="text-subhead text-ink-2 mt-0.5">
+                Pick a system, or set weight and length separately. Change them any time in Settings.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Units">
+              {([
+                { value: 'lb' as const, title: 'Imperial', detail: 'lb & inches', Icon: IconRuler2 },
+                { value: 'kg' as const, title: 'Metric', detail: 'kg & cm', Icon: IconWorld },
+              ]).map(({ value, title, detail, Icon }) => {
+                // A system is "picked" only while both choices match it.
+                const checked = selectedUnits === value && selectedLength === lengthUnitForWeightUnit(value);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    aria-label={`${title} (${detail})`}
+                    data-testid={`units-option-${value}`}
+                    onClick={() => pickSystem(value)}
+                    className={`min-h-[44px] p-3 rounded-xl border-2 transition-all text-left ${
+                      checked ? 'border-action bg-action/10' : 'border-sep hover:border-sep bg-fill/50'
+                    }`}
+                  >
+                    {/* The check takes the icon's place, so nothing overlaps
+                        the name at large text sizes. */}
+                    <span className="flex items-center gap-1.5">
+                      {checked ? (
+                        <span
+                          aria-hidden="true"
+                          className="w-5 h-5 flex-shrink-0 rounded-full bg-action text-on-action flex items-center justify-center"
+                        >
+                          <IconCheck size={13} stroke={3} />
+                        </span>
+                      ) : (
+                        <Icon size={20} className="flex-shrink-0 text-action" aria-hidden="true" />
+                      )}
+                      <span className="text-headline font-bold text-ink">{title}</span>
+                    </span>
+                    <span className="block text-subhead text-ink-2">{detail}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* The two choices on their own, always visible: e.g. kg on the
+                bar but inches for height and the tape. */}
+            <div className="space-y-3" data-testid="units-separate">
+              <div>
+                <p className="text-subhead font-medium text-ink mb-1.5">
+                  Weight <span className="text-caption text-ink-3 font-normal">(lifts, body weight)</span>
+                </p>
+                <SegmentedControl<WeightUnit>
+                  label="Weight units"
+                  value={selectedUnits}
+                  onChange={pickWeight}
+                  options={[
+                    { value: 'kg', label: 'kg' },
+                    { value: 'lb', label: 'lb' },
+                  ]}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <p className="text-subhead font-medium text-ink mb-1.5">
+                  Length <span className="text-caption text-ink-3 font-normal">(height, body measurements)</span>
+                </p>
+                <SegmentedControl<LengthUnit>
+                  label="Length units"
+                  value={selectedLength}
+                  onChange={pickLength}
+                  options={[
+                    { value: 'cm', label: 'cm' },
+                    { value: 'in', label: 'inches' },
+                  ]}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Applies on tap (the preview and this whole page grow with it)
+            and saves itself; Default unless the user picks otherwise. */}
+        <Card data-testid="onboarding-text-size">
+          <CardContent className="p-4 space-y-3">
+            <div>
+              <p className="text-headline text-ink">Text size</p>
+              <p className="text-subhead text-ink-2 mt-0.5">Pick what&apos;s easiest to read.</p>
+            </div>
+            <TextSizeControl preview />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Context card explaining why we need this data. Collapsed: each
+          field below now says why it is asked, right where it is asked. */}
       <ContextCard
         cardKey="bodyComposition"
         className="mb-6"
-        defaultCollapsed={false}
+        defaultCollapsed={true}
         collapsible={true}
       />
       
@@ -933,7 +934,10 @@ export default function OnboardingBodyCompPage() {
               </p>
             </div>
 
-            {/* Asked up front with the basics: it drives the calorie target. */}
+            {/* Asked up front with the basics: it drives the calorie target.
+                The hint says why it's optional and what skipping it costs
+                (UX round 23: "why age was optional, or that it affected
+                targets"). */}
             <Input
               label="Age (optional)"
               type="number"
@@ -943,18 +947,18 @@ export default function OnboardingBodyCompPage() {
               placeholder="30"
               min={13}
               max={100}
-              hint="Used to work out your daily calorie target."
+              hint={AGE_WHY}
             />
             
             <HeightField
               unit={heightUnit}
               onUnitChange={switchHeightUnit}
               cm={heightDisplay}
-              onCmChange={setHeightDisplay}
+              onCmChange={(v) => { unitsTouched.current = true; setHeightDisplay(v); }}
               feet={heightFeet}
-              onFeetChange={setHeightFeet}
+              onFeetChange={(v) => { unitsTouched.current = true; setHeightFeet(v); }}
               inches={heightInches}
-              onInchesChange={setHeightInches}
+              onInchesChange={(v) => { unitsTouched.current = true; setHeightInches(v); }}
             />
 
             <Input
@@ -965,6 +969,9 @@ export default function OnboardingBodyCompPage() {
                 : weightDisplay}
               onChange={(e) => {
                 setUseDexa(false);
+                // A number typed in the unit shown commits to that unit: a
+                // stored preference arriving late must not relabel it.
+                unitsTouched.current = true;
                 setWeightDisplay(e.target.value);
               }}
               placeholder={units === 'lb' ? '175' : '80'}
@@ -979,10 +986,11 @@ export default function OnboardingBodyCompPage() {
               <p className="text-subhead text-ink-2 mb-2" data-testid="body-fat-why">
                 <span className="font-medium text-ink">Why we ask:</span> it splits your weight into lean
                 mass and fat. Your protein target is set from your lean mass, and so is your resting
-                calorie burn. A scale or scan reading is best; a look-alike guess below is fine. Optional: you can skip it.
+                calorie burn. A scale or scan reading is best; a look-alike guess below is fine.
+                Don&apos;t know it? Leave it empty and we use a typical value for now.
               </p>
               <Input
-                label="Body fat %"
+                label="Body fat % (optional)"
                 type="number"
                 value={useDexa && existingDexa ? String(existingDexa.body_fat_percent) : bodyFatPercent}
                 onChange={(e) => {
@@ -1042,7 +1050,7 @@ export default function OnboardingBodyCompPage() {
                       />
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {BODY_FAT_OPTIONS[sex].map((option) => (
                       <button
                         key={option.value}
@@ -1208,18 +1216,24 @@ export default function OnboardingBodyCompPage() {
               ' Not sure of your body fat? Pick the closest look in the visual guide, or tap “I don’t know — skip”.'}
           </p>
         )}
+        {canContinue && bodyFatLeftEmpty && sex && (
+          <p className="text-caption text-ink-2 text-right" data-testid="body-fat-empty-note">
+            No body fat? Continue uses a typical {typicalBodyFat(sex)}% for now.
+          </p>
+        )}
         <Button
           size="lg"
-          onClick={async () => {
-            // Track progress - user completed body composition
-            const supabase = createUntypedClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              await updateOnboardingStep(supabase, user.id, 'body_comp');
+          onClick={() => {
+            if (bodyFatLeftEmpty && sex) {
+              setBodyFatPercent(typicalBodyFat(sex));
+              setBfEstimated(true);
             }
-            setStep('goal');
+            void handleBodyContinue();
           }}
-          disabled={!canContinue}
+          disabled={!canContinue || isSavingBody}
+          isLoading={isSavingBody}
+          aria-busy={isSavingBody}
+          data-testid="body-continue"
         >
           Continue
           <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

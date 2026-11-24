@@ -11,7 +11,7 @@
  *
  * Every answer is optional; an unanswered one writes nothing.
  */
-import { GOAL_PERCENT_BW, type Goal as NutritionGoal } from '@/lib/nutrition/macroCalculator';
+import { GOAL_PERCENT_BW, getLossRateCap, type Goal as NutritionGoal } from '@/lib/nutrition/macroCalculator';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
 import type { UserPreferences, WeightUnit } from '@/types/schema';
 
@@ -86,6 +86,25 @@ export function rateOptionsForGoal(goal: TrainingGoal | null): RateOption[] {
 export function formatRatePercent(percentBW: number): string {
   const sign = percentBW > 0 ? '+' : percentBW < 0 ? '−' : '';
   return `${sign}${Math.abs(percentBW)}% of body weight a week`;
+}
+
+/**
+ * The most a cut may lose a week at this body fat (the calculator's own
+ * guardrail, getLossRateCap), as a positive % of body weight. `bodyFatPercent`
+ * null = not given (the calculator's default cap applies). Pure.
+ */
+export function lossCapFor(bodyFatPercent: number | null): { percentBW: number; bodyFatPercent: number | null } {
+  return { percentBW: getLossRateCap(bodyFatPercent ?? undefined), bodyFatPercent };
+}
+
+/**
+ * A cut pace as the targets will actually use it: the picked % when it is
+ * within the cap, else the cap. Null for a pace the cap doesn't touch (any
+ * gain, or a loss at or under the cap). Pure.
+ */
+export function cappedLossPercent(percentBW: number, cap: { percentBW: number } | null): number | null {
+  if (!cap || percentBW >= 0) return null;
+  return Math.abs(percentBW) > cap.percentBW + 1e-9 ? cap.percentBW : null;
 }
 
 /** "about +0.2 kg a week" at this body weight (null without one). */

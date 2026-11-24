@@ -71,10 +71,11 @@ describe('RegisterPage — experience question', () => {
 
   it('offers a "just started" answer and finer, non-overlapping ranges', async () => {
     await fillIn();
-    const labels = screen.getAllByRole('radio').map((r) => r.textContent);
+    const labels = screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'));
     expect(labels).toEqual([
       'No, food tracking',
       'Just started (under 6 months)',
+      'Returning after a break',
       '6–12 months',
       '1–2 years',
       '2–3 years',
@@ -91,6 +92,19 @@ describe('RegisterPage — experience question', () => {
     expect(sentExperience()).toBe('intermediate');
     // The exact answer is kept so onboarding can show it back, not re-ask.
     expect(sentData()).toMatchObject({ lifting_answer: '2_to_3_years' });
+  });
+
+  it('describes each option; "Returning after a break" signs up as intermediate and says so (UX round 23)', async () => {
+    const user = await fillIn();
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).toHaveAccessibleDescription(/\w{3,}/);
+    }
+    const returning = screen.getByRole('radio', { name: 'Returning after a break' });
+    expect(returning).toHaveAccessibleDescription(/A year or more off\. Set up like 1–2 years/);
+    await user.click(returning);
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
+    expect(sentData()).toMatchObject({ experience: 'intermediate', lifting_answer: 'returning' });
   });
 
   it('says what the answer changes', async () => {
