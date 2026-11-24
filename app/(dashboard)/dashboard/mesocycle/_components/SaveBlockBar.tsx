@@ -14,6 +14,7 @@ export function SaveBlockBar({
   saved,
   error,
   blockName,
+  isBuilding = false,
 }: {
   onBack: () => void;
   onSave: () => void;
@@ -21,6 +22,8 @@ export function SaveBlockBar({
   saved: boolean;
   error: string | null;
   blockName: string;
+  /** The plan is still being generated: saving now would save the old one. */
+  isBuilding?: boolean;
 }) {
   return (
     <div
@@ -42,8 +45,15 @@ export function SaveBlockBar({
             <Button variant="ghost" onClick={onBack} disabled={isSaving}>
               Back
             </Button>
-            <Button className="flex-1" size="lg" onClick={onSave} isLoading={isSaving} data-testid="builder-save">
-              Save training block
+            <Button
+              className="flex-1"
+              size="lg"
+              onClick={onSave}
+              isLoading={isSaving}
+              disabled={isBuilding}
+              data-testid="builder-save"
+            >
+              {isBuilding ? 'Building your plan…' : 'Save training block'}
             </Button>
           </div>
           <p className="mt-1.5 text-caption text-ink-3">
