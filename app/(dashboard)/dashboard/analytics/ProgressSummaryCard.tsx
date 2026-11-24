@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { IconChevronDown } from '@tabler/icons-react';
+import { IconChevronDown, IconInfoCircle } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 import type { LiftBreakdownRow, ProgressSummary } from './progressSummary';
 
@@ -13,10 +13,10 @@ const TONE_CLASS: Record<LiftBreakdownRow['tone'], string> = {
 };
 
 /**
- * "Are you progressing?" at the top of Progress: the weight line with how
- * its trend is worked out, and the strength line with a "See each lift" list
- * (name, first → latest best set, direction) so "4 of 6 lifts up" names
- * which four.
+ * "Are you progressing?" at the top of Progress: the weight line, and the
+ * strength line with a "See each lift" list (name, first → latest best set,
+ * direction) so "4 of 6 lifts up" names which four. How the trends are
+ * worked out sits behind one info toggle at the bottom.
  */
 export function ProgressSummaryCard({ summary }: { summary: ProgressSummary }) {
   const [open, setOpen] = useState(false);
@@ -25,20 +25,18 @@ export function ProgressSummaryCard({ summary }: { summary: ProgressSummary }) {
     <div className="rounded-card bg-card p-4 shadow-card" data-testid="progress-summary">
       <p className="text-caption text-ink-2">Are you progressing?</p>
       {summary.weight && (
-        <>
-          <p className="mt-0.5 text-body text-ink" data-testid="progress-summary-weight">
-            {summary.weight}
-          </p>
-          {summary.weightMethod && (
-            <p className="mt-0.5 text-caption text-ink-2" data-testid="progress-summary-weight-method">
-              {summary.weightMethod}
-            </p>
-          )}
-        </>
+        <p className="mt-0.5 text-body text-ink" data-testid="progress-summary-weight">
+          {summary.weight}
+        </p>
       )}
       {summary.strength && (
         <p className="mt-2 text-body text-ink" data-testid="progress-summary-strength">
           {summary.strength}
+        </p>
+      )}
+      {summary.strengthContext && (
+        <p className="mt-0.5 text-subhead text-ink-2" data-testid="progress-summary-strength-context">
+          {summary.strengthContext}
         </p>
       )}
       {summary.strength && summary.strengthNames && (
@@ -88,6 +86,29 @@ export function ProgressSummaryCard({ summary }: { summary: ProgressSummary }) {
           )}
         </>
       )}
+      <TrendHelp weightMethod={summary.weightMethod} liftMethod={summary.liftMethod} />
     </div>
+  );
+}
+
+/**
+ * How the trends are worked out, ONCE for the whole page and closed by
+ * default (UX panel r19: the method text repeated under every chart was
+ * wordy clutter, and nobody could tell what made a lift "flat").
+ */
+function TrendHelp({ weightMethod, liftMethod }: { weightMethod: string | null; liftMethod: string | null }) {
+  if (!weightMethod && !liftMethod) return null;
+  return (
+    <details className="group" data-testid="progress-trend-help">
+      <summary className="-ml-1 inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1 px-1 text-subhead font-semibold text-action [&::-webkit-details-marker]:hidden">
+        <IconInfoCircle size={16} aria-hidden="true" />
+        How trends are worked out
+        <IconChevronDown size={16} aria-hidden="true" className="transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="space-y-1.5 pb-1 text-subhead text-ink-2">
+        {weightMethod && <p data-testid="progress-summary-weight-method">{weightMethod}</p>}
+        {liftMethod && <p data-testid="progress-summary-lift-method">{liftMethod}</p>}
+      </div>
+    </details>
   );
 }

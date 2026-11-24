@@ -63,20 +63,24 @@ import {
   type ExerciseOverride,
 } from '@/services/mesocycleHelpers';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
-import { buildTrainingSchedule, type ScheduleMode } from '@/lib/training/trainingSchedule';
-import {
-  deriveWorkoutTitle,
-  RECENT_SESSION_SELECT,
-  toRepeatableExercises,
-  type RecentSessionRow,
-  type RepeatableExercise,
-} from '@/lib/training/repeatWorkout';
+import { buildTrainingSchedule } from '@/lib/training/trainingSchedule';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
-import { useMuscleProgression } from '@/hooks/useMuscleProgression';
-import { fetchActiveMesocycle, type ActiveMesocycleRow } from '@/lib/training/fetchActiveMesocycle';
+import { useLiftTrends } from '@/hooks/useLiftTrends';
+import { useTrainPageData, TRAIN_PAGE_QUERY_KEY, trainWeekStartDay } from '@/hooks/useTrainPageData';
+import { muscleProgressionInputFromRollup } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import { getMuscleGroupProgression } from '@/services/progressionInsights';
+import { now as clockNow } from '@/lib/clock';
+import { parseLocalDay } from '@/lib/date/localDay';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  mesoProgress,
+  toRecentWorkouts,
+  weekStats,
+  type TrainPageData,
+} from './trainPageData';
 import {
   SectionLabel,
   UnfinishedWorkoutBanner,
@@ -92,14 +96,13 @@ import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
 import { RepeatWorkoutSheet } from '@/components/workout/RepeatWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
 import { clearPersistedRestTimer } from '@/hooks/useRestTimer';
-import { fetchTrainingStyle } from '@/lib/training/trainingStyle';
 import {
   STANDARD_MUSCLE_DISPLAY_NAMES,
   resolveMuscleToStandard,
   toLegacyMuscleGroup,
   type StandardMuscleGroup,
 } from '@/types/schema';
-import type { FullProgramRecommendation, WorkoutDay } from '@/types/schema';
+import type { Experience, FullProgramRecommendation, WorkoutDay } from '@/types/schema';
 import { WorkoutStartProgress, prefetchWorkoutRoute, workoutStartLabel, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
 
 // The readiness card (good-targets strip + body map + per-muscle rows) shares
@@ -122,55 +125,10 @@ const TrainReadinessCard = dynamic(
   }
 );
 
-interface InProgressSummary {
-  id: string;
-  /** null for ad-hoc (blank/quick/AI) sessions. */
-  mesocycleId: string | null;
-  startedAt: string | null;
-  setsDone: number;
-  /** exercise_block ids, needed by the discard path. */
-  blockIds: string[];
-}
-
-interface RecentWorkout {
-  id: string;
-  completedAt: Date;
-  title: string;
-  setCount: number;
-  /** null when started_at is missing (can't compute a duration). */
-  durationMin: number | null;
-  /** Exercise list for the "Repeat previous workout" clone path. */
-  exercises: RepeatableExercise[];
-}
-
-interface InProgressBlockRow {
-  id: string;
-  set_logs: { id: string; is_warmup: boolean | null }[] | null;
-}
-
 /** Per-device cache of the last fetched training style (see TrainPage). */
 const TRAIN_STYLE_KEY = 'hypertrack:train-style';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/**
- * Active workout minutes: the duration_seconds snapshot (pauses excluded)
- * when present, else the completed_at − started_at wall-clock span for legacy
- * sessions without one. Null when neither yields a positive duration.
- */
-function activeDurationMin(row: {
-  started_at: string | null;
-  completed_at: string;
-  duration_seconds: number | null;
-}): number | null {
-  if (row.duration_seconds != null && row.duration_seconds > 0) {
-    return row.duration_seconds / 60;
-  }
-  if (!row.started_at) return null;
-  const min =
-    (new Date(row.completed_at).getTime() - new Date(row.started_at).getTime()) / 60000;
-  return min > 0 ? min : null;
-}
 
 /** "4h 35m" / "45m" from a minute total. */
 function formatHoursMinutes(totalMinutes: number): string {
@@ -201,25 +159,56 @@ export default function TrainPage() {
   // Only the rest-day note reads this now — the Recovery card itself renders
   // the shared readiness body (TrainReadinessCard) off the same history cache.
   const { recoveryStatus, isLoading: recoveryLoading } = useMuscleRecovery();
-  const { groups: progressionGroups, isLoading: progressionLoading } = useMuscleProgression();
+  // Progression pace per muscle group, rolled up from the SAME persisted
+  // lift-trend query Progress › Strength uses (hooks/useLiftTrends) — it used
+  // to be a second getUser() + 12-week session fetch on every Train visit.
+  const liftTrendsQuery = useLiftTrends();
+  const progressionLoading = liftTrendsQuery.isPending;
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [inProgress, setInProgress] = useState<InProgressSummary | null>(null);
-  const [activeMeso, setActiveMeso] = useState<ActiveMesocycleRow | null>(null);
+  // One persisted, cached-first query (hooks/useTrainPageData): a revisit
+  // paints at once and revalidates in the background.
+  const queryClient = useQueryClient();
+  const trainQuery = useTrainPageData();
+  const data = trainQuery.data ?? null;
+  const today = getLocalDateString();
+  // Nothing to show yet (first-ever visit): sections render skeletons.
+  const isLoading = trainQuery.isPending;
+  // Day-scoped: an unfinished workout from a payload fetched on another day
+  // is not today's.
+  const inProgress = data && data.date === today ? data.inProgress : null;
+  const activeMeso = data?.activeMeso ?? null;
+  const userId = data?.userId ?? null;
+  const recentWorkouts = useMemo(() => toRecentWorkouts(data?.recentRows ?? []), [data?.recentRows]);
+  const { sessionsThisWeek, weekTime } = useMemo(
+    () => weekStats(data?.weekRows ?? [], parseLocalDay(trainWeekStartDay()).toISOString()),
+    [data?.weekRows]
+  );
+  const { mesoCompletedCount, completedTodayCount, lastCycleDone } = useMemo(
+    () => mesoProgress(data?.mesoCompleted ?? null, activeMeso?.days_per_week ?? null, today),
+    [data?.mesoCompleted, activeMeso?.days_per_week, today]
+  );
+
   // Freestyle training style hides the plan card (lib/training/trainingStyle).
-  const [isFreestyle, setIsFreestyle] = useState(false);
-  const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
-  const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
-  // Time trained over the same rolling 7 days; avgMin is null until at least
-  // one session in the window has a usable started_at → completed_at span.
-  const [weekTime, setWeekTime] = useState<{ totalMin: number; avgMin: number | null }>({
-    totalMin: 0,
-    avgMin: null,
-  });
-  const [mesoCompletedCount, setMesoCompletedCount] = useState<number | null>(null);
-  // Completed sessions dated today — picks a two-a-day date's next session.
-  const [completedTodayCount, setCompletedTodayCount] = useState(0);
-  const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
+  // Before any payload, the last-seen style (per-device convenience) keeps a
+  // freestyle user's start options from jumping up under the finger.
+  const [cachedFreestyle, setCachedFreestyle] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TRAIN_STYLE_KEY) === 'freestyle') setCachedFreestyle(true);
+    } catch {
+      // Blocked storage: no cached style, same as a first visit.
+    }
+  }, []);
+  const isFreestyle = data ? data.isFreestyle : cachedFreestyle;
+  useEffect(() => {
+    if (!data) return;
+    try {
+      window.localStorage.setItem(TRAIN_STYLE_KEY, data.isFreestyle ? 'freestyle' : 'plan');
+    } catch {
+      // Convenience only.
+    }
+  }, [data]);
+
   const [isStarting, setIsStarting] = useState(false);
   const [startStage, setStartStage] = useState<WorkoutStartStage>('preparing');
   const [showAiSheet, setShowAiSheet] = useState(false);
@@ -228,164 +217,6 @@ export default function TrainPage() {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // For the self-contained cardio quick-log card.
-  const [userId, setUserId] = useState<string | null>(null);
-
-  // Last-seen training style (per-device convenience): a freestyle user's
-  // page used to render the plan card's "Loading..." and then drop it, so
-  // everything below — the start options and "Plan a training block" —
-  // jumped up under the finger. The fetch below still decides.
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(TRAIN_STYLE_KEY) === 'freestyle') setIsFreestyle(true);
-    } catch {
-      // Blocked storage: no cached style, same as a first visit.
-    }
-  }, []);
-
-  useEffect(() => {
-    async function fetchAll() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        setUserId(user.id);
-
-        const today = getLocalDateString();
-        // Same rolling 7-day window as useWeeklyVolume, so the sets and
-        // sessions in the week-stats card count the same workouts.
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-        const weekStart = getLocalDateString(sevenDaysAgo);
-
-        const [inProgressRes, mesoRes, recentRes, weekSessionsRes, styleRes] = await Promise.all([
-          supabase
-            .from('workout_sessions')
-            .select('id, mesocycle_id, started_at, exercise_blocks(id, set_logs(id, is_warmup))')
-            .eq('user_id', user.id)
-            .eq('planned_date', today)
-            .eq('state', 'in_progress')
-            .limit(1),
-          // Use shared helper to fetch active mesocycle (same logic as Home)
-          fetchActiveMesocycle(supabase, user.id),
-          supabase
-            .from('workout_sessions')
-            .select(
-              RECENT_SESSION_SELECT
-            )
-            .eq('user_id', user.id)
-            .eq('state', 'completed')
-            .order('completed_at', { ascending: false })
-            .limit(5),
-          supabase
-            .from('workout_sessions')
-            .select('started_at, completed_at, duration_seconds')
-            .eq('user_id', user.id)
-            .eq('state', 'completed')
-            .gte('completed_at', weekStart),
-          // Training style (lib/training/trainingStyle): freestyle hides the
-          // plan card. Fetched with the rest so the card never flashes.
-          fetchTrainingStyle(supabase, user.id).catch(() => null),
-        ]);
-        const freestyle = styleRes?.style === 'freestyle';
-        setIsFreestyle(freestyle);
-        try {
-          window.localStorage.setItem(TRAIN_STYLE_KEY, freestyle ? 'freestyle' : 'plan');
-        } catch {
-          // Convenience only.
-        }
-
-        const ipRow = inProgressRes.data?.[0];
-        if (ipRow) {
-          const blocks = (ipRow.exercise_blocks ?? []) as InProgressBlockRow[];
-          const setsDone = blocks.reduce(
-            (sum, b) => sum + (b.set_logs ?? []).filter((l) => !l.is_warmup).length,
-            0
-          );
-          setInProgress({
-            id: ipRow.id,
-            mesocycleId: ipRow.mesocycle_id ?? null,
-            startedAt: ipRow.started_at ?? null,
-            setsDone,
-            blockIds: blocks.map((b) => b.id),
-          });
-        }
-
-        const meso = mesoRes;
-        // Freestyle treats the plan as absent, so every plan-dependent piece
-        // (week label, session count, preview) falls back to its no-plan form.
-        setActiveMeso(freestyle ? null : meso);
-
-        setRecentWorkouts(
-          ((recentRes.data ?? []) as RecentSessionRow[]).map((row) => {
-            const blocks = row.exercise_blocks ?? [];
-            const setCount = blocks.reduce(
-              (sum, b) => sum + (b.set_logs ?? []).filter((l) => !l.is_warmup).length,
-              0
-            );
-            const completedAt = new Date(row.completed_at);
-            const rawDurationMin = activeDurationMin(row);
-            const durationMin = rawDurationMin != null ? Math.round(rawDurationMin) : null;
-            const exercises = toRepeatableExercises(blocks);
-            return {
-              id: row.id,
-              completedAt,
-              title: deriveWorkoutTitle(blocks),
-              setCount,
-              durationMin: durationMin != null && durationMin > 0 ? durationMin : null,
-              exercises,
-            };
-          })
-        );
-
-        const weekRows = (weekSessionsRes.data ?? []) as {
-          started_at: string | null;
-          completed_at: string;
-          duration_seconds: number | null;
-        }[];
-        setSessionsThisWeek(weekRows.length);
-        // Sessions without a usable duration still count as sessions but are
-        // dropped from the time math rather than skewing the totals.
-        const durationsMin = weekRows
-          .map(activeDurationMin)
-          .filter((min): min is number => min !== null);
-        const totalMin = durationsMin.reduce((sum, min) => sum + min, 0);
-        setWeekTime({
-          totalMin,
-          avgMin: durationsMin.length > 0 ? totalMin / durationsMin.length : null,
-        });
-
-        // Completed-session count drives the next session index (the
-        // self-extending scheme the start path uses) and "last done" — one
-        // full cycle (days_per_week sessions) ago in completion order.
-        if (meso) {
-          const { data: completedRows } = await supabase
-            .from('workout_sessions')
-            .select('started_at, planned_date')
-            .eq('mesocycle_id', meso.id)
-            .eq('state', 'completed')
-            .order('started_at', { ascending: true });
-          const completed = (completedRows ?? []) as {
-            started_at: string | null;
-            planned_date: string | null;
-          }[];
-          setMesoCompletedCount(completed.length);
-          const todayStr = getLocalDateString();
-          setCompletedTodayCount(
-            completed.filter((row) => row.planned_date === todayStr).length
-          );
-          const lastCycleIdx = completed.length - meso.days_per_week;
-          const lastStartedAt = lastCycleIdx >= 0 ? completed[lastCycleIdx]?.started_at : null;
-          setLastCycleDone(lastStartedAt ? new Date(lastStartedAt) : null);
-        }
-      } catch (err) {
-        console.error('Failed to load train dashboard data:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Today's scheduled workout, or the next one with how far out it is.
   const { todayWorkout, nextWorkoutInfo } = useMemo((): {
@@ -493,7 +324,9 @@ export default function TrainPage() {
       ]
         .filter(Boolean)
         .join(' · ')
-    : 'No active plan';
+    : isLoading
+      ? 'Your plan'
+      : 'No active plan';
 
   // Training-day meta: "7 exercises · est. 65 min · last done Thu".
   const trainingDayMeta = useMemo(() => {
@@ -566,7 +399,11 @@ export default function TrainPage() {
           clearPersistedRestTimer();
           endSession();
         }
-        setInProgress(null);
+        // Keep the cache in step with the server (CLAUDE.md: mutations
+        // write through), so a revisit never resurrects the banner.
+        queryClient.setQueryData<TrainPageData | null>(TRAIN_PAGE_QUERY_KEY, (prev) =>
+          prev ? { ...prev, inProgress: null } : prev
+        );
       } else {
         console.error('Failed to discard workout:', errors);
         setError('Failed to discard workout. Please try again.');
@@ -586,6 +423,21 @@ export default function TrainPage() {
         minute: '2-digit',
       })
     : null;
+
+  const liftRollup = liftTrendsQuery.data?.rollup ?? null;
+  const progressionGroups = useMemo(() => {
+    if (!liftRollup) return [];
+    const input = muscleProgressionInputFromRollup(liftRollup);
+    return getMuscleGroupProgression({
+      snapshotsByExercise: input.snapshotsByExercise,
+      muscleByExercise: input.muscleByExercise,
+      discontinuitiesByExercise: input.discontinuitiesByExercise,
+      experience: (data?.experience as Experience | null) ?? 'intermediate',
+      referenceDate: clockNow(),
+      goal: liftRollup.goal,
+      programStartDate: liftRollup.programStartDate,
+    });
+  }, [liftRollup, data?.experience]);
 
   // Progression summary: "2 muscle groups tracked · 18 building history (wk 1)".
   const progressionSubtitle = useMemo(() => {
@@ -735,17 +587,27 @@ export default function TrainPage() {
             </div>
             {isStarting && <WorkoutStartProgress stage={startStage} compact className="mt-2" />}
           </>
+        ) : isLoading ? (
+          // First-ever visit, nothing cached: the card's own shape, not a
+          // "Loading..." title that then turns into something else.
+          <div
+            className="animate-pulse"
+            role="status"
+            aria-busy="true"
+            aria-label="Loading your plan"
+            data-testid="train-plan-loading"
+          >
+            <div className="mt-2 h-6 w-2/3 rounded bg-fill" />
+            <div className="mt-2 h-4 w-1/2 rounded bg-fill" />
+            <div className="mt-4 h-11 w-full rounded-button bg-fill" />
+          </div>
         ) : (
           <>
-            <h2 className="text-title text-ink mt-1.5">
-              {isLoading ? 'Loading...' : 'No training plan'}
-            </h2>
+            <h2 className="text-title text-ink mt-1.5">No training plan</h2>
             <p className="text-subhead text-ink-2 mt-1">
-              {isLoading
-                ? ' '
-                : 'Plan a mesocycle for smart progression and volume tracking'}
+              Plan a mesocycle for smart progression and volume tracking
             </p>
-            {!isLoading && (
+            {(
               <div className="flex gap-2 mt-4">
                 <Link
                   href="/dashboard/mesocycle/new"
@@ -906,8 +768,19 @@ export default function TrainPage() {
           </Link>
         </div>
         {isLoading ? (
-          <div className="p-4 rounded-card bg-card text-subhead text-ink-3 shadow-card">
-            Loading...
+          <div
+            className="animate-pulse overflow-hidden rounded-card bg-card shadow-card"
+            role="status"
+            aria-busy="true"
+            aria-label="Loading recent workouts"
+            data-testid="train-recent-loading"
+          >
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="space-y-2 px-4 py-3">
+                <div className="h-4 w-2/5 rounded bg-fill" />
+                <div className="h-3 w-3/5 rounded bg-fill" />
+              </div>
+            ))}
           </div>
         ) : recentWorkouts.length === 0 ? (
           <div className="p-4 rounded-card bg-card text-subhead text-ink-3 shadow-card">

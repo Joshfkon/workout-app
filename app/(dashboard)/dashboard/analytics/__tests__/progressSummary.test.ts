@@ -4,6 +4,9 @@ import type { LiftTrend } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 
 const NOW = new Date('2026-11-22T12:00:00');
 
+const PLAIN_WEIGHT_METHOD =
+  'Your weight trend uses all 8 weigh-ins from the last 30 days, not just the first and the last, so one heavy or light day barely moves it. Less than 0.05 lb a week either way counts as steady.';
+
 function trends(over: Partial<LiftTrendsSummary> = {}): LiftTrendsSummary {
   return {
     lifts: [],
@@ -87,13 +90,13 @@ describe('strengthSentence', () => {
     );
     // Plain words naming the lift and how many more times — not "not
     // enough data for a strength trend" (UX panel: vague, jargony).
-    expect(s).toBe('Log Barbell Back Squat once more to see its trend line.');
+    expect(s).toBe("Log Barbell Back Squat in 1 more workout to see if it's going up.");
     expect(s).not.toMatch(/enough (lifting )?data/);
   });
 
   it('falls back to the plain rule when no lift is named', () => {
     expect(strengthSentence(trends({ insufficientData: 1 }))).toBe(
-      'Log the same lift in 3 workouts to see its trend line.'
+      "Do the same lift in 3 separate workouts to see if it's going up."
     );
   });
 
@@ -110,7 +113,9 @@ describe('buildProgressSummary', () => {
       buildProgressSummary({ weighIns: weighIns(190, -0.1), liftTrends: trends({ rising: 1, flat: 2 }), units: 'lb', now: NOW })
     ).toEqual({
       weight: 'Weight is down 2.8 lb over the last 30 days.',
-      weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
+      weightMethod: PLAIN_WEIGHT_METHOD,
+      liftMethod: null,
+      strengthContext: null,
       strength: 'Over the last 12 weeks, 1 of your 3 tracked lifts is going up and none are slipping.',
       strengthNames: null,
       lifts: [],
@@ -120,7 +125,9 @@ describe('buildProgressSummary', () => {
   it('gives a food-only user the weight line alone', () => {
     expect(buildProgressSummary({ weighIns: weighIns(160, -0.05), liftTrends: trends(), units: 'lb', now: NOW })).toEqual({
       weight: 'Weight is down 1.4 lb over the last 30 days.',
-      weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
+      weightMethod: PLAIN_WEIGHT_METHOD,
+      liftMethod: null,
+      strengthContext: null,
       strength: null,
       strengthNames: null,
       lifts: [],
@@ -130,7 +137,58 @@ describe('buildProgressSummary', () => {
   it('is null with nothing to say', () => {
     expect(buildProgressSummary({ weighIns: [], liftTrends: trends(), units: 'lb', now: NOW })).toBeNull();
   });
+
+  it('explains the trends in plain words, with the real thresholds', () => {
+    const s = buildProgressSummary({
+      weighIns: weighIns(190, -0.1),
+      liftTrends: trends({ lifts: [trendedLift()], flat: 1 }),
+      units: 'kg',
+      now: NOW,
+    });
+    expect(s?.weightMethod).not.toMatch(/straight line|fitted|trend line/);
+    expect(s?.weightMethod).toMatch(/Less than 0\.05 kg a week either way counts as steady\.$/);
+    // liftTrends FLAT_BAND_PCT = 0.15 %/wk.
+    expect(s?.liftMethod).toBe(
+      "A lift is rising when its est. max goes up more than 0.15% a week, down when it drops more than 0.15% a week, and flat in between (on a 100 kg lift, that's less than 0.15 kg a week either way)."
+    );
+  });
+
+  it('says holding strength is a good result on a cut, and only on a cut', () => {
+    const input = { weighIns: weighIns(190, -0.1), liftTrends: trends({ lifts: [trendedLift()], flat: 1 }), units: 'lb' as const, now: NOW };
+    expect(buildProgressSummary({ ...input, goal: 'cut' })?.strengthContext).toBe(
+      "You're on a cut, so lifts holding steady is a good result: you're keeping your strength while you lose fat."
+    );
+    expect(buildProgressSummary({ ...input, goal: 'bulk' })?.strengthContext).toBeNull();
+    expect(buildProgressSummary({ ...input, goal: null })?.strengthContext).toBeNull();
+    // No verdict yet → nothing to put in context.
+    expect(
+      buildProgressSummary({ ...input, liftTrends: trends({ insufficientData: 1 }), goal: 'cut' })?.strengthContext
+    ).toBeNull();
+  });
 });
+
+function trendedLift(): LiftTrend {
+  return {
+    exerciseId: 'bench',
+    seriesKey: 'bench',
+    name: 'Bench Press',
+    locationId: null,
+    locationLabel: null,
+    direction: 'flat',
+    weeklyChangePct: 0.1,
+    currentE1RMKg: 100,
+    sessionCount: 4,
+    history: [
+      { date: '2026-09-01', e1rmKg: 99, topSetWeightKg: 80, topSetReps: 8 },
+      { date: '2026-11-20', e1rmKg: 100, topSetWeightKg: 80, topSetReps: 8 },
+    ],
+    lowConfidence: false,
+    calibrationReason: null,
+    excludedDates: [],
+    discontinuityDate: null,
+    plateau: null,
+  };
+}
 
 describe('early comparison before a trend exists', () => {
   const early = (over: Partial<import('@/app/(dashboard)/dashboard/_lib/liftTrends').EarlyLift>) => ({
