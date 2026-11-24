@@ -6785,6 +6785,12 @@ export default function WorkoutPage() {
   }, [phase, startPreview, heldPreview]);
   // A set already logged on the preview releases it: nothing left to tap there.
   const holdingPreview = phase === 'workout' && !!heldPreview && !previewReleased && !previewEarlySet;
+  // Persist that release: replaying the set consumes previewEarlySet, and
+  // the preview must not come back over the live workout then (Codex review
+  // on #873).
+  useEffect(() => {
+    if (previewEarlySet && !previewReleased) setPreviewReleased(true);
+  }, [previewEarlySet, previewReleased]);
 
   const earlySetReplayedForRef = useRef<string | null>(null);
   useEffect(() => {
@@ -6792,6 +6798,8 @@ export default function WorkoutPage() {
     clearPendingWorkoutPreview(sessionId);
     // While the preview is held, set 1 (if any) waits for the release.
     if (holdingPreview) return;
+    // Whatever happens next, the preview is done.
+    if (heldPreview && !previewReleased) setPreviewReleased(true);
     // Only the live workout can take the set. On any other phase (a load
     // error above all) it stays held, unconsumed: the error screen names it so
     // it isn't lost silently (Codex review on #871).
