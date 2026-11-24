@@ -65,6 +65,13 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 interface WeeklySetsCardProps {
   rows: VolumeRow[];
+  /**
+   * Heading. Home keeps "Sets this week"; Progress names it the way an
+   * advanced lifter searches for it ("Weekly sets per muscle", UX panel r21).
+   */
+  title?: string;
+  /** Anchor id, so another control can scroll to the card. */
+  id?: string;
 }
 
 /**
@@ -75,7 +82,7 @@ interface WeeklySetsCardProps {
  * switch. Same rows (buildVolumeRows) as the sheet, the workout strip and the
  * Sets per week page, so the numbers agree everywhere.
  */
-export function WeeklySetsCard({ rows }: WeeklySetsCardProps) {
+export function WeeklySetsCard({ rows, title = 'Sets this week', id }: WeeklySetsCardProps) {
   const [showKey, setShowKey] = useState(false);
   const { shown, total } = pickWeeklySetsRows(rows);
   // Client-only (the dismissal lives in persisted local state): rendering it
@@ -86,10 +93,15 @@ export function WeeklySetsCard({ rows }: WeeklySetsCardProps) {
   const showFirstLine = hydrated && !lineDismissed;
   if (shown.length === 0) return null;
   return (
-    <section className="rounded-card bg-card shadow-card px-4 py-3.5" data-testid="home-weekly-sets" aria-labelledby="home-weekly-sets-title">
+    <section
+      id={id}
+      className="scroll-mt-20 rounded-card bg-card shadow-card px-4 py-3.5"
+      data-testid="home-weekly-sets"
+      aria-labelledby="home-weekly-sets-title"
+    >
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="home-weekly-sets-title" className="text-headline text-ink">
-          Sets this week
+          {title}
         </h2>
         {/* The jargon gets its key one tap away, right where it is used. */}
         <button

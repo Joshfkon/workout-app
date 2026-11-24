@@ -114,3 +114,17 @@ describe('weightAxisDomain', () => {
     expect(hi - lo).toBeGreaterThanOrEqual(MIN_WEIGHT_AXIS_SPAN.kg);
   });
 });
+
+describe('WeightGraph on the shared Progress range', () => {
+  it('follows the page range and shows no range picker of its own', () => {
+    render(<WeightGraph weightHistory={history} preferredUnit="lb" windowDays={84} />);
+    expect(screen.queryByRole('group', { name: 'Weight chart range' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('weight-change')).toHaveTextContent(/in the last 12 weeks$/);
+  });
+
+  it('a short range drops older weigh-ins', () => {
+    render(<WeightGraph weightHistory={history} preferredUnit="lb" windowDays={7} />);
+    // Only the Nov 20 weigh-in is inside 7 days.
+    expect(screen.getByTestId('weight-change')).toHaveTextContent(/One weigh-in in this range/);
+  });
+});

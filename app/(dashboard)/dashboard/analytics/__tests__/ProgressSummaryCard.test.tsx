@@ -18,6 +18,7 @@ const summary: ProgressSummary = {
   strengthContext: "You're on a cut, so lifts holding steady is a good result: you're keeping your strength while you lose fat.",
   strengthNames: null,
   lifts: [],
+  volume: null,
 };
 
 describe('ProgressSummaryCard', () => {
@@ -33,6 +34,20 @@ describe('ProgressSummaryCard', () => {
     expect(help).toHaveAttribute('open');
     expect(screen.getByTestId('progress-summary-weight-method')).toHaveTextContent(/8 weigh-ins/);
     expect(screen.getByTestId('progress-summary-lift-method')).toHaveTextContent(/0\.15% a week/);
+  });
+
+  it('puts weekly sets per muscle on the card, with a way to the full card', async () => {
+    const user = userEvent.setup();
+    const onSeeVolume = jest.fn();
+    render(
+      <ProgressSummaryCard
+        summary={{ ...summary, volume: 'Sets per muscle, last 7 days: 6 muscles in range, 2 under the minimum (MEV).' }}
+        onSeeVolume={onSeeVolume}
+      />
+    );
+    expect(screen.getByTestId('progress-summary-volume')).toHaveTextContent(/MEV/);
+    await user.click(screen.getByTestId('progress-summary-volume-link'));
+    expect(onSeeVolume).toHaveBeenCalled();
   });
 
   it('has no toggle when there is nothing to explain', () => {

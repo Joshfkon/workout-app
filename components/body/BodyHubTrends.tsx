@@ -53,6 +53,8 @@ import type { Goal, Experience } from '@/types/schema';
 
 interface BodyHubTrendsProps {
   units: 'lb' | 'kg';
+  /** The page's shared range in days; the weight chart follows it. */
+  windowDays?: number;
   /** Height from the user profile; without it the FFMI toggle is hidden. */
   heightCm: number | null;
   /** Anchored trend from useBodyCompTrend — shared with the FFMI gauge. */
@@ -145,6 +147,7 @@ function singleWeighInDisplay(entry: WeightHistoryEntry, units: 'lb' | 'kg'): st
 
 export function BodyHubTrends({
   units,
+  windowDays,
   heightCm,
   trend,
   weightHistory,
@@ -262,7 +265,7 @@ export function BodyHubTrends({
             <CardTitle>Body weight</CardTitle>
           </CardHeader>
           <CardContent>
-            <WeightGraph weightHistory={weightHistory} preferredUnit={units} phases={phaseSpans} />
+            <WeightGraph weightHistory={weightHistory} preferredUnit={units} phases={phaseSpans} windowDays={windowDays} />
           </CardContent>
         </Card>
       ) : isLoading ? (

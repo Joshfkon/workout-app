@@ -18,7 +18,14 @@ const TONE_CLASS: Record<LiftBreakdownRow['tone'], string> = {
  * direction) so "4 of 6 lifts up" names which four. How the trends are
  * worked out sits behind one info toggle at the bottom.
  */
-export function ProgressSummaryCard({ summary }: { summary: ProgressSummary }) {
+export function ProgressSummaryCard({
+  summary,
+  onSeeVolume,
+}: {
+  summary: ProgressSummary;
+  /** Opens the weekly sets per muscle card (Strength tab). */
+  onSeeVolume?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const listId = 'progress-summary-lifts';
   return (
@@ -83,6 +90,23 @@ export function ProgressSummaryCard({ summary }: { summary: ProgressSummary }) {
                 ))}
               </ul>
             </div>
+          )}
+        </>
+      )}
+      {summary.volume && (
+        <>
+          <p className="mt-2 text-body text-ink" data-testid="progress-summary-volume">
+            {summary.volume}
+          </p>
+          {onSeeVolume && (
+            <button
+              type="button"
+              onClick={onSeeVolume}
+              className="-ml-1 inline-flex min-h-[44px] items-center gap-1 px-1 text-subhead font-semibold text-action"
+              data-testid="progress-summary-volume-link"
+            >
+              See sets per muscle
+            </button>
           )}
         </>
       )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useHydrated } from '@/hooks/useHydrated';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
@@ -206,6 +207,10 @@ export default function SettingsPage() {
   // Load settings on mount and when page becomes visible
   const queryClient = useQueryClient();
   const isRestoring = useIsRestoring();
+  // false while hydrating: the server never "restores", so until hydration
+  // ends the skeleton decision must match the server HTML (a reload with a
+  // persisted cache rendered the form against the server's skeleton).
+  const hydrated = useHydrated();
 
   // User settings row cached so returning to Settings renders instantly instead
   // of re-blocking. Moderate staleTime + refetch on tab focus keeps it fresh.
@@ -688,7 +693,7 @@ export default function SettingsPage() {
   // shape, not a centred spinner: the header is real at once and only the
   // controls are placeholders (UX panel round 19: "a loading state for a
   // moment after I tapped the gear").
-  if (isLoading && !settingsQuery.data && !isRestoring && !settingsQuery.isError) {
+  if (isLoading && !settingsQuery.data && (!hydrated || !isRestoring) && !settingsQuery.isError) {
     return <SettingsSkeleton />;
   }
 
