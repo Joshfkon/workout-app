@@ -118,22 +118,33 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
         />
       )}
 
-      {/* Mobile menu button - hidden on workout pages (WorkoutHeader has its own back button) */}
+      {/* Mobile menu button - hidden on workout pages (WorkoutHeader has its own back button).
+          z-[35]: above the sticky app header (z-30), which is later in the
+          DOM and used to cover it — a nameless button nobody could press. */}
       {!isActiveWorkoutRoute(pathname) && (
         <button
+          type="button"
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-30 p-2 lg:hidden text-ink-2 hover:text-ink bg-card/80 backdrop-blur-lg rounded-lg"
+          aria-label="Open menu"
+          aria-expanded={sidebarOpen}
+          className="fixed top-4 left-4 z-[35] p-2 lg:hidden text-ink-2 hover:text-ink bg-card/80 backdrop-blur-lg rounded-lg"
         >
           <IconMenu2 size={24} stroke={2} aria-hidden="true" />
         </button>
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar. Closed on a phone it is slid off screen AND invisible:
+          translated alone, its links stayed in the accessibility tree and in
+          the tab order — the UX panel's first tap on "Train" / "Progress" on
+          Home landed on these off-screen copies and did nothing (round 21:
+          "My first tap toward Train failed"). Visibility switches after the
+          slide (transition on visibility), so closing still animates. */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-sep transform transition-transform duration-200 lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-sep transform transition-[transform,visibility] duration-200 lg:translate-x-0 lg:visible',
+          sidebarOpen ? 'translate-x-0 visible' : '-translate-x-full invisible'
         )}
+        data-testid="app-sidebar"
       >
         {/* Logo */}
         <div className="flex items-center h-16 border-b border-sep px-4">

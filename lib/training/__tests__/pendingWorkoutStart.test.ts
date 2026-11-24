@@ -1,6 +1,11 @@
 import {
   __resetPendingWorkoutBuildsForTests,
   awaitPendingWorkoutBuild,
+  clearPendingWorkoutPreview,
+  getEarlyLoggedSet,
+  getPendingWorkoutPreview,
+  recordEarlyLoggedSet,
+  takeEarlyLoggedSet,
   getPendingWorkoutBuildStage,
   hasPendingWorkoutBuild,
   runNavigateFirstStart,
@@ -102,5 +107,105 @@ describe('pendingWorkoutStart', () => {
     d.resolve();
     await flush();
     expect(getPendingWorkoutBuildStage('s3')).toBeNull();
+  });
+
+  describe('preview of the first exercise', () => {
+    const preview = {
+      exercises: [
+        {
+          exerciseId: 'ex-bench',
+          name: 'Bench Press',
+          targetSets: 3,
+          repRange: [8, 12] as [number, number],
+          targetRir: 2,
+          weightKg: 60,
+          loggable: true,
+        },
+      ],
+    };
+
+    it('is available to the workout screen as soon as it navigates, and outlives a successful build', async () => {
+      const rest = deferred();
+      let seenAtNavigate: unknown = 'unset';
+      const run = runNavigateFirstStart({
+        navigate: (id) => {
+          seenAtNavigate = getPendingWorkoutPreview(id);
+        },
+        start: async ({ sessionReady, preview: publish }) => {
+          // Sheet order: the exercises are known before the session is ready.
+          publish(preview);
+          sessionReady('p1');
+          await rest.promise;
+          return { sessionId: 'p1' };
+        },
+      });
+      await flush();
+      expect(seenAtNavigate).toEqual(preview);
+      rest.resolve();
+      await run;
+      await awaitPendingWorkoutBuild('p1');
+      // The screen still has its own load to do: the preview stays until it clears it.
+      expect(getPendingWorkoutPreview('p1')).toEqual(preview);
+      clearPendingWorkoutPreview('p1');
+      expect(getPendingWorkoutPreview('p1')).toBeNull();
+    });
+
+    it('accepts a preview published after the navigation (mesocycle start order)', async () => {
+      await runNavigateFirstStart({
+        navigate: () => {},
+        start: async ({ sessionReady, preview: publish }) => {
+          sessionReady('p2');
+          publish(preview);
+          return { sessionId: 'p2' };
+        },
+      });
+      expect(getPendingWorkoutPreview('p2')).toEqual(preview);
+    });
+
+    it('drops the preview and any early set when the build fails', async () => {
+      await runNavigateFirstStart({
+        navigate: () => {},
+        start: async ({ sessionReady, preview: publish }) => {
+          sessionReady('p3');
+          publish(preview);
+          recordEarlyLoggedSet('p3', {
+            exerciseId: 'ex-bench',
+            weightKg: 60,
+            repCount: 10,
+            rpe: 8,
+            feedback: { repsInTank: 2, form: 'clean' },
+          });
+          await flush();
+          throw new Error('insert failed');
+        },
+      });
+      expect(getPendingWorkoutPreview('p3')).toBeNull();
+      expect(getEarlyLoggedSet('p3')).toBeNull();
+    });
+
+    it('hands an early set over exactly once', () => {
+      const set = {
+        exerciseId: 'ex-bench',
+        weightKg: 60,
+        repCount: 10,
+        rpe: 8,
+        feedback: { repsInTank: 2 as const, form: 'clean' as const },
+      };
+      recordEarlyLoggedSet('p4', set);
+      expect(takeEarlyLoggedSet('p4')).toEqual(set);
+      expect(takeEarlyLoggedSet('p4')).toBeNull();
+    });
+
+    it('ignores an empty preview', () => {
+      runNavigateFirstStart({
+        navigate: () => {},
+        start: async ({ sessionReady, preview: publish }) => {
+          sessionReady('p5');
+          publish({ exercises: [] });
+          return { sessionId: 'p5' };
+        },
+      });
+      expect(getPendingWorkoutPreview('p5')).toBeNull();
+    });
   });
 });
