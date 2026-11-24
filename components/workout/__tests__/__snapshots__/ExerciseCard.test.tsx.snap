@@ -116,7 +116,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                   class="font-medium"
                   data-testid="suggestion-source"
                 >
-                  First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust
+                  First time on this lift — starting estimate from your training profile. Adjust if it feels heavy: pick a weight you could lift ~12 times
                 </span>
                  
                 <button
@@ -124,7 +124,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                   data-testid="why-this-weight"
                   type="button"
                 >
-                  Why this weight?
+                  How it's worked out
                 </button>
               </p>
               <p
@@ -171,6 +171,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         <div
           aria-label="Set 1 logger"
           class="rounded-card bg-action-tint p-3 space-y-2.5"
+          data-active-logger=""
           role="group"
         >
           <div
@@ -360,18 +361,21 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
             </div>
           </div>
-          <p
-            class="pl-1 text-caption text-ink-2"
-            id="effort-q-1"
+          <div
+            class="flex items-baseline justify-between gap-2 pl-1"
           >
-            How many more could you have done?
-            <span
-              class="text-ink-3"
-              data-testid="rir-preset-note"
+            <p
+              class="text-subhead font-medium text-ink"
+              id="effort-q-1"
             >
-               
-              Preset to your target (2) — tap to change.
-            </span>
+              After the set: how many more could you have done?
+            </p>
+          </div>
+          <p
+            class="-mt-1 pl-1 text-caption text-ink-2"
+            data-testid="rir-preset-note"
+          >
+            Preset to your target (2) so logging is one tap. Tap another if the set felt different.
           </p>
           <div
             aria-labelledby="effort-q-1"
@@ -541,6 +545,12 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             Log set
           </button>
         </div>
+        <p
+          class="px-1 text-caption text-ink-2"
+          data-testid="prefill-editable-hint"
+        >
+          Suggested numbers — tap one or use − / + to change it before you log.
+        </p>
       </div>
       <div
         class="flex items-center gap-2 px-1 py-2 text-caption text-ink-2"

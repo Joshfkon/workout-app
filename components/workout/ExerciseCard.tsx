@@ -65,7 +65,7 @@ import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
 import { SegmentedControl } from './SegmentedControl';
-import { SetLoggerRow, clampToChip } from './SetLoggerRow';
+import { SetLoggerRow, clampToChip, type StickyHint } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
 import {
@@ -82,12 +82,16 @@ import {
   whyThisWeightLine,
   setChangeLine,
   emptyBarStartLine,
+  coldStartSourceLine,
+  injuryLoadNote,
   isEmptyBarLoad,
+  withoutUnbackedHistoryClaims,
   type SetChangeCause,
   type WhyThisWeight,
 } from './whyThisWeight';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
-import { plainWorkoutText } from '@/lib/beginnerMode';
+import { injuryNoteFromReason } from '@/services/suggestedWorkout';
+import { BEGINNER_WARMUP_EXPLAINER, plainWorkoutText } from '@/lib/beginnerMode';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
 import { velocityTargetFit, type VelocityTargetFit } from '@/services/shared/motion/setSummary';
@@ -251,6 +255,25 @@ function getExerciseInjuryRiskFromService(
     reasons: Array.from(new Set(reasons)),
     risk: worstRisk
   };
+}
+
+/**
+ * The injured area a prefilled load should be cautioned for, in words
+ * ("Shoulder"): a check-in injury this exercise may aggravate, else the area
+ * the suggested-workout sheet picked around ("For your shoulder: …").
+ * Null when neither applies. Pure; exported for tests.
+ */
+export function injuryAreaForPrefill(
+  exercise: { name: string; primaryMuscle: string },
+  injuries: TemporaryInjury[],
+  injuryNote: string | null
+): string | null {
+  for (const injury of injuries) {
+    if (getExerciseInjuryRiskFromService(exercise, [injury]).isRisky) {
+      return INJURY_LABELS[injury.area] || injury.area.replace(/_/g, ' ');
+    }
+  }
+  return injuryNote?.match(/^For your ([^:]+):/)?.[1]?.trim() ?? null;
 }
 
 /**
@@ -539,6 +562,12 @@ export interface ColdStartSuggestion {
   transferFrom?: string;
   /** Which estimation rung produced the number, so the source line can name it plainly. */
   estimateSource?: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio' | 'calibration' | 'exercise_transfer';
+  /**
+   * The engine made this number lighter on purpose (cold-start headroom /
+   * low-confidence discount — WorkingWeightRecommendation.startsLight). Only
+   * then may the card say the estimate is on the light side.
+   */
+  startsLight?: boolean;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -666,6 +695,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   );
 
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  // Inline "How to do it": the exercise's own form cues, opened in place.
+  const [showHowTo, setShowHowTo] = useState(false);
   const [jointPickerSetId, setJointPickerSetId] = useState<string | null>(null);
   // Warmup checkmarks live in the workout store (persisted) so switching
   // exercises, remounting, or reloading never wipes them; they expire only
@@ -2575,11 +2606,14 @@ export const ExerciseCard = memo(function ExerciseCard({
      * strip drops the separate logged-effort verdict.
      */
     sourceKind: 'set_change' | null;
+    /** The prefill is a cold-start estimate the engine made light on purpose. */
+    startsLight: boolean;
   } => {
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
     let sourceLine = '';
+    let startsLight = false;
     let why: WhyThisWeight | null = null;
     // Within-session load change (set N → N+1): what the just-logged set
     // showed, as the engine's own branch read it. Null = no e1RM-path
@@ -2597,7 +2631,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       Math.max(0, Math.round(effectiveTargetRir));
     const coldStartPickLine = isDurationBased
       ? 'adjust to a weight you can hold for the target time'
-      : `pick a weight you could lift ~${coldStartMaxReps} times, then adjust`;
+      : `pick a weight you could lift ~${coldStartMaxReps} times`;
 
     // Observed RIR for the reason string. Half-step values are real data (the
     // RIR-2 "good" chip stores RPE 7.5) — show one decimal, not a rounded lie.
@@ -3237,12 +3271,28 @@ export const ExerciseCard = memo(function ExerciseCard({
         const basis = transferFrom
           ? `your ${transferFrom}`
           : COLD_START_BASIS[coldStartSuggestion.estimateSource ?? ''] ?? null;
-        sourceLine = basis
-          ? `First time on this lift — starting guess from ${basis}; ${coldStartPickLine}`
-          : `First time on this lift — starting guess; ${coldStartPickLine}`;
+        // "Set on the light side" only when the engine made THIS number light
+        // and the prefill is still that number (a seed may have replaced it).
+        const shownKg = inputWeightToKg(parseFloat(weight), unit);
+        const lightTolKg = Math.max(exercise.minWeightIncrementKg ?? 0, 2.5);
+        startsLight =
+          coldStartSuggestion.startsLight === true &&
+          Number.isFinite(shownKg) &&
+          Math.abs(shownKg - coldStartSuggestion.weightKg) <= lightTolKg;
+        // Never a bare "guess": with no named rung it is still the profile
+        // estimate (the reason and the ⓘ sheet already say so).
+        sourceLine = coldStartSourceLine({
+          basis: basis ?? 'your training profile',
+          startsLight,
+          pickHint: coldStartPickLine,
+        });
         why = { ref: null, rule: 'start_guess', basis };
       } else if (weight) {
-        sourceLine = `First time on this lift — starting guess; ${coldStartPickLine}`;
+        // No estimate handed down by the page (e.g. no height/weight on the
+        // profile): the prefill is the block's stored target, which session
+        // start estimated from the profile. Name that basis, claim nothing
+        // about it being light.
+        sourceLine = coldStartSourceLine({ basis: 'your training profile', startsLight: false, pickHint: coldStartPickLine });
         why = { ref: null, rule: 'start_guess', basis: 'your training profile' };
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
@@ -3257,7 +3307,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         );
       } else {
         reason = 'enter your working weight to calibrate';
-        sourceLine = 'No history yet — log a set and suggestions learn from it';
+        // No number to explain: say how to pick one, in plain words (a
+        // first-run beginner otherwise saw an empty weight and no reason).
+        sourceLine = `No history yet — ${coldStartPickLine}. Suggestions learn from what you log`;
         explanation.push('Log a first set and future suggestions will anchor to it.');
       }
     }
@@ -3376,18 +3428,25 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Beginner mode keeps the line: there the engine's reason lives in the
     // ⓘ sheet, so dropping the source would leave the prefill unexplained.
     const source = reasonNamesSource && !beginner ? '' : sourceLine;
-    return {
-      weight,
-      reps: String(reps),
-      repsLabel,
-      reason,
-      explanation,
-      showRir,
-      role,
-      source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
-      sourceKind,
-      why,
-    };
+    // "Last session" / "last time" only with a completed logged set on this
+    // lift to point at (previousSets = completed sessions' working sets).
+    return withoutUnbackedHistoryClaims(
+      {
+        weight,
+        reps: String(reps),
+        repsLabel,
+        reason,
+        explanation,
+        showRir,
+        role,
+        source: source && targetNotes.length > 0 ? `${source} · ${targetNotes.join(' · ')}` : source,
+        sourceKind,
+        why,
+        // Deload / pain lines replace the start line, so the claim goes too.
+        startsLight: startsLight && why?.rule === 'start_guess',
+      },
+      previousSets.length > 0
+    );
   };
 
   // The MOST RECENT completed set's next-set call (services/
@@ -3553,6 +3612,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Press ("45 lbs x 8, x 8, x 10 @ 3 RIR" for a 45/45/40/40 session).
   // Bodyweight sets with a recorded breakdown read "BW+25 lbs × 14" so the
   // added load is visible instead of the blended effective number.
+  const injuryNote = injuryNoteFromReason(block.suggestionReason);
+  const prefillInjuryArea = injuryAreaForPrefill(exercise, currentInjuries, injuryNote);
+
   const lastSessionMeta = (() => {
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
@@ -3872,6 +3934,15 @@ export const ExerciseCard = memo(function ExerciseCard({
           )}
         </button>
 
+        {/* Why this lift, for the user's injury areas (set by the suggested
+            workout sheet on the block's suggestion_reason): "For your
+            shoulder: picked instead of Overhead Press". */}
+        {injuryNote && (
+          <p className="mt-1 text-caption text-ink-2" data-testid="exercise-injury-note">
+            {injuryNote}
+          </p>
+        )}
+
         {/* Session tonnage — logged volume so far, plus the projection if all
             remaining programmed sets are finished at their suggested/typed
             numbers. Shown once a set is logged: before that a "planned total"
@@ -4140,8 +4211,12 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {warmupDecision?.kind === 'targeted_ramp'
                   ? 'Ramp set'
                   : warmupDecision?.kind === 'partial_protocol'
-                    ? 'Warmup (shortened)'
-                    : 'Warmup protocol'}
+                    ? beginner
+                      ? 'Warm-up sets (shortened)'
+                      : 'Warmup (shortened)'
+                    : beginner
+                      ? 'Warm-up sets'
+                      : 'Warmup protocol'}
               </span>
               <span className="text-caption text-ink-2">
                 ({completedWarmups.size}/{warmupRows.rows.length})
@@ -4166,6 +4241,13 @@ export const ExerciseCard = memo(function ExerciseCard({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
+          {/* Beginner mode: say what warm-up sets are without a tap — the ⓘ
+              alone left "warm-up protocol" as jargon (UX panel round 22). */}
+          {beginner && !isWarmupExpanded && (
+            <p className="-mt-1 px-3 pb-3 text-caption text-ink-2" data-testid="warmup-explainer">
+              {BEGINNER_WARMUP_EXPLAINER}
+            </p>
+          )}
 
           {/* Warmup table - only show when expanded */}
           {isWarmupExpanded && (
@@ -5149,6 +5231,33 @@ export const ExerciseCard = memo(function ExerciseCard({
                 })()
               : null;
 
+          // What the strip says, computed once so the pinned "Log set" bar
+          // repeats the SAME reason line and forecast (a lifter logging from
+          // the bar never sees the card's strip).
+          const stripVerdict =
+            suggestion.sourceKind === 'set_change' && !latestMotion?.verdictShort && !latestCall?.heldByVelocity
+              ? null
+              : bannerVerdict;
+          const stripSource = latestCall?.heldByVelocity
+            ? 'Holding: bar speed says your last set was harder than logged'
+            : suggestion.source;
+          // Every prefill carries a reason on the bar too: when the strip's
+          // source line was folded into the reason (or blanked as an unbacked
+          // history claim), the engine's reason stands in.
+          const stickyWhyRaw = stripSource || stripVerdict || (beginner ? null : suggestion.reason) || null;
+          // Injury caution under the numbers (load-bearing lifts only).
+          const injuryCaution =
+            prefillInjuryArea && !isBodyweightExercise && !isDurationBased && suggestion.weight
+              ? injuryLoadNote({ area: prefillInjuryArea, startsLight: suggestion.startsLight })
+              : null;
+          const stickyHint: StickyHint = {
+            why: stickyWhyRaw ? (beginner ? plainWorkoutText(stickyWhyRaw) : stickyWhyRaw) : null,
+            expect:
+              expectedReps != null && !latestCall?.heldByVelocity
+                ? { repCount: expectedReps, atWeight: suggestion.weight }
+                : null,
+          };
+
           return (
             <div className="space-y-2 pt-1">
               {firstSetGuideTourId && completedSets.length === 0 && (
@@ -5161,19 +5270,54 @@ export const ExerciseCard = memo(function ExerciseCard({
               )}
               {/* Form guide: for a beginner, or any lift with no history
                   here — the panel's beginners found no form guidance. */}
-              {onHowToClick && (beginner || previousSets.length === 0) && (
-                <div className="-mb-1 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={onHowToClick}
-                    data-testid="exercise-how-to"
-                    className="-my-2 inline-flex min-h-[44px] items-center gap-1 px-1 text-subhead font-semibold text-action active:opacity-70"
-                  >
-                    <IconBook size={15} aria-hidden="true" />
-                    How to do it
-                  </button>
-                </div>
-              )}
+              {/* With form cues in the exercise data, the link opens them
+                  right here (UX panel round 21, Maya: "no guidance on form
+                  for a beginner" — the guide was a tap into another sheet
+                  she never opened); the full guide stays one more tap away.
+                  Without cues it opens the guide as before. Never invented:
+                  only the exercise's own cues and setup note show. */}
+              {onHowToClick && (beginner || previousSets.length === 0) && (() => {
+                const cues = (exercise.formCues ?? []).filter((c) => c && c.trim()).slice(0, 3);
+                const setup = exercise.setupNote?.trim() || null;
+                const hasInline = cues.length > 0;
+                return (
+                  <div className="-mb-1">
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={hasInline ? () => setShowHowTo((v) => !v) : onHowToClick}
+                        aria-expanded={hasInline ? showHowTo : undefined}
+                        data-testid="exercise-how-to"
+                        className="-my-2 inline-flex min-h-[44px] items-center gap-1 px-1 text-subhead font-semibold text-action active:opacity-70"
+                      >
+                        <IconBook size={15} aria-hidden="true" />
+                        How to do it
+                      </button>
+                    </div>
+                    {hasInline && showHowTo && (
+                      <div
+                        className="mt-2 rounded-lg bg-fill/60 px-3 py-2"
+                        data-testid="exercise-how-to-cues"
+                      >
+                        {setup && <p className="text-subhead text-ink-2">{setup}</p>}
+                        <ul className={`space-y-0.5 ${setup ? 'mt-1' : ''}`}>
+                          {cues.map((cue) => (
+                            <li key={cue} className="text-subhead text-ink">• {cue}</li>
+                          ))}
+                        </ul>
+                        <button
+                          type="button"
+                          onClick={onHowToClick}
+                          className="mt-1 inline-flex min-h-[44px] items-center text-subhead font-medium text-action"
+                          data-testid="exercise-how-to-full"
+                        >
+                          Full guide and video
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <SuggestionBanner
                 weightLabel={
                   latestCall?.heldByVelocity
@@ -5189,22 +5333,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                 // went ("… (harder than target) → back to 135 lbs"); the
                 // logged-effort verdict would repeat it. A motion verdict is
                 // different evidence and stays.
-                verdict={
-                  suggestion.sourceKind === 'set_change' && !latestMotion?.verdictShort && !latestCall?.heldByVelocity
-                    ? null
-                    : bannerVerdict
-                }
+                verdict={stripVerdict}
                 // Same value the logger presets its chip to (0–4), so the
                 // strip's "@ N RIR" and the preset chip always agree.
                 rir={clampToChip(loggerTargetRir)}
                 showRir={suggestion.showRir}
                 roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
                 reason={suggestion.reason}
-                source={
-                  latestCall?.heldByVelocity
-                    ? 'Holding: bar speed says your last set was harder than logged'
-                    : suggestion.source
-                }
+                source={stripSource}
                 explanation={suggestion.explanation}
                 // The velocity hold swaps the numbers for the coach's call, so
                 // the engine's "why" would describe numbers no longer shown.
@@ -5214,6 +5350,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 expect={expectText}
                 score={predictionScoreLine}
                 nextTime={nextTimeText}
+                caution={injuryCaution}
               />
               {/* Always mounted at a fixed one-line height: the note is
                   cleared on every weight/reps keystroke and re-issued by the
@@ -5262,6 +5399,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 userBodyweightKg={userBodyweightKg}
                 onLog={completeLoggedSet}
                 stickyLabel={exercise.name}
+                stickyHint={stickyHint}
                 sensorRirPrefill={
                   motionRepPrefill?.rir != null
                     ? { nonce: motionRepPrefill.nonce, rir: motionRepPrefill.rir }
@@ -5278,6 +5416,15 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : undefined
                 }
               />
+              {/* The prefilled numbers are a suggestion, not a setting: say
+                  so under them on the lift's first set (UX panel round 20:
+                  4 of 6 read the prefill as fixed and unexplained). Below
+                  the logger, so nothing above it moves. */}
+              {completedSets.length === 0 && (suggestion.weight || suggestion.repsLabel) && (
+                <p className="px-1 text-caption text-ink-2" data-testid="prefill-editable-hint">
+                  Suggested numbers — tap one or use − / + to change it before you log.
+                </p>
+              )}
               {activeIsAmrap && amrapPrompt && (
                 // Quiet inline note, not a card: the last set's ask, with
                 // its reason in plain words. Same choices as before — OK

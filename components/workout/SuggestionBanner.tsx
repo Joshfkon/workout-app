@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { IconSparkles, IconInfoCircle, IconAlertTriangle } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
-import { effortTargetPhrase, plainWorkoutText } from '@/lib/beginnerMode';
+import { beginnerEffortTarget, plainWorkoutText } from '@/lib/beginnerMode';
 import { whyThisWeightSummary, type WhyThisWeight } from './whyThisWeight';
 
 /**
@@ -86,6 +86,11 @@ interface SuggestionBannerProps {
    * opens with a plain summary built from them.
    */
   why?: WhyThisWeight | null;
+  /**
+   * A caution under the reason (an injury the load was not adjusted for).
+   * Plain text, shown as its own line; null hides it.
+   */
+  caution?: string | null;
   /** "Expect about 9 reps at 140 lbs" (setPrediction.expectLine). */
   expect?: string | null;
   /** The last set against its prediction, plus the running tally. */
@@ -150,6 +155,7 @@ export function SuggestionBanner({
   expect = null,
   score = null,
   nextTime = null,
+  caution = null,
 }: SuggestionBannerProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [warningActive, setWarningActive] = useState(false);
@@ -191,7 +197,9 @@ export function SuggestionBanner({
       data-testid="why-this-weight"
       className="inline whitespace-nowrap text-caption font-medium text-action underline underline-offset-2"
     >
-      Why this weight?
+      {/* "Why this weight?" read as one more question to decode next to a
+          "Why:" line that already answers it (UX panel round 22). */}
+      How it&apos;s worked out
     </button>
   );
 
@@ -202,8 +210,13 @@ export function SuggestionBanner({
   // showing, the reason moves to the top of the ⓘ sheet.
   // Beginner mode keeps the strip to the numbers and the plain source line:
   // the engine's reason is jargon-dense, so it always moves to the sheet.
-  const reasonInSheet = !!verdict || !!source || beginner;
-  const reasonLine = source;
+  // No source line (folded into the reason, or blanked as an unbacked
+  // history claim): the reason itself becomes the "Why:" line, so a prefill
+  // is never left without one (UX panel round 20). Not in beginner mode,
+  // where the engine's jargon reason stays in the sheet and the card keeps
+  // its plain source line instead.
+  const reasonLine = source || (!beginner && reason?.trim() ? reason : null);
+  const reasonInSheet = !!verdict || !!reasonLine || beginner;
 
   // The entered load × reps, as the caller formatted them for display.
   const enteredLabel = effortCheck ? `${effortCheck.weightLabel} × ${effortCheck.reps}` : '';
@@ -255,7 +268,7 @@ export function SuggestionBanner({
                 {weightLabel} × {repsLabel}
                 {showRir ? (
                   <span className="font-normal text-ink-2" data-testid="suggestion-rir-plain">
-                    {` · ${effortTargetPhrase(rir)}`}
+                    {` · ${beginnerEffortTarget(rir)}`}
                   </span>
                 ) : null}
               </span>
@@ -299,6 +312,11 @@ export function SuggestionBanner({
             </p>
           ) : whySummary ? (
             <p className="mt-1">{whyLink}</p>
+          ) : null}
+          {caution ? (
+            <p className="mt-1 text-caption leading-snug text-status-warn" data-testid="suggestion-caution">
+              {plain(caution)}
+            </p>
           ) : null}
           {/* Predict, then score — and what reaching the top earns. Quiet
               caption lines; each renders only when the card has it. */}
@@ -358,7 +376,7 @@ export function SuggestionBanner({
             ? [
                 ...(reason
                   ? [
-                      `${weightLabel} × ${repsLabel}${showRir ? `, ${effortTargetPhrase(rir)}` : ''} — ${plainWorkoutText(reason)}.`,
+                      `${weightLabel} × ${repsLabel}${showRir ? `, ${beginnerEffortTarget(rir)}` : ''} — ${plainWorkoutText(reason)}.`,
                     ]
                   : []),
                 ...explanation.map(plainWorkoutText),

@@ -43,6 +43,17 @@ import {
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWatchBridge } from '@/hooks/useWatchBridge';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
+import { usePendingWorkoutBuildStage, usePendingWorkoutPreview } from '@/hooks/usePendingWorkoutBuild';
+import {
+  awaitPendingWorkoutBuild,
+  clearPendingWorkoutPreview,
+  recordEarlyLoggedSet,
+  takeEarlyLoggedSet,
+  getEarlyLoggedSet,
+} from '@/lib/training/pendingWorkoutStart';
+import { WorkoutStartPreview } from './_components/WorkoutStartPreview';
+import { WorkoutNoticeStack, type WorkoutNotice } from './_components/WorkoutNoticeStack';
+import { useUserStore } from '@/stores/userStore';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
@@ -296,6 +307,7 @@ import {
 } from '../_lib/staleTargets';
 import { RecalcTargetsBanner } from '@/components/workout';
 import { STICKY_LOG_SLOT_ID } from '@/components/workout/SetLoggerRow';
+import { useKeepLoggerClearOfBottomChrome } from '@/components/workout/bottomChromeClearance';
 import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
@@ -447,7 +459,18 @@ export default function WorkoutPage() {
   const searchParams = useSearchParams();
   const sessionId = params.id as string;
   const fromCreate = searchParams.get('fromCreate') === 'true';
+  // A navigate-first start (lib/training/pendingWorkoutStart) may still be
+  // writing this session's exercises; the skeleton says which step it's on.
+  const pendingBuildStage = usePendingWorkoutBuildStage(sessionId);
+  // ...and what it is writing: the first exercise renders from this, usable,
+  // until the screen has loaded (instead of a skeleton).
+  const { preview: startPreview, earlySet: previewEarlySet } = usePendingWorkoutPreview(sessionId);
+  // The preview logs in the lifter's unit, so it needs one it can trust: the
+  // hydrated user row (always there after a Home/Train start), else this
+  // page's preferences once loaded — never their pre-load 'lb' default.
+  const storeUnits = useUserStore((state) => state.user?.preferences.units ?? null);
   const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
+  const previewUnit = storeUnits ?? (preferencesLoading ? null : preferences.units);
   // Onboarding's "areas to go easy on", prefilled into the check-in at mild.
   const standingCheckInInjuries = useMemo(
     () => standingAreasToCheckInInjuries(preferences.injuryAreas ?? []),
@@ -923,6 +946,10 @@ export default function WorkoutPage() {
   // reusable workout_template. Purely additive — no session state changes.
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
+  // The fixed bottom stack (toast · rest timer · pinned Log set). When it
+  // grows — the "Set N logged · Undo" toast arriving — the active logger is
+  // scrolled clear of it instead of sitting under it for the toast's 5 s.
+  const bottomChromeRef = useKeepLoggerClearOfBottomChrome();
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
   const [selectedInjurySeverity, setSelectedInjurySeverity] = useState<1 | 2 | 3>(1);
@@ -1680,12 +1707,20 @@ export default function WorkoutPage() {
         // phone, the user re-logs them, and the flush makes duplicates. The
         // snapshot is taken before the read so a set that flushes while the
         // read is in flight is covered by one side or the other.
-        if (typeof navigator === 'undefined' || navigator.onLine) {
-          await Promise.race([
-            flushSetOutbox(supabase).catch(() => null),
-            new Promise((resolve) => setTimeout(resolve, 4000)),
-          ]);
-        }
+        //
+        // A start that navigated here before it finished building (navigate-
+        // first, lib/training/pendingWorkoutStart) is awaited alongside the
+        // flush, so the read below never sees a half-built workout.
+        const [buildError] = await Promise.all([
+          awaitPendingWorkoutBuild(sessionId),
+          typeof navigator === 'undefined' || navigator.onLine
+            ? Promise.race([
+                flushSetOutbox(supabase).catch(() => null),
+                new Promise((resolve) => setTimeout(resolve, 4000)),
+              ])
+            : null,
+        ]);
+        if (buildError) throw new Error(`Couldn't finish setting up this workout: ${buildError}`);
         const queuedAtLoad = await listOutbox().catch(() => [] as OutboxEntry[]);
 
         const loaded = await loadWorkoutSession(supabase, sessionId);
@@ -6730,6 +6765,71 @@ export default function WorkoutPage() {
     finishToDashboard();
   };
 
+  // The start's preview has done its job once the screen is up. A first set
+  // logged on it is replayed here, through the same handleSetComplete →
+  // logSet path as a tap on the card (it was never written on its own). The
+  // block ids are only known now, so the exercise is the match: it must be
+  // the block the screen opened on, with nothing logged on it yet.
+  // The start preview the lifter is looking at stays on screen when the
+  // full workout finishes loading, until they log set 1 on it or tap "Show
+  // full workout". Swapping it out on load moved "Log set" from mid-screen
+  // to the bottom bar under their finger, so the first tap hit nothing (UX
+  // panel: 4 of 5 first taps failed). The store clears its copy on load, so
+  // keep our own.
+  const [heldPreview, setHeldPreview] = useState<typeof startPreview>(null);
+  const [previewReleased, setPreviewReleased] = useState(false);
+  useEffect(() => {
+    if (phase === 'loading' && startPreview && startPreview.exercises.length > 0 && !heldPreview) {
+      setHeldPreview(startPreview);
+    }
+  }, [phase, startPreview, heldPreview]);
+  // A set already logged on the preview releases it: nothing left to tap there.
+  const holdingPreview = phase === 'workout' && !!heldPreview && !previewReleased && !previewEarlySet;
+  // Persist that release: replaying the set consumes previewEarlySet, and
+  // the preview must not come back over the live workout then (Codex review
+  // on #873).
+  useEffect(() => {
+    if (previewEarlySet && !previewReleased) setPreviewReleased(true);
+  }, [previewEarlySet, previewReleased]);
+
+  const earlySetReplayedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase === 'loading') return;
+    clearPendingWorkoutPreview(sessionId);
+    // While the preview is held, set 1 (if any) waits for the release.
+    if (holdingPreview) return;
+    // Whatever happens next, the preview is done.
+    if (heldPreview && !previewReleased) setPreviewReleased(true);
+    // Only the live workout can take the set. On any other phase (a load
+    // error above all) it stays held, unconsumed: the error screen names it so
+    // it isn't lost silently (Codex review on #871).
+    if (phase !== 'workout') return;
+    if (earlySetReplayedForRef.current === sessionId) return;
+    earlySetReplayedForRef.current = sessionId;
+    const early = takeEarlyLoggedSet(sessionId);
+    if (!early) return;
+    if (
+      !currentBlock ||
+      currentBlock.exerciseId !== early.exerciseId ||
+      getSetsForBlock(currentBlock.id).length > 0
+    ) {
+      showError("Your first set couldn't be added automatically. Please log it again.");
+      return;
+    }
+    void handleSetComplete({
+      weightKg: early.weightKg,
+      reps: early.repCount,
+      rpe: early.rpe,
+      note: early.note,
+      setType: 'normal',
+      feedback: early.feedback,
+    });
+    // Runs once, when the screen reaches the live workout (and the preview,
+    // if one was held, is released).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, sessionId, holdingPreview]);
+  const heldEarlySet = phase === 'error' ? getEarlyLoggedSet(sessionId) : null;
+
   // Apple Watch: mirror the active set and take logs/navigation back. A watch
   // log goes through the active ExerciseCard's completeLoggedSet, i.e. this
   // page's handleSetComplete → logSet (outbox) — never a separate write.
@@ -6762,7 +6862,36 @@ export default function WorkoutPage() {
     finishWorkout: handleWorkoutComplete,
   });
 
+  if (holdingPreview && heldPreview) {
+    return (
+      <WorkoutStartPreview
+        preview={heldPreview}
+        stage={null}
+        unit={previewUnit}
+        earlySet={previewEarlySet}
+        onLogFirstSet={(set) => {
+          recordEarlyLoggedSet(sessionId, set);
+          setPreviewReleased(true);
+        }}
+        onShowFull={() => setPreviewReleased(true)}
+      />
+    );
+  }
+
   if (phase === 'loading') {
+    // A start that just navigated here knows its exercises: show the first
+    // one, usable, while the rows are written and this screen loads.
+    if (startPreview && startPreview.exercises.length > 0) {
+      return (
+        <WorkoutStartPreview
+          preview={startPreview}
+          stage={pendingBuildStage}
+          unit={previewUnit}
+          earlySet={previewEarlySet}
+          onLogFirstSet={(set) => recordEarlyLoggedSet(sessionId, set)}
+        />
+      );
+    }
     // Skeleton matching the workout layout instead of a full-screen spinner
     // (P2-16) — mirrors this route's loading.tsx so route-level and
     // in-page loading states look identical.
@@ -6777,8 +6906,14 @@ export default function WorkoutPage() {
             <div className="h-11 w-24 bg-fill rounded-lg" />
           </div>
         </div>
-        <p className="text-subhead text-ink-3">
-          {fromCreate ? 'Starting workout…' : 'Loading workout…'}
+        <p role="status" className="text-subhead text-ink-3">
+          {pendingBuildStage === 'building'
+            ? 'Picking weights from your history…'
+            : pendingBuildStage === 'saving'
+              ? 'Saving your exercises…'
+              : fromCreate
+                ? 'Starting workout…'
+                : 'Loading workout…'}
         </p>
         <SkeletonExercise />
         <SkeletonExercise />
@@ -6797,6 +6932,11 @@ export default function WorkoutPage() {
           </div>
           <p className="text-headline font-medium text-ink">Error loading workout</p>
           <p className="text-ink-3 mt-1">{error}</p>
+          {heldEarlySet && (
+            <p className="mt-3 rounded-lg bg-status-warn/10 px-3 py-2 text-subhead text-ink" data-testid="workout-error-early-set">
+              The set you logged before the workout opened ({formatWeight(heldEarlySet.weightKg, preferences.units)} × {heldEarlySet.repCount}) wasn&apos;t saved. Log it again once your workout opens.
+            </p>
+          )}
           <Button className="mt-4" onClick={() => router.push('/dashboard/workout')}>
             Go back
           </Button>
@@ -6901,7 +7041,7 @@ export default function WorkoutPage() {
           isOpen={showClaimPrompt}
           onClose={handleDeclineClaim}
           onConfirm={handleConfirmClaim}
-          title="Count toward your mesocycle?"
+          title="Count toward your training block?"
           message={`This workout looks like ${claimCandidate?.dayName ?? 'your next planned session'}. Counting it advances your program to the next session — otherwise it stays an extra workout.`}
           confirmText="Count it"
           cancelText="Keep as extra"
@@ -7125,10 +7265,17 @@ export default function WorkoutPage() {
 
   // Up-next rows: non-active blocks with nothing logged yet (skipped ones
   // render greyed with an Undo). Everything else stays in the main list.
+  //
+  // While reordering, everything is ONE list in block order: two sections
+  // (with the "Up next" heading between them) made rows jump across the split
+  // and dropped exercises land somewhere other than where they were let go
+  // (user report). And an exercise placed ABOVE the current one stays in the
+  // main list where it was put, instead of reappearing down in Up next.
   const isBlockInMainList = (index: number) => {
     const b = blocks[index];
     if (!b) return false;
-    return index === currentBlockIndex || getSetsForBlock(b.id).length > 0;
+    if (isDraggingBlock) return true;
+    return index <= currentBlockIndex || getSetsForBlock(b.id).length > 0;
   };
   const upNextEntries = blocks
     .map((block, index) => ({ block, index }))
@@ -7366,26 +7513,13 @@ export default function WorkoutPage() {
   const bottomPad =
     sanityToastVisible || toasts.length > 0 ? 'pb-56' : restBarVisible ? 'pb-32' : 'pb-8';
 
-  return (
-    <div className={`max-w-2xl mx-auto space-y-6 ${bottomPad}`}>
-      {/* Offline banner (P0-2): honest state — nothing is lost, writes queue */}
-      {!isOnline && (
-        <div
-          className="flex items-center gap-2.5 rounded-xl border border-status-warn/45 bg-status-warn/10 px-4 py-2.5 text-subhead text-status-warn"
-          role="status"
-        >
-          <span aria-hidden="true">⚠</span>
-          <span>
-            You&rsquo;re offline — sets are saved on this phone and will sync automatically.
-            {outboxSize > 0 && ` ${outboxSize} set${outboxSize !== 1 ? 's' : ''} queued.`}
-          </span>
-        </div>
-      )}
-
-      {/* Could-not-sync banner: writes the server REFUSED. They are still on
-          this phone (never dropped), but waiting will not deliver them — say
-          so instead of showing them as saved. */}
-      {failedSyncCount > 0 && (
+  // Top-of-screen banners, most important first (WorkoutNoticeStack shows
+  // one and collapses the rest behind "N more notes").
+  const workoutNotices: WorkoutNotice[] = [];
+  if (failedSyncCount > 0) {
+    workoutNotices.push({
+      key: 'sync-failed',
+      node: (
         <div
           className="flex items-center gap-2.5 rounded-xl border border-status-bad/45 bg-status-bad/10 px-4 py-2.5 text-subhead text-status-bad"
           role="alert"
@@ -7405,94 +7539,63 @@ export default function WorkoutPage() {
             Retry
           </button>
         </div>
-      )}
-
-      {/* Recalc banner (P1-3): planned targets derived from since-edited
-          history. Dormant until the set_logs.edited_at migration is applied. */}
-      {!recalcDismissed && staleTargetCount > 0 && (
-        <RecalcTargetsBanner
-          staleCount={staleTargetCount}
-          changes={staleTargetChanges}
-          unit={preferences.units}
-          isApplying={isRecalculating}
-          onApply={applyRecalc}
-          onDismiss={() => setRecalcDismissed(true)}
-        />
-      )}
-
-      {/* Pause overlay - shown when workout is paused */}
-      <PauseOverlay
-        isPaused={workoutTimer.isPaused}
-        elapsedTime={workoutTimer.formattedTime}
-        onResume={workoutTimer.resume}
-      />
-
-      {/* Auto-adjust message */}
-      {autoAdjustMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
-          <div className="bg-action-tint dark:bg-action/20 backdrop-blur-sm border border-action/40 dark:border-action/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
-            <IconRefresh className="h-5 w-5 flex-shrink-0 text-action" stroke={1.75} aria-hidden="true" />
-            <p className="text-subhead text-on-action dark:text-action flex-1">{autoAdjustMessage}</p>
-            <button
-              onClick={() => setAutoAdjustMessage(null)}
-              className="text-action hover:text-on-action dark:text-action dark:hover:text-action"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+      ),
+    });
+  }
+  if (!isOnline) {
+    workoutNotices.push({
+      key: 'offline',
+      node: (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border border-status-warn/45 bg-status-warn/10 px-4 py-2.5 text-subhead text-status-warn"
+          role="status"
+        >
+          <span aria-hidden="true">⚠</span>
+          <span>
+            You&rsquo;re offline — sets are saved on this phone and will sync automatically.
+            {outboxSize > 0 && ` ${outboxSize} set${outboxSize !== 1 ? 's' : ''} queued.`}
+          </span>
         </div>
-      )}
-      
-      {/* Workout header */}
-      <WorkoutHeader
-        workoutName={workoutLabel}
-        exerciseNumber={currentExerciseNumber}
-        exerciseTotal={activeBlocks.length}
-        segments={headerSegments}
-        remainingDurationLabel={
-          durationEstimate.remainingSets > 0
-            ? formatDurationEstimate(durationEstimate.remainingSeconds)
-            : null
-        }
-        remainingDurationHint={durationHint}
-        startedAt={session?.startedAt ?? null}
-        timerStarted={timerStartedAt !== null}
-        workoutTimer={workoutTimer}
-        allCollapsed={allCollapsed}
-        onToggleAllCollapsed={() => setAllCollapsed(!allCollapsed)}
-        showToolsMenu={showToolsMenu}
-        onToggleToolsMenu={() => setShowToolsMenu((v) => !v)}
-        onCloseToolsMenu={() => setShowToolsMenu(false)}
-        injuryCount={temporaryInjuries.length}
-        onOpenInjuryModal={() => setShowInjuryModal(true)}
-        onOpenReadinessModal={() => setShowReadinessModal(true)}
-        onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
-        onOpenPlateCalculator={() => { setPlateCalculatorBlockId(null); setShowPlateCalculator(true); }}
-        locationName={sessionLocationName}
-        onOpenLocationPicker={() => setLocationPickerTarget({ kind: 'session' })}
-        isDeload={session?.isDeload ?? false}
-        onToggleDeload={handleToggleDeloadSession}
-        onCancelWorkout={() => setShowCancelModal(true)}
-        onAddExercise={handleOpenAddExercise}
-        onSaveAsTemplate={() => setShowSaveTemplateModal(true)}
-        onFinishWorkout={handleWorkoutComplete}
-        onMinimize={() => router.push('/dashboard/log')}
-      />
-
-      {/* Idle workout prompt: "Still training?" after 20min of inactivity */}
-      {idlePrompt.shouldShowPrompt && (
+      ),
+    });
+  }
+  if (error) {
+    workoutNotices.push({
+      key: 'error',
+      node: (
+        <div className="p-3 bg-status-bad/10 border border-status-bad/30 rounded-lg flex items-center gap-2">
+          <svg className="w-5 h-5 text-status-bad flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-subhead text-status-bad">{error}</span>
+          <button 
+            onClick={() => setError(null)} 
+            className="ml-auto p-1 hover:bg-status-bad/20 rounded"
+          >
+            <svg className="w-4 h-4 text-status-bad" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ),
+    });
+  }
+  if (idlePrompt.shouldShowPrompt) {
+    workoutNotices.push({
+      key: 'idle',
+      node: (
         <IdleWorkoutPrompt
           onDismiss={idlePrompt.dismissPrompt}
           onFinish={handleWorkoutComplete}
         />
-      )}
-
-      {/* Readiness modulation banner (Phase 1.3): eased targets today, with a
-          session-local "Train as planned" override that zeroes the modulation */}
-      {baseReadinessModulation?.banner && !readinessBannerDismissed && !readinessOverridden && (
-        <div className="flex items-center gap-3 bg-status-warn-tint text-status-warn text-subhead px-4 py-2.5 rounded-card -mt-2">
+      ),
+    });
+  }
+  if (baseReadinessModulation?.banner && !readinessBannerDismissed && !readinessOverridden) {
+    workoutNotices.push({
+      key: 'readiness',
+      node: (
+        <div className="flex items-center gap-3 bg-status-warn-tint text-status-warn text-subhead px-4 py-2.5 rounded-card">
           <span className="flex-1">{baseReadinessModulation.banner}</span>
           <button
             onClick={() => setReadinessOverridden(true)}
@@ -7508,73 +7611,28 @@ export default function WorkoutPage() {
             <IconX size={14} />
           </button>
         </div>
-      )}
-
-      {/* Weekly volume strip: per-muscle rolling-7-day sets (incl. this session)
-          vs the MEV–MRV band, for the muscles this workout trains. Tapping a
-          chip opens the full "What to train" volume + recovery sheet. Hidden
-          on an empty workout, where the empty state's "Muscle readiness" and
-          "Sets this week" rows open the same sheet (show less up front).
-          Beginner mode hides it: MEV/MRV bands are noise in week one (the
-          same sheet stays one tap away in the header menu). */}
-      {workoutBodyView !== 'empty' && !beginnerMode && (
-      <WorkoutVolumeStrip
-        rows={weeklyVolumeRows}
-        isLoading={weeklyVolumeLoading}
-        onOpenDetail={() => setShowMuscleReadinessSheet(true)}
-        suggestions={volumeDeficitSuggestions}
-        onAddSetsToBlock={(blockId, addSets) => {
-          const block = blocks.find((b) => b.id === blockId);
-          if (block) handleTargetSetsChange(blockId, block.targetSets + addSets);
-        }}
-        onAddExerciseForMuscle={(muscle) => {
-          // Land the user in the picker already filtered to the deficit
-          // muscle; a stale search string would override the filter view.
-          setExerciseSearch('');
-          setSelectedMuscleFilter(muscle);
-          handleOpenAddExercise();
-        }}
-      />
-      )}
-
-      {/* First workout guidance */}
-      {isFirstWorkout && showBeginnerTips && (
-        <InlineHint id="first-workout-intro">
-          <div>
-            <p className="font-medium mb-2">Welcome to your first workout!</p>
-            <ul className="space-y-1 text-subhead text-on-action dark:text-action">
-              <li>• <strong>Log each set</strong> - Enter weight and reps after completing a set</li>
-              <li>• <strong>Rate difficulty</strong> - tell us how many more reps you could have done</li>
-              <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
-              <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
-            </ul>
-            <p className="text-caption text-action dark:text-action mt-2">
-              We&apos;ll learn your patterns and personalize recommendations as you train!
-            </p>
-          </div>
-        </InlineHint>
-      )}
-
-      {/* Error alert */}
-      {error && (
-        <div className="p-3 bg-status-bad/10 border border-status-bad/30 rounded-lg flex items-center gap-2">
-          <svg className="w-5 h-5 text-status-bad flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-subhead text-status-bad">{error}</span>
-          <button 
-            onClick={() => setError(null)} 
-            className="ml-auto p-1 hover:bg-status-bad/20 rounded"
-          >
-            <svg className="w-4 h-4 text-status-bad" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/* Coach Message - only show if AI coach notes are enabled */}
-      {coachMessage && aiCoachNotesEnabled && (
+      ),
+    });
+  }
+  if (!recalcDismissed && staleTargetCount > 0) {
+    workoutNotices.push({
+      key: 'recalc',
+      node: (
+        <RecalcTargetsBanner
+          staleCount={staleTargetCount}
+          changes={staleTargetChanges}
+          unit={preferences.units}
+          isApplying={isRecalculating}
+          onApply={applyRecalc}
+          onDismiss={() => setRecalcDismissed(true)}
+        />
+      ),
+    });
+  }
+  if (coachMessage && aiCoachNotesEnabled) {
+    workoutNotices.push({
+      key: 'coach',
+      node: (
         <Card className="overflow-hidden border-action/20 bg-action/5 ">
           <button
             onClick={() => setShowCoachMessage(!showCoachMessage)}
@@ -7653,6 +7711,119 @@ export default function WorkoutPage() {
             </div>
           )}
         </Card>
+      ),
+    });
+  }
+
+  return (
+    <div className={`max-w-2xl mx-auto space-y-6 ${bottomPad}`}>
+      {/* Pause overlay - shown when workout is paused */}
+      <PauseOverlay
+        isPaused={workoutTimer.isPaused}
+        elapsedTime={workoutTimer.formattedTime}
+        onResume={workoutTimer.resume}
+      />
+
+      {/* Auto-adjust message */}
+      {autoAdjustMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
+          <div className="bg-action-tint dark:bg-action/20 backdrop-blur-sm border border-action/40 dark:border-action/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
+            <IconRefresh className="h-5 w-5 flex-shrink-0 text-action" stroke={1.75} aria-hidden="true" />
+            <p className="text-subhead text-on-action dark:text-action flex-1">{autoAdjustMessage}</p>
+            <button
+              onClick={() => setAutoAdjustMessage(null)}
+              className="text-action hover:text-on-action dark:text-action dark:hover:text-action"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Workout header */}
+      <WorkoutHeader
+        workoutName={workoutLabel}
+        exerciseNumber={currentExerciseNumber}
+        exerciseTotal={activeBlocks.length}
+        segments={headerSegments}
+        remainingDurationLabel={
+          durationEstimate.remainingSets > 0
+            ? formatDurationEstimate(durationEstimate.remainingSeconds)
+            : null
+        }
+        remainingDurationHint={durationHint}
+        startedAt={session?.startedAt ?? null}
+        timerStarted={timerStartedAt !== null}
+        workoutTimer={workoutTimer}
+        allCollapsed={allCollapsed}
+        onToggleAllCollapsed={() => setAllCollapsed(!allCollapsed)}
+        showToolsMenu={showToolsMenu}
+        onToggleToolsMenu={() => setShowToolsMenu((v) => !v)}
+        onCloseToolsMenu={() => setShowToolsMenu(false)}
+        injuryCount={temporaryInjuries.length}
+        onOpenInjuryModal={() => setShowInjuryModal(true)}
+        onOpenReadinessModal={() => setShowReadinessModal(true)}
+        onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
+        onOpenPlateCalculator={() => { setPlateCalculatorBlockId(null); setShowPlateCalculator(true); }}
+        locationName={sessionLocationName}
+        onOpenLocationPicker={() => setLocationPickerTarget({ kind: 'session' })}
+        isDeload={session?.isDeload ?? false}
+        onToggleDeload={handleToggleDeloadSession}
+        onCancelWorkout={() => setShowCancelModal(true)}
+        onAddExercise={handleOpenAddExercise}
+        onSaveAsTemplate={() => setShowSaveTemplateModal(true)}
+        onFinishWorkout={handleWorkoutComplete}
+        onMinimize={() => router.push('/dashboard/log')}
+      />
+
+      {/* One banner at a time; the rest behind "N more notes". */}
+      <WorkoutNoticeStack notices={workoutNotices} />
+
+      {/* Weekly volume strip: per-muscle rolling-7-day sets (incl. this session)
+          vs the MEV–MRV band, for the muscles this workout trains. Tapping a
+          chip opens the full "What to train" volume + recovery sheet. Hidden
+          on an empty workout, where the empty state's "Muscle readiness" and
+          "Sets this week" rows open the same sheet (show less up front).
+          Beginner mode hides it: MEV/MRV bands are noise in week one (the
+          same sheet stays one tap away in the header menu). */}
+      {workoutBodyView !== 'empty' && !beginnerMode && (
+      <WorkoutVolumeStrip
+        rows={weeklyVolumeRows}
+        isLoading={weeklyVolumeLoading}
+        onOpenDetail={() => setShowMuscleReadinessSheet(true)}
+        suggestions={volumeDeficitSuggestions}
+        onAddSetsToBlock={(blockId, addSets) => {
+          const block = blocks.find((b) => b.id === blockId);
+          if (block) handleTargetSetsChange(blockId, block.targetSets + addSets);
+        }}
+        onAddExerciseForMuscle={(muscle) => {
+          // Land the user in the picker already filtered to the deficit
+          // muscle; a stale search string would override the filter view.
+          setExerciseSearch('');
+          setSelectedMuscleFilter(muscle);
+          handleOpenAddExercise();
+        }}
+      />
+      )}
+
+      {/* First workout guidance */}
+      {isFirstWorkout && showBeginnerTips && workoutNotices.length === 0 && (
+        <InlineHint id="first-workout-intro">
+          <div>
+            <p className="font-medium mb-2">Welcome to your first workout!</p>
+            <ul className="space-y-1 text-subhead text-on-action dark:text-action">
+              <li>• <strong>Log each set</strong> - Enter weight and reps after completing a set</li>
+              <li>• <strong>Rate difficulty</strong> - tell us how many more reps you could have done</li>
+              <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
+              <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
+            </ul>
+            <p className="text-caption text-action dark:text-action mt-2">
+              We&apos;ll learn your patterns and personalize recommendations as you train!
+            </p>
+          </div>
+        </InlineHint>
       )}
 
       {/* Empty workout: the exercise-list slot shows how to start (Add exercise,
@@ -7908,6 +8079,7 @@ export default function WorkoutPage() {
                         explanation: weightRec.rationale,
                         transferFrom: weightRec.transferFrom || undefined,
                         estimateSource: weightRec.estimateSource,
+                        startsLight: weightRec.startsLight === true,
                       }
                     : undefined;
 
@@ -8278,6 +8450,8 @@ export default function WorkoutPage() {
                   {/* Drag handle - hold to reorder (wired to the existing block drag state) */}
                   <div
                     data-drag-handle
+                    role="button"
+                    aria-label={`Hold to reorder ${block.exercise.name}`}
                     className="text-ink-3 cursor-grab active:cursor-grabbing p-1.5 -m-1 touch-none flex-shrink-0"
                     onTouchStart={(e) => {
                       e.stopPropagation();
@@ -8400,6 +8574,7 @@ export default function WorkoutPage() {
           active set's pinned "Log set" bar portals into the slot at its
           bottom, and a portal target must outlive what renders into it. */}
       <div
+          ref={bottomChromeRef}
           className={`fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto flex flex-col items-stretch gap-2 pointer-events-none [&>*]:pointer-events-auto pb-[env(safe-area-inset-bottom)] ${
             keyboardOpen ? 'hidden' : ''
           }`}

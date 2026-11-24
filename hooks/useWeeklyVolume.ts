@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
 import {
@@ -103,20 +104,79 @@ export function deriveWeeklyVolume(
 }
 
 /**
+ * Completed workouts in the fetched window (distinct sessions with at least
+ * one block), so a card can say "2 workouts in the last 7 days" next to bars
+ * that read low because of it. Pure.
+ */
+export function countWindowWorkouts(blocks: readonly WeeklyVolumeBlockRow[]): number {
+  const ids = new Set<string>();
+  for (const b of blocks) {
+    const s = (b as { workout_sessions?: { id?: string } | { id?: string }[] | null }).workout_sessions;
+    const session = Array.isArray(s) ? s[0] : s;
+    if (session?.id) ids.add(session.id);
+  }
+  return ids.size;
+}
+
+/** Prefix for the shared weekly-volume query (see useWeeklyVolume). */
+export const WEEKLY_VOLUME_QUERY_KEY = ['log', 'weekly-volume'] as const;
+
+const EMPTY_BLOCKS: WeeklyVolumeBlockRow[] = [];
+
+/**
+ * The week's blocks with their sets, since `windowStartIso`. ALWAYS derived
+ * from set_logs. The old weekly_muscle_volume stored-rows fast-path is gone:
+ * no production code ever wrote that table, and any rows an old build /
+ * migration / fixture might leave behind would freeze stale-convention
+ * (pre-group-cap) numbers over live derivation. The table itself is dropped
+ * (20260730000001) so the trap cannot be re-armed by a future writer.
+ *
+ * Same select as the dashboard's weekly-volume query, `feedback` included:
+ * without it there is no RIR to weight with and the effective volume
+ * silently degrades to the raw count. Rows are scoped to the signed-in user
+ * by RLS on workout_sessions.
+ */
+export async function fetchWeeklyVolumeBlocks(windowStartIso: string): Promise<WeeklyVolumeBlockRow[]> {
+  const supabase = createUntypedClient();
+  const { data, error } = await supabase
+    .from('exercise_blocks')
+    .select(`
+      id,
+      exercises (
+        id,
+        name,
+        primary_muscle,
+        secondary_muscles
+      ),
+      set_logs (
+        id,
+        is_warmup,
+        feedback
+      ),
+      workout_sessions!inner (
+        id,
+        completed_at,
+        user_id,
+        state
+      )
+    `)
+    .eq('workout_sessions.state', 'completed')
+    .gte('workout_sessions.completed_at', windowStartIso);
+  if (error) throw error;
+  return (data ?? []) as WeeklyVolumeBlockRow[];
+}
+
+/**
  * The week's training volume, derived from `set_logs` through the SHARED
  * pipeline (`app/(dashboard)/dashboard/_lib/weeklyVolume`) that the home glance
  * tile, volume page, readiness sheet and atrophy warning all render from — so
  * no surface can report a different number of sets for the same week.
  */
 export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
-  const [blocks, setBlocks] = useState<WeeklyVolumeBlockRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const getVolumeLandmarks = useUserStore((state) => state.getVolumeLandmarks);
   // `getVolumeLandmarks` is a stable function that reads the store's user at
   // call time, so it can't be the memo dependency on its own: the derivation
-  // below must re-run when the user (experience, custom landmarks, Enhanced
+  // must re-run when the user's profile (experience, priorities, Enhanced
   // Athlete Mode) is hydrated or edited.
   const storeUser = useUserStore((state) => state.user);
 
@@ -131,62 +191,28 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     [options.weekStart]
   );
 
-  const fetchVolume = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const supabase = createUntypedClient();
-
-      // ALWAYS derive from set_logs. The old weekly_muscle_volume stored-rows
-      // fast-path is gone: no production code ever wrote that table, and any
-      // rows an old build / migration / fixture might leave behind would
-      // freeze stale-convention (pre-group-cap) numbers over live derivation.
-      // The table itself is dropped (20260730000001) so the trap cannot be
-      // re-armed by a future writer.
-      //
-      // Same select as the dashboard's weekly-volume query, `feedback`
-      // included: without it there is no RIR to weight with and the effective
-      // volume silently degrades to the raw count. Rows are scoped to the
-      // signed-in user by RLS on workout_sessions.
-      const { data, error: queryError } = await supabase
-        .from('exercise_blocks')
-        .select(`
-          id,
-          exercises (
-            id,
-            name,
-            primary_muscle,
-            secondary_muscles
-          ),
-          set_logs (
-            id,
-            is_warmup,
-            feedback
-          ),
-          workout_sessions!inner (
-            id,
-            completed_at,
-            user_id,
-            state
-          )
-        `)
-        .eq('workout_sessions.state', 'completed')
-        .gte('workout_sessions.completed_at', windowStartIso);
-
-      if (queryError) throw queryError;
-      setBlocks((data ?? []) as WeeklyVolumeBlockRow[]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch volume');
-      setBlocks([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [windowStartIso]);
-
-  useEffect(() => {
-    fetchVolume();
-  }, [fetchVolume]);
+  // One React Query per window (CLAUDE.md cached-first). The dashboard shell
+  // (nav indicator), Train, Progress › Strength and the workout setup all
+  // read this hook: as a shared query they make ONE request between them,
+  // and navigating to Train or Progress paints the week from cache instead
+  // of re-fetching it per mount. 'log'-prefixed: persisted, and invalidated
+  // on every workout finish (WORKOUT_DERIVED_QUERY_PREFIXES).
+  const query = useQuery({
+    queryKey: [...WEEKLY_VOLUME_QUERY_KEY, windowStartIso],
+    queryFn: () => fetchWeeklyVolumeBlocks(windowStartIso),
+    staleTime: 30 * 1000,
+  });
+  const blocks = query.data ?? EMPTY_BLOCKS;
+  const isLoading = query.isPending;
+  const error = query.error
+    ? query.error instanceof Error
+      ? query.error.message
+      : 'Failed to fetch volume'
+    : null;
+  const { refetch } = query;
+  const refetchVolume = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   const { volumeData, rows, tiles } = useMemo(
     () => deriveWeeklyVolume(blocks, getVolumeLandmarks),
@@ -194,7 +220,11 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     [blocks, getVolumeLandmarks, storeUser]
   );
 
+  const workouts = useMemo(() => countWindowWorkouts(blocks), [blocks]);
+
   return {
+    /** Completed workouts in the window (see countWindowWorkouts). */
+    workouts,
     /** Per-head (26 standard muscles), uncapped — never sum for a week total. */
     volumeData,
     /** Shared coarse row model. */
@@ -206,6 +236,6 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     /** Window start as a localDay string (`YYYY-MM-DD`). */
     weekStart: localDay(new Date(windowStartIso)),
     windowStartIso,
-    refetch: fetchVolume,
+    refetch: refetchVolume,
   };
 }

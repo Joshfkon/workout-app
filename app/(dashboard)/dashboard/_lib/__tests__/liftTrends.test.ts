@@ -1,4 +1,4 @@
-import { computeLiftTrends, type LiftTrendSessionRow } from '../liftTrends';
+import { computeLiftTrends, liftRateReadiness, type LiftTrendSessionRow } from '../liftTrends';
 
 /** Build a completed session with one exercise block and one working top set. */
 function session(
@@ -195,10 +195,16 @@ describe('computeLiftTrends', () => {
       {
         name: 'Bench Press', sessions: 2, bestWeightKg: 85, bestReps: 6,
         firstWeightKg: 80, firstReps: 8, latestWeightKg: 85, latestReps: 6,
+        // Each workout's top set, oldest first, for the pre-trend chart.
+        points: [
+          { date: '2026-06-15', weightKg: 80, topSetReps: 8, e1rmKg: expect.any(Number) },
+          { date: '2026-06-22', weightKg: 85, topSetReps: 6, e1rmKg: expect.any(Number) },
+        ],
       },
       {
         name: 'Squat', sessions: 1, bestWeightKg: 100, bestReps: 5,
         firstWeightKg: 100, firstReps: 5, latestWeightKg: 100, latestReps: 5,
+        points: [expect.objectContaining({ weightKg: 100, topSetReps: 5 })],
       },
     ]);
   });
@@ -221,6 +227,89 @@ describe('computeLiftTrends', () => {
 
     expect(summary.lifts).toHaveLength(1);
     expect(summary.lifts[0].direction).toBe('rising');
+  });
+});
+
+// UX panel r20 (4 of 6): "Many lifts read exactly 0.0%/wk, which looks like
+// missing data shown as a real stall." Three workouts on one day fit a slope
+// of exactly 0; a rate only shows when it's real.
+describe('not enough data for a real weekly rate', () => {
+  it('three workouts on the same day: no rate, not counted flat, no stall', () => {
+    const sessions = [
+      session('s1', '2026-06-20T08:00:00', bench, 80, 8),
+      session('s2', '2026-06-20T12:00:00', bench, 80, 8),
+      session('s3', '2026-06-20T18:00:00', bench, 80, 8),
+    ];
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-06-21'));
+    expect(summary.lifts).toHaveLength(1);
+    const lift = summary.lifts[0];
+    expect(lift.notEnoughData).toEqual({
+      reason: 'short_span',
+      workoutsNeeded: 1,
+      spanDays: 0,
+      readyOn: '2026-06-30',
+    });
+    expect(summary.flat).toBe(0);
+    expect(summary.rising + summary.flat + summary.down).toBe(0);
+    expect(summary.tooEarly).toBe(1);
+    expect(summary.rebuilding).toBe(0);
+    expect(lift.plateau).toBeNull();
+    expect(summary.stalled).toBeNull();
+  });
+
+  it('workouts a few days apart are still too early; spread over 10+ days they are real', () => {
+    const close = computeLiftTrends(
+      [
+        session('a', '2026-06-01T10:00:00', bench, 80, 8),
+        session('b', '2026-06-03T10:00:00', bench, 82.5, 8),
+        session('c', '2026-06-05T10:00:00', bench, 85, 8),
+      ],
+      'bulk',
+      new Date('2026-06-06')
+    );
+    expect(close.lifts[0].notEnoughData?.reason).toBe('short_span');
+    expect(close.lifts[0].notEnoughData?.readyOn).toBe('2026-06-11');
+    expect(close.rising).toBe(0);
+
+    const spread = computeLiftTrends(
+      [
+        session('a', '2026-06-01T10:00:00', bench, 80, 8),
+        session('b', '2026-06-06T10:00:00', bench, 82.5, 8),
+        session('c', '2026-06-11T10:00:00', bench, 85, 8),
+      ],
+      'bulk',
+      new Date('2026-06-12')
+    );
+    expect(spread.lifts[0].notEnoughData).toBeNull();
+    expect(spread.rising).toBe(1);
+    expect(spread.tooEarly).toBe(0);
+  });
+
+  it('lists lifts without a real rate after the trended ones', () => {
+    const sessions = [
+      session('q1', '2026-06-01T10:00:00', squat, 140, 5),
+      session('q2', '2026-06-08T10:00:00', squat, 135, 5),
+      session('q3', '2026-06-15T10:00:00', squat, 130, 5),
+      session('b1', '2026-06-15T10:00:00', bench, 80, 8),
+      session('b2', '2026-06-15T14:00:00', bench, 80, 8),
+      session('b3', '2026-06-15T18:00:00', bench, 80, 8),
+    ];
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-06-16'));
+    expect(summary.lifts.map((l) => l.name)).toEqual(['Squat', 'Bench Press']);
+    expect(summary.down).toBe(1);
+    expect(summary.tooEarly).toBe(1);
+  });
+
+  it('liftRateReadiness: too few usable points asks for more workouts', () => {
+    expect(liftRateReadiness({ confidence: 'insufficient', pointsUsed: 1, spanDays: 0 }, ['2026-06-01'])).toEqual({
+      reason: 'few_workouts',
+      workoutsNeeded: 2,
+      spanDays: 0,
+      readyOn: null,
+    });
+    expect(liftRateReadiness({ confidence: 'high', pointsUsed: 4, spanDays: 21 }, ['2026-06-01'])).toBeNull();
+    // A long gap (low confidence) with a real span keeps its rate.
+    expect(liftRateReadiness({ confidence: 'low', pointsUsed: 4, spanDays: 70 }, ['2026-04-01'])).toBeNull();
   });
 });
 

@@ -12,7 +12,7 @@ describe('whyThisWeightSummary', () => {
         { ref: 'last_session', refSet: '65 lbs × 13', refRir: 2, rule: 'add_rep' },
         '65 lbs × 14'
       )
-    ).toBe('Last time: 65 lbs × 13, 2 reps left → you had room, so +1 rep today: 65 lbs × 14.');
+    ).toBe('Last time: 65 lbs × 13, and you could have done 2 more reps. You had room, so try 1 more rep today: 65 lbs × 14.');
   });
 
   it('says why the load moved within a session', () => {
@@ -21,19 +21,19 @@ describe('whyThisWeightSummary', () => {
         { ref: 'last_set', refSet: '60 kg × 12', refRir: 4, rule: 'load_up', because: 'easier' },
         '62.5 kg × 10'
       )
-    ).toBe('Your last set: 60 kg × 12, 4+ reps left → easier than your target, so weight up today: 62.5 kg × 10.');
+    ).toBe('Your last set: 60 kg × 12, and you could have done 4 or more reps. Easier than your target, so weight up today: 62.5 kg × 10.');
   });
 
   it('leaves the effort out when none was logged', () => {
     expect(
       whyThisWeightSummary({ ref: 'last_session', refSet: '60 kg × 8', refRir: null, rule: 'hold' }, '60 kg × 8')
-    ).toBe('Last time: 60 kg × 8 → same weight today: 60 kg × 8.');
+    ).toBe('Last time: 60 kg × 8. Same weight today: 60 kg × 8.');
   });
 
   it('rounded up, starting guess, recent sets, warm-up, deload', () => {
     expect(
       whyThisWeightSummary({ ref: 'last_session', refSet: '20 kg × 10', refRir: 3, rule: 'rounded_up' }, '22.5 kg × 10')
-    ).toBe('Last time: 20 kg × 10, 3 reps left → your plates round up a little, so same reps at a touch more weight today: 22.5 kg × 10.');
+    ).toBe('Last time: 20 kg × 10, and you could have done 3 more reps. Your plates round up a little, so same reps at a touch more weight today: 22.5 kg × 10.');
     expect(whyThisWeightSummary({ ref: null, rule: 'start_guess', basis: 'your Bench Press' }, '40 kg × 8–12')).toBe(
       'First time on this lift: a starting guess from your Bench Press → 40 kg × 8–12. Adjust after your first set.'
     );
@@ -48,6 +48,20 @@ describe('whyThisWeightSummary', () => {
     );
   });
 
+  it('never uses the "reps left → +1 rep" shorthand (round 20: jargon for a beginner)', () => {
+    const summary = whyThisWeightSummary(
+      { ref: 'last_session', refSet: '45 lbs × 10', refRir: 2, rule: 'add_rep' },
+      '45 lbs × 11'
+    )!;
+    const line = whyThisWeightLine({ ref: 'last_session', refSet: '45 lbs × 10', refRir: 2, rule: 'add_rep' })!;
+    for (const text of [summary, line]) {
+      expect(text).not.toMatch(/reps? left|→|\+1 rep/);
+      expect(text).toMatch(/you could have done 2 more reps/);
+    }
+    // The prefilled rep count is named, so "11" isn't a mystery.
+    expect(summary).toMatch(/45 lbs × 11/);
+  });
+
   it('says nothing without inputs', () => {
     expect(whyThisWeightSummary(null, '60 kg × 8')).toBeNull();
   });
@@ -56,16 +70,16 @@ describe('whyThisWeightSummary', () => {
 describe('whyThisWeightLine (the strip, no tap)', () => {
   it('progressions name the set they came from, its effort and the step', () => {
     expect(whyThisWeightLine({ ref: 'last_session', refSet: '65 lbs × 13', refRir: 2, rule: 'add_rep' })).toBe(
-      'Last time 65 lbs × 13, 2 reps left → +1 rep'
+      'Last time 65 lbs × 13 — you could have done 2 more reps, so try 1 more rep today'
     );
     expect(whyThisWeightLine({ ref: 'last_session', refSet: '60 kg × 12', refRir: 3, rule: 'add_load' })).toBe(
-      'Last time 60 kg × 12, 3 reps left → one weight step up'
+      'Last time 60 kg × 12 — you could have done 3 more reps, so one weight step up today'
     );
     expect(
       whyThisWeightLine({ ref: 'last_set', refSet: '60 kg × 12', refRir: 4, rule: 'load_up', because: 'easier' })
-    ).toBe('Last set 60 kg × 12, 4+ reps left → weight up');
+    ).toBe('Last set 60 kg × 12 — you could have done 4 or more reps, so a bit more weight today');
     expect(whyThisWeightLine({ ref: 'last_session', refSet: '60 kg × 8', refRir: null, rule: 'hold' })).toBe(
-      'Last time 60 kg × 8 → same weight'
+      'Last time 60 kg × 8, so same weight today'
     );
   });
 
@@ -104,14 +118,14 @@ describe('SuggestionBanner "Why this weight?"', () => {
       />
     );
     const link = screen.getByTestId('why-this-weight');
-    expect(link).toHaveTextContent('Why this weight?');
+    expect(link).toHaveTextContent("How it's worked out");
     // Not tagged Pro: smart weight suggestions aren't gated (only the
     // mesocycle builder and AI coach are), so the label would be false.
     expect(screen.queryByTestId('pro-tag')).toBeNull();
     await user.click(link);
     const sheet = screen.getByRole('dialog');
     expect(screen.getByTestId('why-this-weight-summary')).toHaveTextContent(
-      'Last time: 65 lbs × 13, 2 reps left → you had room, so +1 rep today: 65 lbs × 14.'
+      'Last time: 65 lbs × 13, and you could have done 2 more reps. You had room, so try 1 more rep today: 65 lbs × 14.'
     );
     // The engine reasoning is still below it.
     expect(sheet).toHaveTextContent('Set-position matching');
@@ -121,12 +135,12 @@ describe('SuggestionBanner "Why this weight?"', () => {
     render(
       <SuggestionBanner
         {...props}
-        source="Last time 65 lbs × 13, 2 reps left → +1 rep"
+        source="Last time 65 lbs × 13 — you could have done 2 more reps, so try 1 more rep today"
         why={{ ref: 'last_session', refSet: '65 lbs × 13', refRir: 2, rule: 'add_rep' }}
       />
     );
     const line = screen.getByTestId('suggestion-source');
-    expect(line).toHaveTextContent('Last time 65 lbs × 13, 2 reps left → +1 rep');
+    expect(line).toHaveTextContent('Last time 65 lbs × 13 — you could have done 2 more reps, so try 1 more rep today');
     expect(line.parentElement).toContainElement(screen.getByTestId('why-this-weight'));
     // The engine's terser reason moved to the sheet: one "why" on the strip.
     expect(screen.queryByText(/go one more rep/)).not.toBeInTheDocument();

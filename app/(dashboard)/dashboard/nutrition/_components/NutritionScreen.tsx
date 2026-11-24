@@ -1,8 +1,17 @@
 'use client';
 
 import { mealFromAddParam } from '@/lib/nutrition/addFoodLink';
+import { JUST_ADDED_MS, rowNeedsScroll } from '@/lib/nutrition/addConfirmation';
+import {
+  WEIGHT_CHART_RANGE_DAYS,
+  notEnoughWeighInsMessage,
+  pickWeightChartRange,
+  type WeightChartRange,
+} from '@/lib/nutrition/weightChartRange';
+import { buildPendingRows, dropPendingRows, reconcileSavedRows, totalsWith, isPendingFoodLogId } from '@/lib/nutrition/optimisticAdd';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useHydrated } from '@/hooks/useHydrated';
+import { useNoCamera } from '@/hooks/useNoCamera';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
@@ -15,8 +24,14 @@ import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 
+// The Add food sheet is this page's main action, so it is imported
+// statically (its camera/label scanners stay lazy inside it). As a lazy chunk
+// it opened a beat after Search / Log food were tapped: the page was already
+// tappable, the persona tapped Search again, and the sheet arriving
+// mid-tap swallowed it (r20 panel, 6 of 6: "my first tap on Search did
+// nothing ... search turned out to be already open").
+import { AddFoodModal, type AddFoodTab } from '@/components/nutrition/AddFoodModal';
 // Dynamic imports for heavy modals - reduces initial bundle size
-const AddFoodModal = dynamic(() => import('@/components/nutrition/AddFoodModal').then(m => ({ default: m.AddFoodModal })), { ssr: false });
 const WeightLogModal = dynamic(() => import('@/components/nutrition/WeightLogModal').then(m => ({ default: m.WeightLogModal })), { ssr: false });
 const WeightHistoryModal = dynamic(() => import('@/components/nutrition/WeightHistoryModal').then(m => ({ default: m.WeightHistoryModal })), { ssr: false });
 const NutritionTargetsModal = dynamic(() => import('@/components/nutrition/NutritionTargetsModal').then(m => ({ default: m.NutritionTargetsModal })), { ssr: false });
@@ -40,7 +55,6 @@ import type {
 } from '@/types/nutrition';
 import type { ParsedMealItem } from '@/lib/actions/nutrition-ai';
 import type { SavedMeal, SavedMealItem } from '@/components/nutrition/SavedMealsModal';
-import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
 import type { LabelScanPrefill } from '@/components/nutrition/LabelScanner';
 import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
 import { FoodEmojiAvatar } from '@/components/nutrition/FoodEmoji';
@@ -68,12 +82,26 @@ import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
 import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
 import { setMacroAutoUpdateEnabled } from '@/lib/actions/nutrition';
 import { customFoodFieldsFromScan } from '@/lib/nutrition/scannedCustomFood';
-import { addLoggedRowsToFrequentFoods, buildFrequentFoods, frequentFoodPortion, quickAddMessage, addedToMealMessage } from '@/lib/nutrition/frequentFoods';
+import {
+  addLoggedRowsToFrequentFoods,
+  buildFrequentFoods,
+  frequentFoodPortion,
+  addedToMealMessage,
+  quickAddConfirmation,
+  mealTypeForHour,
+  dayTotalsLine,
+  formatPortion,
+  rankQuickAddFoods,
+  addedAmountLine,
+} from '@/lib/nutrition/frequentFoods';
+import { now as clockNow } from '@/lib/clock';
+import type { QuickAddConfirmation } from '@/components/nutrition/QuickAddChips';
 import { addLocalDays } from '@/lib/date/localDay';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { computeScanPairPRatios } from '@/services/compositionSpace';
 import { StepTracking } from '@/components/nutrition/StepTracking';
+import { StepSyncActions } from '@/components/nutrition/StepSyncActions';
 import {
   getLocalDateString,
   formatDate,
@@ -120,6 +148,9 @@ export type NutritionView = 'log' | 'trends';
 
 export const NUTRITION_TRENDS_HREF = '/dashboard/nutrition/trends';
 
+/** localStorage key: Weight & trends' "More: energy burn & steps" is open. */
+const TRENDS_MORE_KEY = 'ht:trendsMoreOpen:v1';
+
 /** Legacy ?tab=weight / ?tab=insights links now live at the trends route. */
 export function isLegacyTrendsTab(value: string | null): boolean {
   return value === 'weight' || value === 'insights';
@@ -146,11 +177,7 @@ function getMealConfig(customNames?: MealNames | null) {
 
 /** Time-of-day default meal (Describe / frequent chips / saved meals) */
 function getMealTypeForNow(): MealType {
-  const hour = new Date().getHours();
-  if (hour < 11) return 'breakfast';
-  if (hour < 15) return 'lunch';
-  if (hour < 20) return 'dinner';
-  return 'snack';
+  return mealTypeForHour(clockNow().getHours());
 }
 
 // Convert food names to proper title case (fix ALL CAPS from USDA/databases)
@@ -206,13 +233,6 @@ interface FoodLogInsert {
   nutritionix_id?: string;
 }
 
-const WEIGHT_CHART_RANGE_DAYS = {
-  '7d': 7,
-  '14d': 14,
-  '30d': 30,
-  '90d': 90,
-} as const;
-type WeightChartRange = keyof typeof WEIGHT_CHART_RANGE_DAYS;
 
 /** Skeleton for the macro summary numbers while a never-fetched day loads. */
 function MacroNumbersSkeleton() {
@@ -266,6 +286,9 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     typeof window === 'undefined' ? null : getLocalDateString()
   );
   const isMounted = useHydrated();
+  // Eat's Scan tile says "type the number" before the tap on a device with
+  // no camera (log view only; the trends view has no Scan).
+  const noCamera = useNoCamera(view === 'log');
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
@@ -291,18 +314,40 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
   const [addFoodTab, setAddFoodTab] = useState<AddFoodTab>('search');
+  // Opened from the Search quick action: the sheet puts the cursor in the box.
+  const [addFoodFocusSearch, setAddFoodFocusSearch] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<MealType>(getMealTypeForNow);
   // The meal the user last chose (opening a meal card, or switching the meal
   // in the Add food sheet). Quick-log chips follow it; until the user picks
   // one, they follow the time of day. null = no explicit choice yet.
   const [quickMeal, setQuickMeal] = useState<MealType | null>(null);
+  // Weight & trends: the metabolism details disclosure. Closed by default;
+  // remembered per viewer (a convenience: storage may be unavailable).
+  const [trendsMoreOpen, setTrendsMoreOpenState] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TRENDS_MORE_KEY) === '1') setTrendsMoreOpenState(true);
+    } catch {
+      /* storage unavailable: stay closed */
+    }
+  }, []);
+  const setTrendsMoreOpen = (open: boolean) => {
+    setTrendsMoreOpenState(open);
+    try {
+      window.localStorage.setItem(TRENDS_MORE_KEY, open ? '1' : '0');
+    } catch {
+      /* storage unavailable: not remembered */
+    }
+  };
   const [showDescribeMeal, setShowDescribeMeal] = useState(false);
   // Meal type a reminder deep-linked into Describe for (?describe=lunch).
   const [describeMealType, setDescribeMealType] = useState<MealType | null>(null);
   const [showSavedMeals, setShowSavedMeals] = useState(false);
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showWeightHistory, setShowWeightHistory] = useState(false);
-  const [weightChartRange, setWeightChartRange] = useState<WeightChartRange>('30d');
+  // null = not chosen yet: the chart opens on the shortest of 30 / 90 days
+  // with enough weigh-ins (lib/nutrition/weightChartRange).
+  const [weightChartRange, setWeightChartRange] = useState<WeightChartRange | null>(null);
   const [editingWeight, setEditingWeight] = useState<WeightLogEntry | null>(null);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
@@ -346,7 +391,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   useEffect(() => {
     const meal = mealFromAddParam(searchParams.get('add'), getMealTypeForNow());
     if (!meal) return;
-    openAddFood(meal);
+    // Straight into search: the box focused, recent foods under it.
+    openAddFood(meal, 'search', { focusSearch: true });
     window.history.replaceState(null, '', pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -368,26 +414,41 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
 
-  const { toasts, dismissToast, showSuccess, addToast } = useToasts();
+  const { toasts, dismissToast, showSuccess, showError, addToast } = useToasts();
   // Food-only users (hooks/useTrackingFocus) get no FFMI in the projections.
   const { foodOnly } = useTrackingFocus();
 
-  // Rows a quick-add just created: briefly tinted + slid in inside their meal
-  // (alongside the Undo toast), so a one-tap add is unmistakable.
+  // Rows a quick-add just created: tinted, check-marked and labelled "Added
+  // just now" inside their meal (alongside the Undo), so a one-tap add is
+  // unmistakable where the eye goes (r20 panel, 4 of 6: "confirmation ... not
+  // obvious"). Long enough to read at a glance, not just a flash.
   const [justAddedIds, setJustAddedIds] = useState<Set<string>>(() => new Set());
   const justAddedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last "Added ..." toast, so a newer add can clear it: an old toast
+  // carried the old day total and sat over the row that had just landed.
+  const addedToastIdRef = useRef<string | null>(null);
+  const replaceAddedToast = useCallback((id: string | null) => {
+    if (addedToastIdRef.current) dismissToast(addedToastIdRef.current);
+    addedToastIdRef.current = id;
+  }, [dismissToast]);
   const flagJustAdded = useCallback((rows: FoodLogEntry[]) => {
     if (rows.length === 0) return;
     setJustAddedIds(new Set(rows.map((r) => r.id)));
     if (justAddedTimerRef.current) clearTimeout(justAddedTimerRef.current);
-    justAddedTimerRef.current = setTimeout(() => setJustAddedIds(new Set()), 2400);
-    // Bring the new row into view once it has rendered (no-op if visible).
+    justAddedTimerRef.current = setTimeout(() => setJustAddedIds(new Set()), JUST_ADDED_MS);
+    // Bring the new row into view once it has rendered. "nearest" parked it
+    // at the bottom edge, under the tab bar and the toast; centre it unless
+    // it is already comfortably on screen.
     requestAnimationFrame(() => {
       const id = rows[0].id;
       const el = Array.from(document.querySelectorAll<HTMLElement>('[data-food-entry-id]')).find(
         (node) => node.dataset.foodEntryId === id
       );
-      el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rowNeedsScroll(rect, window.innerHeight)) {
+        el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      }
     });
   }, []);
   useEffect(() => () => {
@@ -495,24 +556,31 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // Optimistic writer for the selected day's cache. Drop-in replacement for the
   // old setFoodEntries(setState) used by every mutation/undo path.
   const mutateFoodEntries = useCallback(
-    (updater: FoodLogEntry[] | ((prev: FoodLogEntry[]) => FoodLogEntry[])) => {
-      if (!selectedDate) return;
+    (
+      updater: FoodLogEntry[] | ((prev: FoodLogEntry[]) => FoodLogEntry[]),
+      // The day to write; defaults to the selected one. An optimistic add
+      // passes the day it was made on, so a save that lands after the user
+      // switched days still reconciles the right day.
+      dayArg?: string | null
+    ) => {
+      const day = dayArg === undefined ? selectedDate : dayArg;
+      if (!day) return;
       const nextEntries = queryClient.setQueryData<FoodLogEntry[]>(
-        nutritionDayKey(selectedDate),
+        nutritionDayKey(day),
         (prev = []) => (typeof updater === 'function' ? updater(prev) : updater)
       );
       // The calendar's month aggregate now disagrees with the day cache. Mark
       // it stale so the next sheet open refetches — matters for PAST months,
       // whose immutable-in-practice staleTime would otherwise hide the edit.
       void queryClient.invalidateQueries({
-        queryKey: nutritionMonthKey(selectedDate.slice(0, 7)),
+        queryKey: nutritionMonthKey(day.slice(0, 7)),
         refetchType: 'none',
       });
       // Cross-surface: the Home ('/dashboard/log') "Today so far" card reads
       // today's totals from a SEPARATE query (['log','home']) that this write
       // doesn't touch. Only today's edits affect Home (it only ever shows
       // today's totals).
-      if (selectedDate === getLocalDateString()) {
+      if (day === getLocalDateString()) {
         // Patch the Home cache's totals optimistically from the same food-entry
         // rows we just wrote, THEN invalidate for reconciliation. Invalidation
         // alone only marks the query stale: React Query keeps serving the old
@@ -527,7 +595,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           const sumOf = (key: 'calories' | 'protein' | 'carbs' | 'fat') =>
             Math.round(nextEntries.reduce((sum, r) => sum + (r[key] || 0), 0));
           queryClient.setQueryData<LogHomeData | null>(LOG_HOME_QUERY_KEY, (prev) => {
-            if (!prev || prev.date !== selectedDate) return prev;
+            if (!prev || prev.date !== day) return prev;
             return {
               ...prev,
               todaySoFar: {
@@ -844,6 +912,88 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   /**
+   * One-tap adds are optimistic: placeholder rows go into the day's cache at
+   * once, so the totals at the top, the meal card and the confirmation all
+   * change on the tap, then are swapped for the saved rows (or removed if
+   * the insert fails). See lib/nutrition/optimisticAdd.
+   */
+  const pendingIdRef = useRef(0);
+  function addFoodsOptimistically(foods: FoodLogInsert[]): {
+    rows: FoodLogEntry[];
+    saved: Promise<FoodLogEntry[]>;
+    /** The day's calories and protein with these rows in (read from the cache, so rapid taps each count the last). */
+    dayTotals: { calories: number; protein: number };
+  } {
+    const day = selectedDate;
+    if (!day) throw new Error('Date not initialized');
+    const pending = buildPendingRows(foods, {
+      day,
+      createdAt: new Date().toISOString(),
+      nextId: () => String(++pendingIdRef.current),
+    });
+    const pendingIds = pending.map((row) => row.id);
+    mutateFoodEntries((prev) => [...prev, ...pending], day);
+    flagJustAdded(pending);
+    const dayTotals = totalsWith(
+      { calories: 0, protein: 0 },
+      queryClient.getQueryData<FoodLogEntry[]>(nutritionDayKey(day)) ?? pending
+    );
+
+    const insert = foods.length === 1 ? insertFoodEntry(foods[0]).then((row) => [row]) : insertFoodEntries(foods);
+    const saved = insert.then(
+      (rows) => {
+        mutateFoodEntries((prev) => reconcileSavedRows(prev, pendingIds, rows), day);
+        setFrequentFoods((prev) => addLoggedRowsToFrequentFoods(prev, rows, new Date().toISOString()));
+        mutateRecentFoodsCache((prev) => [...rows, ...prev]);
+        // Keep the "Added just now" highlight on the saved rows.
+        setJustAddedIds((prev) => {
+          if (!pendingIds.some((id) => prev.has(id))) return prev;
+          const next = new Set(prev);
+          pendingIds.forEach((id, i) => {
+            if (next.delete(id) && rows[i]) next.add(rows[i].id);
+          });
+          return next;
+        });
+        return rows;
+      },
+      (err) => {
+        mutateFoodEntries((prev) => dropPendingRows(prev, pendingIds), day);
+        // Said here, not only by the confirmation banner: the banner may have
+        // timed out, been replaced or closed with the sheet by the time the
+        // insert fails, and the user already saw "Added" (Codex review on #871).
+        const names = foods.map((f) => f.food_name).filter(Boolean).join(', ') || 'That food';
+        showError(`${names} wasn't saved, so it's no longer in your log. Please add it again.`);
+        throw err;
+      }
+    );
+    // Callers watch `saved` (the confirmation turns into an error line);
+    // this branch only keeps a failure from surfacing as unhandled.
+    saved.catch(() => {});
+    return { rows: pending, saved, dayTotals };
+  }
+
+  /** The confirmation for an optimistic add, quoting the day with it included. */
+  function optimisticConfirmation(
+    text: { added: string; removed: string; failed: string },
+    dayTotals: { calories: number; protein: number },
+    saved: Promise<FoodLogEntry[]>
+  ): QuickAddConfirmation {
+    return {
+      added: text.added,
+      removed: text.removed,
+      failed: text.failed,
+      totals: `Day total ${dayTotalsLine(dayTotals, {
+        calories: effectiveTargets?.calories ?? null,
+        protein: effectiveTargets?.protein ?? null,
+      })}`,
+      saved,
+      onUndo: async () => {
+        await undoQuickAdd(await saved);
+      },
+    };
+  }
+
+  /**
    * Refresh only the data a weight or target change can affect (weight list,
    * nutrition targets, adaptive TDEE) — 2 queries + 1 server action instead
    * of the full loadData() tree.
@@ -921,7 +1071,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     // Same confirmation as the one-tap adds, plus where the day now stands:
     // "Added to Dinner · 1,640 / 2,400 kcal · 120 / 180 g protein".
     // dailyTotals is this render's (pre-insert) day, so add the new row.
-    addToast(
+    replaceAddedToast(null);
+    addedToastIdRef.current = addToast(
       'success',
       addedToMealMessage(
         mealLabelFor(food.meal_type),
@@ -971,32 +1122,62 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   /**
-   * Quick-add from the Recent / Meals views: re-log a snapshot into the
-   * selected day WITHOUT closing the sheet, with an undo toast. Keeps the
-   * per-day and recents caches consistent optimistically.
+   * Quick-add from the Recent / Meals / search views: re-log a snapshot into
+   * the selected day WITHOUT closing the sheet. Optimistic; the sheet shows
+   * the returned confirmation at the top of its list, where the tap was
+   * (r21 panel: the page's toast sat over the sheet with no totals).
    */
-  async function handleQuickAddFood(food: FoodLogInsert) {
-    const inserted = await insertFoodEntry(food);
-    applyInsertedEntries([inserted]);
-    mutateRecentFoodsCache((prev) => [inserted, ...prev]);
-    flagJustAdded([inserted]);
-    addToast('success', quickAddMessage(toTitleCase(food.food_name), food.serving_size, mealLabelFor(food.meal_type)), 5000, {
-      label: 'Undo',
-      onClick: () => { void undoQuickAdd([inserted]); },
-    });
+  async function handleQuickAddFood(food: FoodLogInsert): Promise<QuickAddConfirmation> {
+    const name = toTitleCase(food.food_name);
+    const mealLabel = mealLabelFor(food.meal_type);
+    const { dayTotals, saved } = addFoodsOptimistically([food]);
+    replaceAddedToast(null);
+    return {
+      ...optimisticConfirmation(
+        {
+          // The amount has its own line below, so the headline doesn't repeat it.
+          added: `Added ${name} to ${mealLabel}`,
+          removed: `Removed ${name} (${formatPortion(food.serving_size)}) from ${mealLabel}`,
+          failed: `Couldn’t save ${name}. Check your connection and try again.`,
+        },
+        dayTotals,
+        saved
+      ),
+      // r22 panel (Dre): show the amount on its own line, and let it be
+      // changed right there, not only undone.
+      amount: addedAmountLine(food),
+      onEdit: () => editJustAdded(saved),
+    };
   }
 
-  /** "Add all" from a prior meal — one insert per item, one combined undo. */
-  async function handleQuickAddManyFoods(foods: FoodLogInsert[]) {
+  /**
+   * Edit from an add confirmation: wait for the row's real id (the add is
+   * optimistic), close the Add food sheet so the editor isn't behind it, and
+   * open the logged entry's editor.
+   */
+  async function editJustAdded(saved: Promise<FoodLogEntry[]>) {
+    const [row] = await saved;
+    if (!row) return;
+    setShowAddFood(false);
+    openEditFood(row);
+  }
+
+  /** "Add all" from a prior meal — one insert, one combined undo. */
+  async function handleQuickAddManyFoods(foods: FoodLogInsert[]): Promise<QuickAddConfirmation | void> {
     if (foods.length === 0) return;
-    const inserted = await insertFoodEntries(foods);
-    applyInsertedEntries(inserted);
-    mutateRecentFoodsCache((prev) => [...inserted, ...prev]);
-    flagJustAdded(inserted);
-    addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'} to ${mealLabelFor(foods[0].meal_type)}`, 6000, {
-      label: 'Undo',
-      onClick: () => { void undoQuickAdd(inserted); },
-    });
+    const mealLabel = mealLabelFor(foods[0].meal_type);
+    const count = `${foods.length} item${foods.length === 1 ? '' : 's'}`;
+    const { dayTotals, saved } = addFoodsOptimistically(foods);
+    replaceAddedToast(null);
+    return optimisticConfirmation(
+      {
+        added: `Added ${count} to ${mealLabel}`,
+        removed: `Removed ${count} from ${mealLabel}`,
+        failed: `Couldn’t save those ${count}. Check your connection and try again.`,
+      },
+      dayTotals,
+      saved
+    );
   }
 
   /** The user's name for a meal slot ("Lunch", or their custom name). */
@@ -1131,32 +1312,60 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
    * user's last chosen meal, else the time-appropriate one), with an undo
    * toast naming that meal so it's never a silent guess.
    */
-  async function handleQuickLogFrequent(food: FrequentFood, mealType: MealType, mealLabel: string) {
+  async function handleQuickLogFrequent(
+    food: FrequentFood,
+    mealType: MealType,
+    mealLabel: string
+  ): Promise<QuickAddConfirmation> {
     // Re-log the last portion exactly as logged, so the chip's label
     // ("Oatmeal · 1 cup") is what lands in the log.
     const portion = frequentFoodPortion(food);
-    const inserted = await insertFoodEntry({
-      food_name: food.food_name,
-      serving_size: portion.serving_size,
-      servings: portion.servings,
-      calories: portion.calories,
-      protein: portion.protein,
-      carbs: portion.carbs,
-      fat: portion.fat,
-      meal_type: mealType,
-      source: portion.source ?? 'manual',
-      food_id: portion.food_id ?? undefined,
-    });
-    applyInsertedEntries([inserted]);
-    mutateRecentFoodsCache((prev) => [inserted, ...prev]);
-    flagJustAdded([inserted]);
-    addToast('success', quickAddMessage(toTitleCase(food.food_name), portion.serving_size, mealLabel), 5000, {
-      label: 'Undo',
-      onClick: () => { void undoQuickAdd([inserted]); },
-    });
+    const { dayTotals, saved } = addFoodsOptimistically([
+      {
+        food_name: food.food_name,
+        serving_size: portion.serving_size,
+        servings: portion.servings,
+        calories: portion.calories,
+        protein: portion.protein,
+        carbs: portion.carbs,
+        fat: portion.fat,
+        meal_type: mealType,
+        source: portion.source ?? 'manual',
+        food_id: portion.food_id ?? undefined,
+      },
+    ]);
+    // An earlier add's toast still on screen has the old day total and covers
+    // the meal cards: clear it, this add is confirmed inline under the chips
+    // (what, how much, which meal, where the day now stands), at once.
+    replaceAddedToast(null);
+    const name = toTitleCase(food.food_name);
+    const confirmation = quickAddConfirmation(
+      name,
+      portion.serving_size,
+      mealLabel,
+      dayTotals,
+      { calories: effectiveTargets?.calories ?? null, protein: effectiveTargets?.protein ?? null }
+    );
+    return {
+      ...confirmation,
+      // The amount has its own line, so the headline doesn't repeat it.
+      added: `Added ${name} to ${mealLabel}`,
+      amount: addedAmountLine(portion),
+      saved,
+      failed: `Couldn’t save ${name}. Check your connection and try again.`,
+      onUndo: async () => {
+        await undoQuickAdd(await saved);
+      },
+      onEdit: () => editJustAdded(saved),
+    };
   }
 
   async function handleDeleteFood(id: string) {
+    // A row still being saved has no database id yet (Codex review on #871).
+    if (isPendingFoodLogId(id)) {
+      addToast('info', 'Still saving that food. Try again in a moment.', 3000);
+      return;
+    }
     const entry = foodEntries.find((e) => e.id === id);
     const { error } = await supabase.from('food_log').delete().eq('id', id);
 
@@ -1271,6 +1480,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   }
 
   function openEditFood(entry: FoodLogEntry) {
+    // Editing a row still being saved would keep its placeholder id and make
+    // the later save fail; wait until it has its real id.
+    if (isPendingFoodLogId(entry.id)) {
+      addToast('info', 'Still saving that food. Try again in a moment.', 3000);
+      return;
+    }
     setEditingFood(entry);
     setShowEditFood(true);
   }
@@ -1548,12 +1763,13 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     void queryClient.invalidateQueries({ queryKey: NUTRITION_GLOBAL_KEY });
   }
 
-  function openAddFood(mealType: MealType, tab: AddFoodTab = 'search') {
+  function openAddFood(mealType: MealType, tab: AddFoodTab = 'search', opts: { focusSearch?: boolean } = {}) {
     void ensureSystemFoodsLoaded();
     setRecentsEnabled(true); // latch on the recents/meals query
     setSelectedMealType(mealType);
     setQuickMeal(mealType);
     setAddFoodTab(tab);
+    setAddFoodFocusSearch(Boolean(opts.focusSearch));
     setShowAddFood(true);
   }
 
@@ -1657,21 +1873,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       ? Math.round(remainingCalories / emptyMealCount)
       : 0;
 
-  // Top frequent foods across meals for the one-tap chips row
-  const chipMap = new Map<string, { food: FrequentFood; count: number }>();
-  for (const food of frequentFoods) {
-    const existing = chipMap.get(food.food_name);
-    if (existing) {
-      existing.count += food.times_logged;
-    } else {
-      chipMap.set(food.food_name, { food, count: food.times_logged });
-    }
-  }
-  const frequentChips = Array.from(chipMap.values())
-    .filter((chip) => chip.count >= 2)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
-    .map((chip) => chip.food);
+  // Frequent foods across meals, most-logged first, for the one-tap chips
+  // row. QuickAddChips freezes this order for the visit so an add (which
+  // bumps a count) never reshuffles the chips under the finger.
+  const frequentChips = rankQuickAddFoods(frequentFoods);
 
   // Use unified weight utility - all weight operations now use lib/weightUtils.ts
 
@@ -1694,6 +1899,12 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // home "Weight" glance tile uses, so the "+3.8 lb/wk · target +0.5" the
   // user tapped is the number this tab shows. The regression window follows
   // the chart's 7d/14d/30d/90d toggle so the rate describes what's plotted.
+  const weightChartDefault = pickWeightChartRange(
+    weightEntries.map((entry) => entry.logged_at),
+    getLocalDateString()
+  );
+  const activeWeightRange: WeightChartRange = weightChartRange ?? weightChartDefault.range;
+  const weightChartShortMessage = notEnoughWeighInsMessage(weightChartDefault);
   const weightTrendRate = computeWeightRate(
     weightEntries.map((e) => ({
       date: e.logged_at,
@@ -1702,18 +1913,22 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
     })),
     weightUnit,
     currentPhase ?? 'maintenance',
-    WEIGHT_CHART_RANGE_DAYS[weightChartRange]
+    WEIGHT_CHART_RANGE_DAYS[activeWeightRange]
   );
   const weightRateOnTrack =
     !weightTrendRate || weightTrendRate.target === null || weightTrendRate.target === 0
       ? true
       : Math.sign(weightTrendRate.perWeek) === Math.sign(weightTrendRate.target);
   const signedRate = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}`;
+  // The burn the "Your metabolism" card shows (interval estimate first), so
+  // the trends explanation and the card quote the same number.
+  const trendsBurnKcal =
+    tdeeData?.intervalEstimate?.estimatedTDEE ?? tdeeData?.bestEstimate?.estimatedTDEE ?? null;
 
   // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
   const weightChartCutoff = new Date();
-  weightChartCutoff.setDate(weightChartCutoff.getDate() - WEIGHT_CHART_RANGE_DAYS[weightChartRange]);
+  weightChartCutoff.setDate(weightChartCutoff.getDate() - WEIGHT_CHART_RANGE_DAYS[activeWeightRange]);
   const weightChartEntries = [...weightEntries]
     .filter((entry) => new Date(entry.logged_at) >= weightChartCutoff)
     .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
@@ -1786,15 +2001,66 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
   // The cold-start state is reserved for first-ever load with an empty persisted
   // cache. Date switches (keepPreviousData) and warm reloads (IndexedDB) never
   // reach this — they render chrome + skeletons or cached data instead.
+  // One Add food sheet for both states below. It also renders over the
+  // cold-start skeleton: "Log food" from Home lands here with ?add=, and the
+  // search box must be usable at once, not after the page's data arrives
+  // (r21 panel: "loading skeletons ... I had to wait before I could search").
+  const addFoodSheet = (
+    <AddFoodModal
+      isOpen={showAddFood}
+      onClose={() => setShowAddFood(false)}
+      onAdd={handleAddFood}
+      units={weightUnit}
+      defaultMealType={selectedMealType}
+      onMealTypeChange={(m) => { setSelectedMealType(m); setQuickMeal(m); }}
+      initialTab={addFoodTab}
+      focusSearch={addFoodFocusSearch}
+      onOpenDescribe={() => {
+        setShowAddFood(false);
+        setDescribeMealType(selectedMealType);
+        setShowDescribeMeal(true);
+      }}
+      onOpenSavedMeals={() => {
+        setShowAddFood(false);
+        setShowSavedMeals(true);
+      }}
+      onCreateCustomFood={(barcode) => {
+        setShowAddFood(false);
+        setCustomFoodBarcode(barcode);
+        setShowCreateCustomFood(true);
+      }}
+      onLabelScanned={(prefill) => {
+        setShowAddFood(false);
+        setLabelScanPrefill(prefill);
+        setShowCreateCustomFood(true);
+      }}
+      customFoods={customFoods}
+      frequentFoods={frequentFoods}
+      systemFoods={systemFoods}
+      recentEntries={recentFoodsQuery.data ?? []}
+      recentsLoading={recentFoodsQuery.isLoading}
+      mealNames={nutritionTargets?.meal_names ?? null}
+      selectedDay={selectedDate}
+      onQuickAdd={handleQuickAddFood}
+      onQuickAddMany={handleQuickAddManyFoods}
+    />
+  );
+
   if (isColdStart) {
+    // Same position as in the loaded page below (second child of a
+    // fragment), so the open sheet keeps its typed search when data lands.
     return (
-      <div className="max-w-7xl mx-auto" data-testid="nutrition-full-loading">
-        {isTrends ? <PageSkeleton title="Weight & trends" /> : <NutritionLoading />}
-      </div>
+      <>
+        <div className="max-w-7xl mx-auto" data-testid="nutrition-full-loading">
+          {isTrends ? <PageSkeleton title="Weight & trends" /> : <NutritionLoading />}
+        </div>
+        {isMounted && selectedDate ? addFoodSheet : null}
+      </>
     );
   }
 
   return (
+    <>
     <div className="max-w-7xl mx-auto space-y-4" suppressHydrationWarning>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
@@ -1828,7 +2094,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       )}
 
       {/* Header: title left, date nav + settings right */}
-      <div className={isTrends ? 'hidden' : 'flex items-center justify-between gap-2'}>
+      <div className={isTrends ? 'hidden' : 'flex flex-wrap items-center justify-between gap-2'}>
         <h1 className="text-large-title text-ink">Eat</h1>
         <div className="flex items-center gap-1.5">
           <button
@@ -1877,10 +2143,16 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           <div className="relative">
             <button
               onClick={() => setShowSettingsMenu((open) => !open)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-ink-2 shadow-card hover:text-ink"
+              // A word, not a bare gear, and a 44px target: an icon-only
+              // settings button was "small for my eyes and I had to guess
+              // what it was" (UX panel r22, Frank).
+              className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-card px-3.5 text-subhead font-semibold text-ink shadow-card hover:brightness-110"
               aria-label="Nutrition options"
+              aria-expanded={showSettingsMenu}
+              data-testid="nutrition-options"
             >
-              <IconSettings size={18} aria-hidden="true" />
+              <IconSettings size={20} aria-hidden="true" />
+              Options
             </button>
             {showSettingsMenu && (
               <>
@@ -1943,6 +2215,16 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             {stepAdjustment.adjustment !== 0
               ? `Target ${stepAdjustment.adjustedCalories.toLocaleString()} kcal (base ${stepAdjustment.baseCalories.toLocaleString()}). ${stepAdjustment.reason}. `
               : `${stepAdjustment.reason}. `}
+            {/* No steps yet: offer a way to get them in (sync, connect or
+                type them), not only the settings link (user report). */}
+            {selectedDate && (stepAdjustment.daySteps == null || stepAdjustment.daySteps <= 0) && (
+              <>
+                <StepSyncActions
+                  date={selectedDate}
+                  userWeightKg={tdeeData?.currentWeight ? tdeeData.currentWeight / 2.20462 : 80}
+                />{' '}
+              </>
+            )}
             <button
               type="button"
               onClick={() => setShowActivitySettings(true)}
@@ -1969,6 +2251,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         {!isDaySwitching && targetBasis && dailySummary.hasTargets && (
           <TargetBasisDisclosure
             basis={targetBasis}
+            // Home's "How your calorie target was worked out" link.
+            defaultOpen={searchParams.get('explain') === 'target'}
             onChangeTargets={() =>
               targetBasis.source === 'manual' ? setShowTargetsModal(true) : setShowMacroCalculator(true)
             }
@@ -1982,12 +2266,14 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       <NutritionQuickActions
         onDescribe={() => setShowDescribeMeal(true)}
         onScan={() => openAddFood(chipMealType, 'barcode')}
-        onSearch={() => openAddFood(chipMealType, 'search')}
+        onSearch={() => openAddFood(chipMealType, 'search', { focusSearch: true })}
         onMeals={() => setShowSavedMeals(true)}
+        noCamera={noCamera}
       />
 
-      {/* Recent-food chips: one tap logs to the meal named above them; the
-          chip itself confirms ("Added to Dinner") and the meal card lights up. */}
+      {/* Recent-food chips: one tap logs the last-logged portion to the meal
+          named above them; a line under the row confirms what was added, to
+          which meal, with the day's total and Undo, and the meal card lights up. */}
       <QuickAddChips
         foods={frequentChips}
         mealType={chipMealType}
@@ -1995,6 +2281,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         meals={mealConfig}
         onMealChange={setQuickMeal}
         onAdd={(food) => handleQuickLogFrequent(food, chipMealType, chipMealLabel)}
+        mealIsTimeDefault={quickMeal === null}
         formatName={toTitleCase}
       />
 
@@ -2029,13 +2316,14 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
               {/* Header: "{Meal}: {kcal} cals" + macro breakdown + overflow menu */}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="text-headline text-ink truncate">
+                  {/* Wraps rather than truncates: the "Added" mark must not be cut off. */}
+                  <h3 className="text-headline text-ink break-words">
                     {meal.label}
                     {hasEntries && (
                       <span className="text-subhead font-normal text-ink-2 tabular-nums"> · {mealCalories.toLocaleString()} kcal</span>
                     )}
                     {mealJustAdded && (
-                      <span className="ml-1.5 text-subhead font-medium text-status-ok" data-testid="meal-just-added">
+                      <span className="ml-1.5 whitespace-nowrap text-body font-semibold text-status-ok" data-testid="meal-just-added">
                         <IconCheck size={14} className="inline -mt-0.5" aria-hidden="true" /> Added
                       </span>
                     )}
@@ -2113,11 +2401,21 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                         data-food-entry-id={entry.id}
                         data-just-added={justAddedIds.has(entry.id) ? 'true' : undefined}
                         className={`w-full flex items-center justify-between gap-4 py-2 px-1 rounded-input active:bg-fill transition-colors text-left ${
-                          justAddedIds.has(entry.id) ? 'motion-safe:animate-row-added motion-reduce:bg-status-ok/15' : ''
+                          justAddedIds.has(entry.id) ? 'bg-status-ok/15 motion-safe:animate-row-added' : ''
                         }`}
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
-                          <FoodEmojiAvatar name={entry.food_name} />
+                          {justAddedIds.has(entry.id) ? (
+                            // The avatar becomes a check while the row is new.
+                            <span
+                              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-status-ok text-white"
+                              aria-hidden="true"
+                            >
+                              <IconCheck size={20} stroke={3} />
+                            </span>
+                          ) : (
+                            <FoodEmojiAvatar name={entry.food_name} />
+                          )}
                           <div className="min-w-0">
                             <div className="text-body text-ink truncate">
                               {toTitleCase(entry.food_name)}
@@ -2125,6 +2423,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                             <div className="text-subhead text-ink-2 truncate">
                               {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
                             </div>
+                            {justAddedIds.has(entry.id) && (
+                              <div className="text-body font-semibold text-status-ok" data-testid="food-row-just-added">
+                                Added just now
+                              </div>
+                            )}
                           </div>
                         </div>
                         <span className="text-body text-ink flex-shrink-0 tabular-nums">
@@ -2222,17 +2525,15 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             </span>
           </span>
         </span>
-        <StyledButton
-          variant="primary"
-          size="sm"
-          className="rounded-full px-4 flex-shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowWeightLog(true);
-          }}
+        {/* A label styled as a pill, not a second <button>: the whole card is
+            the button, and a button inside a button is invalid HTML (React
+            hydration error on this page). */}
+        <span
+          aria-hidden="true"
+          className="flex-shrink-0 rounded-full bg-action px-4 py-1.5 text-subhead font-semibold text-on-action"
         >
           {hasLoggedWeightToday ? 'Update' : 'Log'}
-        </StyledButton>
+        </span>
       </button>
 
       {/* Weight Trend */}
@@ -2284,7 +2585,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                 )}
                 {weightTrendRate && (
                   <div>
-                    <div className="text-subhead text-ink-2">Trend ({weightChartRange})</div>
+                    <div className="text-subhead text-ink-2">Trend ({activeWeightRange})</div>
                     <div
                       className={`text-headline font-semibold ${
                         weightRateOnTrack ? 'text-status-ok' : 'text-status-warn'
@@ -2310,7 +2611,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                         key={range}
                         onClick={() => setWeightChartRange(range)}
                         className={`px-2 py-1 text-caption rounded-md transition-colors ${
-                          weightChartRange === range
+                          activeWeightRange === range
                             ? 'bg-action text-on-action'
                             : 'text-ink-2 hover:text-ink'
                         }`}
@@ -2320,6 +2621,11 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                     ))}
                   </div>
                 </div>
+                {weightChartShortMessage && (
+                  <p className="mb-2 text-subhead text-ink-2" data-testid="weight-chart-not-enough">
+                    {weightChartShortMessage}
+                  </p>
+                )}
                 {weightChartData.length === 0 && (
                   <div className="flex h-[200px] items-center justify-center">
                     <p className="text-subhead text-ink-2">No weight data for this period</p>
@@ -2339,7 +2645,7 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                           showDateTick(
                             index,
                             weightChartData.length,
-                            dateTickStep(WEIGHT_CHART_RANGE_DAYS[weightChartRange])
+                            dateTickStep(WEIGHT_CHART_RANGE_DAYS[activeWeightRange])
                           )
                             ? value
                             : ''
@@ -2376,6 +2682,10 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
                         stroke="#3b82f6"
                         strokeWidth={2}
                         dot={{ fill: '#3b82f6', r: 4 }}
+                        // Drawn whole at once: the draw-in animation left a
+                        // screenshot (and a quick glance) of a near-empty
+                        // chart (r21 panel, Priya).
+                        isAnimationActive={false}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -2394,9 +2704,44 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
       {isTrends && (
       <div className="space-y-4">
 
-      {/* Nutrition Trends Graph */}
-      <NutritionTrendGraph targets={nutritionTargets} />
+      {/* Nutrition Trends Graph, with what "under goal" means and how logged
+          intake vs estimated burn compares with the weight trend above. */}
+      <NutritionTrendGraph
+        targets={nutritionTargets}
+        estimatedBurnKcal={trendsBurnKcal}
+        burnSettling={tdeeData?.intervalEstimate ? tdeeData.intervalEstimate.confidence !== 'stable' : true}
+        observedWeightPerWeek={weightTrendRate?.perWeek ?? null}
+        weightUnit={weightUnit}
+      />
 
+      {/* Metabolism details (burn estimate, how it's worked out, steps) sit
+          behind one disclosure: the page leads with weight and rate.
+          Panel finding (r19): "cluttered with metabolism details I didn't need". */}
+      <button
+        type="button"
+        onClick={() => setTrendsMoreOpen(!trendsMoreOpen)}
+        aria-expanded={trendsMoreOpen}
+        aria-controls="trends-more"
+        className="flex w-full items-center justify-between gap-3 rounded-2xl bg-card p-4 text-left shadow-card hover:bg-fill transition-colors"
+        data-testid="trends-more-toggle"
+      >
+        <span className="min-w-0">
+          <span className="block text-body font-semibold text-ink">More: energy burn &amp; steps</span>
+          <span className="block text-caption text-ink-2">
+            {trendsBurnKcal
+              ? `Estimated burn ~${Math.round(trendsBurnKcal).toLocaleString('en-US')} kcal a day, how it's worked out, and steps`
+              : "How your daily burn is worked out, and steps"}
+          </span>
+        </span>
+        <IconChevronRight
+          size={20}
+          aria-hidden="true"
+          className={`flex-shrink-0 text-ink-3 transition-transform ${trendsMoreOpen ? 'rotate-90' : ''}`}
+        />
+      </button>
+
+      {trendsMoreOpen && (
+      <div id="trends-more" className="space-y-4" data-testid="trends-more">
       {/* Step Tracking */}
       {(() => {
         // Calculate userWeightKg from current weight or weight entries
@@ -2451,6 +2796,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
           showFfmi={!foodOnly}
         />
       )}
+      </div>
+      )}
 
       </div>
       )}
@@ -2480,42 +2827,6 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         eatingWindow={eatingWindow}
       />
 
-      <AddFoodModal
-        isOpen={showAddFood}
-        onClose={() => setShowAddFood(false)}
-        onAdd={handleAddFood}
-        defaultMealType={selectedMealType}
-        onMealTypeChange={(m) => { setSelectedMealType(m); setQuickMeal(m); }}
-        initialTab={addFoodTab}
-        onOpenDescribe={() => {
-          setShowAddFood(false);
-          setDescribeMealType(selectedMealType);
-          setShowDescribeMeal(true);
-        }}
-        onOpenSavedMeals={() => {
-          setShowAddFood(false);
-          setShowSavedMeals(true);
-        }}
-        onCreateCustomFood={(barcode) => {
-          setShowAddFood(false);
-          setCustomFoodBarcode(barcode);
-          setShowCreateCustomFood(true);
-        }}
-        onLabelScanned={(prefill) => {
-          setShowAddFood(false);
-          setLabelScanPrefill(prefill);
-          setShowCreateCustomFood(true);
-        }}
-        customFoods={customFoods}
-        frequentFoods={frequentFoods}
-        systemFoods={systemFoods}
-        recentEntries={recentFoodsQuery.data ?? []}
-        recentsLoading={recentFoodsQuery.isLoading}
-        mealNames={nutritionTargets?.meal_names ?? null}
-        selectedDay={selectedDate}
-        onQuickAdd={handleQuickAddFood}
-        onQuickAddMany={handleQuickAddManyFoods}
-      />
 
       <DescribeMealModal
         isOpen={showDescribeMeal}
@@ -2616,6 +2927,8 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
         entry={editingFood}
       />
     </div>
+    {addFoodSheet}
+    </>
   );
 }
 

@@ -15,8 +15,11 @@
  * action so both surfaces produce identical trends for identical data.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
+import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { type AnchoredTrendPoint } from '@/services/bodyCompAnchor';
 import {
   buildPersonalizedBodyCompTrend,
@@ -51,75 +54,95 @@ export interface BodyCompTrendData {
   isLoading: boolean;
 }
 
+/** The raw rows behind the trend (JSON-plain, so the cache can persist them). */
+export interface BodyTrendRows {
+  weightRows: TrendWeightRow[];
+  scans: TrendDexaRow[];
+  waistRows: TrendWaistRow[];
+  profileRows: TrendProfileRows | null;
+}
+
+/**
+ * Persisted ('analytics' prefix): Progress's "Are you progressing?" summary
+ * and the weight chart wait on these rows, and as a fetch-in-useEffect
+ * (behind a getUser() network round trip) they re-blocked the summary on a
+ * skeleton on EVERY visit (UX panel r21: "showed a loading state before the
+ * data"). Now a revisit or reload paints from cache and refetches behind it.
+ */
+export const BODY_TREND_QUERY_KEY = ['analytics', 'body-trend'] as const;
+
+const EMPTY_ROWS: BodyTrendRows = { weightRows: [], scans: [], waistRows: [], profileRows: null };
+
+export async function fetchBodyTrendRows(): Promise<BodyTrendRows> {
+  const supabase = createUntypedClient();
+  // Identity from the locally persisted session — no getUser() round trip
+  // (RLS still checks the token on every read below).
+  const userId = await getLocalUserId(supabase);
+  if (!userId) return EMPTY_ROWS;
+
+  const yearAgoDay = localDay(rollingWindowStart(365));
+  const [weightsRes, scansRes, waistRes, userRes, volumeProfileRes] = await Promise.all([
+    supabase
+      .from('weight_log')
+      .select('logged_at, weight, unit')
+      .eq('user_id', userId)
+      .gte('logged_at', yearAgoDay)
+      .order('logged_at', { ascending: true }),
+    supabase
+      .from('dexa_scans')
+      .select('scan_date, body_fat_percent, lean_mass_kg, fat_mass_kg, weight_kg, bone_mass_kg')
+      .eq('user_id', userId)
+      .order('scan_date', { ascending: true }),
+    // Waist tape entries (cm) shape the estimated BF% interior between
+    // scans. Non-fatal: if the read fails the trend just runs unbent.
+    supabase
+      .from('body_measurements')
+      .select('logged_at, waist')
+      .eq('user_id', userId)
+      .gte('logged_at', yearAgoDay)
+      .not('waist', 'is', null)
+      .order('logged_at', { ascending: true }),
+    // Profile slices feeding the personalized projection p-ratio.
+    // Non-fatal: absent rows just leave the projection at the 0.5 default.
+    supabase.from('users').select('height_cm, goal, sex, age').eq('id', userId).maybeSingle(),
+    supabase.from('user_volume_profiles').select('training_age, is_enhanced').eq('user_id', userId).maybeSingle(),
+  ]);
+  // A failed weigh-in or scan read fails the query (React Query keeps the
+  // last good rows on screen) — never cached and persisted as "no data".
+  if (weightsRes.error) throw weightsRes.error;
+  if (scansRes.error) throw scansRes.error;
+
+  return {
+    weightRows: (weightsRes.data ?? []) as TrendWeightRow[],
+    scans: (scansRes.data ?? []) as TrendDexaRow[],
+    waistRows: (waistRes.data ?? []) as TrendWaistRow[],
+    profileRows: {
+      user: (userRes.data ?? null) as TrendProfileRows['user'],
+      volumeProfile: (volumeProfileRes.data ?? null) as TrendProfileRows['volumeProfile'],
+    },
+  };
+}
+
 /** Bump `refreshKey` to refetch after the log sheet saves something. */
 export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
-  const [weightRows, setWeightRows] = useState<TrendWeightRow[]>([]);
-  const [scans, setScans] = useState<TrendDexaRow[]>([]);
-  const [waistRows, setWaistRows] = useState<TrendWaistRow[]>([]);
-  const [profileRows, setProfileRows] = useState<TrendProfileRows | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const query = useQuery({
+    queryKey: BODY_TREND_QUERY_KEY,
+    queryFn: fetchBodyTrendRows,
+    // Weigh-ins can be logged from Home, so every visit revalidates — but
+    // behind the cached rows, never in front of them.
+    staleTime: 0,
+    gcTime: IMMUTABLE_GC_TIME,
+  });
+  const { weightRows, scans, waistRows, profileRows } = query.data ?? EMPTY_ROWS;
+  const isLoading = query.isPending && !query.isError;
 
+  const { refetch } = query;
+  const mountedKey = useRef(refreshKey);
   useEffect(() => {
-    async function fetchAll() {
-      try {
-        const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const yearAgoDay = localDay(rollingWindowStart(365));
-        const [weightsRes, scansRes, waistRes, userRes, volumeProfileRes] = await Promise.all([
-          supabase
-            .from('weight_log')
-            .select('logged_at, weight, unit')
-            .eq('user_id', user.id)
-            .gte('logged_at', yearAgoDay)
-            .order('logged_at', { ascending: true }),
-          supabase
-            .from('dexa_scans')
-            .select(
-              'scan_date, body_fat_percent, lean_mass_kg, fat_mass_kg, weight_kg, bone_mass_kg'
-            )
-            .eq('user_id', user.id)
-            .order('scan_date', { ascending: true }),
-          // Waist tape entries (cm) shape the estimated BF% interior between
-          // scans. Non-fatal: if the read fails the trend just runs unbent.
-          supabase
-            .from('body_measurements')
-            .select('logged_at, waist')
-            .eq('user_id', user.id)
-            .gte('logged_at', yearAgoDay)
-            .not('waist', 'is', null)
-            .order('logged_at', { ascending: true }),
-          // Profile slices feeding the personalized projection p-ratio.
-          // Non-fatal: absent rows just leave the projection at the 0.5
-          // default.
-          supabase
-            .from('users')
-            .select('height_cm, goal, sex, age')
-            .eq('id', user.id)
-            .maybeSingle(),
-          supabase
-            .from('user_volume_profiles')
-            .select('training_age, is_enhanced')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-        ]);
-
-        setWeightRows((weightsRes.data ?? []) as TrendWeightRow[]);
-        setScans((scansRes.data ?? []) as TrendDexaRow[]);
-        setWaistRows((waistRes.data ?? []) as TrendWaistRow[]);
-        setProfileRows({
-          user: (userRes.data ?? null) as TrendProfileRows['user'],
-          volumeProfile: (volumeProfileRes.data ?? null) as TrendProfileRows['volumeProfile'],
-        });
-      } catch (err) {
-        console.error('Failed to load body trend data:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchAll();
-  }, [refreshKey]);
+    if (refreshKey === mountedKey.current) return;
+    mountedKey.current = refreshKey;
+    void refetch();
+  }, [refreshKey, refetch]);
 
   const weightHistory = useMemo(
     () =>

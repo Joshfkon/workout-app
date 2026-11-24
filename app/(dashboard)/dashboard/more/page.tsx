@@ -1,6 +1,7 @@
 'use client';
 
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { usePrefetchSettings } from '@/hooks/useSettingsQuery';
 
 import { ListGroup, ListRow } from '@/components/ui/ListRow';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
@@ -90,6 +91,8 @@ const visibleSections: MoreSection[] = moreSections
 
 export default function MorePage() {
   useDocumentTitle('More');
+  // Settings is a row on this page: warm it so it opens without a wait.
+  usePrefetchSettings(true, 300);
   return (
     <div className="space-y-6 animate-fade-in">
       <h1 className="text-large-title text-ink">More</h1>

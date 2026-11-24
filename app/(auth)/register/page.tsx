@@ -11,6 +11,7 @@ import { TRACKING_FOCUS_METADATA_KEY } from '@/lib/onboarding/trackingFocus';
 import {
   LIFTING_OPTIONS,
   experienceForLiftingAnswer,
+  LIFTING_ANSWER_METADATA_KEY,
   type LiftingAnswer,
 } from '@/lib/onboarding/experienceOptions';
 import { TextSizeQuickPicker } from '@/components/settings/TextSizeQuickPicker';
@@ -91,6 +92,9 @@ export default function RegisterPage() {
           data: {
             goal,
             experience: experienceForLiftingAnswer(liftingAnswer),
+            // The exact answer too, so onboarding shows it back instead of
+            // asking about experience a second time.
+            ...(liftingAnswer ? { [LIFTING_ANSWER_METADATA_KEY]: liftingAnswer } : {}),
             ...(liftingAnswer === 'no' ? { [TRACKING_FOCUS_METADATA_KEY]: 'food' } : {}),
           },
         },
@@ -156,8 +160,20 @@ export default function RegisterPage() {
 
   return (
     <div className="w-full max-w-md animate-fade-in">
+      {/* Text size FIRST, above everything else on the page, so someone who
+          finds the text small can fix it before reading the form. Same
+          localStorage key as Settings, so the choice carries into the new
+          account (hooks/useTextSize). */}
+      <div
+        className="mb-4 flex items-center justify-center gap-3 rounded-card bg-card/80 px-3 py-1 shadow-card"
+        data-testid="register-text-size"
+      >
+        <span className="text-headline font-semibold text-ink">Text size</span>
+        <TextSizeQuickPicker />
+      </div>
+
       {/* Logo */}
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <Link href="/" className="inline-flex items-center gap-3 group">
           <div className="w-12 h-12 rounded-xl bg-action flex items-center justify-center group-hover:scale-105 transition-transform">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -176,12 +192,12 @@ export default function RegisterPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <h2 className="text-headline font-bold text-ink">Confirm your email</h2>
-            <p className="text-ink-2">
+            <h2 className="text-title font-bold text-ink">Confirm your email</h2>
+            <p className="text-headline font-normal text-ink-2">
               We sent a confirmation link to{' '}
               <span className="text-ink font-medium">{sentTo}</span>
             </p>
-            <p className="text-subhead text-ink-3">
+            <p className="text-headline font-normal text-ink-2">
               Not there after a couple of minutes? Check your spam folder. You can also enter the
               code from the email instead of clicking the link.
             </p>
@@ -192,12 +208,12 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setSentTo(null)}
-                className="text-subhead text-action font-medium underline"
+                className="text-headline text-action font-medium underline"
               >
                 Wrong address? Change email
               </button>
             </div>
-            <p className="text-subhead text-ink-2 pt-2">
+            <p className="text-headline font-normal text-ink-2 pt-2">
               Already confirmed?{' '}
               <Link href="/login" className="text-action font-medium">
                 Sign in
@@ -209,7 +225,7 @@ export default function RegisterPage() {
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
           <h1 className="text-title font-bold text-ink">Create your account</h1>
-          <p className="text-ink-2 mt-1">Track your workouts and your food in one place.</p>
+          <p className="text-headline font-normal text-ink-2 mt-1">Track your workouts and your food in one place.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -220,6 +236,7 @@ export default function RegisterPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             required
+            inputSize="large"
             autoComplete="email"
           />
 
@@ -230,6 +247,7 @@ export default function RegisterPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             hint="8+ characters with lowercase, uppercase letters, and digits"
+            inputSize="large"
             autoComplete="new-password"
             rightIcon={
               <button
@@ -238,7 +256,7 @@ export default function RegisterPage() {
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 className="-m-2 p-2 text-ink-2 hover:text-ink transition-colors"
               >
-                {showPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+                {showPassword ? <IconEyeOff size={22} /> : <IconEye size={22} />}
               </button>
             }
           />
@@ -246,9 +264,9 @@ export default function RegisterPage() {
           {/* Optional, plain-language, nothing preselected. "No" is a real
               answer, not a skip: it leads Home with food. */}
           <div role="radiogroup" aria-labelledby="lifting-question" aria-describedby="lifting-hint">
-            <p id="lifting-question" className="block text-body font-medium text-ink mb-2">
+            <p id="lifting-question" className="block text-headline font-medium text-ink mb-2">
               Do you lift weights? If so, for how long?{' '}
-              <span className="text-ink-3 font-normal">(optional)</span>
+              <span className="text-ink-2 font-normal">(optional)</span>
             </p>
             <div className="grid grid-cols-2 gap-2">
               {LIFTING_OPTIONS.map((option, index) => {
@@ -260,19 +278,28 @@ export default function RegisterPage() {
                     role="radio"
                     aria-checked={checked}
                     data-testid={`experience-option-${option.value}`}
+                    aria-label={option.label}
+                    aria-describedby={`experience-${option.value}-desc`}
                     // Tapping the picked option again clears it (back to "skip").
                     onClick={() => setLiftingAnswer(checked ? null : option.value)}
-                    // "No" and "Just started" span the row; the year ranges pair up.
-                    className={`${index < 2 ? 'col-span-2 ' : ''}min-h-[44px] px-2 rounded-input border-2 text-subhead font-medium transition-colors ${
+                    // "No", "Just started" and "Returning" span the row; the
+                    // year ranges pair up. Each says who it's for and what it
+                    // sets (UX round 23: unclear for a lifter back after a break).
+                    className={`${index < 3 ? 'col-span-2 ' : ''}min-h-[48px] px-3 py-2 text-left text-headline rounded-input border-2 transition-colors ${
                       checked ? 'border-action bg-action/10 text-ink' : 'border-sep bg-fill/50 text-ink-2 hover:text-ink'
                     }`}
                   >
-                    {option.label}
+                    <span className="block font-medium">
+                      {option.label}
+                    </span>
+                    <span id={`experience-${option.value}-desc`} className="block text-body font-normal text-ink-2">
+                      {option.description}
+                    </span>
                   </button>
                 );
               })}
             </div>
-            <p id="lifting-hint" className="text-caption text-ink-3 mt-1">
+            <p id="lifting-hint" className="text-headline font-normal text-ink-2 mt-1">
               Sets your starting weekly sets and first weight suggestions (under a year also turns on
               Beginner mode). Change it any time in Settings. Not sure? Skip it.
             </p>
@@ -282,10 +309,10 @@ export default function RegisterPage() {
             <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
               {error === 'EMAIL_EXISTS' ? (
                 <div>
-                  <p className="text-subhead text-status-bad font-medium">
+                  <p className="text-headline text-status-bad font-medium">
                     An account with this email already exists.
                   </p>
-                  <p className="text-subhead text-ink-2 mt-1">
+                  <p className="text-headline font-normal text-ink-2 mt-1">
                     <Link href="/login" className="text-action underline">
                       Sign in instead
                     </Link>
@@ -296,18 +323,18 @@ export default function RegisterPage() {
                   </p>
                 </div>
               ) : (
-                <p className="text-subhead text-status-bad">{error}</p>
+                <p className="text-headline font-normal text-status-bad">{error}</p>
               )}
             </div>
           )}
 
-          <Button type="submit" className="w-full" isLoading={isLoading} aria-busy={isLoading}>
+          <Button type="submit" size="lg" className="w-full" isLoading={isLoading} aria-busy={isLoading}>
             {isLoading ? 'Creating account…' : 'Create account'}
           </Button>
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-subhead text-ink-2">
+          <p className="text-headline font-normal text-ink-2">
             Already have an account?{' '}
             <Link href="/login" className="text-action font-medium">
               Sign in
@@ -318,22 +345,16 @@ export default function RegisterPage() {
       )}
 
       <div className="mt-4 text-center space-y-2">
-        {/* Text size before sign-up: same localStorage key as Settings, so
-            the choice carries into the new account (hooks/useTextSize). */}
-        <div className="flex items-center justify-center gap-1" data-testid="register-text-size">
-          <span className="text-caption text-ink-3">Text size:</span>
-          <TextSizeQuickPicker compact />
-        </div>
-        <p className="text-subhead text-ink-3">
+        <p className="text-headline font-normal text-ink-2">
           Get full Elite access for 14 days—no credit card required.
         </p>
-        <p className="text-caption text-ink-3">
+        <p className="text-body text-ink-2">
           By signing up, you agree to our{' '}
-          <Link href="/terms" className="text-ink-3 hover:text-ink-2 underline">
+          <Link href="/terms" className="text-ink-2 hover:text-ink underline">
             Terms of Service
           </Link>{' '}
           and{' '}
-          <Link href="/privacy" className="text-ink-3 hover:text-ink-2 underline">
+          <Link href="/privacy" className="text-ink-2 hover:text-ink underline">
             Privacy Policy
           </Link>
         </p>

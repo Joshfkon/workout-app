@@ -1,17 +1,17 @@
 'use client';
 
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useHydrated } from '@/hooks/useHydrated';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
-import { LoadingState, PageHeader, SegmentedControl } from '@/components/ui';
-import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
-
-const SETTINGS_KEY = ['settings', 'user'] as const;
-// Kept as '*': two columns this page reads/writes (`age`, `training_age`) are
-// not created by any migration in the repo, so naming them explicitly would
-// turn schema drift into a hard load failure (PostgREST 42703).
-const SETTINGS_USER_SELECT = '*';
+import { PageHeader, SegmentedControl } from '@/components/ui';
+import {
+  SETTINGS_GC_TIME,
+  SETTINGS_KEY,
+  SETTINGS_STALE_TIME,
+  fetchSettingsBundle,
+} from '@/hooks/useSettingsQuery';
 import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import {
   migrateStoredLandmarks,
@@ -27,12 +27,13 @@ import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences, applyPreferenceLocally } from '@/hooks/useUserPreferences';
 import { savePreferencesPatch } from '@/lib/settings/savePreferencesPatch';
 import { resolveBeginnerMode } from '@/lib/beginnerMode';
+import { trainingAgeForDisplay, trainingAgeForSave } from '@/lib/settings/trainingAge';
 import { useUserStore } from '@/stores/userStore';
 import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
 import { ProfileTabPanel } from '@/components/settings/ProfileTabPanel';
 import { TrainingTabPanel } from '@/components/settings/TrainingTabPanel';
-import { PreferencesTabPanel } from '@/components/settings/PreferencesTabPanel';
+import { PreferencesTabPanel, UnitsCard } from '@/components/settings/PreferencesTabPanel';
 import { AccountTabPanel } from '@/components/settings/AccountTabPanel';
 import type { PreferenceSaveStatus } from '@/components/settings/PreferencesTabPanel';
 
@@ -206,36 +207,19 @@ export default function SettingsPage() {
   // Load settings on mount and when page becomes visible
   const queryClient = useQueryClient();
   const isRestoring = useIsRestoring();
+  // false while hydrating: the server never "restores", so until hydration
+  // ends the skeleton decision must match the server HTML (a reload with a
+  // persisted cache rendered the form against the server's skeleton).
+  const hydrated = useHydrated();
 
   // User settings row cached so returning to Settings renders instantly instead
   // of re-blocking. Moderate staleTime + refetch on tab focus keeps it fresh.
   const settingsQuery = useQuery({
     queryKey: SETTINGS_KEY,
-    queryFn: async () => {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      // A failed read must FAIL the query, not be cached as "this user has no
-      // row": the form then showed defaults, and Save upserted those defaults
-      // over the real goal / experience / landmarks / equipment / injuries
-      // (and dropped every preferences key it didn't know about). maybeSingle
-      // so a genuinely missing row / empty weight log is null, not an error.
-      const [userResult, weightResult] = await Promise.all([
-        supabase.from('users').select(SETTINGS_USER_SELECT).eq('id', user.id).maybeSingle(),
-        supabase
-          .from('weight_log')
-          .select('weight, unit, logged_at')
-          .eq('user_id', user.id)
-          .order('logged_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      if (userResult.error) throw userResult.error;
-      if (weightResult.error) throw weightResult.error;
-      return { userId: user.id, userRow: userResult.data, latestWeightLog: weightResult.data };
-    },
-    staleTime: 1000 * 60,
-    gcTime: IMMUTABLE_GC_TIME,
+    // Shared with the Home / More prefetch (hooks/useSettingsQuery).
+    queryFn: fetchSettingsBundle,
+    staleTime: SETTINGS_STALE_TIME,
+    gcTime: SETTINGS_GC_TIME,
   });
 
   // Refresh helper for the visibility handler (kept as loadSettings for minimal
@@ -342,7 +326,8 @@ export default function SettingsPage() {
           if (data.age) setAge(String(data.age));
           if (data.sleep_quality) setSleepQuality(data.sleep_quality as Rating);
           if (data.stress_level) setStressLevel(data.stress_level as Rating);
-          if (data.training_age !== null && data.training_age !== undefined) setTrainingAge(String(data.training_age));
+          // 0 is the old "not given" value: shown empty (lib/settings/trainingAge).
+          setTrainingAge(trainingAgeForDisplay(data.training_age));
           if (data.available_equipment && Array.isArray(data.available_equipment)) {
             setAvailableEquipment(data.available_equipment as Equipment[]);
           }
@@ -503,7 +488,8 @@ export default function SettingsPage() {
           age: age ? parseInt(age) : null,
           sleep_quality: sleepQuality,
           stress_level: stressLevel,
-          training_age: trainingAge ? parseFloat(trainingAge) : 0,
+          // null = not given (never 0): lib/settings/trainingAge.
+          training_age: trainingAgeForSave(trainingAge),
           available_equipment: availableEquipment,
           injury_history: injuryHistory,
       };
@@ -702,14 +688,13 @@ export default function SettingsPage() {
     setVolumeLandmarks(DEFAULT_VOLUME_LANDMARKS[exp]);
   };
 
-  // Full-screen loader only on first-ever load with an empty cache. A revisit
-  // (warm cache) or reload (IndexedDB restore) renders settings immediately.
-  if (isLoading && !settingsQuery.data && !isRestoring && !settingsQuery.isError) {
-    return (
-      <div className="max-w-2xl mx-auto py-20" data-testid="settings-full-loading">
-        <LoadingState label="Loading settings..." size="lg" />
-      </div>
-    );
+  // First-ever load with an empty cache only (a revisit or an IndexedDB
+  // restore renders settings immediately). Even then it is the page's own
+  // shape, not a centred spinner: the header is real at once and only the
+  // controls are placeholders (UX panel round 19: "a loading state for a
+  // moment after I tapped the gear").
+  if (isLoading && !settingsQuery.data && (!hydrated || !isRestoring) && !settingsQuery.isError) {
+    return <SettingsSkeleton />;
   }
 
   // The row could not be read and there is no cached copy: show that, with a
@@ -741,6 +726,16 @@ export default function SettingsPage() {
       <PageHeader
         title="Settings"
         subtitle="Customize your training preferences and account"
+      />
+
+      {/* Units sit above the sections: the setting people open Settings for
+          most, visible on every tab without a tap. */}
+      <UnitsCard
+        units={units}
+        handleUnitsChange={handleUnitsChange}
+        lengthUnits={lengthUnits}
+        handleLengthUnitsChange={handleLengthUnitsChange}
+        saveStatus={prefSaveStatus}
       />
 
       <SegmentedControl
@@ -806,10 +801,6 @@ export default function SettingsPage() {
 
       {activeTab === 'preferences' && (
         <PreferencesTabPanel
-          units={units}
-          handleUnitsChange={handleUnitsChange}
-          lengthUnits={lengthUnits}
-          handleLengthUnitsChange={handleLengthUnitsChange}
           restTimer={restTimer}
           setRestTimer={handleRestTimerChange}
           showFormCues={showFormCues}
@@ -831,6 +822,37 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'account' && <AccountTabPanel />}
+    </div>
+  );
+}
+
+/** Cold-start placeholder in the page's own layout (header, units, tabs, a section). */
+function SettingsSkeleton() {
+  const bar = 'rounded-input bg-fill animate-pulse';
+  return (
+    <div
+      className="max-w-2xl mx-auto space-y-6"
+      data-testid="settings-full-loading"
+      aria-busy="true"
+    >
+      <PageHeader title="Settings" subtitle="Customize your training preferences and account" />
+      <span role="status" className="sr-only">
+        Loading your settings
+      </span>
+      <div className="rounded-card bg-card p-4 shadow-card space-y-3" aria-hidden="true">
+        <div className={`${bar} h-5 w-24`} />
+        <div className={`${bar} h-11 w-full`} />
+        <div className={`${bar} h-11 w-full`} />
+      </div>
+      <div className={`${bar} h-11 w-full rounded-button`} aria-hidden="true" />
+      <div className="rounded-card bg-card p-4 shadow-card space-y-4" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="space-y-2">
+            <div className={`${bar} h-4 w-32`} />
+            <div className={`${bar} h-11 w-full`} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

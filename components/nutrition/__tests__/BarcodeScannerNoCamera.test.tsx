@@ -24,7 +24,7 @@ jest.mock('@/lib/supabase/client', () => ({ createUntypedClient: jest.fn() }));
 jest.mock('@/services/openFoodFactsService', () => ({ lookupBarcode: jest.fn() }));
 jest.mock('@/lib/actions/nutrition', () => ({ lookupBarcodeUsdaAction: jest.fn() }));
 
-import { BarcodeScanner, classifyCameraError, precheckWebCamera } from '../BarcodeScanner';
+import { BarcodeScanner, canRetryCamera, classifyCameraError, precheckWebCamera } from '../BarcodeScanner';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -45,15 +45,58 @@ describe('BarcodeScanner without a camera', () => {
     mockStart.mockRejectedValue(new Error('NotFoundError: Requested device not found'));
     render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
 
-    expect(
-      await screen.findByText('No camera available here — type the barcode number instead')
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Type the barcode number')).toBeInTheDocument();
     expect(screen.getByLabelText('Barcode number')).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Look up barcode' })).toBeInTheDocument();
+    // Says plainly that a typed number is looked up, like a scan.
+    expect(screen.getByTestId('barcode-typed-lookup-note')).toHaveTextContent(
+      'We look the number up in the food database, just like a scan'
+    );
     // No small error line, no duplicate manual field, no "Start camera" hero.
     expect(screen.queryByText(/Camera unavailable/)).not.toBeInTheDocument();
     expect(screen.queryByText('Or enter barcode manually:')).not.toBeInTheDocument();
     expect(screen.queryByText('Start camera scanner')).not.toBeInTheDocument();
+  });
+
+  it('labels itself as the typed-number fallback and says what the camera scan does', async () => {
+    mockStart.mockRejectedValue(new Error('NotFoundError: Requested device not found'));
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    expect(await screen.findByTestId('barcode-fallback-tag')).toHaveTextContent(
+      'Typed-number fallback: this device has no camera'
+    );
+    expect(screen.getByTestId('barcode-camera-explainer')).toHaveTextContent(
+      /With a camera, Scan opens it full screen.*no typing/
+    );
+  });
+
+  it('names the reason in the fallback tag when access is off', async () => {
+    mockStart.mockRejectedValue(Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' }));
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    expect(await screen.findByTestId('barcode-fallback-tag')).toHaveTextContent('camera access is off');
+  });
+
+  it('hides "Try the camera again" when there is no camera to retry', async () => {
+    mockStart.mockRejectedValue(new Error('NotFoundError: Requested device not found'));
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    await screen.findByTestId('barcode-manual-first');
+    expect(screen.queryByRole('button', { name: 'Try the camera again' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the retry when access was only denied (it can be allowed)', async () => {
+    mockStart.mockRejectedValue(Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' }));
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    expect(await screen.findByRole('button', { name: 'Try the camera again' })).toBeInTheDocument();
+    expect(screen.getByTestId('barcode-camera-issue-detail')).toHaveTextContent('Camera access is off');
+  });
+
+  it('canRetryCamera: only a missing camera has nothing to retry', () => {
+    expect(canRetryCamera('missing')).toBe(false);
+    expect(canRetryCamera('denied')).toBe(true);
+    expect(canRetryCamera('failed')).toBe(true);
   });
 
   it('looks up a typed barcode', async () => {
@@ -67,9 +110,11 @@ describe('BarcodeScanner without a camera', () => {
     await waitFor(() => expect(onScan).toHaveBeenCalledWith('0123456789012'));
   });
 
-  it('retries the camera on request', async () => {
+  it('retries the camera on request after a failed start', async () => {
     const user = userEvent.setup();
-    mockStart.mockRejectedValueOnce(new Error('NotFoundError')).mockReturnValue(new Promise(() => {}));
+    mockStart
+      .mockRejectedValueOnce(new Error('Could not start video source'))
+      .mockReturnValue(new Promise(() => {}));
     render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
 
     await user.click(await screen.findByRole('button', { name: 'Try the camera again' }));
@@ -137,11 +182,13 @@ describe('BarcodeScanner on a computer without a webcam', () => {
     try {
       render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
       expect(
-        await screen.findByText('No camera available here — type the barcode number instead')
+        await screen.findByText('Type the barcode number')
       ).toBeInTheDocument();
       expect(screen.getByTestId('barcode-camera-issue-detail')).toHaveTextContent(
-        'On a phone, Scan opens the camera.'
+        "There's no camera on this device"
       );
+      expect(screen.getByTestId('barcode-fallback-tag')).toHaveTextContent('Typed-number fallback');
+      expect(screen.getByTestId('barcode-camera-explainer')).toHaveTextContent('With a camera, Scan opens it');
       expect(screen.getByLabelText('Barcode number')).toBeInTheDocument();
       expect(mockStart).not.toHaveBeenCalled();
     } finally {

@@ -173,6 +173,10 @@ export function MetricTileGrid({
     if (rebuildingLifts > 0) {
       liftParts.push(`${rebuildingLifts} rebuilding after program change`);
     }
+    // Enough workouts but too close together for a real rate (liftTrends
+    // notEnoughData): not a stall, so not "flat".
+    const tooEarly = liftTrends.tooEarly ?? 0;
+    if (tooEarly > 0) liftParts.push(`${tooEarly} need${tooEarly === 1 ? 's' : ''} more data`);
   }
 
   // Weight sparkline values in the display unit (last 30 entries).

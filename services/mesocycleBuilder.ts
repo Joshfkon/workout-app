@@ -38,6 +38,7 @@ import type {
 import {
   COARSE_CHILDREN,
   COARSE_MUSCLES,
+  coarseVolumeLandmarks,
   FINE_CHILD_MUSCLES,
   getEffectiveBand,
   getStandardMev,
@@ -48,7 +49,7 @@ import {
   resolvePrimaryMuscleCredits,
   SECONDARY_MUSCLE_CREDIT,
 } from '@/services/volumeTracker';
-import { groupCapScale, perSetCredits } from '@/services/shared/volumeCredit';
+import { groupCapScale, perSetCredits, perSetGroupCredits } from '@/services/shared/volumeCredit';
 import { resolveMuscleToStandard } from '@/types/schema';
 import {
   DEFAULT_VOLUME_LANDMARKS,
@@ -189,6 +190,31 @@ function getExerciseDatabase(): ExerciseEntry[] {
 // ============================================================
 // RECOVERY FACTOR CALCULATIONS
 // ============================================================
+
+/**
+ * Years of training to assume for each experience level when the profile
+ * has none. `users.training_age` defaults to 0 and nothing in onboarding
+ * writes it, so an 11-year advanced lifter was planned as "under a year of
+ * training" (×0.85 volume, linear novice ramp — UX panel, round 19).
+ * Novice stays under the one-year line; intermediate sits in the 1–3 band;
+ * advanced at 5, the line calculateRecoveryFactors already treats as
+ * experienced.
+ */
+export const TRAINING_AGE_BY_EXPERIENCE: Record<Experience, number> = {
+  novice: 0.5,
+  intermediate: 2,
+  advanced: 5,
+};
+
+/**
+ * The training age the planners use: the stored years when the lifter has
+ * set them (> 0), else the experience level's typical value. 0 is the
+ * column default, not an answer, so it counts as unset. Pure.
+ */
+export function effectiveTrainingAge(stored: number | null | undefined, experience: Experience): number {
+  if (typeof stored === 'number' && Number.isFinite(stored) && stored > 0) return stored;
+  return TRAINING_AGE_BY_EXPERIENCE[experience] ?? TRAINING_AGE_BY_EXPERIENCE.intermediate;
+}
 
 /**
  * Calculate recovery factors based on user profile
@@ -475,7 +501,7 @@ function getTooShortReasoning(
   factor: MesocycleLengthGuidance['primaryFactor']
 ): string {
   if (goal === 'bulk' && factor === 'goal') {
-    return `Longer mesocycles (${min}+ weeks) work better for hypertrophy — you get more weeks of progressive overload on the same movements before resetting, which drives more growth. Shorter cycles are better suited for cuts or if recovery is limited.`;
+    return `Longer training blocks (${min}+ weeks) work better for hypertrophy — you get more weeks of progressive overload on the same movements before resetting, which drives more growth. Shorter cycles are better suited for cuts or if recovery is limited.`;
   }
 
   if (experience === 'intermediate' || experience === 'advanced') {
@@ -704,10 +730,20 @@ export function buildPeriodizationPlan(
   // Select periodization model based on experience and training age
   let model: PeriodizationModel;
   
+  // An advanced lifter on a bulk is accumulating: volume climbs toward MRV
+  // and then deloads. Block periodization runs the other way (1.1 → 0.8 →
+  // 0.6 of the sets into a heavy peak), a strength-peaking shape that cut an
+  // off-season bodybuilder's chest from 11 to 8 sets over the block (UX
+  // panel, round 19). A cut is the same: a bodybuilder in a deficit keeps
+  // hypertrophy volume to hold muscle, and the block's 60% week put back,
+  // quads and hamstrings under MEV with a deload no lighter than week 4 (UX
+  // panel round 22). Maintenance and recomp keep block.
   if (profile.experience === 'novice' || profile.trainingAge < 1) {
     model = 'linear';
   } else if (profile.experience === 'intermediate' || profile.trainingAge < 3) {
     model = profile.goal === 'cut' ? 'weekly_undulating' : 'daily_undulating';
+  } else if (profile.goal === 'bulk' || profile.goal === 'cut') {
+    model = 'linear';
   } else {
     model = 'block';
   }
@@ -751,6 +787,13 @@ export function buildPeriodizationPlan(
  */
 export const ENHANCED_VOLUME_RAMP_BONUS = 0.1;
 
+/** Week-1 share of the plan's weekly sets in a linear block; the last
+ *  accumulation week reaches 100%. A 4-week block steps 75 / 83 / 92 / 100%,
+ *  about one or two sets per muscle per week. */
+export const LINEAR_RAMP_START = 0.75;
+/** Same for daily-undulating blocks, which already vary load within a week. */
+export const DUP_RAMP_START = 0.8;
+
 /**
  * Build week-by-week progression targets
  */
@@ -767,13 +810,18 @@ function buildWeeklyProgression(
 
   switch (model) {
     case 'linear':
-      // Simple linear ramp
+      // Linear ramp: volume starts near the low end of the productive range
+      // and climbs to the plan's full weekly sets in the last accumulation
+      // week (RP-style MEV → MRV). The old 92% → 100% ramp rounded to the
+      // same set counts every week, so the block read as "only RIR changes"
+      // (UX panel round 19).
       for (let i = 1; i <= trainingWeeks; i++) {
         const progress = i / trainingWeeks;
+        const climb = trainingWeeks > 1 ? (i - 1) / (trainingWeeks - 1) : 1;
         weeks.push({
           week: i,
           intensityModifier: 0.85 + (progress * 0.15),  // 85% -> 100%
-          volumeModifier: 0.9 + (progress * (0.1 + rampBonus)), // 90% -> 100% (110% enhanced)
+          volumeModifier: LINEAR_RAMP_START + (climb * (1 - LINEAR_RAMP_START + rampBonus)), // 75% -> 100% (110% enhanced)
           rpeTarget: { min: 6 + Math.floor(progress * 2), max: 7 + Math.floor(progress * 2) },
           focus: progress < 0.5 ? 'Technique and base building' : 'Progressive overload'
         });
@@ -784,10 +832,11 @@ function buildWeeklyProgression(
       // Volume waves within weeks, overall progression across mesocycle
       for (let i = 1; i <= trainingWeeks; i++) {
         const progress = i / trainingWeeks;
+        const climb = trainingWeeks > 1 ? (i - 1) / (trainingWeeks - 1) : 1;
         weeks.push({
           week: i,
           intensityModifier: 0.9 + (progress * 0.1),
-          volumeModifier: 0.85 + (progress * (0.15 + rampBonus)),
+          volumeModifier: DUP_RAMP_START + (climb * (1 - DUP_RAMP_START + rampBonus)), // 80% -> 100%
           rpeTarget: { min: 7, max: 9 },
           focus: `DUP Week ${i}: Rotate hypertrophy/strength/power daily`
         });
@@ -882,13 +931,44 @@ function buildWeeklyProgression(
 // ============================================================
 
 /**
+ * The builder's "Starting volume" choice: where in each muscle's MEV–MAV–MRV
+ * landmarks the block's peak-week target sits (before the goal adjustment).
+ *   conservative — halfway from MEV to MAV
+ *   standard     — at MAV
+ *   high         — halfway from MAV to MRV
+ * Omitted, the generator keeps its long-standing per-experience presets
+ * (recommendVolume's table), so headless callers and the simulation are
+ * unchanged.
+ */
+export type StartingVolume = 'conservative' | 'standard' | 'high';
+
+export const STARTING_VOLUME_OPTIONS: readonly StartingVolume[] = ['conservative', 'standard', 'high'];
+
+/**
+ * A coarse group's weekly target for a starting-volume choice, in credited
+ * sets, from its landmarks (coarseVolumeLandmarks). Pure.
+ */
+export function landmarkVolumeTarget(
+  muscle: CoarseMuscle,
+  experience: Experience,
+  startingVolume: StartingVolume,
+  enhancedAthleteMode?: boolean
+): number {
+  const l = coarseVolumeLandmarks(muscle, experience, { recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard' });
+  const at = startingVolume === 'conservative' ? (l.mev + l.mav) / 2 : startingVolume === 'high' ? (l.mav + l.mrv) / 2 : l.mav;
+  return Math.round(at);
+}
+
+/**
  * Recommend sets per muscle group per week based on comprehensive factors
  */
 export function recommendVolume(
   experience: Experience,
   goal: Goal,
   muscleGroup: string,
-  enhancedAthleteMode?: boolean
+  enhancedAthleteMode?: boolean,
+  /** Anchor the target on the landmarks instead of the preset table. */
+  startingVolume?: StartingVolume
 ): number {
   // Base volumes (MAV estimates), TOTAL-INCLUSIVE (convention-conversion v2,
   // ADOPTED): the tracking surfaces count credited volume (0.5/secondary
@@ -953,13 +1033,18 @@ export function recommendVolume(
     erectors: { novice: 5, intermediate: 8, advanced: 10 },
   };
 
-  let volume = baseVolumes[muscleGroup]?.[experience] || 12;
+  const isCoarseGroup = (COARSE_MUSCLES as readonly string[]).includes(muscleGroup);
+  let volume =
+    startingVolume && isCoarseGroup
+      ? landmarkVolumeTarget(muscleGroup as CoarseMuscle, experience, startingVolume, enhancedAthleteMode)
+      : baseVolumes[muscleGroup]?.[experience] || 12;
 
   // Enhanced preset shift is capped at +10% — deliberately LESS than the
   // enhanced MRV scaling (min tier ×1.15, see ENHANCED_MRV_MULTIPLIERS): the
   // extra ceiling is headroom for autoregulated exploration, not a
   // prescription. (Replaces the old flat ×1.25 MAV bump.)
-  if (enhancedAthleteMode) {
+  // (The landmark path's MAV already carries the enhanced shift.)
+  if (enhancedAthleteMode && !(startingVolume && isCoarseGroup)) {
     volume = Math.round(volume * 1.10);
   }
 
@@ -979,6 +1064,9 @@ export function recommendVolume(
       recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard',
     });
     volume = Math.min(volume, band.mrv);
+    // A landmark-anchored target never starts under MEV (a cut's ×0.7 on
+    // "conservative" would otherwise plan maintenance-or-less).
+    if (startingVolume) volume = Math.max(volume, band.mev);
   }
 
   return volume;
@@ -1012,7 +1100,9 @@ export function calculateVolumeDistribution(
   recoveryFactors: RecoveryFactors,
   laggingAreas?: string[],  // From regional DEXA analysis
   volumeAdjustments?: VolumeAdjustmentInput[],  // From imbalance engine or user priorities
-  enhancedAthleteMode?: boolean
+  enhancedAthleteMode?: boolean,
+  /** The builder's starting-volume choice (StartingVolume); omitted = presets. */
+  startingVolume?: StartingVolume
 ): Record<MuscleGroup, { sets: number; frequency: number }> {
 
   // traps added in the residuals pass: it was absent from planning entirely
@@ -1111,7 +1201,7 @@ export function calculateVolumeDistribution(
   }
 
   muscles.forEach(muscle => {
-    let baseVolume = recommendVolume(experience, goal, muscle, enhancedAthleteMode);
+    let baseVolume = recommendVolume(experience, goal, muscle, enhancedAthleteMode, startingVolume);
 
     // Apply muscle-specific multiplier
     const muscleMultiplier = muscleMultipliers.get(muscle) || 1.0;
@@ -1736,15 +1826,46 @@ export function applyIndirectAwareAllocation(
   sessions: AllocatableSession[],
   targets: Record<string, { sets: number }>,
   /** Credit-projection currency — see the capped-projection gate above. */
-  projection?: CreditProjectionOptions
+  projection?: CreditProjectionOptions,
+  /**
+   * Training weeks: never take a set that leaves a muscle group under its
+   * MEV as the review and tracking count it (capped group credit). The trim
+   * measures in the uncapped projection (the gate above), where a pulldown
+   * set is ~1.5 back sets, so it could trim back to 9 tracked sets (MEV 10)
+   * while believing it sat at the 13-set target (UX panel round 22, Dre:
+   * "back, quads, hamstrings, calves and traps sit at or below MEV"). Off
+   * for a deload, which sits under MEV by design.
+   */
+  keepTrackedMev = false
 ): string[] {
   const notes: string[] = [];
   const trimmedByGroup = new Map<CoarseMuscle, number>();
   const blockedGroups = new Set<CoarseMuscle>();
+  // Tracked (capped) group credit of the week, and what one set of an
+  // exercise contributes to it.
+  const groupCreditsOf = (ex: AllocatableExercise) =>
+    perSetGroupCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? []);
+  const trackedTotals = (): Map<CoarseMuscle, number> => {
+    const totals = new Map<CoarseMuscle, number>();
+    for (const session of sessions) {
+      for (const ex of session.exercises) {
+        for (const { group, credit } of groupCreditsOf(ex)) {
+          totals.set(group, (totals.get(group) ?? 0) + ex.sets * credit);
+        }
+      }
+    }
+    return totals;
+  };
+  const keepsTrackedMev = (ex: AllocatableExercise, tracked: Map<CoarseMuscle, number>): boolean =>
+    groupCreditsOf(ex).every(({ group, credit }) => {
+      const mev = getEffectiveBand(group)?.mev ?? 0;
+      return (tracked.get(group) ?? 0) - credit >= mev - 1e-9;
+    });
 
   // Safety valve far above any real trim count (weekly sets are ~100).
   for (let iteration = 0; iteration < 300; iteration++) {
     const { direct, indirect } = creditWeek(sessions, projection);
+    const tracked = keepTrackedMev ? trackedTotals() : null;
 
     // Largest-overshoot group first, recomputed every iteration because a
     // trim also removes the trimmed exercise's OWN secondary credit from
@@ -1809,6 +1930,7 @@ export function applyIndirectAwareAllocation(
             // A trim that would DELETE the exercise must pass the
             // movement-pattern floor.
             if (ex.sets === 1 && !removalKeepsMovements(ex)) continue;
+            if (tracked && !keepsTrackedMev(ex, tracked)) continue;
             const credit = resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle).find(
               (c) => c.muscle === std
             );
@@ -1877,7 +1999,7 @@ export function generateFullProgram(
   const periodization = buildPeriodizationPlan(profile, recoveryFactors);
 
   programNotes.push(`Periodization: ${periodization.model}`);
-  programNotes.push(`Mesocycle length: ${periodization.mesocycleWeeks} weeks (${periodization.deloadFrequency} training + 1 deload)`);
+  programNotes.push(`Training block length: ${periodization.mesocycleWeeks} weeks (${periodization.deloadFrequency} training + 1 deload)`);
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
 
   // Step 4: Calculate volume distribution (with adjustments for lagging areas and user priorities)
@@ -2074,7 +2196,7 @@ export function recommendDuration(experience: Experience, goal: Goal): { weeks: 
     case 'advanced':
       return { weeks: 8, reason: 'Advanced lifters need longer to accumulate stimulus' };
     default:
-      return { weeks: 6, reason: 'Standard mesocycle length' };
+      return { weeks: 6, reason: 'Standard training block length' };
   }
 }
 

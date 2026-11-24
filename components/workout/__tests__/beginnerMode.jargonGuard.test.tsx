@@ -180,17 +180,28 @@ describe('beginner effort question: three answers on existing chip values', () =
     onRepsChange: jest.fn(),
   };
 
+  it('says why an answer is already selected and that a tap changes it (round 20)', () => {
+    setBeginner(true);
+    render(<SetLoggerRow {...base} targetRir={2} onLog={jest.fn()} />);
+    const note = screen.getByTestId('rir-preset-note');
+    expect(note).toHaveTextContent('We picked today’s target (“Just right”) so logging is one tap.');
+    expect(note).toHaveTextContent(/tap that answer/);
+    expect(note.textContent).not.toMatch(/\bRIR\b/);
+  });
+
   it.each([
-    ['That was hard', 1],
-    ['A couple more', 2],
-    ['Could do lots more', 4],
+    ['Hard, 0–1 reps left', 1],
+    ['Just right, 2–3 reps left', 2],
+    ['Easy, 4+ reps left', 4],
   ])('"%s" logs RIR %i as a lifter-chosen value', async (label, rir) => {
     setBeginner(true);
     const user = userEvent.setup();
     const onLog = jest.fn();
     render(<SetLoggerRow {...base} targetRir={3} onLog={onLog} />);
-    expect(screen.getByText('How did that set feel?')).toBeInTheDocument();
+    expect(screen.getByText('After the set: how many more reps could you have done?')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: label }));
+    // Once tapped, the "we picked it for you" note goes: it's their answer now.
+    expect(screen.queryByTestId('rir-preset-note')).toBeNull();
     await user.click(screen.getAllByRole('button', { name: 'Log set' })[0]);
     expect(onLog).toHaveBeenCalledTimes(1);
     const data = onLog.mock.calls[0][0];
@@ -204,8 +215,8 @@ describe('beginner effort question: three answers on existing chip values', () =
     setBeginner(true);
     const onLog = jest.fn();
     render(<SetLoggerRow {...base} targetRir={3} onLog={onLog} />);
-    // 3 has no answer of its own: "A couple more" is highlighted…
-    expect(screen.getByRole('button', { name: 'A couple more' })).toHaveAttribute('aria-pressed', 'true');
+    // 3 has no answer of its own: "Just right" (2–3) is highlighted…
+    expect(screen.getByRole('button', { name: 'Just right, 2–3 reps left' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getAllByRole('button', { name: 'Log set' })[0]);
     const beginnerData = onLog.mock.calls[0][0];
 
@@ -220,6 +231,20 @@ describe('beginner effort question: three answers on existing chip values', () =
     expect(beginnerData.rirExplicitlySelected).toBe(false);
   });
 
+  it('"What\'s this?" explains the effort question in plain words (round 22)', async () => {
+    setBeginner(true);
+    const user = userEvent.setup();
+    render(<SetLoggerRow {...base} targetRir={2} onLog={jest.fn()} />);
+    expect(screen.queryByTestId('effort-explainer')).toBeNull();
+    await user.click(screen.getByTestId('effort-whats-this'));
+    const explainer = screen.getByTestId('effort-explainer');
+    expect(explainer).toHaveTextContent(/how many more reps you could have done/);
+    expect(explainer.textContent).not.toMatch(/\b(RIR|RPE)\b/);
+    // Each answer says how many reps were left, not just a feeling.
+    expect(screen.getByTestId('beginner-effort-1')).toHaveTextContent('0–1 reps left');
+    expect(screen.getByTestId('beginner-effort-4')).toHaveTextContent('4+ reps left');
+  });
+
   it('an untouched sensor prefill still logs rirSource "sensor"', async () => {
     setBeginner(true);
     const user = userEvent.setup();
@@ -227,7 +252,7 @@ describe('beginner effort question: three answers on existing chip values', () =
     render(
       <SetLoggerRow {...base} targetRir={2} onLog={onLog} sensorRirPrefill={{ nonce: 1, rir: 0 }} />
     );
-    expect(screen.getByRole('button', { name: 'That was hard' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Hard, 0–1 reps left' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getAllByRole('button', { name: 'Log set' })[0]);
     const data = onLog.mock.calls[0][0];
     expect(data.feedback.repsInTank).toBe(0);

@@ -949,8 +949,8 @@ describe('ExerciseCard', () => {
       await act(() => new Promise((r) => setTimeout(r, 400)));
       expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
       expect(screen.queryByText(/may be near max/)).not.toBeInTheDocument();
-      // One gentle note remains: the strip says it's a guess to adjust.
-      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting guess.*then adjust/);
+      // One gentle note remains: the strip says it's an estimate to adjust.
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting estimate.*Adjust if it feels heavy/);
     });
   });
 
@@ -1241,7 +1241,7 @@ describe('ExerciseCard', () => {
       // No history and a target weight -> the plain source line is on the
       // strip, and the profile-estimate reason (which says the same thing in
       // other words) is not repeated next to it.
-      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting guess/);
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting estimate/);
       expect(screen.queryByText(/starting point estimated/)).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'How this suggestion works' }));
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
@@ -1272,8 +1272,10 @@ describe('ExerciseCard', () => {
     it('cold start (no history): the banner says the number is a profile estimate', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting estimate from your training profile. Adjust if it feels heavy: pick a weight you could lift ~12 times'
       );
+      // ...and that the numbers are editable, under the logger.
+      expect(screen.getByTestId('prefill-editable-hint')).toHaveTextContent('tap one or use − / + to change it');
     });
 
     it('cold start from a profile estimate says what the guess rests on', () => {
@@ -1290,7 +1292,7 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'First time on this lift — starting guess from typical strength for your experience and bodyweight; pick a weight'
+        'First time on this lift — starting estimate from typical strength for your experience and bodyweight. Adjust if it feels heavy: pick a weight'
       );
     });
 
@@ -1308,7 +1310,7 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'First time on this lift — starting guess from your Barbell Back Squat; pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting estimate from your Barbell Back Squat. Adjust if it feels heavy: pick a weight you could lift ~12 times'
       );
       // The prescribed number is unchanged by the explanation.
       expect(screen.getByTestId('suggestion-source').closest('[data-testid="suggestion-strip"]')).toHaveTextContent(
@@ -3495,7 +3497,7 @@ describe('ExerciseCard round 10: AMRAP note, why-this-weight, beginner wording',
     );
     await user.click(screen.getByTestId('why-this-weight'));
     const summary = screen.getByTestId('why-this-weight-summary');
-    expect(summary).toHaveTextContent(/^Your last set: 100 kg × 10, 2 reps left → /);
+    expect(summary).toHaveTextContent(/^Your last set: 100 kg × 10, and you could have done 2 more reps\. /);
     expect(summary.textContent).not.toMatch(JARGON);
   });
 });
@@ -3515,7 +3517,7 @@ describe('ExerciseCard round 11: the reason is on the strip, no tap', () => {
       />
     );
     expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-      /^Last time 100 kg × 10, 2 reps left → (\+1 rep|one weight step up|same weight|weight up|weight down)/
+      /^Last time 100 kg × 10 — you could have done 2 more reps, so (try 1 more rep today|one weight step up today|same weight today|a bit more weight today|a bit less weight today)/
     );
     // The link stays for the full sheet.
     expect(screen.getByTestId('why-this-weight')).toBeInTheDocument();
@@ -3540,7 +3542,7 @@ describe('ExerciseCard round 11: the reason is on the strip, no tap', () => {
       />
     );
     const line = screen.getByTestId('suggestion-source');
-    expect(line).toHaveTextContent(/^Last (set|time) 100 kg × 10, 2 reps left → /);
+    expect(line).toHaveTextContent(/^Last (set|time) 100 kg × 10 — you could have done 2 more reps, so /);
     expect(line.textContent).not.toMatch(/\bRIR\b|e1RM|AMRAP/);
   });
 });
@@ -3643,10 +3645,79 @@ describe('ExerciseCard round 18: every set says why, predict then score, form gu
     expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
       'Empty bar — a safe start; add weight if 10 reps feel easy'
     );
+    // The exercise's own cues open in place; the full guide is one more tap.
     await user.click(screen.getByTestId('exercise-how-to'));
+    expect(screen.getByTestId('exercise-how-to-cues')).toHaveTextContent('Keep shoulder blades retracted');
+    expect(screen.getByTestId('exercise-how-to-cues')).toHaveTextContent('Set up with eyes under the bar');
+    expect(onHowToClick).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId('exercise-how-to-full'));
     expect(onHowToClick).toHaveBeenCalledTimes(1);
     // The prefilled numbers show they can be typed over.
     expect(screen.getByTestId('logger-weight-edit-hint')).toBeInTheDocument();
     expect(screen.getByTestId('logger-reps-edit-hint')).toBeInTheDocument();
+  });
+
+  it('without form cues in the data, "How to do it" opens the guide instead of inventing any', async () => {
+    const user = userEvent.setup();
+    const onHowToClick = jest.fn();
+    render(
+      <ExerciseCard
+        {...defaultProps}
+        exercise={createMockExercise({ formCues: [], setupNote: '' })}
+        isActive={true}
+        previousSets={[]}
+        onHowToClick={onHowToClick}
+      />
+    );
+    await user.click(screen.getByTestId('exercise-how-to'));
+    expect(onHowToClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('exercise-how-to-cues')).not.toBeInTheDocument();
+  });
+
+  // UX panel round 21 (Maya, Sam): "no explanation of where the suggested
+  // weight comes from". A first-run beginner — no history at all — gets a
+  // plain reason on the strip itself, not only behind "Why this weight?".
+  describe('first-run beginner: a reason right under the numbers', () => {
+    beforeEach(() => {
+      useUserStore.setState({
+        user: {
+          id: 'u1',
+          experience: 'novice',
+          preferences: { units: 'kg', beginnerMode: true },
+          volumeLandmarks: {},
+        } as unknown as import('@/types/schema').User,
+      });
+    });
+
+    it('names the basis of an estimated start', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exercise={createMockExercise({ name: 'Leg Press' })}
+          block={createMockBlock({ targetRepRange: [10, 15] as [number, number], targetWeightKg: 0 })}
+          isActive={true}
+          previousSets={[]}
+          coldStartSuggestion={{ weightKg: 60, reason: 'starting point', explanation: 'Profile.' }}
+        />
+      );
+      const strip = screen.getByTestId('suggestion-strip');
+      expect(strip).toContainElement(screen.getByTestId('suggestion-source'));
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/First time on this lift/);
+    });
+
+    it('says how to pick a weight when there is no number to explain', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exercise={createMockExercise({ name: 'Leg Press' })}
+          block={createMockBlock({ targetRepRange: [10, 15] as [number, number], targetWeightKg: 0 })}
+          isActive={true}
+          previousSets={[]}
+        />
+      );
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
+        /No history yet — pick a weight you could lift ~\d+ times/
+      );
+    });
   });
 });

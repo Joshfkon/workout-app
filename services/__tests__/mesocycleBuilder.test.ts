@@ -273,7 +273,7 @@ describe('mesocycleBuilder', () => {
     it.each([3, 4, 5, 6, 7, 8])(
       'block periodization reaches its peak phase with %i training weeks',
       (trainingWeeks) => {
-        const profile = createProfile({ experience: 'advanced', trainingAge: 6 });
+        const profile = createProfile({ experience: 'advanced', trainingAge: 6, goal: 'maintenance' });
         const recoveryFactors = calculateRecoveryFactors(profile);
         const plan = buildPeriodizationPlan(profile, recoveryFactors, trainingWeeks + 1);
         expect(plan.model).toBe('block');
@@ -344,10 +344,19 @@ describe('mesocycleBuilder', () => {
       expect(plan.model).toBe('weekly_undulating');
     });
 
-    it('uses block periodization for advanced lifters', () => {
+    it('uses an accumulating linear ramp for an advanced lifter on a bulk', () => {
+      const profile = createProfile({ experience: 'advanced', trainingAge: 5, goal: 'bulk' });
+      const plan = buildPeriodizationPlan(profile, calculateRecoveryFactors(profile), 5);
+      expect(plan.model).toBe('linear');
+      const mods = plan.weeklyProgression.slice(0, 4).map((w) => w.volumeModifier);
+      expect([...mods].sort((a, b) => a - b)).toEqual(mods);
+    });
+
+    it('uses block periodization for advanced lifters off a bulk', () => {
       const profile = createProfile({
         experience: 'advanced',
         trainingAge: 5,
+        goal: 'maintenance',
       });
       const recoveryFactors: RecoveryFactors = {
         volumeMultiplier: 1.0,

@@ -147,13 +147,13 @@ export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardPr
         {pendingChange && (
           <div className="space-y-4">
             <p className="text-body text-ink-2">
-              A mesocycle ({pendingChange.mesocycle.name}, week {pendingChange.mesocycle.current_week} of{' '}
+              A training block ({pendingChange.mesocycle.name}, week {pendingChange.mesocycle.current_week} of{' '}
               {pendingChange.mesocycle.total_weeks}) is in progress. How should the change apply?
             </p>
             <div className="space-y-3 text-body text-ink-2">
               <p>
                 <span className="font-medium text-ink">Adjust remaining weeks</span> —
-                regenerates the future weeks of the current mesocycle with the{' '}
+                regenerates the future weeks of the current training block with the{' '}
                 {pendingChange.value ? 'raised' : 'natural'} volume landmarks and progression rate.
                 Completed weeks and logged workouts are untouched. If this week is already underway,
                 changes start next week.
@@ -161,9 +161,9 @@ export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardPr
                   ' Prescriptions above the natural volume ceiling are brought back down to it.'}
               </p>
               <p>
-                <span className="font-medium text-ink">Apply at next mesocycle</span> —
-                the current mesocycle runs unchanged; the setting takes effect when your next
-                mesocycle is generated.
+                <span className="font-medium text-ink">Apply at next training block</span> —
+                the current training block runs unchanged; the setting takes effect when your next
+                training block is generated.
               </p>
             </div>
             <ModalFooter className="flex-col sm:flex-row items-stretch sm:items-center">
@@ -179,7 +179,7 @@ export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardPr
                 onClick={() => applyChange(pendingChange.value, false)}
                 isLoading={isSaving}
               >
-                Apply at next mesocycle
+                Apply at next training block
               </Button>
             </ModalFooter>
           </div>

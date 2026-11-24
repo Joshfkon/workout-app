@@ -38,6 +38,7 @@ import { lightHaptic } from '@/lib/integrations/notifications';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import {
   BEGINNER_EFFORT_CHOICES,
+  BEGINNER_EFFORT_EXPLAINER,
   beginnerEffortChoiceFor,
   effortLeftPhrase,
   plainWorkoutText,
@@ -119,6 +120,41 @@ interface SetLoggerRowProps {
    * a lifter who can't see the card still knows what the tap logs.
    */
   stickyLabel?: string;
+  /**
+   * The suggestion's one-line reason and prediction, repeated on the pinned
+   * bar (UX panel: a lifter who logs every set from the bar never scrolls to
+   * the card's strip, so he never saw why the weight was picked). `why` is
+   * the same text the strip's "Why:" line shows; `expect` is the strip's
+   * forecast, shown only while the entered weight is still the one it was
+   * made for.
+   */
+  stickyHint?: StickyHint | null;
+}
+
+export interface StickyHint {
+  /** The strip's reason line (set-change or source line), already plain-worded. */
+  why?: string | null;
+  /** Predicted reps at `atWeight` (the suggested load, as the field shows it). */
+  expect?: { repCount: number; atWeight: string } | null;
+}
+
+/**
+ * The pinned bar's hint line: "Why: … · Expect ~9 reps". The forecast is
+ * dropped once the lifter types a different weight — it was made for the
+ * suggested load, not the entered one. Null when there is nothing to say.
+ */
+export function stickyHintText(
+  hint: StickyHint | null | undefined,
+  enteredWeight: string
+): { why: string | null; expect: string | null } | null {
+  if (!hint) return null;
+  const why = hint.why?.trim() || null;
+  const sameWeight =
+    hint.expect != null &&
+    Number.isFinite(parseFloat(enteredWeight)) &&
+    Math.abs(parseFloat(enteredWeight) - parseFloat(hint.expect.atWeight)) < 0.001;
+  const expect = sameWeight && hint.expect ? `Expect ~${hint.expect.repCount} reps` : null;
+  return why || expect ? { why, expect } : null;
 }
 
 /**
@@ -225,9 +261,12 @@ export function SetLoggerRow({
   onPlateCalculatorOpen,
   sensorRirPrefill = null,
   stickyLabel,
+  stickyHint = null,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [rirTouched, setRirTouched] = useState(false);
+  // Beginner "What's this?" under the effort question (UX panel round 22).
+  const [showEffortExplainer, setShowEffortExplainer] = useState(false);
   // The selected chip is the sensor's untouched estimate.
   const [rirFromSensor, setRirFromSensor] = useState(false);
   const [sensorRirOffer, setSensorRirOffer] = useState<RepsInTank | null>(null);
@@ -457,6 +496,7 @@ export function SetLoggerRow({
   const stickySummary = `${stickyWeightText} × ${reps || '0'}${isDurationBased ? 's' : ' reps'} · ${
     RIR_CHIP_TEXT[selectedRir]
   } left`;
+  const stickyHintLine = stickyHintText(stickyHint, weight);
   const stickyBar = (
     <div
       data-testid="sticky-log-set"
@@ -469,6 +509,24 @@ export function SetLoggerRow({
         <span className="block truncate text-subhead font-semibold tabular-nums text-ink">
           {stickySummary}
         </span>
+        {/* Why + forecast: wraps to two lines rather than truncating, so the
+            reason survives 390 px and the larger text sizes. */}
+        {stickyHintLine ? (
+          <span data-testid="sticky-log-hint" className="mt-0.5 line-clamp-2 text-caption text-ink">
+            {stickyHintLine.why ? (
+              <>
+                <span className="font-semibold text-action">Why: </span>
+                <span data-testid="sticky-log-why">{stickyHintLine.why}</span>
+              </>
+            ) : null}
+            {stickyHintLine.why && stickyHintLine.expect ? <span className="text-ink-2"> · </span> : null}
+            {stickyHintLine.expect ? (
+              <span data-testid="sticky-log-expect" className="text-ink-2">
+                {stickyHintLine.expect}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
       </div>
       <button
         type="button"
@@ -554,6 +612,9 @@ export function SetLoggerRow({
       className="rounded-card bg-action-tint p-3 space-y-2.5"
       role="group"
       aria-label={`Set ${setNumber} logger`}
+      // The workout page keeps this clear of its fixed bottom stack when the
+      // stack grows (a toast arriving) — see keepClearOfBottomChrome.
+      data-active-logger=""
     >
       {/* Row 0: set label + plate calculator affordance (P1-5, mockup 02) */}
       {onPlateCalculatorOpen && (
@@ -818,19 +879,42 @@ export function SetLoggerRow({
 
       {/* Row 2: effort chips (labeled, full-width) + set type + feedback sheet
           trigger. Asked in plain words; "RIR" stays in the accessible names. */}
-      <p className="pl-1 text-caption text-ink-2" id={`effort-q-${setNumber}`}>
-        {beginner ? 'How did that set feel?' : 'How many more could you have done?'}
-        {!rirTouched && !rirFromSensor && (
-          // The chip starts on the target effort so logging stays one tap; say
-          // so, or an untouched chip reads as an answer the lifter never gave.
-          <span className="text-ink-3" data-testid="rir-preset-note">
-            {' '}
-            {beginner
-              ? 'Set to today’s target — tap if it felt different.'
-              : `Preset to your target (${RIR_CHIP_TEXT[clampToChip(targetRir)]}) — tap to change.`}
-          </span>
+      <div className="flex items-baseline justify-between gap-2 pl-1">
+        <p className="text-subhead font-medium text-ink" id={`effort-q-${setNumber}`}>
+          {beginner ? 'After the set: how many more reps could you have done?' : 'After the set: how many more could you have done?'}
+        </p>
+        {beginner && (
+          // "A beginner wouldn't know what the feel-rating means" (UX panel
+          // round 22, Maya): a visible word, not another ⓘ.
+          <button
+            type="button"
+            onClick={() => setShowEffortExplainer((v) => !v)}
+            aria-expanded={showEffortExplainer}
+            data-testid="effort-whats-this"
+            className="flex-shrink-0 min-h-[44px] -my-3 text-caption font-medium text-action underline underline-offset-2"
+          >
+            What&apos;s this?
+          </button>
         )}
-      </p>
+      </div>
+      {beginner && showEffortExplainer && (
+        <p className="-mt-1 pl-1 text-caption text-ink-2" data-testid="effort-explainer">
+          {BEGINNER_EFFORT_EXPLAINER}
+        </p>
+      )}
+      {!rirTouched && !rirFromSensor && (
+        // The chip starts on the target effort so logging stays one tap; say
+        // so, and why, on its own line — an untouched chip read as an answer
+        // the lifter never gave, and the inline grey note was missed (UX
+        // panel round 20, 3 of 6: "a preselected answer, unexplained").
+        <p className="-mt-1 pl-1 text-caption text-ink-2" data-testid="rir-preset-note">
+          {beginner
+            ? `We picked today’s target (“${
+                BEGINNER_EFFORT_CHOICES.find((c) => c.rir === beginnerEffortChoiceFor(targetRir))?.label ?? 'Just right'
+              }”) so logging is one tap. If the set felt harder or easier, tap that answer first.`
+            : `Preset to your target (${RIR_CHIP_TEXT[clampToChip(targetRir)]}) so logging is one tap. Tap another if the set felt different.`}
+        </p>
+      )}
       <div
         className="flex items-stretch gap-1.5 large-text:flex-wrap"
         role="group"
@@ -854,12 +938,16 @@ export function SetLoggerRow({
               }}
               disabled={disabled}
               aria-pressed={isSelected}
+              aria-label={`${choice.label}, ${choice.hint}`}
               data-testid={`beginner-effort-${choice.rir}`}
               className={`${SELECTOR_CHIP_BASE} px-1 text-center ${
                 isSelected ? SELECTOR_CHIP_SELECTED : SELECTOR_CHIP_IDLE
               }`}
             >
               <span className="text-caption font-semibold leading-tight">{choice.label}</span>
+              <span className={`text-caption leading-tight ${isSelected ? 'opacity-80' : 'text-ink-2'}`}>
+                {choice.hint}
+              </span>
             </button>
           );
         })}

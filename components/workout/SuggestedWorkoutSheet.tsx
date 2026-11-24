@@ -25,7 +25,7 @@
  * fetches happen on mount.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconArrowsExchange, IconLoader2, IconPlus, IconX } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -40,6 +40,9 @@ import {
   detectSplit,
   maxExercisesForDuration,
   suggestedOrderLine,
+  injuryAreasPhrase,
+  injuryPickLine,
+  injuryPlanLine,
   type SuggestedOrderRule,
 } from '@/services/suggestedWorkout';
 import {
@@ -64,10 +67,21 @@ import {
   touchLocationLastUsed,
   type TrainingLocationRow,
 } from '@/lib/actions/locations';
-import { getOrCreateTodaySession } from '@/app/(dashboard)/dashboard/workout/_lib/adhocSession';
+import {
+  getOrCreateTodaySession,
+  hasTodayAdhocSession,
+  insertTodayAdhocSession,
+  newClientSessionId,
+} from '@/app/(dashboard)/dashboard/workout/_lib/adhocSession';
+import { runNavigateFirstStart, type PendingWorkoutPreviewExercise } from '@/lib/training/pendingWorkoutStart';
+import { estimateRepsForWeight, recommendSessionStart } from '@/services/setRecommender';
 import { markGymChosen } from '@/lib/geo/gymChoice';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
-import { exerciseSafetyForAreas, parseStandingInjuryAreas } from '@/lib/training/standingInjuries';
+import {
+  exerciseSafetyForAreas,
+  parseStandingInjuryAreas,
+  STANDING_INJURY_OPTIONS,
+} from '@/lib/training/standingInjuries';
 import type { PositionStress } from '@/services/exerciseService';
 import { now as clockNow } from '@/lib/clock';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
@@ -79,6 +93,7 @@ import { convertWeightForDisplay, formatDate, formatWeight } from '@/lib/utils';
 import { localDaysBetween } from '@/lib/date/localDay';
 import type { Experience, ExerciseType, MuscleGroup, WarmupSet } from '@/types/schema';
 import { formatTargetRange, getSetReps, type ModalitySource } from '@/services/shared/setModality';
+import { WorkoutStartProgress, workoutStartLabel, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
 
 interface SheetExercise {
   id: string;
@@ -286,6 +301,16 @@ export function pickWhyLine(args: {
   return basis ? `${lead} Starts at ~${w}, estimated from ${basis}.` : `${lead} Starts at ~${w} (an estimate).`;
 }
 
+/**
+ * The Start button's copy while starting: which step it is on, not a bare
+ * "Starting..." (UX panel round 19: the wait read as a stall). The steps
+ * themselves, with a progress bar, render under the button
+ * (WorkoutStartProgress).
+ */
+export function startStageLabel(stage: WorkoutStartStage): string {
+  return workoutStartLabel(stage);
+}
+
 interface SuggestedWorkoutSheetProps {
   isOpen: boolean;
   onClose: () => void;
@@ -372,6 +397,13 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   const [planOrder, setPlanOrder] = useState<SuggestedOrderRule | undefined>(undefined);
   // Loaded with the plan data so each pick can preview its starting weight.
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
+  /**
+   * Whether today already has an ad-hoc session (read with the sheet's other
+   * data; null = unknown). When it doesn't, Start writes a new session under
+   * a client-made id and opens the workout screen at once, instead of first
+   * waiting on the lookups that decide between reuse and insert.
+   */
+  const [todayAdhocExists, setTodayAdhocExists] = useState<boolean | null>(null);
   // Recent completed sessions' exercise ids, most recent first — for the
   // split check (detectSplit: push/pull/legs or a body-part split).
   const [recentSessionExerciseIds, setRecentSessionExerciseIds] = useState<string[][]>([]);
@@ -399,6 +431,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [aiPlan, setAiPlan] = useState<SubstitutedWorkoutPlan | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  /** Where the start is (button copy): building the session, then opening it. */
+  const [startStage, setStartStage] = useState<WorkoutStartStage>('preparing');
   // One-tap start from Home: cleared by the first start or any user edit.
   const [autoStartPending, setAutoStartPending] = useState(autoStart);
   const [error, setError] = useState<string | null>(null);
@@ -425,7 +459,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-        const [exercisesRes, usageRes, profileRes, unavailable, locationRows, transfers] = await Promise.all([
+        const [exercisesRes, usageRes, profileRes, unavailable, locationRows, transfers, adhocToday] = await Promise.all([
           supabase
             .from('exercises')
             .select(
@@ -446,8 +480,10 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
           fetchUnavailableEquipment(userId).catch(() => [] as string[]),
           fetchTrainingLocations(userId).catch(() => [] as TrainingLocationRow[]),
           fetchTransferCandidates(userId, supabase).catch(() => [] as TransferCandidate[]),
+          hasTodayAdhocSession(supabase, userId).catch(() => null),
         ]);
         setTransferCandidates(transfers);
+        setTodayAdhocExists(adhocToday);
 
         setExercises((exercisesRes.data ?? []) as SheetExercise[]);
         setProfile((profileRes.data as SheetProfile | null) ?? null);
@@ -610,6 +646,18 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   // recovery/volume/exercise/location data is in, sized to fit the time and
   // substituted to fit the selected location's equipment.
   const exerciseById = useMemo(() => new Map(exercises.map((ex) => [ex.id, ex])), [exercises]);
+  // "your shoulder" — the standing injury areas the plan was checked against
+  // (same parse the plan effect feeds exerciseSafetyForAreas). Null = none.
+  const injuryAreas = useMemo(
+    () =>
+      injuryAreasPhrase(
+        parseStandingInjuryAreas(profile?.preferences?.injuryAreas).map(
+          (id) => STANDING_INJURY_OPTIONS.find((o) => o.id === id)?.label ?? id
+        )
+      ),
+    [profile]
+  );
+  const exerciseNameOf = useCallback((id: string) => exerciseById.get(id)?.name, [exerciseById]);
 
   useEffect(() => {
     if (!aiRequested || recoveryLoading || volumeLoading || isLoadingData || !blocklistsReady)
@@ -849,6 +897,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
   const handleStart = async () => {
     if (!aiPlan || aiPlan.exercises.length === 0 || isStarting) return;
     setIsStarting(true);
+    setStartStage('preparing');
     setError(null);
     try {
       // Only bounce to /login when the persisted session is genuinely absent.
@@ -860,117 +909,204 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
         return;
       }
 
-      const { sessionId, isNewSession } = await getOrCreateTodaySession(
-        supabase,
-        userId,
-        'ai_suggested',
-        selectedLocationId
-      );
+      // Navigate-first (lib/training/pendingWorkoutStart): the workout screen
+      // opens as soon as the session id is known and shows its skeleton while
+      // the exercises are written, instead of this sheet waiting on the whole
+      // build and only then starting the route load (UX panel round 20:
+      // "a brief 'opening workout screen' wait; Hevy opens instantly").
+      //
+      // Round trips before the screen opens, typical new session:
+      //   before — session lookups (1) + session insert (1) + blocks insert (1),
+      //            then the route load;
+      //   now    — none when the sheet already knows today has no ad-hoc
+      //            session: the id is made here and both inserts run while the
+      //            route loads. Otherwise the lookups + insert/reuse, then open.
+      const plan = aiPlan;
+      const clientId = todayAdhocExists === false ? newClientSessionId() : null;
+      const destinationFor = (id: string) => `/dashboard/workout/${id}?fromCreate=true`;
+      await runNavigateFirstStart({
+        navigate: (id) => {
+          setStartStage('opening');
+          router.push(destinationFor(id));
+        },
+        onStage: setStartStage,
+        start: async ({ sessionReady, stage, preview }) => {
+          let sessionId: string;
+          let isNewSession: boolean;
+          let sessionInsert: Promise<string> | null = null;
+          if (clientId) {
+            sessionId = clientId;
+            isNewSession = true;
+            sessionInsert = insertTodayAdhocSession(supabase, userId, 'ai_suggested', selectedLocationId, clientId);
+            // Awaited below, before the blocks; this only keeps an early
+            // failure from being reported as unhandled in the meantime.
+            sessionInsert.catch(() => {});
+            // Read before the page loads it: the gym was picked here.
+            if (locationChosen) markGymChosen(sessionId);
+            sessionReady(sessionId);
+          } else {
+            ({ sessionId, isNewSession } = await getOrCreateTodaySession(
+              supabase,
+              userId,
+              'ai_suggested',
+              selectedLocationId
+            ));
+            if (locationChosen) markGymChosen(sessionId);
+            sessionReady(sessionId);
+          }
+          stage('building');
 
-      // Cross-exercise strength summary for cold-start weight estimation:
-      // never-trained exercises (incl. first-time substitutes) seed from a
-      // related exercise's logged e1RM before profile heuristics.
-      const transferCandidates = await fetchTransferCandidates(userId, supabase);
+          let order = 1;
+          if (!isNewSession) {
+            const { data: maxOrderResult } = await supabase
+              .from('exercise_blocks')
+              .select('order')
+              .eq('workout_session_id', sessionId)
+              .order('order', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            order = (maxOrderResult?.order || 0) + 1;
+          }
 
-      let order = 1;
-      if (!isNewSession) {
-        const { data: maxOrderResult } = await supabase
-          .from('exercise_blocks')
-          .select('order')
-          .eq('workout_session_id', sessionId)
-          .order('order', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        order = (maxOrderResult?.order || 0) + 1;
-      }
+          const blocks = [];
+          const previewExercises: PendingWorkoutPreviewExercise[] = [];
+          for (const pick of plan.exercises) {
+            const exercise = exerciseById.get(pick.exerciseId);
+            if (!exercise) continue;
 
-      const blocks = [];
-      for (const pick of aiPlan.exercises) {
-        const exercise = exerciseById.get(pick.exerciseId);
-        if (!exercise) continue;
+            const isCompound = exercise.mechanic === 'compound';
+            const repRange = pick.repRange;
+            const substituted = isActiveSubstitution(pick);
+            let suggestedWeight = 0;
+            let lowConfidenceSeed = false;
+            // Substitutes are estimated from the SUBSTITUTE's own name — the
+            // original exercise's e1RM/history is never grafted on. First-time
+            // substitutes fall through to related-lift / strength-standard
+            // seeding, which the engine flags low-confidence. Cross-exercise
+            // transfer candidates are the ones the sheet loaded, so the start
+            // writes the same "Starts at ~X" the preview showed.
+            const weightRec = estimatePickStart(exercise, pick, profile, transferCandidates);
+            if (weightRec) {
+              suggestedWeight =
+                weightRec.confidence === 'find_working_weight'
+                  ? 0
+                  : weightRec.recommendedWeight || 0;
+              lowConfidenceSeed =
+                substituted &&
+                (weightRec.confidence === 'low' || weightRec.confidence === 'find_working_weight');
+            }
 
-        const isCompound = exercise.mechanic === 'compound';
-        const repRange = pick.repRange;
-        const substituted = isActiveSubstitution(pick);
-        let suggestedWeight = 0;
-        let lowConfidenceSeed = false;
-        // Substitutes are estimated from the SUBSTITUTE's own name — the
-        // original exercise's e1RM/history is never grafted on. First-time
-        // substitutes fall through to related-lift / strength-standard
-        // seeding, which the engine flags low-confidence.
-        const weightRec = estimatePickStart(exercise, pick, profile, transferCandidates);
-        if (weightRec) {
-          suggestedWeight =
-            weightRec.confidence === 'find_working_weight'
-              ? 0
-              : weightRec.recommendedWeight || 0;
-          lowConfidenceSeed =
-            substituted &&
-            (weightRec.confidence === 'low' || weightRec.confidence === 'find_working_weight');
-        }
+            // Cap dumbbell suggestions at the location's heaviest dumbbell.
+            suggestedWeight = capToLocationDumbbells(suggestedWeight, exercise, selectedLocation?.dumbbell_max_kg);
 
-        // Cap dumbbell suggestions at the location's heaviest dumbbell.
-        suggestedWeight = capToLocationDumbbells(suggestedWeight, exercise, selectedLocation?.dumbbell_max_kg);
+            let reason = pick.reason;
+            if (substituted && pick.substitution) {
+              reason += ` ↔ Swapped from ${pick.substitution.originalExerciseName} (equipment${
+                selectedLocation ? ` at ${selectedLocation.name}` : ''
+              })`;
+              if (lowConfidenceSeed) reason += ' · weight seeded from strength data (low confidence)';
+            }
+            // The injury line rides into the workout on the block, last, so the
+            // card can say why this lift was chosen for the user's shoulder/knee
+            // (services/suggestedWorkout injuryNoteFromReason reads it back).
+            const injuryLine = injuryPickLine(pick.injury, pick.exerciseId, injuryAreas, exerciseNameOf);
+            if (injuryLine) reason += ` · ${injuryLine}`;
 
-        let reason = pick.reason;
-        if (substituted && pick.substitution) {
-          reason += ` ↔ Swapped from ${pick.substitution.originalExerciseName} (equipment${
-            selectedLocation ? ` at ${selectedLocation.name}` : ''
-          })`;
-          if (lowConfidenceSeed) reason += ' · weight seeded from strength data (low confidence)';
-        }
+            let warmupSets: WarmupSet[] = [];
+            if (isNewSession && blocks.length === 0) {
+              warmupSets = generateWarmupProtocol({
+                workingWeight: suggestedWeight > 0 ? suggestedWeight : 60,
+                exercise: {
+                  id: exercise.id,
+                  name: exercise.name,
+                  primaryMuscle: (exercise.primary_muscle || 'chest') as MuscleGroup,
+                  secondaryMuscles: [],
+                  mechanic: isCompound ? 'compound' : 'isolation',
+                  defaultRepRange: repRange,
+                  defaultRir: pick.targetRir,
+                  minWeightIncrementKg: 2.5,
+                  formCues: [],
+                  commonMistakes: [],
+                  equipmentRequired: [],
+                  setupNote: '',
+                  movementPattern: isCompound ? 'compound' : 'isolation',
+                },
+                isFirstExercise: true,
+              });
+            }
 
-        let warmupSets: WarmupSet[] = [];
-        if (isNewSession && blocks.length === 0) {
-          warmupSets = generateWarmupProtocol({
-            workingWeight: suggestedWeight > 0 ? suggestedWeight : 60,
-            exercise: {
-              id: exercise.id,
+            blocks.push({
+              workout_session_id: sessionId,
+              exercise_id: exercise.id,
+              order: order++,
+              target_sets: pick.sets,
+              target_rep_range: repRange,
+              target_rir: pick.targetRir,
+              target_weight_kg: suggestedWeight,
+              target_rest_seconds: isCompound ? 180 : 90,
+              suggestion_reason: reason,
+              warmup_protocol: { sets: warmupSets },
+            });
+            // A lift with history opens from its last best set, through the
+            // engine's own session-start rule (the stored target above is the
+            // profile estimate; the workout card re-anchors on history).
+            const lastTop = hasCompletedLift(exercise.id, lastCompletedAt)
+              ? lastTopSets.get(exercise.id) ?? null
+              : null;
+            const fromHistory =
+              lastTop && exercise.exercise_type !== 'duration_based' && !exercise.is_bodyweight
+                ? recommendSessionStart({
+                    prevWeightKg: lastTop.weightKg,
+                    prevReps: lastTop.repCount,
+                    targetRepRange: repRange,
+                    targetRir: pick.targetRir,
+                  })
+                : null;
+            previewExercises.push({
+              exerciseId: exercise.id,
               name: exercise.name,
-              primaryMuscle: (exercise.primary_muscle || 'chest') as MuscleGroup,
-              secondaryMuscles: [],
-              mechanic: isCompound ? 'compound' : 'isolation',
-              defaultRepRange: repRange,
-              defaultRir: pick.targetRir,
-              minWeightIncrementKg: 2.5,
-              formCues: [],
-              commonMistakes: [],
-              equipmentRequired: [],
-              setupNote: '',
-              movementPattern: isCompound ? 'compound' : 'isolation',
-            },
-            isFirstExercise: true,
-          });
-        }
+              targetSets: pick.sets,
+              repRange: [repRange[0], repRange[1]],
+              targetRir: pick.targetRir,
+              weightKg: fromHistory && fromHistory.weightKg > 0 ? fromHistory.weightKg : suggestedWeight,
+              // Reps at that load from the same set's capacity (Epley, at the
+              // target effort): the card's own "245 × 9", not the range floor.
+              prefillReps: fromHistory && lastTop && fromHistory.weightKg > 0
+                ? estimateRepsForWeight(fromHistory.weightKg, {
+                    lastWeightKg: lastTop.weightKg,
+                    lastReps: lastTop.repCount,
+                    lastRir: pick.targetRir,
+                    setsCompletedThisExercise: 0,
+                    targetRepRange: repRange,
+                    targetRir: pick.targetRir,
+                  }) ?? getSetReps(fromHistory, null) ?? undefined
+                : undefined,
+              lastTopSet: lastTop ?? undefined,
+              loggable: !exercise.is_bodyweight && exercise.exercise_type !== 'duration_based',
+            });
+          }
 
-        blocks.push({
-          workout_session_id: sessionId,
-          exercise_id: exercise.id,
-          order: order++,
-          target_sets: pick.sets,
-          target_rep_range: repRange,
-          target_rir: pick.targetRir,
-          target_weight_kg: suggestedWeight,
-          target_rest_seconds: isCompound ? 180 : 90,
-          suggestion_reason: reason,
-          warmup_protocol: { sets: warmupSets },
-        });
-      }
+          if (blocks.length === 0) throw new Error('No exercises to start');
+          // The workout screen shows the first exercise from this while the
+          // rows below are written and it loads (only for a new session: a
+          // reused one already has exercises ahead of these).
+          if (isNewSession) preview({ exercises: previewExercises });
+          rememberDuration(aiDuration);
 
-      if (blocks.length === 0) throw new Error('No exercises to start');
-      rememberDuration(aiDuration);
+          // The blocks reference the session row: its insert must land first.
+          if (sessionInsert) await sessionInsert;
+          stage('saving');
+          const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
+          if (blocksError) throw blocksError;
 
-      const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
-      if (blocksError) throw blocksError;
-
-      // Remember where this workout happened (best-effort) so next time the
-      // chip row defaults to it.
-      if (selectedLocationId) {
-        touchLocationLastUsed(userId, selectedLocationId).catch(() => {});
-      }
-
-      if (locationChosen) markGymChosen(sessionId);
-      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
+          // Remember where this workout happened (best-effort) so next time the
+          // chip row defaults to it.
+          if (selectedLocationId) {
+            touchLocationLastUsed(userId, selectedLocationId).catch(() => {});
+          }
+          return { sessionId };
+        },
+      });
     } catch (err) {
       console.error('Failed to start suggested workout:', err);
       setError('Failed to start workout. Please try again.');
@@ -1152,6 +1288,9 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
             <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
             {autoStartPending ? `Building and starting today’s ~${aiDuration}-minute workout…` : `Building a ~${aiDuration}-minute workout...`}
           </p>
+          {/* One-tap start: the same step list the Start button shows, from
+              the first frame, so the wait is visibly moving (round 19). */}
+          {autoStartPending && <WorkoutStartProgress stage="preparing" />}
         </div>
       )}
 
@@ -1207,6 +1346,16 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
             return orderLine ? (
               <p className="text-caption text-ink-2" data-testid="suggested-workout-order">
                 {orderLine}
+              </p>
+            ) : null;
+          })()}
+          {(() => {
+            // Did the injury areas shape the picks? Said either way, so
+            // "does it account for my shoulder?" always has an answer.
+            const line = aiPlan.exercises.length > 0 ? injuryPlanLine(aiPlan.exercises, injuryAreas) : null;
+            return line ? (
+              <p className="text-caption text-ink-2" data-testid="suggested-workout-injury">
+                {line}
               </p>
             ) : null;
           })()}
@@ -1284,6 +1433,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
                       <span className="block text-caption text-ink-3" data-testid="suggested-pick-reason">
                         {beginner ? beginnerPickReason(pick.reason, pick.muscle) : pick.reason}
                       </span>
+                      {(() => {
+                        const injuryLine = injuryPickLine(pick.injury, pick.exerciseId, injuryAreas, exerciseNameOf);
+                        return injuryLine ? (
+                          <span className="block text-caption text-ink-2" data-testid="suggested-pick-injury">
+                            {injuryLine}
+                          </span>
+                        ) : null;
+                      })()}
                       {sub && (
                         <button
                           onClick={() =>
@@ -1355,13 +1512,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose, autoStart = false }: Su
           </div>
 
           <div className="space-y-2">
+            {isStarting && <WorkoutStartProgress stage={startStage} className="pb-1" />}
             <button
               onClick={handleStart}
               disabled={isStarting || aiPlan.exercises.length === 0}
               className="w-full py-2.5 rounded-lg bg-action text-on-action text-subhead font-medium hover:bg-action transition-colors disabled:opacity-60"
             >
               {isStarting
-                ? 'Starting...'
+                ? startStageLabel(startStage)
                 : `Start workout (${aiPlan.exercises.length} ${
                     aiPlan.exercises.length === 1 ? 'exercise' : 'exercises'
                   })`}

@@ -21,6 +21,7 @@ import {
   analyzeExerciseTrend,
   detectPlateau,
   MIN_SESSIONS_AFTER_DISCONTINUITY,
+  MIN_TREND_SPAN_DAYS,
   type PlateauDetectionResult,
   type PlateauGoal,
 } from '@/services/plateauDetector';
@@ -100,6 +101,34 @@ export interface LiftTrend {
    * that feeds `stalled`, kept per lift for the lift's own screen.
    */
   plateau: PlateauDetectionResult | null;
+  /**
+   * Set when the lift has its MIN_SESSIONS_FOR_TREND workouts but the fit
+   * still can't give a real weekly rate — too short a span (three workouts
+   * in a few days, or all on one day, fit a slope of exactly 0) or too few
+   * usable points. The UI shows "Not enough data yet" and what's needed,
+   * never a %/week; the lift is not counted rising/flat/down and gets no
+   * stall verdict. Null when the rate is real. Optional: summaries persisted
+   * before it was added lack it.
+   */
+  notEnoughData?: LiftNotEnoughData | null;
+}
+
+/** Why a lift with enough workouts still has no weekly rate. */
+export interface LiftNotEnoughData {
+  /**
+   * 'short_span': the workouts are too close together in time.
+   * 'few_workouts': too few usable workouts (after outliers / a reset).
+   */
+  reason: 'short_span' | 'few_workouts';
+  /** More workouts with this lift needed (at least 1). */
+  workoutsNeeded: number;
+  /** Days between the first and last workout the fit used. */
+  spanDays: number;
+  /**
+   * 'short_span' only: the first local day (YYYY-MM-DD) a workout with this
+   * lift makes the span long enough. Null for 'few_workouts'.
+   */
+  readyOn: string | null;
 }
 
 /** A lift trained in the window without enough sessions for a trend yet. */
@@ -118,6 +147,24 @@ export interface EarlyLift {
   firstReps?: number;
   latestWeightKg?: number;
   latestReps?: number;
+  /**
+   * Each workout's top set, oldest first (1–2 of them), so the card can
+   * draw the sessions that exist instead of no chart until a trend (UX panel
+   * r22, Maya: "only a basic comparison and no chart"). Optional: older
+   * persisted summaries lack it.
+   */
+  points?: EarlyLiftPoint[];
+}
+
+/** One workout's top set for an early (pre-trend) lift. */
+export interface EarlyLiftPoint {
+  /** Local day, YYYY-MM-DD. */
+  date: string;
+  weightKg: number;
+  /** Lift trends skip duration exercises, so these are real reps. */
+  topSetReps: number;
+  /** Estimated max of that set (kg), what the chart plots. */
+  e1rmKg: number;
 }
 
 export interface LiftTrendsSummary {
@@ -129,6 +176,12 @@ export interface LiftTrendsSummary {
   down: number;
   /** Classified lifts currently low-confidence (program just changed). */
   rebuilding: number;
+  /**
+   * Lifts with enough workouts whose rate isn't real yet (`notEnoughData`):
+   * not in rising/flat/down, not in `rebuilding`. Optional: older persisted
+   * summaries lack it.
+   */
+  tooEarly?: number;
   /**
    * Lifts trained in the window that don't yet have enough sessions
    * (< MIN_SESSIONS_FOR_TREND) to classify at all.
@@ -257,8 +310,49 @@ export const MAX_TRACKED_LIFTS = 10;
  *  computing over identical data). */
 export const LIFT_TREND_WINDOW_DAYS = 84;
 
-/** Weekly E1RM change (%/wk) within ±this band counts as "flat". */
-const FLAT_BAND_PCT = 0.15;
+/**
+ * Weekly E1RM change (%/wk) within ±this band counts as "flat". Exported so
+ * the Progress copy states the real threshold (components/analytics/trendHelp).
+ */
+export const FLAT_BAND_PCT = 0.15;
+
+/** Local YYYY-MM-DD `days` after a local YYYY-MM-DD day (calendar days). */
+function addLocalDays(day: string, days: number): string {
+  const d = new Date(`${day}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return getLocalDateString(d);
+}
+
+/**
+ * Whether a fitted e1RM trend gives a real weekly rate, and if not, what is
+ * missing. Pure; exported for tests. `usedDates` are the dates the fit used
+ * (oldest first) — the span counts from the first of them.
+ */
+export function liftRateReadiness(
+  trend: { confidence?: 'high' | 'low' | 'insufficient'; pointsUsed?: number; spanDays?: number },
+  usedDates: readonly string[]
+): LiftNotEnoughData | null {
+  const points = trend.pointsUsed ?? usedDates.length;
+  if (trend.confidence === 'insufficient' || points < 2) {
+    return {
+      reason: 'few_workouts',
+      workoutsNeeded: Math.max(1, MIN_SESSIONS_FOR_TREND - points),
+      spanDays: Math.round(trend.spanDays ?? 0),
+      readyOn: null,
+    };
+  }
+  const span = trend.spanDays;
+  if (span !== undefined && span < MIN_TREND_SPAN_DAYS) {
+    const first = usedDates[0];
+    return {
+      reason: 'short_span',
+      workoutsNeeded: 1,
+      spanDays: Math.round(span),
+      readyOn: first ? addLocalDays(first, MIN_TREND_SPAN_DAYS) : null,
+    };
+  }
+  return null;
+}
 
 interface SeriesAccumulator {
   trackKey: string;
@@ -286,6 +380,13 @@ export interface ComputeLiftTrendsOptions {
   programStartDate?: string | null;
   /** Also return the per-lift series for the muscle rollup (`rollup`). */
   includeRollup?: boolean;
+  /**
+   * Days the caller fetched sessions over, reported back as `windowDays`
+   * (the sentences say "over the last N weeks" from it). The sessions are
+   * already bounded by the caller's query; this does not filter them.
+   * Defaults to LIFT_TREND_WINDOW_DAYS (Home's tile and Progress's default).
+   */
+  windowDays?: number;
 }
 
 /**
@@ -461,6 +562,12 @@ export function computeLiftTrends(
         firstReps: first.topSetReps,
         latestWeightKg: latest.topSetWeightKg,
         latestReps: latest.topSetReps,
+        points: byDate.map((snap) => ({
+          date: snap.sessionDate,
+          weightKg: snap.topSetWeightKg,
+          topSetReps: snap.topSetReps,
+          e1rmKg: snap.estimatedE1RM,
+        })),
       };
       return early;
     })
@@ -532,10 +639,20 @@ export function computeLiftTrends(
       calibrationReason = 'equipment_change';
     }
 
+    // A lift with its workouts but no real rate yet (too short a span, too
+    // few usable points): no %/week, no verdict, no stall. Calibrating wins —
+    // it already says why there's no rate.
+    const excluded = new Set(trend.excludedDates ?? []);
+    const segmentStart = trend.discontinuityDate ?? null;
+    const usedDates = sorted
+      .map((s) => s.sessionDate)
+      .filter((d) => !excluded.has(d) && (!segmentStart || d >= segmentStart));
+    const notEnoughData = lowConfidence ? null : liftRateReadiness(trend, usedDates);
+
     // A "stalled N wks" verdict across a program boundary is the same noise
     // as the direction verdict — skip low-confidence lifts.
     let plateau: PlateauDetectionResult | null = null;
-    if (!lowConfidence) {
+    if (!lowConfidence && !notEnoughData) {
       const result = detectPlateau({
         exerciseId,
         snapshots: sorted,
@@ -576,25 +693,37 @@ export function computeLiftTrends(
       excludedDates: trend.excludedDates ?? [],
       discontinuityDate: trend.discontinuityDate ?? null,
       plateau,
+      notEnoughData,
     });
   }
 
   const order: Record<LiftDirection, number> = { rising: 0, flat: 1, down: 2 };
-  lifts.sort((a, b) => order[a.direction] - order[b.direction] || b.weeklyChangePct - a.weeklyChangePct);
+  // Lifts without a real rate yet go last: their direction is a placeholder.
+  const notReady = (l: LiftTrend) => (l.notEnoughData ? 1 : 0);
+  lifts.sort(
+    (a, b) =>
+      notReady(a) - notReady(b) ||
+      order[a.direction] - order[b.direction] ||
+      b.weeklyChangePct - a.weeklyChangePct
+  );
 
-  const confident = lifts.filter((l) => !l.lowConfidence);
+  // Counted rising/flat/down only with a real rate: calibrating lifts are
+  // `rebuilding`, lifts without enough span/points are `tooEarly`.
+  const confident = lifts.filter((l) => !l.lowConfidence && !l.notEnoughData);
+  const rebuilding = lifts.filter((l) => l.lowConfidence).length;
 
   return {
     lifts,
     rising: confident.filter((l) => l.direction === 'rising').length,
     flat: confident.filter((l) => l.direction === 'flat').length,
     down: confident.filter((l) => l.direction === 'down').length,
-    rebuilding: lifts.length - confident.length,
+    rebuilding,
+    tooEarly: lifts.length - confident.length - rebuilding,
     insufficientData,
     sessionsInWindow: sessions.length,
     earlyLifts,
     stalled,
-    windowDays: LIFT_TREND_WINDOW_DAYS,
+    windowDays: options.windowDays ?? LIFT_TREND_WINDOW_DAYS,
     ...(options.includeRollup
       ? {
           rollup: {

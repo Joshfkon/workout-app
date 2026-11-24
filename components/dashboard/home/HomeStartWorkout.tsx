@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { IconBarbell, IconPlayerPlay } from '@tabler/icons-react';
-import { createUntypedClient } from '@/lib/supabase/client';
+import { fetchResumableWorkoutId } from '@/lib/training/resumableSession';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { StartWorkoutOptions } from '@/components/workout/StartWorkoutOptions';
 import { useLastRepeatableWorkout } from './FreestyleStartActions';
@@ -25,19 +25,6 @@ const SuggestedWorkoutSheet = dynamic(
   () => import('@/components/workout/SuggestedWorkoutSheet').then((m) => m.SuggestedWorkoutSheet),
   { ssr: false }
 );
-
-/** The user's unfinished workout (any day), newest first, or null. */
-async function fetchInProgressWorkoutId(userId: string): Promise<string | null> {
-  const { data, error } = await createUntypedClient()
-    .from('workout_sessions')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('state', 'in_progress')
-    .order('started_at', { ascending: false, nullsFirst: false })
-    .limit(1);
-  if (error) throw error;
-  return (data?.[0]?.id as string | undefined) ?? null;
-}
 
 const BUTTON =
   'flex w-full min-h-[50px] items-center justify-center gap-2 rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110 active:brightness-95';
@@ -66,7 +53,9 @@ export function HomeStartWorkout({
   // Live state: never trust a cached "nothing in progress" on revisit.
   const { data: inProgressId } = useQuery({
     queryKey: ['workout', 'in-progress-id', userId],
-    queryFn: () => fetchInProgressWorkoutId(userId as string),
+    // Only a workout the screen will actually open: an empty leftover is
+    // archived here instead of offered (it only bounced you to Train).
+    queryFn: () => fetchResumableWorkoutId(userId as string, Date.now()),
     enabled: !!userId,
     staleTime: 0,
   });
@@ -86,29 +75,35 @@ export function HomeStartWorkout({
   }
 
   const startButton = compact ? (
+    // Still one quiet card, but its button is the same one-tap "Start today's
+    // workout" as everywhere else on Home. It used to open the options sheet,
+    // so a first workout took Start → AI-suggested → Start (UX panel round 20,
+    // Frank: "several ways to start a workout, and several taps"). The other
+    // ways sit under it as a plain link.
     <div
-      className="flex items-center gap-3 rounded-card bg-card shadow-card px-4 py-3"
+      className="rounded-card bg-card shadow-card px-4 py-3 space-y-2"
       data-testid="home-compact-workout-entry"
     >
-      <div className="min-w-0 flex-1">
-        <div className="text-body font-semibold text-ink">Lifting too?</div>
+      <div className="text-body font-semibold text-ink">Lifting too?</div>
+      <StartTodaysWorkoutButton />
+      <div className="flex flex-wrap items-center justify-between gap-x-4">
+        <button
+          type="button"
+          onClick={() => setShowOptions(true)}
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-subhead text-action font-semibold"
+          data-testid="home-start-workout"
+        >
+          <IconBarbell size={16} aria-hidden="true" />
+          Other ways to start
+        </button>
         <Link
           href="/dashboard/mesocycle/new"
-          className="inline-flex items-center gap-1.5 text-subhead text-ink-2 hover:text-ink transition-colors"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-subhead text-ink-2 hover:text-ink transition-colors"
         >
           Or build a program
           <ProTag feature="mesocycleBuilder" />
         </Link>
       </div>
-      <button
-        type="button"
-        onClick={() => setShowOptions(true)}
-        className={COMPACT_BUTTON}
-        data-testid="home-start-workout"
-      >
-        <IconBarbell size={16} aria-hidden="true" />
-        Start workout
-      </button>
     </div>
   ) : (
     // One tap starts today's recommended workout; every other way to start

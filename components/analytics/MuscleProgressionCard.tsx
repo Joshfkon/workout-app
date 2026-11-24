@@ -9,7 +9,8 @@ import {
   type MuscleGroupProgression,
   type ProgressionPace,
 } from '@/services/progressionInsights';
-import type { PlateauGoal } from '@/services/plateauDetector';
+import { MIN_TREND_SPAN_DAYS, type PlateauGoal } from '@/services/plateauDetector';
+import { rangePhrase } from '@/app/(dashboard)/dashboard/analytics/progressRange';
 
 interface MuscleProgressionCardProps {
   groups: MuscleGroupProgression[];
@@ -52,8 +53,10 @@ function paceHasRate(pace: ProgressionPace): boolean {
   return pace !== 'insufficient_data' && pace !== 'calibrating';
 }
 
-function formatWeeklyPct(pct: number): string {
-  return `${pct >= 0 ? '+' : ''}${pct}%/wk`;
+/** "+1.2% per week" — plain words, not "%/wk" (UX panel r20: jargon). */
+export function formatWeeklyPct(pct: number): string {
+  if (Math.abs(pct) < 0.05) return 'no change per week';
+  return `${pct >= 0 ? '+' : ''}${pct}% per week`;
 }
 
 /**
@@ -73,8 +76,10 @@ export function buildingSummaryText(groups: MuscleGroupProgression[]): {
     name: muscleDisplayName(g.muscleGroup),
     sessions: g.insights.reduce((best, i) => Math.max(best, i.sessionsAnalyzed), 0),
   }));
+  // A lift with its workouts but no rate yet: they're too close together in
+  // time (progressionInsights' span gate), not short of workouts.
   const parts = counted.map((c) =>
-    c.sessions >= min ? `${c.name} settling` : `${c.name} ${c.sessions} of ${min}`
+    c.sessions >= min ? `${c.name} needs its workouts spread over ${MIN_TREND_SPAN_DAYS}+ days` : `${c.name} ${c.sessions} of ${min}`
   );
   const short = counted.filter((c) => c.sessions < min);
   let next = '';
@@ -110,18 +115,20 @@ export function muscleProgressionSubtitle(
   windowDays?: number
 ): string {
   const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
-  const weeks = windowDays ? Math.round(windowDays / 7) : null;
-  const over = weeks ? ` over the last ${weeks} weeks` : '';
-  const average =
-    " A muscle's rate is the average of its lifts, weighted by sets. Tap a muscle to see each lift.";
+  const over = windowDays ? ` ${rangePhrase(windowDays)}` : '';
+  const lead = `How fast each muscle's lifts are getting stronger${over}.`;
+  const average = ' Each muscle averages its lifts; tap one to see them.';
   if (normalizedGoal === 'cut') {
-    return `How fast each muscle's lifts are getting stronger${over}. You're eating less to lose fat, so holding strength counts as on track.${average}`;
+    return `${lead} You're eating less to lose fat, so holding steady is on track.${average}`;
   }
   if (normalizedGoal === 'maintenance') {
-    return `How fast each muscle's lifts are getting stronger${over}. You're eating to hold your weight, so holding strength counts as on track.${average}`;
+    return `${lead} You're eating to hold your weight, so holding steady is on track.${average}`;
   }
-  return `How fast each muscle's lifts are getting stronger${over}, vs the ~${expectedPct}% a week expected at your level.${average}`;
+  return `${lead} About ${expectedPct}% a week is normal at your level.${average}`;
 }
+
+/** The card's heading, in plain words (UX panel r21, Maya: "Strength by muscle" read as jargon). */
+export const MUSCLE_PROGRESSION_TITLE = 'Which muscles are getting stronger';
 
 /**
  * "Progression by muscle group" — how each muscle's lifts are trending vs
@@ -170,7 +177,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays 
   return (
     <Card id="muscle-progression" padding="none" className="scroll-mt-4">
       <div className="p-4 border-b border-sep">
-        <h3 className="font-medium text-ink">Strength by muscle</h3>
+        <h3 className="font-medium text-ink">{MUSCLE_PROGRESSION_TITLE}</h3>
         <p className="text-caption text-ink-2 mt-0.5">{subtitle}</p>
       </div>
       <ul className="divide-y divide-sep">
@@ -209,7 +216,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays 
                     )}
                     {group.plateauedCount > 0 && (
                       <span className="whitespace-nowrap text-caption text-status-warn">
-                        {group.plateauedCount} plateaued
+                        {group.plateauedCount} stalled
                       </span>
                     )}
                   </span>
@@ -264,9 +271,9 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal, windowDays 
             data-testid="muscle-progression-calibrating-summary"
           >
             <span className="font-medium text-ink-2">
-              {calibratingGroups.length} calibrating
+              {calibratingGroups.length} rebuilding
             </span>{' '}
-            after program change — {calibratingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
+            after a program change — {calibratingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
             Rates return after 2–3 sessions on the new program.
           </li>
         )}

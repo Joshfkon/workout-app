@@ -65,7 +65,7 @@ describe('buildingSummaryText', () => {
   });
 
   it('does not show a complete-looking count for a lift at the threshold with a noisy fit', () => {
-    expect(buildingSummaryText([group('chest', [insight(3)])]).detail).toBe('Chest settling.');
+    expect(buildingSummaryText([group('chest', [insight(3)])]).detail).toBe('Chest needs its workouts spread over 10+ days.');
   });
 });
 
@@ -114,11 +114,11 @@ describe('MuscleProgressionCard', () => {
     );
     const name = screen.getByTestId('muscle-progression-name');
     const rate = screen.getByTestId('muscle-progression-rate');
-    expect(rate).toHaveTextContent('+0%/wk');
+    expect(rate).toHaveTextContent('no change per week');
     expect(name.className).not.toMatch(/\btruncate\b/);
     expect(rate.className).not.toMatch(/\btruncate\b/);
     // Plain words, not "Progression by muscle group" / "on a cut".
-    expect(screen.getByText('Strength by muscle')).toBeInTheDocument();
+    expect(screen.getByText('Which muscles are getting stronger')).toBeInTheDocument();
     expect(screen.getByText(/eating less to lose fat/)).toBeInTheDocument();
     expect(screen.queryByText(/on a cut/)).not.toBeInTheDocument();
   });
@@ -131,13 +131,14 @@ describe('MuscleProgressionCard', () => {
 describe('muscleProgressionSubtitle', () => {
   it('names the window and says a muscle is the average of its lifts', () => {
     expect(muscleProgressionSubtitle('bulk', 0.15, 84)).toBe(
-      "How fast each muscle's lifts are getting stronger over the last 12 weeks, vs the ~0.15% a week expected at your level. A muscle's rate is the average of its lifts, weighted by sets. Tap a muscle to see each lift."
+      "How fast each muscle's lifts are getting stronger over the last 12 weeks. About 0.15% a week is normal at your level. Each muscle averages its lifts; tap one to see them."
     );
+    expect(muscleProgressionSubtitle('bulk', 0.15, 28)).toMatch(/over the last 4 weeks\./);
   });
   it('keeps the goal wording on a cut and omits the window when unknown', () => {
     const text = muscleProgressionSubtitle('cut', 0);
     expect(text).toMatch(/^How fast each muscle's lifts are getting stronger\. You're eating less/);
-    expect(text).toMatch(/average of its lifts/);
+    expect(text).toMatch(/averages its lifts/);
   });
 });
 

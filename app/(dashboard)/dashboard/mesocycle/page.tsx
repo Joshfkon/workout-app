@@ -1,6 +1,8 @@
 'use client';
 
 import { ProTag } from '@/components/subscription/ProTag';
+import { MesocycleSkeleton } from './_components/MesocycleSkeleton';
+import { SavedBlockBanner } from './_components/SavedBlockBanner';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider, Input } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
-import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
+import { calculateRecoveryFactors, effectiveTrainingAge } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import {
   getSessionFromProgramData,
@@ -18,6 +20,7 @@ import {
   type ExerciseOverride,
   type ExtractedSession,
 } from '@/services/mesocycleHelpers';
+import { runNavigateFirstStart } from '@/lib/training/pendingWorkoutStart';
 import {
   startMesocycleWorkoutSession,
   getWorkoutsForDate,
@@ -149,7 +152,7 @@ function RenameEditor({
           if (e.key === 'Enter') onSave();
           if (e.key === 'Escape') onCancel();
         }}
-        placeholder="Mesocycle name"
+        placeholder="Training block name"
         autoFocus
       />
       <Button size="sm" onClick={onSave} isLoading={isSaving} disabled={!value.trim()}>
@@ -167,8 +170,8 @@ function RenameButton({ onClick, className }: { onClick: () => void; className?:
     <button
       onClick={onClick}
       className={`text-ink-3 hover:text-action hover:bg-action/10 rounded transition-colors ${className || 'p-1'}`}
-      title="Rename mesocycle"
-      aria-label="Rename mesocycle"
+      title="Rename training block"
+      aria-label="Rename training block"
     >
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -178,7 +181,7 @@ function RenameButton({ onClick, className }: { onClick: () => void; className?:
 }
 
 export default function MesocyclePage() {
-  useDocumentTitle('Mesocycle');
+  useDocumentTitle('Training block');
   const router = useRouter();
   const queryClient = useQueryClient();
   const [mesocycles, setMesocycles] = useState<Mesocycle[]>([]);
@@ -334,13 +337,19 @@ export default function MesocyclePage() {
         mesocycle.generated_with_enhanced_mode ?? (userData?.enhanced_athlete_mode === true);
 
       // Build extended user profile
+      const experience = (userProfile?.experience as Experience) || 'intermediate';
       const extendedProfile: ExtendedUserProfile = {
         age: userData?.age || 30,
-        experience: (userProfile?.experience as Experience) || 'intermediate',
+        experience,
         goal: (userProfile?.goal as SchemaGoal) || 'maintenance',
         sleepQuality: (userData?.sleep_quality as Rating) || 3,
         stressLevel: (userData?.stress_level as Rating) || 3,
-        trainingAge: userData?.training_age_years || 1,
+        // Settings writes training_age; training_age_years is an older
+        // column. Both default to 0 (unset), so fall back to experience.
+        trainingAge: effectiveTrainingAge(
+          Math.max(Number(userData?.training_age) || 0, Number(userData?.training_age_years) || 0),
+          experience
+        ),
         availableEquipment: (userData?.available_equipment as Equipment[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'],
         injuryHistory: (userData?.injury_history as MuscleGroup[]) || [],
         heightCm: userData?.height_cm || null,
@@ -657,14 +666,24 @@ export default function MesocyclePage() {
 
     try {
       const supabase = createUntypedClient();
-      const { sessionId } = await startMesocycleWorkoutSession({
-        supabase,
-        mesocycle: activeMesocycle,
-        todayWorkout,
-        completedSessions,
+      const mesocycle = activeMesocycle;
+      // Navigate-first (lib/training/pendingWorkoutStart): open the workout
+      // screen once the session row exists; it finishes the build there.
+      await runNavigateFirstStart({
+        start: ({ sessionReady, stage, preview }) =>
+          startMesocycleWorkoutSession({
+            supabase,
+            mesocycle,
+            todayWorkout,
+            completedSessions,
+            onStage: (s, id) => {
+              if (s === 'building') sessionReady(id);
+              stage(s);
+            },
+            onPreview: preview,
+          }),
+        navigate: (id) => router.push(`/dashboard/workout/${id}`),
       });
-
-      router.push(`/dashboard/workout/${sessionId}`);
     } catch (error) {
       console.error('Failed to start workout:', error);
       setIsStartingWorkout(false);
@@ -676,15 +695,15 @@ export default function MesocyclePage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-title font-bold text-ink">Mesocycle</h1>
+            <h1 className="text-title font-bold text-ink">Training block</h1>
             <div className="group relative">
               <button className="w-5 h-5 rounded-full bg-sep hover:bg-sep text-ink-2 text-caption flex items-center justify-center">
                 ?
               </button>
               <div className="absolute left-0 top-7 w-72 p-3 bg-fill border border-sep rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                <p className="text-subhead font-medium text-ink mb-1">What is a Mesocycle?</p>
+                <p className="text-subhead font-medium text-ink mb-1">What is a training block?</p>
                 <p className="text-caption text-ink-2">
-                  A <span className="text-action">mesocycle</span> is a training block lasting 4-8 weeks, designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
+                  A <span className="text-action">training block</span> is a 4-8 week program designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
                 </p>
                 <p className="text-caption text-ink-3 mt-2">
                   Think of it as a &ldquo;chapter&rdquo; in your training story—focused, structured, and building toward the next phase.
@@ -699,49 +718,19 @@ export default function MesocyclePage() {
             <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            New mesocycle
+            New training block
             <ProTag feature="mesocycleBuilder" tone="onAccent" className="ml-2" />
           </Button>
         </Link>
       </div>
 
+      <SavedBlockBanner />
+
       {isLoading ? (
         // Skeletons approximating the loaded layout (today card + overview)
         // instead of a spinner: structural guard against load-time layout
         // shift on this page (audit: CLS 0.417) + perceived-perf (PERF item 2)
-        <>
-          <Card variant="elevated" aria-busy="true">
-            <CardContent className="p-6">
-              <div className="animate-pulse space-y-3">
-                <div className="h-4 w-28 bg-fill rounded" />
-                <div className="h-6 w-48 bg-fill rounded" />
-                <div className="flex gap-2">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="h-6 w-16 bg-fill rounded-full" />
-                  ))}
-                </div>
-                <div className="h-4 w-56 bg-fill rounded" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card aria-busy="true">
-            <CardContent className="p-6">
-              <div className="animate-pulse space-y-6">
-                <div className="grid gap-4 grid-cols-2 sm:grid-cols-5">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-20 bg-fill rounded-lg" />
-                  ))}
-                </div>
-                <div className="h-2 bg-fill rounded-full" />
-                <div className="flex gap-2 overflow-hidden">
-                  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                    <div key={i} className="h-16 min-w-[80px] bg-fill rounded-lg" />
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </>
+        <MesocycleSkeleton />
       ) : !activeMesocycle ? (
         <Card className="text-center py-12">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">
@@ -749,13 +738,13 @@ export default function MesocyclePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <h2 className="text-headline font-semibold text-ink">No active mesocycle</h2>
+          <h2 className="text-headline font-semibold text-ink">No active training block</h2>
           <p className="text-ink-3 mt-2 max-w-md mx-auto">
-            Create a mesocycle to plan your training with progressive overload and scheduled deloads.
+            Create a training block to plan your workouts with progressive overload and scheduled deloads.
           </p>
           <Link href="/dashboard/mesocycle/new">
             <Button className="mt-6">
-              Create your first mesocycle
+              Create your first training block
               <ProTag feature="mesocycleBuilder" tone="onAccent" className="ml-2" />
             </Button>
           </Link>
@@ -1253,11 +1242,11 @@ export default function MesocyclePage() {
       {!isLoading && (
         <Card>
           <CardHeader>
-            <CardTitle>What is a Mesocycle?</CardTitle>
+            <CardTitle>What is a training block?</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-ink-2 mb-4">
-              A mesocycle is a training block typically lasting 4-8 weeks, designed to progressively overload your muscles before a recovery (deload) week.
+              A training block is a program typically lasting 4-8 weeks, designed to progressively overload your muscles before a recovery (deload) week.
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="p-4 bg-fill/50 rounded-lg">
@@ -1287,7 +1276,7 @@ export default function MesocyclePage() {
       {pastMesocycles.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Past mesocycles</CardTitle>
+            <CardTitle>Past training blocks</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -1344,7 +1333,7 @@ export default function MesocyclePage() {
                       <button
                         onClick={() => setConfirmDeleteId(meso.id)}
                         className="p-1.5 text-ink-3 hover:text-status-bad hover:bg-status-bad/10 rounded transition-colors"
-                        title="Delete mesocycle"
+                        title="Delete training block"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

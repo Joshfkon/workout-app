@@ -168,7 +168,7 @@ export function ProfileTabPanel({
             value={trainingAge}
             onChange={(e) => setTrainingAge(e.target.value)}
             placeholder="e.g., 2.5"
-            hint="Years of consistent resistance training"
+            hint="Years of consistent resistance training. Not sure? Leave it empty and your experience level is used."
           />
         </CardContent>
       </Card>

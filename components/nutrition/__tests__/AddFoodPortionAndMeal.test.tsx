@@ -69,6 +69,34 @@ describe('portion before adding', () => {
     expect(screen.getByTestId('add-food-preview-calories')).toHaveTextContent('186');
   });
 
+  it('offers everyday units alongside grams, and one tap switches to one (panel r19)', async () => {
+    const user = userEvent.setup();
+    const { onAdd } = renderAdd({ units: 'lb' });
+    await user.click(screen.getByText(CHICKEN.name));
+    const line = screen.getByTestId('add-food-equivalents');
+    expect(line).toHaveTextContent('Same as4 oz·1 palm-size portion');
+    // The everyday measure is in the unit picker too, but not the default.
+    expect(screen.getByTestId('add-food-unit')).toHaveValue('g');
+    expect(screen.getByRole('option', { name: 'palm-size portion (113 g)' })).toBeInTheDocument();
+    // The food still has no standard serving of its own.
+    await user.click(screen.getByRole('button', { name: 'Switch to 1 palm-size portion' }));
+    expect(screen.getByTestId('add-food-unit')).toHaveValue('everyday');
+    expect(screen.getByTestId('add-food-amount')).toHaveValue(1);
+    await user.click(screen.getByRole('button', { name: 'Add to Dinner' }));
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ serving_size: '1 palm-size portion (113g)', calories: 186 })
+    );
+  });
+
+  it('leaves ounces out of the equivalents for a metric user', async () => {
+    const user = userEvent.setup();
+    renderAdd({ units: 'kg' });
+    await user.click(screen.getByText(CHICKEN.name));
+    const line = screen.getByTestId('add-food-equivalents');
+    expect(line).toHaveTextContent('1 palm-size portion');
+    expect(line).not.toHaveTextContent('oz');
+  });
+
   it('the stepper changes the amount before adding, and that amount is logged', async () => {
     const user = userEvent.setup();
     const { onAdd } = renderAdd();
@@ -113,6 +141,42 @@ describe('portion before adding', () => {
     expect(screen.getByTestId('add-food-unit')).toHaveValue('g');
   });
 
+  it('says where the starting amount came from, in the user\'s units, with its kcal/protein (panel r19)', async () => {
+    const user = userEvent.setup();
+    const first = renderAdd({ units: 'lb' });
+    await user.click(screen.getByText(CHICKEN.name));
+    expect(screen.getByTestId('add-food-portion-source')).toHaveTextContent(
+      'Starting amount: 113 g · about 4 oz, a typical cooked portion, about the size of your palm · 186 kcal, 35 g protein'
+    );
+    // Once the user changes it, it's their amount: no source line.
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.queryByTestId('add-food-portion-source')).not.toBeInTheDocument();
+    first.unmount();
+
+    renderAdd({ units: 'kg' });
+    await user.click(screen.getByText(CHICKEN.name));
+    const metric = screen.getByTestId('add-food-portion-source');
+    expect(metric).toHaveTextContent('113 g · a typical cooked portion, about the size of your palm');
+    expect(metric).not.toHaveTextContent('oz');
+  });
+
+  it('says "what you logged last time" when the amount is remembered', async () => {
+    const user = userEvent.setup();
+    const first = renderAdd();
+    await user.click(screen.getByText(CHICKEN.name));
+    const amount = screen.getByTestId('add-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '150');
+    await user.click(screen.getByRole('button', { name: 'Add to Dinner' }));
+    first.unmount();
+
+    renderAdd();
+    await user.click(screen.getByText(CHICKEN.name));
+    expect(screen.getByTestId('add-food-portion-source')).toHaveTextContent(
+      '150 g · what you logged last time · 248 kcal, 47 g protein'
+    );
+  });
+
   it('says that tapping a food lets you choose the amount', () => {
     renderAdd();
     expect(screen.getByTestId('add-food-portion-hint')).toHaveTextContent(/choose how much before it's added/);
@@ -142,11 +206,37 @@ describe('target meal', () => {
 });
 
 describe('scan from the search bar', () => {
-  it('the scan icon in the search bar opens the barcode scanner', async () => {
+  const realMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+  afterEach(() => {
+    if (realMediaDevices) Object.defineProperty(navigator, 'mediaDevices', realMediaDevices);
+    else delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+  });
+
+  it('a labelled Scan barcode button beside the search box opens the barcode scanner', async () => {
     const user = userEvent.setup();
     renderAdd();
-    await user.click(screen.getByRole('button', { name: 'Scan a barcode' }));
+    await user.click(screen.getByRole('button', { name: 'Scan barcode' }));
     expect(await screen.findByTestId('fake-barcode-scanner')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Scan/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('says up front, before the tap, when there is no camera', async () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { enumerateDevices: () => Promise.resolve([{ kind: 'audioinput' }]) },
+    });
+    renderAdd();
+    expect(await screen.findByTestId('search-scan-no-camera')).toHaveTextContent(/type the number/);
+  });
+
+  it('says nothing extra when a camera is there', async () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { enumerateDevices: () => Promise.resolve([{ kind: 'videoinput' }]) },
+    });
+    renderAdd();
+    await screen.findByRole('button', { name: 'Scan barcode' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('search-scan-no-camera')).not.toBeInTheDocument();
   });
 });

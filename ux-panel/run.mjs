@@ -92,6 +92,33 @@ function reusableResult(reuseDir, taskId) {
 const sha = (s) => createHash('sha1').update(s).digest('hex').slice(0, 10);
 
 async function main() {
+  // --study=pricing: the synthetic pricing study (pricing/study.mjs). Survey
+  // mode does no browsing and needs no Supabase; --hands-on=N re-enters this
+  // runner as a child with --persona-file.
+  const study = flag('study', '');
+  if (study) {
+    if (study !== 'pricing') throw new Error(`unknown --study=${study} (available: pricing)`);
+    const { runPricingStudy } = await import('./pricing/study.mjs');
+    await runPricingStudy({
+      n: Number(flag('n', DRY ? 10 : 100)),
+      seed: String(flag('seed', 1)),
+      handsOn: Number(flag('hands-on', 0)),
+      model: opts.model,
+      effort: opts.effort,
+      baseUrl: opts.baseUrl,
+      embed: opts.embed,
+      yes: opts.yes,
+      fake: FAKE,
+      estimateOnly: opts.estimateOnly,
+      concurrency: Number(flag('concurrency', 4)),
+      label: opts.label,
+      out: flag('out', ''),
+      gitSha: safeGit('git rev-parse --short HEAD') + (safeGit('git status --porcelain --untracked-files=no') ? '+dirty' : ''),
+      allowRemotePreview: !!flag('allow-remote-preview'),
+      headed: !!flag('headed'),
+    });
+    return;
+  }
   const host = new URL(opts.baseUrl).hostname;
   if (!['localhost', '127.0.0.1'].includes(host) && !flag('allow-remote-preview')) {
     throw new Error(`--base-url ${opts.baseUrl} is not local. The panel runs against \`npm run dev\` (or a preview with --allow-remote-preview); never production.`);
@@ -99,7 +126,10 @@ async function main() {
   assertLocalSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://missing');
   if (opts.lens && !LENSES[opts.lens]) throw new Error(`unknown --lens=${opts.lens} (available: ${Object.keys(LENSES).join(', ')})`);
 
-  const { personas: allPersonas } = JSON.parse(await readFile(path.join(HERE, 'personas.json'), 'utf8'));
+  // --persona-file: another panel's personas in the same shape (the pricing
+  // study's hands-on subset); default personas.json.
+  const personaFile = flag('persona-file', '');
+  const { personas: allPersonas } = JSON.parse(await readFile(personaFile ? path.resolve(personaFile) : path.join(HERE, 'personas.json'), 'utf8'));
   const personas =
     opts.personas === 'all'
       ? allPersonas
@@ -368,6 +398,6 @@ function apiErrorMessage(e) {
 }
 
 main().catch((e) => {
-  console.error(e.message);
+  console.error(process.env.PANEL_DEBUG ? e.stack : e.message); // PANEL_DEBUG=1 prints the stack
   process.exit(1);
 });

@@ -68,7 +68,9 @@ describe('WeightGraph', () => {
   it('labels the trend-line rate with its unit, matching the drawn trend', () => {
     render(<WeightGraph weightHistory={history} preferredUnit="lb" />);
     expect(screen.getByTestId('weight-trend')).toHaveTextContent(/That's −0\.\d lb\/wk/);
-    expect(screen.getByTestId('weight-trend')).toHaveTextContent(/can differ from your latest weigh-in/);
+    expect(screen.getByTestId('weight-trend')).toHaveTextContent(/can differ from your latest one/);
+    // The method is explained once, on the Progress summary — not here too.
+    expect(screen.getByTestId('weight-trend')).not.toHaveTextContent(/straight line|fitted/);
   });
 
   it('converts to the viewer unit', () => {
@@ -110,5 +112,19 @@ describe('weightAxisDomain', () => {
     expect(lo * 2).toBe(Math.round(lo * 2));
     expect(hi * 2).toBe(Math.round(hi * 2));
     expect(hi - lo).toBeGreaterThanOrEqual(MIN_WEIGHT_AXIS_SPAN.kg);
+  });
+});
+
+describe('WeightGraph on the shared Progress range', () => {
+  it('follows the page range and shows no range picker of its own', () => {
+    render(<WeightGraph weightHistory={history} preferredUnit="lb" windowDays={84} />);
+    expect(screen.queryByRole('group', { name: 'Weight chart range' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('weight-change')).toHaveTextContent(/in the last 12 weeks$/);
+  });
+
+  it('a short range drops older weigh-ins', () => {
+    render(<WeightGraph weightHistory={history} preferredUnit="lb" windowDays={7} />);
+    // Only the Nov 20 weigh-in is inside 7 days.
+    expect(screen.getByTestId('weight-change')).toHaveTextContent(/One weigh-in in this range/);
   });
 });

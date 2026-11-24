@@ -11,22 +11,25 @@ import { PHASES_QUERY_KEY_PREFIX } from '@/hooks/useTrainingPhases';
 
 const PHASE_META: Record<
   TrainingPhase,
-  { label: string; chipClasses: string; selectedClasses: string; description: string }
+  { label: string; plain: string; chipClasses: string; selectedClasses: string; description: string }
 > = {
   cut: {
     label: 'Cutting',
+    plain: 'losing fat',
     chipClasses: 'bg-status-warn-tint text-status-warn',
     selectedClasses: 'border-status-warn/60 bg-status-warn/10',
     description: 'Lose fat while holding on to muscle. Calorie deficit.',
   },
   maintenance: {
     label: 'Maintaining',
+    plain: 'holding weight',
     chipClasses: 'bg-fill text-ink-2',
     selectedClasses: 'border-ink-3/60 bg-fill',
     description: 'Hold steady or recomp. Eat around maintenance.',
   },
   bulk: {
     label: 'Bulking',
+    plain: 'gaining muscle',
     chipClasses: 'bg-status-ok-tint text-status-ok',
     selectedClasses: 'border-status-ok/60 bg-status-ok/10',
     description: 'Build muscle. Calorie surplus.',
@@ -34,6 +37,16 @@ const PHASE_META: Record<
 };
 
 const PHASE_ORDER: TrainingPhase[] = ['cut', 'maintenance', 'bulk'];
+
+/**
+ * The chip's words: the phase name plus what it means in plain language
+ * ("Cutting · losing fat"). "Cutting" alone was unexplained jargon to the UX
+ * panel (round 19, 6 of 6). Pure; exported for tests.
+ */
+export function phaseChipText(phase: TrainingPhase): { label: string; plain: string } {
+  const meta = PHASE_META[phase] ?? PHASE_META.maintenance;
+  return { label: meta.label, plain: meta.plain };
+}
 
 interface PhaseSelectorProps {
   /** Current phase (normalized from users.goal). */
@@ -110,10 +123,12 @@ export function PhaseSelector({ phase, onPhaseChanged, offerPlanRebuild = true }
       <button
         type="button"
         onClick={openModal}
-        aria-label={`Current phase: ${meta.label}. Tap to change.`}
+        aria-label={`Current phase: ${meta.label} (${meta.plain}). Tap to change.`}
         className={`rounded-full px-2 py-0.5 text-caption font-semibold whitespace-nowrap transition-opacity hover:opacity-80 ${meta.chipClasses}`}
+        data-testid="home-phase-chip"
       >
         {meta.label}
+        <span className="font-normal"> · {meta.plain}</span>
       </button>
 
       <Modal

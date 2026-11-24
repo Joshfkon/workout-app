@@ -106,6 +106,53 @@ describe('Recent view', () => {
     expect(onClose).not.toHaveBeenCalled(); // stays open for more grabs
   });
 
+  it('confirms the add at the top of the sheet: food, amount, meal, the day total, Undo', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onUndo = jest.fn().mockResolvedValue(undefined);
+    setup({
+      onQuickAdd: jest.fn().mockResolvedValue({
+        added: 'Added Chicken (200g) to Dinner',
+        totals: 'Day total 700 / 2,000 kcal · 50 / 150 g protein',
+        removed: 'Removed Chicken (200g) from Dinner',
+        onUndo,
+        saved: Promise.resolve(),
+      }),
+    });
+    expect(screen.getByTestId('add-food-portion-hint')).toBeInTheDocument();
+    const list = screen.getByTestId('recent-foods-list');
+    const chickenRow = within(list).getByText('Chicken').closest('[data-testid="recent-food-row"]')!;
+    await user.click(within(chickenRow as HTMLElement).getByRole('button', { name: /quick-add chicken/i }));
+
+    expect(await screen.findByTestId('add-food-added-added')).toHaveTextContent('Added Chicken (200g) to Dinner');
+    expect(screen.getByTestId('add-food-added-totals')).toHaveTextContent('Day total 700 / 2,000 kcal');
+    // It takes the hint's place, right under the search box (no overlay).
+    expect(screen.queryByTestId('add-food-portion-hint')).not.toBeInTheDocument();
+    await user.click(within(screen.getByTestId('add-food-added-status')).getByRole('button', { name: 'Undo' }));
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByTestId('add-food-added-added')).toHaveTextContent('Removed Chicken (200g) from Dinner')
+    );
+  });
+
+  it('says so when the save behind the confirmation fails', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const saved = Promise.reject(new Error('offline'));
+    saved.catch(() => {});
+    setup({
+      onQuickAdd: jest.fn().mockResolvedValue({
+        added: 'Added Chicken (200g) to Dinner',
+        totals: 'Day total 700 kcal · 50 g protein',
+        removed: 'Removed Chicken (200g) from Dinner',
+        saved,
+        failed: 'Couldn’t save Chicken. Check your connection and try again.',
+      }),
+    });
+    const list = screen.getByTestId('recent-foods-list');
+    const chickenRow = within(list).getByText('Chicken').closest('[data-testid="recent-food-row"]')!;
+    await user.click(within(chickenRow as HTMLElement).getByRole('button', { name: /quick-add chicken/i }));
+    expect(await screen.findByTestId('add-food-added-failed')).toHaveTextContent('Couldn’t save Chicken');
+  });
+
   it('tapping a recent row body opens the shared serving editor', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     setup();

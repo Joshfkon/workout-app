@@ -3,14 +3,14 @@
 import { IconActivityHeartbeat, IconAlertTriangle, IconBarbell, IconChartBar } from '@tabler/icons-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
-import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
-import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useQuery, useQueryClient, useIsRestoring, keepPreviousData } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader, LoadingState, Sheet, ListGroup, ListRow, InfoTooltip } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ErrorRetry, PageHeader, LoadingState, Sheet, ListGroup, ListRow, InfoTooltip } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
-import { resolveAuthState } from '@/lib/supabase/authState';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -70,10 +70,11 @@ import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
 import { ProgressPhotosHero } from '@/components/analytics/ProgressPhotosHero';
 import { CollapsibleSection } from '@/components/analytics/CollapsibleSection';
-import { LiftTrendsSkeleton, ProgressSummarySkeleton } from '@/components/analytics/RegionSkeletons';
+import { LiftTrendsSkeleton, ProgressPageSkeleton, ProgressSummarySkeleton, ProgressTabSkeleton } from '@/components/analytics/RegionSkeletons';
 import { mergeSleepLogIntoWellness, type SleepLogRow } from './wellnessSleep';
 import { WeeklySetsCard } from '@/components/dashboard/home/WeeklySetsCard';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
+import { goalTargetRate, type WeightGoal } from '@/app/(dashboard)/dashboard/_lib/weightRate';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
@@ -83,6 +84,7 @@ import { muscleProgressionInputFromRollup } from '@/app/(dashboard)/dashboard/_l
 import { useBodyOrFoodLogged } from '@/hooks/useBodyOrFoodLogged';
 import {
   hasRecentLifting,
+  hideBodyScanPrompts,
   orderProgressTabs,
   parseProgressTabParam,
   resolveActiveProgressTab,
@@ -90,13 +92,19 @@ import {
   type ProgressTab,
 } from './progressTabs';
 import { buildProgressSummary } from './progressSummary';
+import {
+  DEFAULT_PROGRESS_RANGE,
+  PROGRESS_RANGES,
+  progressRange,
+  progressRangeStart,
+  type ProgressRangeId,
+} from './progressRange';
 import { ProgressSummaryCard } from './ProgressSummaryCard';
 import { now as clockNow } from '@/lib/clock';
 import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { listOutbox } from '@/lib/offline/setOutbox';
 import {
-  rangeStartLocalDay,
   pendingCompletionsFromOutbox,
   pendingSetsFromOutbox,
   mergeLocalPendingWorkouts,
@@ -201,19 +209,6 @@ interface UserProfile {
   targetWeightKg: number | null;
 }
 
-// Get time range label
-function getTimeRangeLabel(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): string {
-  switch (range) {
-    case '7d': return 'this week';
-    case '30d': return 'this month';
-    case '60d': return '2 months';
-    case '6m': return '6 months';
-    case '1y': return '1 year';
-    case 'all': return 'all time';
-    default: return 'this period';
-  }
-}
-
 // Helper function for percentile bars
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
   const segments = generatePercentileSegments(percentile);
@@ -269,9 +264,234 @@ async function fetchAllRowsNewestFirst(
   return all;
 }
 
+type PlateauAlertRow = { exerciseId: string; exerciseName: string; result: PlateauDetectionResult };
+
+/**
+ * Plateau alerts for the Strength tab's "need attention" line, per time
+ * range. A React Query (['analytics', 'plateaus', range]: persisted, and
+ * invalidated on every workout finish with the rest of 'analytics') instead
+ * of a fetch-in-useEffect that re-ran on every visit and first spent an auth
+ * round trip on getUser().
+ */
+async function fetchPlateauAlerts(rangeDays: number): Promise<PlateauAlertRow[]> {
+  const supabase = createUntypedClient();
+  // Identity from the locally persisted session (no auth round trip — RLS
+  // still checks the token on every request below). Signed out → nothing.
+  const localUserId = await getLocalUserId(supabase);
+  if (!localUserId) return [];
+  const user = { id: localUserId };
+
+  // Range lower bound at local midnight so a range means whole local
+  // calendar days — never a rolling UTC-instant window (this bug class
+  // has shipped twice; see services/volumeTrendsData).
+  const startDate = progressRangeStart(rangeDays, clockNow());
+
+  let query = supabase
+    .from('workout_sessions')
+    .select(`
+      id,
+      started_at,
+      completed_at,
+      duration_seconds,
+      session_rpe,
+      exercise_blocks!inner (
+        id,
+        exercises!inner (
+          id,
+          name,
+          primary_muscle,
+          exercise_type
+        ),
+        set_logs!inner (
+          id,
+          weight_kg,
+          reps,
+          rpe,
+          is_warmup,
+          logged_at
+        )
+      )
+    `)
+    .eq('user_id', user.id)
+    .eq('state', 'completed')
+    .order('completed_at', { ascending: false });
+
+  if (startDate) {
+    query = query.gte('completed_at', startDate.toISOString());
+  }
+
+  // Diet goal for plateau detection (fetched here, not from userProfile
+  // state, so the per-range cache can't be seeded before the profile
+  // query resolves and keep stale goal-less results).
+  const goalPromise = supabase
+    .from('users')
+    .select('goal')
+    .eq('id', user.id)
+    .single();
+
+  // Locally-finished workouts whose completion patch (and possibly set
+  // rows) are still queued in the offline outbox: the server row is
+  // still `in_progress`, so the state='completed' query above can't see
+  // them. Unsynced must not mean invisible — the finish screen, Home
+  // card, and history all already show these.
+  const outboxEntries = await listOutbox().catch(() => []);
+  const pendingCompletions = pendingCompletionsFromOutbox(outboxEntries);
+  const pendingSetsByBlock = pendingSetsFromOutbox(outboxEntries);
+
+  // Left joins here (unlike the main query): blocks whose sets are all
+  // still queued locally must come back so the queued sets can be
+  // merged in.
+  const pendingPromise = pendingCompletions.size > 0
+    ? supabase
+        .from('workout_sessions')
+        .select(`
+          id,
+          started_at,
+          completed_at,
+          duration_seconds,
+          session_rpe,
+          exercise_blocks (
+            id,
+            exercises (
+              id,
+              name,
+              primary_muscle,
+              exercise_type
+            ),
+            set_logs (
+              id,
+              weight_kg,
+              reps,
+              rpe,
+              is_warmup,
+              logged_at
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+        .in('id', Array.from(pendingCompletions.keys()))
+    : Promise.resolve({ data: [] as RawWorkoutSession[], error: null });
+
+  const [{ data: serverSessions, error }, { data: goalRow }, { data: pendingData, error: pendingError }] =
+    await Promise.all([query, goalPromise, pendingPromise]);
+
+  if (error || pendingError) {
+    // A failed fetch must never be cached as "no data" — throw so React
+    // Query keeps the last good result and retries.
+    throw error ?? pendingError;
+  }
+
+  const workoutSessions = mergeLocalPendingWorkouts({
+    serverSessions: (serverSessions ?? []) as RawWorkoutSession[],
+    pendingSessions: (pendingData ?? []) as RawWorkoutSession[],
+    pendingCompletions,
+    pendingSetsByBlock,
+    rangeStart: startDate,
+  });
+
+  if (workoutSessions.length === 0) {
+    // Genuinely zero workouts in range (server AND local outbox agree).
+    return [];
+  }
+
+  // Per-session snapshots per exercise (for plateau detection), plus
+  // each exercise's name.
+  const snapshotMap = new Map<string, ExercisePerformanceSnapshot[]>();
+  const exerciseNameMap = new Map<string, string>();
+
+  workoutSessions.forEach((session: any) => {
+    if (session.exercise_blocks) {
+      session.exercise_blocks.forEach((block: any) => {
+        if (!block.exercises || !block.set_logs) return;
+
+        const exerciseId = block.exercises.id;
+        const exerciseName = block.exercises.name;
+
+        const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
+
+        // Duration exercises carry seconds in reps: no e1RM snapshot, no
+        // plateau trend — a stable hold ceiling is not a plateau.
+        if (block.exercises.exercise_type === 'duration_based') return;
+
+        // Build a per-session snapshot for this exercise (top set by E1RM)
+        // so the plateau detector can analyze E1RM trends over time.
+        if (workingSets.length > 0) {
+          const sessionDate = getLocalDateString(new Date(session.completed_at));
+          let topE1RM = 0;
+          let topWeight = 0;
+          let topReps = 0;
+          workingSets.forEach((set: any) => {
+            const e1rm = e1rmValueFromRpe(set.weight_kg, set.reps, set.rpe);
+            if (e1rm > topE1RM) {
+              topE1RM = e1rm;
+              topWeight = set.weight_kg;
+              topReps = set.reps;
+            }
+          });
+
+          exerciseNameMap.set(exerciseId, exerciseName);
+          // No estimable set (canonical estimator: >15 effective reps
+          // has no e1RM) -> no snapshot; never trend a 0.
+          if (topE1RM <= 0) return;
+          if (!snapshotMap.has(exerciseId)) {
+            snapshotMap.set(exerciseId, []);
+          }
+          snapshotMap.get(exerciseId)!.push({
+            id: `${session.id}-${exerciseId}`,
+            userId: user.id,
+            exerciseId,
+            sessionDate,
+            topSetWeightKg: topWeight,
+            topSetReps: topReps,
+            // topSetRpe is display metadata only; the e1RM above already
+            // consumed the set's logged RPE via the canonical estimator.
+            topSetRpe: 10,
+            totalWorkingSets: workingSets.length,
+            estimatedE1RM: topE1RM,
+          });
+        }
+      });
+    }
+  });
+
+  // Run plateau detection over per-exercise session snapshots.
+  // Today's date skips exercises not trained recently (long ranges like
+  // '1y'/'all' include long-abandoned lifts); the goal sets expectations
+  // (gains on a bulk vs. holding strength on a cut).
+  const plateauResults = analyzeAllExercises(
+    snapshotMap,
+    new Date(),
+    (goalRow?.goal as PlateauGoal | null) ?? undefined
+  );
+  const detectedPlateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> = [];
+  plateauResults.forEach((result, exerciseId) => {
+    if (result.isPlateaued) {
+      detectedPlateauAlerts.push({
+        exerciseId,
+        exerciseName: exerciseNameMap.get(exerciseId) ?? 'Exercise',
+        result,
+      });
+    }
+  });
+  detectedPlateauAlerts.sort((a, b) => b.result.weeksSinceProgress - a.result.weeksSinceProgress);
+  return detectedPlateauAlerts;
+}
+
+const EMPTY_PLATEAU_ALERTS: PlateauAlertRow[] = [];
+
+/** Anchor of the Strength tab's weekly sets card (?section= deep links too). */
+const WEEKLY_SETS_SECTION_ID = 'weekly-sets';
+
 function AnalyticsPageContent() {
-  const { rows: weeklyVolumeRows } = useWeeklyVolume();
+  const {
+    rows: weeklyVolumeRows,
+    workouts: weeklyVolumeWorkouts,
+    windowStartIso: weeklyVolumeWindowStartIso,
+    isLoading: weeklyVolumeLoading,
+  } = useWeeklyVolume();
   const beginnerMode = useBeginnerMode();
+  const [pageMounted, setPageMounted] = useState(false);
+  useEffect(() => setPageMounted(true), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
@@ -300,7 +520,10 @@ function AnalyticsPageContent() {
     // subsequent taps.
     setPickedTab(tab);
   };
-  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d' | '6m' | '1y' | 'all'>('30d');
+  // ONE range for every trend on the page (./progressRange): the summary,
+  // the weight chart, lift trends, the muscle rollup, plateaus and Wellness.
+  const [rangeId, setRangeId] = useState<ProgressRangeId>(DEFAULT_PROGRESS_RANGE);
+  const range = progressRange(rangeId);
 
   // Body composition state
   const [scans, setScans] = useState<DexaScan[]>([]);
@@ -364,7 +587,11 @@ function AnalyticsPageContent() {
   // Per-lift trend breakdown behind the home "Lifts" tile (shared function +
   // identical query window, so the tile aggregate and this detail agree).
   // Shared React Query cache with the single-lift screen (hooks/useLiftTrends).
-  const liftTrendsQuery = useLiftTrends();
+  // The default 12-week query decides which tab opens and in what order
+  // (so a range tap never reshuffles the tabs); the range's own query feeds
+  // everything that is SHOWN. At the default range they are the same query.
+  const defaultLiftTrendsQuery = useLiftTrends();
+  const liftTrendsQuery = useLiftTrends(range.days);
   const liftTrendsSummary = liftTrendsQuery.data ?? null;
 
   // Data-driven default tab. Both signals are persisted React Query reads,
@@ -376,7 +603,18 @@ function AnalyticsPageContent() {
   // Food-only users (hooks/useTrackingFocus) are treated as non-lifters
   // here: Body first, Strength last, no FFMI / body-scan / strength prompts.
   const { foodOnly } = useTrackingFocus();
-  const liftedForTabs = foodOnly ? false : hasRecentLifting(liftTrendsQuery.data);
+  // Beginner mode with no body scan yet: no FFMI / "log a DEXA scan" prompts.
+  const hideScanPrompts = hideBodyScanPrompts(beginnerMode, scans.length);
+  const liftedForTabs = foodOnly ? false : hasRecentLifting(defaultLiftTrendsQuery.data);
+  // Weekly sets per muscle vs MEV–MRV: for anyone who lifts, outside
+  // beginner mode (as everywhere). Not for someone with no lifting in the
+  // window: a card of zeros pushed the empty state below the fold (r19).
+  const showWeeklySets = !beginnerMode && liftedForTabs !== false;
+  const [volumeScrollRequest, setVolumeScrollRequest] = useState(0);
+  useEffect(() => {
+    if (volumeScrollRequest === 0) return;
+    document.getElementById(WEEKLY_SETS_SECTION_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [volumeScrollRequest]);
   const dataDefaultTab = resolveDefaultProgressTab({
     hasRecentLifting: liftedForTabs,
     hasBodyOrFoodData:
@@ -394,11 +632,6 @@ function AnalyticsPageContent() {
     dataDefaultTab: lockedDefaultTab ?? dataDefaultTab,
   });
 
-  // Per-time-range result cache (P1-2) — lives for the page's lifetime.
-  const analyticsRangeCacheRef = useRef(
-    new Map<string, { plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> }>()
-  );
-  const [plateauAlerts, setPlateauAlerts] = useState<Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>>([]);
 
   // Wellness state
   const [hydrationData, setHydrationData] = useState<Array<{ date: string; totalMl: number }>>([]);
@@ -468,17 +701,16 @@ function AnalyticsPageContent() {
     queryKey: ['analytics', 'main'],
     queryFn: async () => {
       const supabase = createUntypedClient();
-      // Distinguish a genuinely signed-out user (→ /login) from a transient
-      // failure to verify the session (→ throw, so React Query surfaces a
-      // retryable error state). A verify blip must never look like a logout.
-      const auth = await resolveAuthState(supabase);
-      if (auth.status === 'unauthenticated') return AUTH_REQUIRED;
-      if (auth.status === 'error') {
-        throw auth.error instanceof Error
-          ? auth.error
-          : new Error('Could not verify your session');
-      }
-      const user = { id: auth.userId };
+      // Identity from the locally persisted session — no getUser() network
+      // round trip before the first read (it also holds supabase-js's auth
+      // lock, which every other query on this page then queued behind). No
+      // stored session → genuinely signed out (→ /login). A token the server
+      // rejects fails the reads below, which throw into the retryable error
+      // state — never a logout. Middleware has already verified the session
+      // for this route.
+      const localUserId = await getLocalUserId(supabase);
+      if (!localUserId) return AUTH_REQUIRED;
+      const user = { id: localUserId };
       const [profileResult, scanResult, photoResult, sessionsResult] = await Promise.all([
         supabase
           .from('users')
@@ -886,28 +1118,8 @@ function AnalyticsPageContent() {
 
       const supabase = createUntypedClient();
       
-      // Calculate date range based on timeRange
-      const now = new Date();
-      let startDate: Date;
-      switch (timeRange) {
-        case '7d':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case '30d':
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        case '60d':
-          startDate = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-          break;
-        case '6m':
-          startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-          break;
-        case '1y':
-          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startDate = new Date(0); // All time
-      }
+      // The page's shared range (./progressRange), whole local days.
+      const startDate = progressRangeStart(range.days, clockNow());
 
       const startDateStr = getLocalDateString(startDate);
 
@@ -1029,241 +1241,22 @@ function AnalyticsPageContent() {
     let cancelled = false;
     fetchWellnessData();
     return () => { cancelled = true; };
-  }, [userId, timeRange]);
+  }, [userId, range.days]);
 
   // Fetch workout data for the Strength tab's plateau alerts. (The
   // muscle-progression card rolls up the lift-trend series instead — see
   // muscleProgression below.) (The Training tab this fetch also fed was
   // removed — its totals/volume/recent-workout views live on the Train page.)
-  // P1-2 (perf): results are cached per time range for the page's lifetime —
-  // flipping 7d -> 30d -> 7d no longer refetches the whole nested query tree.
-  useEffect(() => {
-    async function fetchAnalytics() {
-      try {
-        const cached = analyticsRangeCacheRef.current.get(timeRange);
-        if (cached) {
-          setPlateauAlerts(cached.plateauAlerts);
-          return;
-        }
-
-        const supabase = createUntypedClient();
-        // Same auth semantics as the main query: only a confirmed signed-out
-        // state bails (the main query's effect redirects to /login); a
-        // transient verify failure must not be cached as emptiness.
-        const auth = await resolveAuthState(supabase);
-        if (auth.status !== 'authenticated') return;
-        const user = { id: auth.userId };
-
-        // Range lower bound at local midnight so a range means whole local
-        // calendar days — never a rolling UTC-instant window (this bug class
-        // has shipped twice; see services/volumeTrendsData).
-        const startDate = rangeStartLocalDay(timeRange);
-
-        let query = supabase
-          .from('workout_sessions')
-          .select(`
-            id,
-            started_at,
-            completed_at,
-            duration_seconds,
-            session_rpe,
-            exercise_blocks!inner (
-              id,
-              exercises!inner (
-                id,
-                name,
-                primary_muscle,
-                exercise_type
-              ),
-              set_logs!inner (
-                id,
-                weight_kg,
-                reps,
-                rpe,
-                is_warmup,
-                logged_at
-              )
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('state', 'completed')
-          .order('completed_at', { ascending: false });
-
-        if (startDate) {
-          query = query.gte('completed_at', startDate.toISOString());
-        }
-
-        // Diet goal for plateau detection (fetched here, not from userProfile
-        // state, so the per-range cache can't be seeded before the profile
-        // query resolves and keep stale goal-less results).
-        const goalPromise = supabase
-          .from('users')
-          .select('goal')
-          .eq('id', user.id)
-          .single();
-
-        // Locally-finished workouts whose completion patch (and possibly set
-        // rows) are still queued in the offline outbox: the server row is
-        // still `in_progress`, so the state='completed' query above can't see
-        // them. Unsynced must not mean invisible — the finish screen, Home
-        // card, and history all already show these.
-        const outboxEntries = await listOutbox().catch(() => []);
-        const pendingCompletions = pendingCompletionsFromOutbox(outboxEntries);
-        const pendingSetsByBlock = pendingSetsFromOutbox(outboxEntries);
-
-        // Left joins here (unlike the main query): blocks whose sets are all
-        // still queued locally must come back so the queued sets can be
-        // merged in.
-        const pendingPromise = pendingCompletions.size > 0
-          ? supabase
-              .from('workout_sessions')
-              .select(`
-                id,
-                started_at,
-                completed_at,
-                duration_seconds,
-                session_rpe,
-                exercise_blocks (
-                  id,
-                  exercises (
-                    id,
-                    name,
-                    primary_muscle,
-                    exercise_type
-                  ),
-                  set_logs (
-                    id,
-                    weight_kg,
-                    reps,
-                    rpe,
-                    is_warmup,
-                    logged_at
-                  )
-                )
-              `)
-              .eq('user_id', user.id)
-              .in('id', Array.from(pendingCompletions.keys()))
-          : Promise.resolve({ data: [] as RawWorkoutSession[], error: null });
-
-        const [{ data: serverSessions, error }, { data: goalRow }, { data: pendingData, error: pendingError }] =
-          await Promise.all([query, goalPromise, pendingPromise]);
-
-        if (error || pendingError) {
-          // A failed fetch must never be cached as "no data" — bail and let
-          // the next mount/range change retry.
-          console.error('Failed to fetch analytics:', error ?? pendingError);
-          return;
-        }
-
-        const workoutSessions = mergeLocalPendingWorkouts({
-          serverSessions: (serverSessions ?? []) as RawWorkoutSession[],
-          pendingSessions: (pendingData ?? []) as RawWorkoutSession[],
-          pendingCompletions,
-          pendingSetsByBlock,
-          rangeStart: startDate,
-        });
-
-        if (workoutSessions.length === 0) {
-          // Genuinely zero workouts in range (server AND local outbox agree).
-          setPlateauAlerts([]);
-          analyticsRangeCacheRef.current.set(timeRange, {
-            plateauAlerts: [],
-          });
-          return;
-        }
-
-        // Per-session snapshots per exercise (for plateau detection), plus
-        // each exercise's name.
-        const snapshotMap = new Map<string, ExercisePerformanceSnapshot[]>();
-        const exerciseNameMap = new Map<string, string>();
-
-        workoutSessions.forEach((session: any) => {
-          if (session.exercise_blocks) {
-            session.exercise_blocks.forEach((block: any) => {
-              if (!block.exercises || !block.set_logs) return;
-
-              const exerciseId = block.exercises.id;
-              const exerciseName = block.exercises.name;
-
-              const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
-
-              // Duration exercises carry seconds in reps: no e1RM snapshot, no
-              // plateau trend — a stable hold ceiling is not a plateau.
-              if (block.exercises.exercise_type === 'duration_based') return;
-
-              // Build a per-session snapshot for this exercise (top set by E1RM)
-              // so the plateau detector can analyze E1RM trends over time.
-              if (workingSets.length > 0) {
-                const sessionDate = getLocalDateString(new Date(session.completed_at));
-                let topE1RM = 0;
-                let topWeight = 0;
-                let topReps = 0;
-                workingSets.forEach((set: any) => {
-                  const e1rm = e1rmValueFromRpe(set.weight_kg, set.reps, set.rpe);
-                  if (e1rm > topE1RM) {
-                    topE1RM = e1rm;
-                    topWeight = set.weight_kg;
-                    topReps = set.reps;
-                  }
-                });
-
-                exerciseNameMap.set(exerciseId, exerciseName);
-                // No estimable set (canonical estimator: >15 effective reps
-                // has no e1RM) -> no snapshot; never trend a 0.
-                if (topE1RM <= 0) return;
-                if (!snapshotMap.has(exerciseId)) {
-                  snapshotMap.set(exerciseId, []);
-                }
-                snapshotMap.get(exerciseId)!.push({
-                  id: `${session.id}-${exerciseId}`,
-                  userId: user.id,
-                  exerciseId,
-                  sessionDate,
-                  topSetWeightKg: topWeight,
-                  topSetReps: topReps,
-                  // topSetRpe is display metadata only; the e1RM above already
-                  // consumed the set's logged RPE via the canonical estimator.
-                  topSetRpe: 10,
-                  totalWorkingSets: workingSets.length,
-                  estimatedE1RM: topE1RM,
-                });
-              }
-            });
-          }
-        });
-
-        // Run plateau detection over per-exercise session snapshots.
-        // Today's date skips exercises not trained recently (long ranges like
-        // '1y'/'all' include long-abandoned lifts); the goal sets expectations
-        // (gains on a bulk vs. holding strength on a cut).
-        const plateauResults = analyzeAllExercises(
-          snapshotMap,
-          new Date(),
-          (goalRow?.goal as PlateauGoal | null) ?? undefined
-        );
-        const detectedPlateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> = [];
-        plateauResults.forEach((result, exerciseId) => {
-          if (result.isPlateaued) {
-            detectedPlateauAlerts.push({
-              exerciseId,
-              exerciseName: exerciseNameMap.get(exerciseId) ?? 'Exercise',
-              result,
-            });
-          }
-        });
-        detectedPlateauAlerts.sort((a, b) => b.result.weeksSinceProgress - a.result.weeksSinceProgress);
-        setPlateauAlerts(detectedPlateauAlerts);
-
-        analyticsRangeCacheRef.current.set(timeRange, {
-          plateauAlerts: detectedPlateauAlerts,
-        });
-      } catch (error) {
-        console.error('Failed to fetch analytics:', error);
-      }
-    }
-
-    fetchAnalytics();
-  }, [timeRange]);
+  // Cached per time range (fetchPlateauAlerts): flipping 7d -> 30d -> 7d,
+  // or coming back to Progress, doesn't refetch the nested query tree.
+  const plateauQuery = useQuery({
+    queryKey: ['analytics', 'plateaus', range.days],
+    queryFn: () => fetchPlateauAlerts(range.days),
+    staleTime: 1000 * 60 * 5,
+    gcTime: IMMUTABLE_GC_TIME,
+    placeholderData: keepPreviousData,
+  });
+  const plateauAlerts = plateauQuery.data ?? EMPTY_PLATEAU_ALERTS;
 
   // Muscle-group progression classification (services/progressionInsights).
   // Rolls up the SAME per-lift series, window (LIFT_TREND_WINDOW_DAYS), goal
@@ -1388,12 +1381,17 @@ function AnalyticsPageContent() {
     );
   }
 
-  // Full-screen loader only on first-ever load with an empty cache. A revisit
-  // (warm cache) or reload (IndexedDB restore) has the bundle available and
-  // renders immediately.
-  if (isLoading && !mainQuery.data && !isRestoring) {
-    return <div data-testid="analytics-full-loading"><FullPageLoading text="Loading your analytics..." title="Progress" /></div>;
-  }
+  // First-ever load with an empty cache: the page frame (title, summary,
+  // tabs) renders straight away and only the tab's content waits, as a
+  // skeleton of its own shape — never a blank page or a full-page spinner
+  // (UX panel r19: "loads slowly with no clear indicator"). A revisit (warm
+  // cache) or reload (IndexedDB restore) has the bundle and skips this.
+  // Until mounted, decide exactly as the server did: the server's plain query
+  // provider is never "restoring", but the client's persisted provider is
+  // while it hydrates, so `!isRestoring` flipped this to false only on the
+  // client and the tab content rendered against the server's skeleton
+  // (hydration error on /dashboard/analytics).
+  const coldStart = !mainQuery.data && (!pageMounted || (isLoading && !isRestoring));
 
   // After the unified sheet saves: refresh the hub widgets, and for a DEXA
   // save also refresh this page's own scan-driven sections (quick stats,
@@ -1482,6 +1480,7 @@ function AnalyticsPageContent() {
   const bodyTrendModule = (
     <BodyHubTrends
       units={units}
+      windowDays={range.days}
       heightCm={userProfile?.heightCm ?? null}
       trend={bodyCompTrend}
       weightHistory={bodyWeightHistory}
@@ -1517,7 +1516,7 @@ function AnalyticsPageContent() {
           : undefined
       }
       onLogWeight={() => setLogSegment('weight')}
-      hideFfmi={foodOnly}
+      hideFfmi={foodOnly || hideScanPrompts}
       phaseSpans={trainingPhases.map((p) => ({
         phaseType: p.phaseType,
         startDay: p.startDay,
@@ -1541,6 +1540,18 @@ function AnalyticsPageContent() {
   // weight and strength are answered together. Only restates the weight
   // chart's 30-day change and the Strength tab's trend counts; waits for
   // the weigh-ins so it doesn't appear half-written.
+  // Target weekly weight change for the pace line: the current phase's own
+  // target (stored in lb/wk), else the goal's default; none for maintenance.
+  const summaryGoal = currentPhase?.phaseType ?? userProfile?.goal ?? liftRollup?.goal ?? null;
+  const summaryUnits: 'lb' | 'kg' = units === 'kg' ? 'kg' : 'lb';
+  const targetRatePerWeek =
+    currentPhase?.targetRateLbsPerWeek != null && (currentPhase.phaseType === 'cut' || currentPhase.phaseType === 'bulk')
+      ? summaryUnits === 'lb'
+        ? currentPhase.targetRateLbsPerWeek
+        : Math.round((currentPhase.targetRateLbsPerWeek / 2.20462) * 100) / 100
+      : summaryGoal
+        ? goalTargetRate(summaryGoal as WeightGoal, summaryUnits)
+        : null;
   const progressSummary = isBodyTrendLoading
     ? null
     : buildProgressSummary({
@@ -1548,48 +1559,66 @@ function AnalyticsPageContent() {
         liftTrends: liftTrendsSummary,
         units: units === 'kg' ? 'kg' : 'lb',
         now: clockNow(),
+        windowDays: range.days,
+        // Weekly sets per muscle vs MEV–MRV, for lifters (same gate as the
+        // card on Strength): the first place an advanced lifter looks.
+        volumeRows: showWeeklySets ? weeklyVolumeRows : null,
+        volumeWorkouts: weeklyVolumeLoading ? null : weeklyVolumeWorkouts,
+        plannedPerWeek: activeMesocycle?.daysPerWeek ?? null,
+        targetRatePerWeek,
+        // Same rule as the Body chart's advice framing: the active phase,
+        // else users.goal (the lift-trend query reads users.goal too).
+        goal: summaryGoal,
       });
 
-  // The global time-range selector genuinely scopes only the Wellness data
-  // (hydration/cardio/check-in series). On Body and Strength it was a dead
-  // control, so it renders only where it applies.
-  const rangeAppliesToTab = activeTab === 'wellness';
-
-  const timeRangeSelector = (
-    <div className="flex gap-0.5 bg-fill p-0.5 rounded-[10px] flex-wrap" data-testid="analytics-range-selector">
-      {([
-        { value: '7d', label: '7d' },
-        { value: '30d', label: '30d' },
-        { value: '60d', label: '60d' },
-        { value: '6m', label: '6mo' },
-        { value: '1y', label: '1yr' },
-        { value: 'all', label: 'All' },
-      ] as const).map((range) => (
+  // ONE range control for the whole page: weight, strength and wellness
+  // are always read over the same period (UX panel r21: weight over 30 days
+  // next to strength over 12 weeks).
+  const rangeSelector = (
+    <div
+      className="flex gap-0.5 rounded-[10px] bg-fill p-0.5"
+      role="radiogroup"
+      aria-label="Time range for every trend on this page"
+      data-testid="analytics-range-selector"
+    >
+      {PROGRESS_RANGES.map((r) => (
         <button
-          key={range.value}
-          onClick={() => setTimeRange(range.value)}
-          className={`h-7 px-2.5 text-caption rounded-[8px] transition-colors ${
-            timeRange === range.value ? 'bg-card text-ink font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]' : 'text-ink-2'
+          key={r.id}
+          type="button"
+          role="radio"
+          aria-checked={rangeId === r.id}
+          aria-label={`Last ${r.words}`}
+          onClick={() => setRangeId(r.id)}
+          data-testid={`analytics-range-${r.id}`}
+          className={`min-h-[36px] px-2.5 text-subhead rounded-[8px] transition-colors ${
+            rangeId === r.id ? 'bg-card text-ink font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]' : 'text-ink-2'
           }`}
         >
-          {range.label}
+          {r.short}
         </button>
       ))}
     </div>
   );
+
+  // Scroll the weekly sets card into view from the summary's link (it lives
+  // on Strength, so switch there first).
+  const showVolumeCard = () => {
+    setPickedTab('strength');
+    setVolumeScrollRequest((n) => n + 1);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="analytics-content">
       {/* Header. The page title now matches the "Progress" nav label. The
           range selector renders here only on tabs it actually scopes
           (Training / Wellness); Body and Strength carry no dead control. */}
-      <PageHeader
-        title="Progress"
-        actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
-      />
+      <PageHeader title="Progress" actions={rangeSelector} />
 
       {progressSummary ? (
-        <ProgressSummaryCard summary={progressSummary} />
+        <ProgressSummaryCard
+          summary={progressSummary}
+          onSeeVolume={showWeeklySets ? showVolumeCard : undefined}
+        />
       ) : (isBodyTrendLoading || (liftTrendsQuery.isPending && !liftTrendsSummary)) ? (
         // Cold start only: the summary waits on weigh-ins and lift trends
         // (separate fetches), so hold its place instead of leaving a gap.
@@ -1614,8 +1643,15 @@ function AnalyticsPageContent() {
         ))}
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'body-composition' && (
+      {/* Tab Content. Cold start: the tab's own skeleton until the page's
+          first read lands (testid kept for the revisit guardrail — it must
+          never show on a revisit). */}
+      {coldStart && (
+        <div data-testid="analytics-full-loading">
+          <ProgressTabSkeleton />
+        </div>
+      )}
+      {!coldStart && activeTab === 'body-composition' && (
         <div className="space-y-6">
           {/* Body hub front door: Log + Edit goals. Goal-setting moved here
               from the dissolved Goals tab, behind this header action. */}
@@ -1739,8 +1775,10 @@ function AnalyticsPageContent() {
             activeTarget={activeTarget}
             activeMesocycle={activeMesocycle}
             currentFfmi={ffmiResult?.ffmi ?? null}
-            // Food-only users never see FFMI (lifting jargon), even with a scan.
-            showFfmi={!foodOnly}
+            // Food-only users never see FFMI (lifting jargon), even with a scan;
+            // beginners don't get the FFMI "add a scan" prompt before a scan
+            // exists (panel: FFMI/DEXA unexplained and intimidating).
+            showFfmi={!foodOnly && !hideScanPrompts}
             experience={userProfile?.experience ?? null}
             heightCm={userProfile?.heightCm ?? null}
             displayUnit={preferences?.lengthUnits ?? (units === 'kg' ? 'cm' : 'in')}
@@ -1752,7 +1790,7 @@ function AnalyticsPageContent() {
             needsPhase={!currentPhase}
             phaseHref="/dashboard/phases"
             scanCount={scans.length}
-            offerScan={!foodOnly}
+            offerScan={!foodOnly && !hideScanPrompts}
             onLogScan={() => setLogSegment('dexa')}
             needsGoals={!activeTarget && !showGoalsEditor}
             onSetGoals={openGoalsEditor}
@@ -1782,13 +1820,25 @@ function AnalyticsPageContent() {
         </div>
       )}
 
-      {activeTab === 'strength' && (
+      {!coldStart && activeTab === 'strength' && (
         <div className="space-y-6">
           {/* Weekly sets per muscle vs MEV–MRV, where an advanced lifter looks
               for it (UX panel: "no weekly sets per muscle against MEV/MRV in
               analytics"). Same rows as Home, the workout strip and the Sets
               per week page. Beginner mode keeps it out, as everywhere. */}
-          {!beginnerMode && <WeeklySetsCard rows={weeklyVolumeRows} />}
+          {/* Not for someone with no lifting in the window: a card of zeros
+              ("13 below MEV") pushed the empty state — and its "Log a
+              workout" button — below the fold (UX panel r19). */}
+          {showWeeklySets && (
+            <WeeklySetsCard
+              rows={weeklyVolumeRows}
+              title="Weekly sets per muscle"
+              id={WEEKLY_SETS_SECTION_ID}
+              windowStart={new Date(weeklyVolumeWindowStartIso)}
+              workouts={weeklyVolumeLoading ? null : weeklyVolumeWorkouts}
+              plannedPerWeek={activeMesocycle?.daysPerWeek ?? null}
+            />
+          )}
           {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
               First so ?section=lift-trends deep links land above the fold. */}
           {liftTrendsSummary ? (
@@ -1926,7 +1976,7 @@ function AnalyticsPageContent() {
                           <div>
                             <h4 className="font-medium text-ink">{lift.lift}</h4>
                             <p className="text-subhead text-ink-2">
-                              Est. max: {displayWeight(lift.estimated1RM)} {weightUnit}
+                              Estimated max: {displayWeight(lift.estimated1RM)} {weightUnit}
                             </p>
                           </div>
                           <Badge variant={getStrengthLevelBadgeVariant(lift.strengthLevel)}>
@@ -1996,7 +2046,7 @@ function AnalyticsPageContent() {
 
       {/* Wellness Tab. Muscle recovery lives on the Train page (its Recovery
           section) — no duplicate card here. */}
-      {activeTab === 'wellness' && (
+      {!coldStart && activeTab === 'wellness' && (
         <div className="space-y-6">
           {/* ONE Wellness Trends card: a single chart with metric chips
               (sleep / soreness / energy / mood up front, the rest under
@@ -2010,7 +2060,7 @@ function AnalyticsPageContent() {
             hydrationData={hydrationData}
             cardioData={cardioData}
             hydrationUnit={units === 'kg' ? 'ml' : 'oz'}
-            rangeLabel={getTimeRangeLabel(timeRange)}
+            rangeLabel={`the last ${range.words}`}
           />
 
           {/* ONE "Today" card consolidating steps/activity (HealthKit-aware),
@@ -2078,12 +2128,12 @@ function AnalyticsPageContent() {
 }
 
 // useSearchParams (deep-linkable ?tab=/&section=) requires a Suspense
-// boundary for the static prerender pass — the fallback matches the page's
-// own loading state so nothing visibly changes.
+// boundary for the static prerender pass — the fallback is the page's own
+// frame + skeletons, so nothing visibly changes when it resolves.
 export default function AnalyticsPage() {
   useDocumentTitle('Progress');
   return (
-    <Suspense fallback={<FullPageLoading text="Loading your analytics..." title="Progress" />}>
+    <Suspense fallback={<ProgressPageSkeleton />}>
       <AnalyticsPageContent />
     </Suspense>
   );

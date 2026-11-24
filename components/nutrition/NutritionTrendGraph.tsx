@@ -23,6 +23,7 @@ import {
   showDateTick,
 } from '@/lib/utils';
 import type { FoodLogEntry, NutritionTargets } from '@/types/nutrition';
+import { explainIntakeVsTrend } from '@/lib/nutrition/intakeVsTrend';
 
 interface DailyData {
   date: string;
@@ -36,6 +37,13 @@ interface DailyData {
 
 interface NutritionTrendGraphProps {
   targets: NutritionTargets | null;
+  /** Estimated daily burn (the "Your metabolism" number), to explain the gap. */
+  estimatedBurnKcal?: number | null;
+  /** True while that estimate is still settling (not yet 'stable'). */
+  burnSettling?: boolean;
+  /** The weight trend shown above, per week in `weightUnit` (negative = losing). */
+  observedWeightPerWeek?: number | null;
+  weightUnit?: 'kg' | 'lb';
 }
 
 const TIME_RANGES = [
@@ -97,7 +105,13 @@ const CustomTooltip = memo(function CustomTooltip({
 // View toggle for calories vs macros
 type ViewMode = 'calories' | 'macros';
 
-export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
+export function NutritionTrendGraph({
+  targets,
+  estimatedBurnKcal = null,
+  burnSettling = false,
+  observedWeightPerWeek = null,
+  weightUnit = 'kg',
+}: NutritionTrendGraphProps) {
   const [days, setDays] = useState(30);
   const [viewMode, setViewMode] = useState<ViewMode>('calories');
   const [isLoading, setIsLoading] = useState(true);
@@ -207,6 +221,35 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
       daysTracked: daysWithData.length,
     };
   }, [chartData]);
+
+  // Average over COMPLETE days for the goal / burn comparison: today is still
+  // being logged, and counting a half-logged day drags the average down and
+  // inflates "under goal". (Today still shows on the chart.)
+  const completeDayAverage = useMemo(() => {
+    const today = getLocalDateString();
+    const complete = chartData.filter((d) => d.hasData && d.date !== today);
+    if (complete.length === 0) return null;
+    return {
+      calories: Math.round(complete.reduce((sum, d) => sum + d.calories, 0) / complete.length),
+      days: complete.length,
+    };
+  }, [chartData]);
+
+  const explanation = useMemo(
+    () =>
+      completeDayAverage
+        ? explainIntakeVsTrend({
+            avgIntakeKcal: completeDayAverage.calories,
+            daysLogged: completeDayAverage.days,
+            goalKcal: targets?.calories ?? null,
+            burnKcal: estimatedBurnKcal,
+            burnSettling,
+            observedPerWeek: observedWeightPerWeek,
+            unit: weightUnit,
+          })
+        : null,
+    [completeDayAverage, targets?.calories, estimatedBurnKcal, burnSettling, observedWeightPerWeek, weightUnit]
+  );
 
   // Determine Y-axis domain for calories
   const caloriesDomain = useMemo(() => {
@@ -394,6 +437,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                   />
                 )}
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="calories"
                   name="Calories"
@@ -441,6 +485,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                   />
                 )}
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="protein"
                   name="Protein"
@@ -450,6 +495,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                   activeDot={{ r: 4 }}
                 />
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="carbs"
                   name="Carbs"
@@ -459,6 +505,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                   activeDot={{ r: 4 }}
                 />
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="fat"
                   name="Fat"
@@ -473,34 +520,44 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
         </div>
 
         {/* Interpretation */}
-        {averages && targets?.calories && (
-          <div className="mt-4 p-3 bg-fill/30 rounded-lg">
-            <p className="text-caption text-ink-2">
-              {averages.calories > targets.calories ? (
-                <>
-                  <span className="text-status-warn font-medium">Above target: </span>
-                  You&apos;re averaging{' '}
-                  <span className="text-ink font-medium">
-                    {averages.calories - targets.calories}
-                  </span>{' '}
-                  calories over your daily goal.
-                </>
-              ) : averages.calories < targets.calories * 0.9 ? (
-                <>
-                  <span className="text-action font-medium">Below target: </span>
-                  You&apos;re averaging{' '}
-                  <span className="text-ink font-medium">
-                    {targets.calories - averages.calories}
-                  </span>{' '}
-                  calories under your daily goal.
-                </>
-              ) : (
-                <>
-                  <span className="text-status-ok font-medium">On track: </span>
-                  You&apos;re hitting your calorie target consistently.
-                </>
-              )}
-            </p>
+        {/* Interpretation: what "under goal" means (logged intake vs the
+            goal), and how intake vs estimated burn compares with the weight
+            trend. See lib/nutrition/intakeVsTrend. */}
+        {explanation && (explanation.goalLine || explanation.burnLine) && (
+          <div className="mt-4 space-y-1.5 rounded-lg bg-fill/30 p-3" data-testid="intake-vs-trend">
+            {explanation.goalLine && (
+              <p className="text-caption text-ink-2" data-testid="intake-vs-goal">
+                {completeDayAverage && targets?.calories ? (
+                  <span
+                    className={`font-medium ${
+                      completeDayAverage.calories > targets.calories
+                        ? 'text-status-warn'
+                        : completeDayAverage.calories < targets.calories * 0.9
+                          ? 'text-action'
+                          : 'text-status-ok'
+                    }`}
+                  >
+                    {completeDayAverage.calories > targets.calories
+                      ? 'Above goal: '
+                      : completeDayAverage.calories < targets.calories * 0.9
+                        ? 'Below goal: '
+                        : 'On track: '}
+                  </span>
+                ) : null}
+                {explanation.goalLine}
+              </p>
+            )}
+            {explanation.burnLine && (
+              <p className="text-caption text-ink-2" data-testid="intake-vs-burn">
+                {explanation.burnLine}
+              </p>
+            )}
+            {explanation.trendLine && (
+              <p className="text-caption text-ink-2" data-testid="intake-vs-weight">
+                {explanation.trendLine}
+              </p>
+            )}
+            <p className="text-caption text-ink-3">Today isn&apos;t counted until it&apos;s over.</p>
           </div>
         )}
       </CardContent>

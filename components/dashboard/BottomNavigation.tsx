@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
 import {
   IconHome,
@@ -90,10 +90,16 @@ function tapHaptic(): void {
 interface BottomNavigationProps {
   /** True when every muscle group has reached MEV this week — lights up Train. */
   volumeGoalsMet?: boolean;
+  /**
+   * The tab waiting for its page (null once it arrives), so the shell can
+   * show that page's skeleton instead of the old page (TabPendingSkeleton).
+   */
+  onPendingChange?: (href: string | null) => void;
 }
 
-export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationProps) {
+export function BottomNavigation({ volumeGoalsMet = false, onPendingChange }: BottomNavigationProps) {
   const pathname = usePathname() ?? '';
+  const router = useRouter();
   const keyboardOpen = useKeyboardOpen();
   // Food-only users get Weight where Train was (components/dashboard/foodOnlyNav).
   const { foodOnly } = useTrackingFocus();
@@ -106,6 +112,10 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
   useEffect(() => {
     setPendingHref(null);
   }, [pathname]);
+
+  useEffect(() => {
+    onPendingChange?.(pendingHref);
+  }, [pendingHref, onPendingChange]);
 
   // Never leave a tab stuck "pending" if a navigation fails or is cancelled.
   useEffect(() => {
@@ -153,6 +163,15 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
               key={item.name}
               href={item.href}
               aria-current={isActive ? 'page' : undefined}
+              onPointerDown={() => {
+                // Start loading the route before the click lands (as
+                // PendingLink does). An optimisation only.
+                try {
+                  router.prefetch(item.href);
+                } catch {
+                  /* ignore */
+                }
+              }}
               onClick={() => {
                 tapHaptic();
                 if (pathname !== item.href) setPendingHref(item.href);

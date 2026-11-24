@@ -74,4 +74,14 @@ describe('remembering a food under every key it is known by', () => {
     expect(getLastUsedServingForKeys(foodKeysFor({ id: 'sys-1', name: 'Peas' }))).toMatchObject({ amount: 200 });
     expect(getLastUsedServingForKeys(foodKeysFor({ name: 'Carrots' }))).toBeNull();
   });
+
+  it('a newer portion logged from Recent wins when the food is reopened from search', () => {
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000);
+    recordLastUsedServingForKeys(foodKeysFor({ id: 'sys-2', name: 'Rice' }), 200, 'g'); // search: id + name
+    now.mockReturnValue(2_000);
+    recordLastUsedServingForKeys(foodKeysFor({ name: 'Rice' }), 150, 'g'); // Recent: name only
+    expect(getLastUsedServingForKeys(foodKeysFor({ id: 'sys-2', name: 'Rice' }))).toMatchObject({ amount: 150 });
+    now.mockRestore();
+  });
 });

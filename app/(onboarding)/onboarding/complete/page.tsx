@@ -1,5 +1,6 @@
 'use client';
 
+import { ProTag } from '@/components/subscription/ProTag';
 import { IconAlertTriangle, IconApple, IconBarbell, IconChartLine, IconSparkles } from '@tabler/icons-react';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -23,6 +24,7 @@ import { kgToLbs, roundToIncrement } from '@/lib/utils';
 import { generateAnonymousUsername } from '@/lib/social';
 import { SOCIAL_FEATURES_ENABLED, ONBOARDING_AFTER_PROFILE_ROUTE } from '@/lib/socialFeatures';
 import type { WeightUnit } from '@/types/schema';
+import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
   const segments = generatePercentileSegments(percentile);
@@ -257,21 +259,7 @@ function CompleteContent() {
   
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Progress indicator - complete */}
-      <div className="flex items-center justify-center gap-2 mb-8">
-        {[1, 2, 3, 4].map((step) => (
-          <div key={step} className="flex items-center">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-body font-medium bg-action text-on-action">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            {step < 4 && (
-              <div className="w-12 h-0.5 bg-action" />
-            )}
-          </div>
-        ))}
-      </div>
+      <OnboardingSteps current="strength" allDone />
       
       <div className="text-center mb-8">
         <h1 className="text-large-title font-bold text-ink mb-2">Your strength profile</h1>
@@ -469,7 +457,8 @@ function CompleteContent() {
             <div className="p-3 bg-card/50 rounded-lg border border-sep">
               <div className="flex items-center gap-2 mb-1">
                 <IconBarbell size={20} className="text-action" aria-hidden="true" />
-                <span className="font-medium text-ink">Create mesocycle</span>
+                <span className="font-medium text-ink">Create training block</span>
+                <ProTag feature="mesocycleBuilder" />
               </div>
               <p className="text-caption text-ink-3">AI-generated training blocks with S-tier exercises</p>
             </div>
@@ -486,6 +475,7 @@ function CompleteContent() {
               <div className="flex items-center gap-2 mb-1">
                 <IconSparkles size={20} className="text-action" aria-hidden="true" />
                 <span className="font-medium text-ink">AI coaching</span>
+                <ProTag feature="ai-coaching" />
               </div>
               <p className="text-caption text-ink-3">Get personalized advice before every workout</p>
             </div>

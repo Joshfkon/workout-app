@@ -144,7 +144,7 @@ export function getTierDisplayInfo(tier: FailureSafetyTier): TierDisplayInfo {
         shortLabel: 'Caution',
         color: 'yellow',
         emoji: '🟡',
-        description: 'Free weight compounds. Push hard but keep 1 rep in reserve. We\'ll test limits at mesocycle end.',
+        description: 'Free weight compounds. Push hard but keep 1 rep in reserve. We\'ll test limits at the end of the training block.',
       };
     case 'protect':
       return {

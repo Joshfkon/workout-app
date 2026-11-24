@@ -3,6 +3,7 @@
 // Core service for generating and managing training programs
 // ============================================================
 
+import { effectiveTrainingAge } from '@/services/mesocycleBuilder';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import { describeSupabaseError } from '@/lib/errors';
@@ -248,7 +249,7 @@ export class ProgramEngine {
         stressLevel: (data.stress_level || 3) as 1 | 2 | 3 | 4 | 5,
         availableEquipment: data.available_equipment || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'],
         injuryHistory: data.injury_history || [],
-        trainingAge: data.training_age_years || 0,
+        trainingAge: effectiveTrainingAge(data.training_age_years ?? null, data.experience || 'novice'),
       };
     } else {
       // Default profile
@@ -998,7 +999,7 @@ export class ProgramEngine {
       warnings: recoveryFactors.warnings,
       programNotes: [
         `Periodization: ${periodization.model}`,
-        `Mesocycle: ${periodization.mesocycleWeeks} weeks`,
+        `Training block: ${periodization.mesocycleWeeks} weeks`,
         `Deload: Week ${periodization.deloadFrequency + 1}`
       ]
     };
@@ -1029,7 +1030,7 @@ export class ProgramEngine {
     if (error || !data) {
       // Keep what the database said — a PostgrestError is a plain object, so
       // a bare rethrow elsewhere would reduce it to a generic message.
-      throw new Error(describeSupabaseError(error, 'Failed to create mesocycle'));
+      throw new Error(describeSupabaseError(error, 'Failed to create training block'));
     }
     
     return { mesocycleId: data.id, program };

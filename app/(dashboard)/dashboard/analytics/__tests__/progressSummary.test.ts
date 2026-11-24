@@ -1,8 +1,19 @@
 import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
-import { buildProgressSummary, liftBreakdown, strengthSentence, weightSentence } from '../progressSummary';
+import {
+  buildProgressSummary,
+  liftBreakdown,
+  strengthSentence,
+  volumeSentence,
+  weightPaceSentence,
+  weightSentence,
+} from '../progressSummary';
+import type { VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { LiftTrend } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 
 const NOW = new Date('2026-11-22T12:00:00');
+
+const PLAIN_WEIGHT_METHOD =
+  'Weight uses every weigh-in in the range, so one heavy or light day barely moves it.';
 
 function trends(over: Partial<LiftTrendsSummary> = {}): LiftTrendsSummary {
   return {
@@ -54,6 +65,12 @@ describe('weightSentence', () => {
 });
 
 describe('strengthSentence', () => {
+  it('says there is not enough data, not a verdict, when no lift has a real rate yet', () => {
+    expect(strengthSentence(trends({ tooEarly: 2 }))).toBe(
+      "Not enough data for a strength trend yet. A trend needs the lift in at least 3 workouts, spread over at least 10 days, so one good or bad day can't fake a change."
+    );
+  });
+
   it('counts confident lifts only', () => {
     expect(strengthSentence(trends({ rising: 3 }))).toBe('Over the last 12 weeks, all 3 of your tracked lifts are going up.');
     expect(strengthSentence(trends({ rising: 2, flat: 1 }))).toBe(
@@ -87,13 +104,13 @@ describe('strengthSentence', () => {
     );
     // Plain words naming the lift and how many more times — not "not
     // enough data for a strength trend" (UX panel: vague, jargony).
-    expect(s).toBe('Log Barbell Back Squat once more to see its trend line.');
+    expect(s).toBe("Log Barbell Back Squat in 1 more workout to see if it's going up.");
     expect(s).not.toMatch(/enough (lifting )?data/);
   });
 
   it('falls back to the plain rule when no lift is named', () => {
     expect(strengthSentence(trends({ insufficientData: 1 }))).toBe(
-      'Log the same lift in 3 workouts to see its trend line.'
+      "Do the same lift in 3 separate workouts to see if it's going up."
     );
   });
 
@@ -110,25 +127,90 @@ describe('buildProgressSummary', () => {
       buildProgressSummary({ weighIns: weighIns(190, -0.1), liftTrends: trends({ rising: 1, flat: 2 }), units: 'lb', now: NOW })
     ).toEqual({
       weight: 'Weight is down 2.8 lb over the last 30 days.',
-      weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
+      weightPace: null,
+      weightMethod: PLAIN_WEIGHT_METHOD,
+      liftMethod: null,
+      strengthContext: null,
       strength: 'Over the last 12 weeks, 1 of your 3 tracked lifts is going up and none are slipping.',
+      strengthNames: null,
       lifts: [],
+      volume: null,
     });
   });
 
   it('gives a food-only user the weight line alone', () => {
     expect(buildProgressSummary({ weighIns: weighIns(160, -0.05), liftTrends: trends(), units: 'lb', now: NOW })).toEqual({
       weight: 'Weight is down 1.4 lb over the last 30 days.',
-      weightMethod: 'The trend is a straight line fitted through all 8 weigh-ins from the last 30 days (not a 7-day average), so one heavy or light day barely moves it.',
+      weightPace: null,
+      weightMethod: PLAIN_WEIGHT_METHOD,
+      liftMethod: null,
+      strengthContext: null,
       strength: null,
+      strengthNames: null,
       lifts: [],
+      volume: null,
     });
   });
 
   it('is null with nothing to say', () => {
     expect(buildProgressSummary({ weighIns: [], liftTrends: trends(), units: 'lb', now: NOW })).toBeNull();
   });
+
+  it('explains the trends in plain words, with the real thresholds', () => {
+    const s = buildProgressSummary({
+      weighIns: weighIns(190, -0.1),
+      liftTrends: trends({ lifts: [trendedLift()], flat: 1 }),
+      units: 'kg',
+      now: NOW,
+    });
+    expect(s?.weightMethod).not.toMatch(/straight line|fitted|trend line/);
+    // Two short sentences in all (UX panel r21: the explanation was wordy).
+    expect(s?.weightMethod).toBe(PLAIN_WEIGHT_METHOD);
+    // liftTrends FLAT_BAND_PCT = 0.15 %/wk -> 0.15 kg a week on 100 kg.
+    expect(s?.liftMethod).toBe(
+      'A lift is going up or slipping once its estimated max moves more than 0.15 kg a week on a 100 kg lift.'
+    );
+    for (const sentence of [s?.weightMethod, s?.liftMethod]) {
+      expect(sentence!.length).toBeLessThan(110);
+    }
+  });
+
+  it('says holding strength is a good result on a cut, and only on a cut', () => {
+    const input = { weighIns: weighIns(190, -0.1), liftTrends: trends({ lifts: [trendedLift()], flat: 1 }), units: 'lb' as const, now: NOW };
+    expect(buildProgressSummary({ ...input, goal: 'cut' })?.strengthContext).toBe(
+      "You're on a cut, so lifts holding steady is a good result: you're keeping your strength while you lose fat."
+    );
+    expect(buildProgressSummary({ ...input, goal: 'bulk' })?.strengthContext).toBeNull();
+    expect(buildProgressSummary({ ...input, goal: null })?.strengthContext).toBeNull();
+    // No verdict yet → nothing to put in context.
+    expect(
+      buildProgressSummary({ ...input, liftTrends: trends({ insufficientData: 1 }), goal: 'cut' })?.strengthContext
+    ).toBeNull();
+  });
 });
+
+function trendedLift(): LiftTrend {
+  return {
+    exerciseId: 'bench',
+    seriesKey: 'bench',
+    name: 'Bench Press',
+    locationId: null,
+    locationLabel: null,
+    direction: 'flat',
+    weeklyChangePct: 0.1,
+    currentE1RMKg: 100,
+    sessionCount: 4,
+    history: [
+      { date: '2026-09-01', e1rmKg: 99, topSetWeightKg: 80, topSetReps: 8 },
+      { date: '2026-11-20', e1rmKg: 100, topSetWeightKg: 80, topSetReps: 8 },
+    ],
+    lowConfidence: false,
+    calibrationReason: null,
+    excludedDates: [],
+    discontinuityDate: null,
+    plateau: null,
+  };
+}
 
 describe('early comparison before a trend exists', () => {
   const early = (over: Partial<import('@/app/(dashboard)/dashboard/_lib/liftTrends').EarlyLift>) => ({
@@ -220,5 +302,148 @@ describe('liftBreakdown (the "See each lift" list)', () => {
 
   it('is empty without a summary', () => {
     expect(liftBreakdown(null, 'lb')).toEqual([]);
+  });
+});
+
+describe('strengthNames (panel r19: name the lifts, not just a count)', () => {
+  const t = (name: string, direction: LiftTrend['direction'], over: Partial<LiftTrend> = {}) =>
+    ({ name, direction, lowConfidence: false, locationLabel: null, seriesKey: name, history: [], ...over }) as unknown as LiftTrend;
+
+  it('names the rising and slipping lifts next to the counts', () => {
+    const lifts = [
+      t('Bench Press', 'rising'),
+      t('Barbell Row', 'rising'),
+      t('Hack Squat', 'rising'),
+      t('RDL', 'rising'),
+      t('Pulldown', 'rising'),
+      t('Squat', 'down'),
+      t('Curl', 'flat'),
+      t('Leg Press', 'rising', { lowConfidence: true }),
+    ];
+    const s = buildProgressSummary({
+      weighIns: [],
+      liftTrends: trends({ lifts, rising: 5, flat: 1, down: 1, rebuilding: 1 }),
+      units: 'lb',
+      now: NOW,
+    })!;
+    // The counts are unchanged; the names are the same confident lifts.
+    expect(s.strength).toBe('Over the last 12 weeks, 1 of your 7 tracked lifts is slipping and 5 are going up.');
+    expect(s.strengthNames).toBe('Rising: Bench Press, Barbell Row, Hack Squat (+2 more). Slipping: Squat.');
+  });
+
+  it('says nothing extra when every lift is flat', () => {
+    const s = buildProgressSummary({
+      weighIns: [],
+      liftTrends: trends({ lifts: [t('Curl', 'flat'), t('Squat', 'flat')], flat: 2 }),
+      units: 'lb',
+      now: NOW,
+    })!;
+    expect(s.strengthNames).toBeNull();
+  });
+});
+
+describe('one shared range', () => {
+  it('reads weight over the page range, the same words strength uses', () => {
+    const s = buildProgressSummary({
+      weighIns: weighIns(190, -0.1, 80, 4),
+      liftTrends: trends({ rising: 2, flat: 1, windowDays: 84 }),
+      units: 'lb',
+      now: NOW,
+      windowDays: 84,
+    });
+    expect(s?.weight).toMatch(/over the last 12 weeks\.$/);
+    expect(s?.strength).toMatch(/^Over the last 12 weeks,/);
+  });
+
+  it('a 4-week range only counts the last 4 weeks of weigh-ins', () => {
+    // Down 0.1 lb/day for 80 days: the 4-week window sees under 3 lb, not ~8 lb.
+    expect(weightSentence(weighIns(190, -0.1, 80, 4), 'lb', NOW, 28)).toMatch(/^Weight is down [23]\.\d lb over the last 4 weeks\.$/);
+    expect(strengthSentence(trends({ rising: 1, windowDays: 28 }))).toBe('Over the last 4 weeks, your tracked lift is going up.');
+    expect(strengthSentence(trends({ rising: 1, windowDays: 365 }))).toBe('Over the last year, your tracked lift is going up.');
+  });
+});
+
+function row(over: Partial<VolumeRow>): VolumeRow {
+  return {
+    key: 'chest',
+    displayName: 'Chest',
+    sets: 0,
+    band: { mev: 8, mrv: 22 },
+    zone: 'below_mev',
+    belowMev: true,
+    warnable: true,
+    isChild: false,
+    ...over,
+  } as VolumeRow;
+}
+
+describe('volumeSentence', () => {
+  it('counts muscles in range, under MEV and over MRV in one plain line', () => {
+    expect(
+      volumeSentence([
+        row({ key: 'chest', sets: 12, zone: 'in_zone', belowMev: false }),
+        row({ key: 'back', sets: 14, zone: 'in_zone', belowMev: false }),
+        row({ key: 'quads', sets: 4, zone: 'below_mev' }),
+        row({ key: 'biceps', sets: 26, zone: 'over_mrv', belowMev: false }),
+        row({ key: 'rear', sets: 3, zone: 'in_zone', isChild: true }),
+      ])
+    ).toBe('Sets per muscle, last 7 days: 2 muscles in range, 1 under the minimum (MEV), 1 over the max (MRV).');
+  });
+
+  it('says nothing for a week of zeros, or without rows', () => {
+    expect(volumeSentence([row({}), row({ key: 'back' })])).toBeNull();
+    expect(volumeSentence(null)).toBeNull();
+  });
+
+  it('rides on the summary even before any weight or lift trend exists', () => {
+    const s = buildProgressSummary({
+      weighIns: [],
+      liftTrends: trends(),
+      units: 'lb',
+      now: NOW,
+      volumeRows: [row({ sets: 10, zone: 'in_zone', belowMev: false })],
+    });
+    expect(s?.volume).toBe('Sets per muscle, last 7 days: 1 muscle in range.');
+  });
+});
+
+describe('weekly sets window context (UX panel r22: all under MEV after 2 workouts)', () => {
+  const rows = [row({ key: 'chest', sets: 6 }), row({ key: 'back', sets: 6 })];
+  it('says how many workouts the 7 days hold, and what the plan has', () => {
+    expect(volumeSentence(rows, 2, 4)).toBe(
+      'Sets per muscle, last 7 days (2 workouts; your plan has 4 a week): 0 muscles in range, 2 under the minimum (MEV).'
+    );
+    expect(volumeSentence(rows, 1, null)).toBe(
+      'Sets per muscle, last 7 days (1 workout): 0 muscles in range, 2 under the minimum (MEV).'
+    );
+  });
+});
+
+describe('weightPaceSentence', () => {
+  it('reads the same fitted line against the target rate', () => {
+    // -0.1 lb/day = -0.7 lb/week vs a -1.0 target: slower.
+    expect(weightPaceSentence(weighIns(190, -0.1), 'lb', NOW, 30, -1)).toBe(
+      "That's −0.7 lb a week against your target of −1.0 lb a week: slower than your target."
+    );
+    expect(weightPaceSentence(weighIns(190, -0.14), 'lb', NOW, 30, -1)).toMatch(/on pace\.$/);
+    expect(weightPaceSentence(weighIns(190, -0.3), 'lb', NOW, 30, -1)).toMatch(/faster than your target\.$/);
+    expect(weightPaceSentence(weighIns(190, 0.05), 'lb', NOW, 30, -1)).toMatch(/slower than your target\.$/);
+  });
+
+  it('says nothing without a target (maintenance) or a trend', () => {
+    expect(weightPaceSentence(weighIns(190, -0.1), 'lb', NOW, 30, null)).toBeNull();
+    expect(weightPaceSentence([], 'lb', NOW, 30, -1)).toBeNull();
+  });
+
+  it('rides under the weight line on the summary', () => {
+    const s = buildProgressSummary({
+      weighIns: weighIns(190, -0.1),
+      liftTrends: trends(),
+      units: 'lb',
+      now: NOW,
+      windowDays: 30,
+      targetRatePerWeek: -1,
+    });
+    expect(s?.weightPace).toMatch(/against your target of −1\.0 lb a week/);
   });
 });

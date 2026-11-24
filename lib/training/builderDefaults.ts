@@ -1,16 +1,26 @@
 import { detectSplit } from '@/services/suggestedWorkout';
 import {
+  MUSCLE_PRIORITY_HEADS,
   STANDARD_MUSCLE_DISPLAY_NAMES,
   priorityHeadParent,
+  type Experience,
   type MuscleGroup,
   type PeriodizationModel,
   type RecoveryFactors,
+  type Split,
   type StandardMuscleGroup,
 } from '@/types/schema';
-import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
-import { COARSE_MUSCLES, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
-import { perSetCredits } from '@/services/shared/volumeCredit';
-import { creditedSetsByGroup, peakTrainingWeek } from '@/services/sessionBuilderWithFatigue';
+import type { StartingVolume, VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
+import { COARSE_MUSCLES, STANDARD_TO_COARSE, getEffectiveBand, type BandContext, type CoarseMuscle } from '@/services/volumeBands';
+// The same head counter enforceNonDecreasingRamp holds non-decreasing.
+import {
+  creditedSetsByGroup,
+  creditedSetsByHead,
+  peakTrainingWeek,
+  MAX_SETS_PER_MUSCLE_PER_SESSION,
+  MAX_SESSION_MUSCLE_CEILING,
+} from '@/services/sessionBuilderWithFatigue';
+import type { PriorityEffect } from '@/types/schema';
 import { muscleDisplayName } from '@/lib/utils';
 
 /** Days of history the builder reads to prefill the schedule. */
@@ -20,9 +30,65 @@ export interface BuilderHistoryDefaults {
   /** Sessions per week over the window (2–7), or null with too little history. */
   daysPerWeek: number | null;
   /** The split the history reads as, when it reads as one. */
-  splitKind: 'body_part' | 'ppl' | null;
+  splitKind: HistorySplitKind | null;
   /** One line for the builder, e.g. "From your last 4 weeks: 5 sessions a week, a body-part split." */
   summary: string | null;
+}
+
+/** The split shapes the builder can read from history. */
+export type HistorySplitKind = 'body_part' | 'ppl' | 'upper_lower' | 'full_body';
+
+const UPPER_GROUPS: ReadonlySet<CoarseMuscle> = new Set(['chest', 'back', 'shoulders', 'biceps', 'triceps', 'traps'] as CoarseMuscle[]);
+const LOWER_GROUPS: ReadonlySet<CoarseMuscle> = new Set(['quads', 'hamstrings', 'glutes', 'calves', 'adductors'] as CoarseMuscle[]);
+
+/** A session as upper-only, lower-only or both (abs and unknowns say nothing). */
+function sessionHalf(muscles: StandardMuscleGroup[]): 'upper' | 'lower' | 'full' | null {
+  let upper = false;
+  let lower = false;
+  for (const m of muscles) {
+    const g = STANDARD_TO_COARSE[m];
+    if (g && UPPER_GROUPS.has(g)) upper = true;
+    if (g && LOWER_GROUPS.has(g)) lower = true;
+  }
+  if (upper && lower) return 'full';
+  return upper ? 'upper' : lower ? 'lower' : null;
+}
+
+/**
+ * Upper/lower or full body from recent sessions, for the splits detectSplit
+ * (push/pull/legs, body-part) does not read. The builder recommended Full
+ * Body to a lifter whose history it could not name at all (UX panel round
+ * 22, Dre: "It recommended full body even though I run upper/lower"): only
+ * PPL and body-part histories reached the split default.
+ * - upper/lower: the last four sessions are each upper-only or lower-only,
+ *   with both kinds present;
+ * - full body: at least three of the last four train upper and lower body.
+ * Pure.
+ */
+export function detectBroadSplit(sessions: StandardMuscleGroup[][]): 'upper_lower' | 'full_body' | null {
+  const recent = sessions.slice(-4).map(sessionHalf);
+  if (recent.length < 4 || recent.some((h) => h === null)) return null;
+  if (recent.every((h) => h === 'upper' || h === 'lower') && recent.includes('upper') && recent.includes('lower')) {
+    return 'upper_lower';
+  }
+  if (recent.filter((h) => h === 'full').length >= 3) return 'full_body';
+  return null;
+}
+
+/** The builder split a history split kind maps to. */
+export function builderSplitFor(kind: HistorySplitKind | null | undefined): Split | null {
+  switch (kind) {
+    case 'body_part':
+      return 'Bro Split';
+    case 'ppl':
+      return 'PPL';
+    case 'upper_lower':
+      return 'Upper/Lower';
+    case 'full_body':
+      return 'Full Body';
+    default:
+      return null;
+  }
 }
 
 /**
@@ -45,8 +111,17 @@ export function builderDefaultsFromHistory(
   const weeks = Math.min(BUILDER_HISTORY_DAYS, Math.max(7, spanDays)) / 7;
   const perWeek = Math.min(7, Math.max(2, Math.round(sessions.length / weeks)));
   const split = detectSplit(sessions);
-  const splitKind = split?.kind ?? null;
-  const splitText = splitKind === 'body_part' ? ', a body-part split' : splitKind === 'ppl' ? ', push/pull/legs' : '';
+  const splitKind: HistorySplitKind | null = split?.kind ?? detectBroadSplit(sessions);
+  const splitText =
+    splitKind === 'body_part'
+      ? ', a body-part split'
+      : splitKind === 'ppl'
+        ? ', push/pull/legs'
+        : splitKind === 'upper_lower'
+          ? ', upper/lower'
+          : splitKind === 'full_body'
+            ? ', full body'
+            : '';
   return {
     daysPerWeek: perWeek,
     splitKind,
@@ -161,9 +236,132 @@ export function isUnderDelivered(target: number, delivered: number | undefined):
   return target > 0 && (delivered ?? 0) < target * 0.85;
 }
 
+export type VolumeStatus = 'below_mev' | 'over_mrv' | 'short' | 'in_range';
+
+/**
+ * One review-table row's status, worst first: at or under MEV, past MRV,
+ * clearly short of its target, else in range. Pure.
+ */
+export function volumeStatus(done: number, target: number, mev: number, mrv: number): VolumeStatus {
+  if (isAtOrBelowMev(done, mev)) return 'below_mev';
+  if (done > mrv) return 'over_mrv';
+  if (isUnderDelivered(target, done)) return 'short';
+  return 'in_range';
+}
+
+/** The words for a VolumeStatus. */
+export const VOLUME_STATUS_LABEL: Record<VolumeStatus, string> = {
+  below_mev: 'At/below MEV',
+  over_mrv: 'Over MRV',
+  short: 'Short of target',
+  in_range: 'In range',
+};
+
 /** A muscle whose sets sit at or under its minimum effective volume. */
 export function isAtOrBelowMev(sets: number | undefined, mev: number): boolean {
   return (sets ?? 0) <= mev;
+}
+
+/**
+ * Muscles one session a week trains whose weekly target is more than one
+ * session can hold (MAX_SETS_PER_MUSCLE_PER_SESSION) and that the sessions
+ * deliver clearly short of it: Bro Split chest, 11 of a 20-set target.
+ * Longer sessions do not raise these; only a second day does. `frequency`
+ * is the number of sessions a week that train the muscle (the generator
+ * sets it from the split's templates). Pure.
+ */
+export function onceWeeklyCeilingMuscles(
+  volumePerMuscle: Partial<Record<string, { sets: number; frequency: number }>>,
+  delivered: Partial<Record<CoarseMuscle, number>>,
+  /** The plan's per-session ceiling (12 unless the lifter raised it). */
+  ceiling: number = MAX_SETS_PER_MUSCLE_PER_SESSION
+): { muscle: CoarseMuscle; delivered: number; wanted: number }[] {
+  const out: { muscle: CoarseMuscle; delivered: number; wanted: number }[] = [];
+  for (const [muscle, vol] of Object.entries(volumePerMuscle)) {
+    if (!vol || vol.frequency !== 1 || vol.sets <= ceiling) continue;
+    const got = delivered[muscle as CoarseMuscle];
+    if (!isUnderDelivered(vol.sets, got)) continue;
+    out.push({ muscle: muscle as CoarseMuscle, delivered: Math.round(got ?? 0), wanted: vol.sets });
+  }
+  return out;
+}
+
+/** Splits that train every muscle at least twice a week, with the days each
+ *  needs, for the once-a-week note. */
+const TWICE_A_WEEK_SPLITS: { split: Split; label: string; days: number }[] = [
+  { split: 'Full Body', label: 'Full Body', days: 3 },
+  { split: 'Upper/Lower', label: 'Upper/Lower', days: 4 },
+  { split: 'PPL', label: 'Push/Pull/Legs', days: 6 },
+];
+
+/**
+ * The plain-words fix for onceWeeklyCeilingMuscles: why a longer session
+ * won't help, and what will (a second day for that muscle, or a split that
+ * hits it twice). null when there is nothing to say. Pure.
+ */
+export function onceWeeklyCeilingNote(
+  muscles: readonly { muscle: CoarseMuscle; delivered: number; wanted: number }[],
+  split: Split,
+  /** The plan's per-session ceiling (12 unless the lifter raised it). */
+  ceiling: number = MAX_SETS_PER_MUSCLE_PER_SESSION,
+  /** Whether this lifter is offered the raise (advanced). */
+  canRaiseCeiling: boolean = false
+): string | null {
+  if (muscles.length === 0) return null;
+  const names = muscles.map((m) => muscleDisplayName(m.muscle));
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  const counts = muscles.map((m) => `${muscleDisplayName(m.muscle)} ${m.delivered} of ${m.wanted}`).join(', ');
+  const them = muscles.length === 1 ? 'it' : 'them';
+  const alternatives = TWICE_A_WEEK_SPLITS.filter((s) => s.split !== split)
+    .map((s) => `${s.label} (${s.days} days)`)
+    .join(' or ');
+  const raise =
+    canRaiseCeiling && ceiling < MAX_SESSION_MUSCLE_CEILING
+      ? ` Or raise the per-session limit (up to ${MAX_SESSION_MUSCLE_CEILING} hard sets); ` +
+        `most research finds diminishing returns past ~10–12 sets in one session, so a second day usually does more.`
+      : '';
+  return (
+    `${list} ${muscles.length === 1 ? 'is' : 'are'} trained once a week, and one session holds about ` +
+    `${ceiling} hard sets of a muscle, so longer sessions won't raise ${them} (${counts}). ` +
+    `To reach the target, train ${them} on more days: give ${them} a second day in your week, ` +
+    `or switch to a split that hits each muscle twice, like ${alternatives}.${raise}`
+  );
+}
+
+/** One priority's effect as the builder says it: "Hamstrings +7 sets/week
+ *  from priority (12 → 19)". Pure. */
+export function priorityEffectLine(effect: PriorityEffect): string {
+  const name = effect.head ? STANDARD_MUSCLE_DISPLAY_NAMES[effect.head] : muscleDisplayName(effect.muscleGroup);
+  const delta = Math.round(effect.after - effect.before);
+  const range = `${fmtSets(effect.before)} → ${fmtSets(effect.after)}`;
+  if (delta === 0) return `${name}: no change from priority (${fmtSets(effect.after)} sets/week)`;
+  const sign = delta > 0 ? '+' : '−';
+  return `${name} ${sign}${Math.abs(delta)} sets/week from priority (${range})`;
+}
+
+function fmtSets(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/**
+ * Why a high priority moved a muscle little or not at all, when the reason
+ * is the once-a-week per-session ceiling (Bro Split: one day holds ~12 sets
+ * of a muscle). null when the priority did its job (+3 or more) or the
+ * muscle is trained more than once a week. Pure.
+ */
+export function priorityCeilingHint(
+  effect: PriorityEffect,
+  ceiling: number,
+  canRaiseCeiling: boolean
+): string | null {
+  if (effect.direction !== 'up' || effect.sessionsPerWeek !== 1 || effect.after - effect.before >= 3) return null;
+  const name = effect.head ? STANDARD_MUSCLE_DISPLAY_NAMES[effect.head] : muscleDisplayName(effect.muscleGroup);
+  return (
+    `${name} is trained once a week and one session holds about ${ceiling} hard sets of it, so priority can't add much. ` +
+    (canRaiseCeiling && ceiling < MAX_SESSION_MUSCLE_CEILING
+      ? `Raise the per-session limit (up to ${MAX_SESSION_MUSCLE_CEILING}) or give it a second day.`
+      : 'Give it a second day, or pick a split that trains it twice a week.')
+  );
 }
 
 export interface RirRange {
@@ -203,6 +401,21 @@ export interface PlanWeekSummary {
   rir: RirRange | null;
   /** Credited sets per coarse muscle the week's sessions contain. */
   sets: Partial<Record<CoarseMuscle, number>>;
+  /** Credited sets per prioritizable head (MUSCLE_PRIORITY_HEADS), same
+   *  counter, rounded to 0.1. */
+  heads: Partial<Record<StandardMuscleGroup, number>>;
+}
+
+/** The heads shown under a group in the week table (side delts under
+ *  shoulders…): the ones a lifter can prioritize. */
+export function headsOf(group: CoarseMuscle): readonly StandardMuscleGroup[] {
+  return MUSCLE_PRIORITY_HEADS[group as MuscleGroup] ?? [];
+}
+
+/** "6", "1.5": a head's credited sets for a table cell. */
+export function formatHeadSets(sets: number | undefined): string {
+  const half = Math.round((sets ?? 0) * 2) / 2;
+  return Number.isInteger(half) ? String(half) : half.toFixed(1);
 }
 
 /**
@@ -218,6 +431,7 @@ export function weekByWeekPlan(program: ProgramWeeks | null | undefined): PlanWe
     intensityModifier: typeof w.intensityModifier === 'number' ? w.intensityModifier : null,
     rir: weekRir(w),
     sets: creditedSetsByGroup(w.sessions),
+    heads: creditedSetsByHead(w.sessions),
   }));
 }
 
@@ -271,6 +485,36 @@ export function deloadSummary(weeks: PlanWeekSummary[]): DeloadSummary | null {
     loadPercent: d.intensityModifier === null ? null : Math.round(d.intensityModifier * 100),
     rir: d.rir,
   };
+}
+
+/** A deload share above this of the peak week is called out by name. */
+export const DELOAD_FLOOR_SHARE = 0.6;
+
+/**
+ * Which muscles the deload cuts by less than about half, and why (UX panel
+ * round 22, Dre: "quad and hamstring sets stay at 6 while the other muscles
+ * drop. It looks inconsistent and isn't explained"). Every exercise keeps at
+ * least one set in the deload — the same movements, lighter — so a muscle
+ * trained by several exercises can't fall all the way to half. Null when
+ * every muscle drops to about half or less. Pure.
+ */
+export function deloadFloorNote(weeks: PlanWeekSummary[]): string | null {
+  const deload = weeks.find((w) => w.isDeload);
+  const training = weeks.filter((w) => !w.isDeload);
+  if (!deload || training.length === 0) return null;
+  const held: string[] = [];
+  for (const muscle of Object.keys(deload.sets) as CoarseMuscle[]) {
+    const peak = Math.max(...training.map((w) => Math.round(w.sets[muscle] ?? 0)));
+    const sets = Math.round(deload.sets[muscle] ?? 0);
+    if (peak <= 0 || sets <= 0) continue;
+    if (sets > peak * DELOAD_FLOOR_SHARE) held.push(`${muscleDisplayName(muscle).toLowerCase()} ${peak} → ${sets}`);
+  }
+  if (held.length === 0) return null;
+  const lead = held.length === 1 ? 'One muscle drops' : 'Some muscles drop';
+  return (
+    `${lead} by less than half from its biggest week (${held.join(', ')}) because each exercise ` +
+    `keeps at least one set in the deload, so you keep practising the same movements at light loads.`
+  );
 }
 
 /**
@@ -351,14 +595,183 @@ export function headSetsAtPeak(
   const out: Partial<Record<StandardMuscleGroup, number>> = {};
   const peak = peakTrainingWeek(program?.mesocycleWeeks ?? []);
   if (!peak || heads.length === 0) return out;
-  const wanted = new Set(heads);
-  for (const session of peak.sessions) {
-    for (const ex of session.exercises) {
-      for (const { muscle, credit } of perSetCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? [])) {
-        if (wanted.has(muscle)) out[muscle] = (out[muscle] ?? 0) + ex.sets * credit;
-      }
-    }
-  }
-  for (const k of Object.keys(out) as StandardMuscleGroup[]) out[k] = Math.round((out[k] ?? 0) * 10) / 10;
+  const all = creditedSetsByHead(peak.sessions);
+  for (const h of heads) if (all[h] !== undefined) out[h] = all[h];
   return out;
+}
+
+/**
+ * Session length the builder opens at: the length of the lifter's last
+ * block when there is one (it is what they actually train), else 75 minutes
+ * for an advanced lifter and 60 for everyone else. An advanced lifter's
+ * weekly targets (20+ sets for most muscles) do not fit 60-minute sessions
+ * on a 5-day split: on the time and fatigue model quads, triceps and
+ * hamstrings sit at MEV at 60 and 2–3 sets above it at 75 (UX panel, round
+ * 19: "I couldn't find a way to change session length"). Pure.
+ */
+export function defaultSessionMinutes(experience: Experience, previousMinutes?: number | null): number {
+  if (typeof previousMinutes === 'number' && previousMinutes >= 15 && previousMinutes <= 120) return previousMinutes;
+  return experience === 'advanced' ? 75 : 60;
+}
+
+export interface SessionLengthOption {
+  minutes: number;
+  /** Muscles in focus whose peak-week credited sets rise, with before/after. */
+  gains: { muscle: CoarseMuscle; from: number; to: number }[];
+  /** Focus muscles at or below MEV now that clear it at this length. */
+  clearsMev: CoarseMuscle[];
+}
+
+/**
+ * Longer session lengths worth offering next to the "sessions cap these
+ * muscles" banner, each with what it actually changes. `buildAt` generates
+ * the same plan at another length (the caller's generator, so the numbers
+ * are the plan's own). A length is offered only when it lifts a focus
+ * muscle off MEV or adds at least 2 sets across them: on a once-a-week split
+ * the per-session fatigue budget, not the clock, often caps a muscle, and a
+ * button that changes nothing is worse than none. Pure given `buildAt`.
+ */
+export function sessionLengthOptions(
+  currentMinutes: number,
+  focus: { muscle: CoarseMuscle; mev: number }[],
+  current: Partial<Record<CoarseMuscle, number>>,
+  buildAt: (minutes: number) => ProgramWeeks | null,
+  candidates: number[] = [currentMinutes + 15, currentMinutes + 30]
+): SessionLengthOption[] {
+  if (focus.length === 0) return [];
+  const out: SessionLengthOption[] = [];
+  for (const minutes of candidates) {
+    if (minutes <= currentMinutes || minutes > 120) continue;
+    const delivered = deliveredSetsAtPeak(buildAt(minutes));
+    if (!delivered) continue;
+    const gains = focus
+      .map(({ muscle }) => ({ muscle, from: Math.round(current[muscle] ?? 0), to: Math.round(delivered[muscle] ?? 0) }))
+      .filter((g) => g.to > g.from);
+    const clearsMev = focus
+      .filter(({ muscle, mev }) => isAtOrBelowMev(current[muscle], mev) && !isAtOrBelowMev(delivered[muscle], mev))
+      .map((f) => f.muscle);
+    const added = gains.reduce((sum, g) => sum + (g.to - g.from), 0);
+    if (clearsMev.length > 0 || added >= 2) out.push({ minutes, gains, clearsMev });
+  }
+  return out;
+}
+
+/** The schedule a lifter gave at onboarding (users.preferences
+ *  trainingDaysPerWeek / currentSplit), as builder defaults. */
+export interface OnboardingScheduleDefaults {
+  daysPerWeek: number | null;
+  split: Split | null;
+}
+
+const ONBOARDING_SPLIT: Record<string, Split> = {
+  body_part: 'Bro Split',
+  ppl: 'PPL',
+  upper_lower: 'Upper/Lower',
+  full_body: 'Full Body',
+};
+
+/**
+ * Builder defaults from the onboarding answers, used when there is too
+ * little logged history for builderDefaultsFromHistory. Read defensively:
+ * the fields may be absent, mistyped, or 'other'. Pure.
+ */
+export function onboardingScheduleDefaults(preferences: unknown): OnboardingScheduleDefaults {
+  const prefs = preferences && typeof preferences === 'object' ? (preferences as Record<string, unknown>) : {};
+  const days = typeof prefs.trainingDaysPerWeek === 'number' ? prefs.trainingDaysPerWeek : Number.NaN;
+  const daysPerWeek = Number.isInteger(days) && days >= 2 && days <= 7 ? days : null;
+  const split =
+    typeof prefs.currentSplit === 'string' && Object.prototype.hasOwnProperty.call(ONBOARDING_SPLIT, prefs.currentSplit)
+      ? ONBOARDING_SPLIT[prefs.currentSplit]
+      : null;
+  return { daysPerWeek, split };
+}
+
+// ============================================================
+// SPLIT CHOICE, STARTING VOLUME, PRIORITY FREQUENCY (UX round 22)
+// ============================================================
+
+export interface SplitChoice {
+  split: Split;
+  label: string;
+  /** What the week is like, in plain words. */
+  blurb: string;
+  /** Fewest sessions a week the rotation needs (no day dropped). */
+  minDays: number;
+}
+
+/**
+ * The splits the builder offers as cards, in the order a lifter reads them
+ * (UX panel round 21: "The split was AI-chosen by default and I didn't see a
+ * clear way to choose my own"). minDays matches the generator's rotation
+ * (sessionBuilderWithFatigue splitRotationLength): a split given fewer
+ * sessions falls back to the recommendation.
+ */
+export const SPLIT_CHOICES: readonly SplitChoice[] = [
+  { split: 'Full Body', label: 'Full Body', blurb: 'Every session trains the whole body, so each muscle gets 2–3 days a week.', minDays: 2 },
+  { split: 'Upper/Lower', label: 'Upper / Lower', blurb: 'Upper-body and lower-body days in turn; each muscle twice a week on 4 days.', minDays: 4 },
+  { split: 'PPL', label: 'Push / Pull / Legs', blurb: 'Pushing muscles, pulling muscles, then legs; each muscle once a week on 3 days, twice on 6.', minDays: 3 },
+  { split: 'Arnold', label: 'Arnold', blurb: 'Chest & back, then shoulders & arms, then legs; once a week on 3 days, twice on 6.', minDays: 3 },
+  { split: 'Bro Split', label: 'Bro Split', blurb: 'One body part a day over 5 days; each muscle once a week, in one long session.', minDays: 5 },
+];
+
+/** Fewest sessions a week a split needs (SPLIT_CHOICES). */
+export function splitMinDays(split: string): number {
+  return SPLIT_CHOICES.find((c) => c.split === split)?.minDays ?? 2;
+}
+
+/** The plain-words label for a split ("Push / Pull / Legs"). */
+export function splitLabel(split: string): string {
+  return SPLIT_CHOICES.find((c) => c.split === split)?.label ?? split;
+}
+
+/** The builder's "Starting volume" choices, each against the landmarks
+ *  (mesocycleBuilder StartingVolume). */
+export const STARTING_VOLUME_CHOICES: readonly { value: StartingVolume; label: string; detail: string }[] = [
+  { value: 'conservative', label: 'Conservative', detail: 'halfway from MEV to MAV' },
+  { value: 'standard', label: 'Standard', detail: 'at MAV' },
+  { value: 'high', label: 'High', detail: 'halfway from MAV to MRV' },
+];
+
+/** A high-priority muscle (or head) the chosen split trains once a week. */
+export interface OncePerWeekPriority {
+  label: string;
+  muscleGroup: MuscleGroup;
+  head?: StandardMuscleGroup;
+}
+
+/**
+ * High priorities whose muscle the plan trains in only one session a week
+ * (Bro Split, or PPL/Arnold on 3 days). One session holds about the
+ * per-session limit of a muscle, so a priority there adds little (UX panel
+ * round 21: "high priority only gave hamstrings +1 set. The app doesn't
+ * warn about the frequency limit"). `volumePerMuscle[group].frequency` is
+ * the generator's count of sessions that train the group. Pure.
+ */
+export function oncePerWeekPriorities(
+  adjustments: readonly VolumeAdjustmentInput[],
+  volumePerMuscle: Partial<Record<string, { frequency: number }>> | null | undefined
+): OncePerWeekPriority[] {
+  if (!volumePerMuscle) return [];
+  const out: OncePerWeekPriority[] = [];
+  const seen = new Set<string>();
+  for (const a of adjustments) {
+    if (a.reason !== 'user_priority' || a.volumeMultiplier <= 1) continue;
+    const key = a.head ?? a.muscleGroup;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (volumePerMuscle[a.muscleGroup]?.frequency !== 1) continue;
+    out.push({ label: priorityLabel(a), muscleGroup: a.muscleGroup, head: a.head });
+  }
+  return out;
+}
+
+/**
+ * A split that trains every muscle at least twice a week in
+ * `sessionsPerWeek` sessions, for the one-tap fix beside the once-a-week
+ * warning: Full Body up to 3, Upper/Lower at 4–5, Push/Pull/Legs at 6+. Pure.
+ */
+export function twiceWeeklySplitFor(sessionsPerWeek: number): Split {
+  if (sessionsPerWeek >= 6) return 'PPL';
+  if (sessionsPerWeek >= 4) return 'Upper/Lower';
+  return 'Full Body';
 }

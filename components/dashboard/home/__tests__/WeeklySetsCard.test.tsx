@@ -1,5 +1,15 @@
+import userEvent from '@testing-library/user-event';
 import { render, screen } from '@testing-library/react';
-import { WeeklySetsCard, pickWeeklySetsRows, weeklySetsDigest } from '../WeeklySetsCard';
+import {
+  WeeklySetsCard,
+  pickWeeklySetsRows,
+  weeklySetsDigest,
+  MEV_MRV_FIRST_LINE,
+  MEV_MRV_LINE_HINT_ID,
+  SETS_COUNTING_RULE,
+  weeklySetsWindowLine,
+} from '../WeeklySetsCard';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
 import type { VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 const row = (muscle: string, sets: number, mev: number, mrv: number, over: Partial<VolumeRow> = {}): VolumeRow =>
@@ -52,14 +62,67 @@ describe('WeeklySetsCard', () => {
 
   it('shows each muscle against its range and a digest', () => {
     render(<WeeklySetsCard rows={rows} />);
-    expect(screen.getByText('Sets this week')).toBeInTheDocument();
-    expect(screen.getByTestId('home-weekly-sets-digest')).toHaveTextContent('2 below MEV · 1 over MRV');
+    expect(screen.getByText('Sets, last 7 days')).toBeInTheDocument();
+    expect(screen.getByTestId('home-weekly-sets-digest')).toHaveTextContent(
+      '2 muscles under their minimum (MEV) · 1 over its max (MRV)'
+    );
     expect(screen.getAllByTestId('home-weekly-sets-row')[0]).toHaveTextContent('Shoulders28 of 12–26');
+  });
+
+  it('explains MEV and MRV in plain words from the info button (round 19 jargon)', async () => {
+    const user = userEvent.setup();
+    render(<WeeklySetsCard rows={rows} />);
+    expect(screen.queryByTestId('home-weekly-sets-key')).not.toBeInTheDocument();
+    const info = screen.getByTestId('home-weekly-sets-info');
+    expect(info).toHaveAttribute('aria-expanded', 'false');
+    await user.click(info);
+    expect(info).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('home-weekly-sets-key')).toHaveTextContent(/fewest hard sets a week that still grow a muscle/);
+    expect(screen.getByTestId('home-weekly-sets-key')).toHaveTextContent(/most you can recover from/);
+  });
+
+  it('names the rolling 7-day window, the workouts in it, and how sets are counted (round 22, Dre)', () => {
+    const start = new Date(2026, 10, 18);
+    render(<WeeklySetsCard rows={rows} windowStart={start} workouts={2} plannedPerWeek={4} />);
+    expect(screen.getByTestId('home-weekly-sets-window')).toHaveTextContent(
+      'Last 7 days (since Wed, Nov 18): 2 workouts of the 4 a week your plan has, so some muscles read low until the rest are done.'
+    );
+    expect(screen.getByTestId('home-weekly-sets-rule')).toHaveTextContent(SETS_COUNTING_RULE);
+    expect(SETS_COUNTING_RULE).toMatch(/counts 1 for the muscle .* ½ for each muscle it also works/);
+    expect(weeklySetsWindowLine({ windowStart: start, workouts: 3 })).toBe('Last 7 days (since Wed, Nov 18): 3 workouts logged.');
+    expect(weeklySetsWindowLine({ windowStart: start, plannedPerWeek: 5 })).toBe(
+      'Last 7 days (since Wed, Nov 18). Your plan has 5 workouts a week.'
+    );
+    expect(weeklySetsWindowLine({ windowStart: start, workouts: 5, plannedPerWeek: 4 })).toBe(
+      'Last 7 days (since Wed, Nov 18): 5 workouts of the 4 a week your plan has.'
+    );
   });
 
   it('all-clear digest, and nothing at all with no data', () => {
     expect(weeklySetsDigest([row('chest', 12, 8, 22)])).toBe('Every trained muscle is in its range');
     const { container } = render(<WeeklySetsCard rows={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  describe('first-run explanation (round 20, Sam)', () => {
+    beforeEach(() => useEducationStore.setState({ dismissedHints: [] }));
+
+    it('explains MEV–MRV in one plain line without a tap, until dismissed; the key stays', async () => {
+      const user = userEvent.setup();
+      render(<WeeklySetsCard rows={rows} />);
+      expect(screen.getByTestId('home-weekly-sets-first-line')).toHaveTextContent(MEV_MRV_FIRST_LINE);
+      await user.click(screen.getByTestId('home-weekly-sets-first-line-dismiss'));
+      expect(screen.queryByTestId('home-weekly-sets-first-line')).toBeNull();
+      expect(useEducationStore.getState().dismissedHints).toContain(MEV_MRV_LINE_HINT_ID);
+      // The info key is still one tap away.
+      await user.click(screen.getByTestId('home-weekly-sets-info'));
+      expect(screen.getByTestId('home-weekly-sets-key')).toBeInTheDocument();
+    });
+
+    it('stays hidden once dismissed', () => {
+      useEducationStore.setState({ dismissedHints: [MEV_MRV_LINE_HINT_ID] });
+      render(<WeeklySetsCard rows={rows} />);
+      expect(screen.queryByTestId('home-weekly-sets-first-line')).toBeNull();
+    });
   });
 });

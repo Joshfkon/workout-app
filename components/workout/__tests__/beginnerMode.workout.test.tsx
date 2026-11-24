@@ -59,7 +59,9 @@ describe('SuggestionBanner in beginner mode', () => {
   it('says the target in words, with no RIR anywhere on the strip', () => {
     setUser('novice', true);
     const { container } = render(<SuggestionBanner {...banner} />);
-    expect(screen.getByTestId('suggestion-rir-plain')).toHaveTextContent('· stop 2 reps short of failure');
+    expect(screen.getByTestId('suggestion-rir-plain')).toHaveTextContent('· stop when you could still do 2 more');
+    // No "failure" for a beginner (UX panel round 19).
+    expect(container).not.toHaveTextContent(/failure/);
     expect(container).not.toHaveTextContent(/RIR/);
     // The jargon-dense engine reason moves off the strip.
     expect(container).not.toHaveTextContent(/holding load/);
@@ -73,7 +75,8 @@ describe('SuggestionBanner in beginner mode', () => {
     const sheet = screen.getByRole('dialog');
     expect(sheet).not.toHaveTextContent(/RIR/);
     expect(sheet).toHaveTextContent('8 reps with 2 reps left vs 2 target — holding load');
-    expect(sheet).toHaveTextContent('Target: 8–12 reps stopping 2 reps short of failure.');
+    expect(sheet).toHaveTextContent('Target: 8–12 reps stopping when you could still do 2 more.');
+    expect(sheet).not.toHaveTextContent(/failure/);
   });
 
   it('keeps the existing copy when beginner mode is off', () => {

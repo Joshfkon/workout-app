@@ -77,11 +77,19 @@ beforeEach(() => {
 
 describe('HomeStartWorkout', () => {
   it('resumes an unfinished workout instead of starting another', async () => {
-    mockRows = { in_progress: [{ id: 'sess-9' }] };
+    mockRows = { in_progress: [{ id: 'sess-9', state: 'in_progress', started_at: new Date().toISOString(), mesocycle_id: null, exercise_blocks: [{ count: 4 }] }] };
     renderIt();
     const link = await screen.findByRole('link', { name: /resume workout/i });
     expect(link).toHaveAttribute('href', '/dashboard/workout/sess-9');
     expect(screen.queryByRole('button', { name: /start workout/i })).not.toBeInTheDocument();
+  });
+
+  it('never offers an empty leftover the workout screen would only bounce to Train (user report)', async () => {
+    const sixHoursAgo = new Date(Date.now() - 6 * 3600e3).toISOString();
+    mockRows = { in_progress: [{ id: 'old-empty', state: 'in_progress', started_at: sixHoursAgo, mesocycle_id: null, exercise_blocks: [{ count: 0 }] }] };
+    renderIt();
+    expect(await screen.findByRole('button', { name: 'Start today’s workout' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /resume workout/i })).not.toBeInTheDocument();
   });
 
   it('starts today’s recommended workout in one tap (auto-start sheet)', async () => {
@@ -122,8 +130,7 @@ describe('HomeStartWorkout', () => {
 });
 
 describe('HomeStartWorkout — compact entry (food-focused Home)', () => {
-  it('is one quiet row with a start button and a program link', async () => {
-    const user = userEvent.setup();
+  it('is one quiet card with a program link', async () => {
     renderIt(true);
     expect(screen.getByTestId('home-compact-workout-entry')).toBeInTheDocument();
     expect(screen.getByText('Lifting too?')).toBeInTheDocument();
@@ -131,7 +138,20 @@ describe('HomeStartWorkout — compact entry (food-focused Home)', () => {
       'href',
       '/dashboard/mesocycle/new'
     );
-    await user.click(screen.getByRole('button', { name: /start workout/i }));
+  });
+
+  it('starts today’s workout in one tap, not via the options sheet (round 20, Frank)', async () => {
+    const user = userEvent.setup();
+    renderIt(true);
+    await user.click(screen.getByRole('button', { name: 'Start today’s workout' }));
+    expect(screen.getByText('Suggestion sheet (auto-start)')).toBeInTheDocument();
+    expect(screen.queryByText('Start empty workout')).not.toBeInTheDocument();
+  });
+
+  it('keeps the other ways to start one tap behind a plain link', async () => {
+    const user = userEvent.setup();
+    renderIt(true);
+    await user.click(screen.getByRole('button', { name: /other ways to start/i }));
     expect(screen.getByText('Start empty workout')).toBeInTheDocument();
   });
 });

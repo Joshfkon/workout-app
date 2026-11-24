@@ -31,6 +31,7 @@ import {
 import { BenchmarkBar } from './ProgressVisualization';
 import { formatMeasurementValue, formatHeight, parseLocalDate } from '@/lib/utils';
 import { getNaturalFFMILimit } from '@/services/bodyCompEngine';
+import { DEXA_PLAIN, FFMI_PLAIN } from './bodyJargon';
 import type {
   BodyCompositionTarget,
   Mesocycle,
@@ -216,9 +217,12 @@ function FfmiCeilingSection({
 }) {
   if (currentFfmi == null) {
     return (
-      <p className="text-caption text-ink-3">
-        Add a body scan (DEXA) to see your muscle-to-height ceiling (FFMI).
-      </p>
+      <div className="space-y-1" data-testid="ffmi-ceiling-empty">
+        <p className="text-caption text-ink-2">{FFMI_PLAIN}</p>
+        <p className="text-caption text-ink-3">
+          Add a body scan (DEXA) to see your muscle-to-height ceiling (FFMI). {DEXA_PLAIN}
+        </p>
+      </div>
     );
   }
 
@@ -252,6 +256,7 @@ function FfmiCeilingSection({
 
   return (
     <div>
+      <p className="text-caption text-ink-2 mb-2" data-testid="ffmi-plain">{FFMI_PLAIN}</p>
       <div className="relative h-10 bg-card rounded overflow-hidden mb-1">
         {tiers.map((tier) => (
           <div
@@ -435,7 +440,7 @@ function WeightProjectionSection({
     <div>
       <p className="text-caption text-ink-3 mb-2">
         {mesocycle
-          ? `Scope: this mesocycle (week ${mesocycle.currentWeek} of ${mesocycle.totalWeeks})`
+          ? `Scope: this training block (week ${mesocycle.currentWeek} of ${mesocycle.totalWeeks})`
           : `Scope: last 90 days of weigh-ins, projected ${DEFAULT_PROJECTION_WEEKS - currentWeek} weeks ahead`}
       </p>
       <div className="h-48" data-testid="weight-projection-chart">

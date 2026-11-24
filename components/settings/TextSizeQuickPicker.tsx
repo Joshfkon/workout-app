@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 /**
  * Three "A" buttons, each drawn at its own size, for the places that offer
  * text size without a full settings row: Home's one-time "Text too small?"
- * card and the register page footer. Same store as Settings
+ * card and the top of the register page. Same store as Settings
  * (hooks/useTextSize): applies on tap, saved on this device, and on the
  * account once there is one.
  */

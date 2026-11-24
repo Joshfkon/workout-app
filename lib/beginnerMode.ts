@@ -20,6 +20,16 @@ export const BEGINNER_MODE_DESCRIPTION =
   'A simpler workout screen: effort in plain words, fewer numbers and charts. Your plan stays the same.';
 
 /**
+ * One line next to "Beginner mode: on/off" wherever it is shown as a summary,
+ * so the state explains itself and says how to change it.
+ */
+export function beginnerModeSummaryLine(on: boolean): string {
+  return on
+    ? 'Simpler workout screen with effort in plain words. Turn it off under Change.'
+    : 'Turn it on under Change for a simpler workout screen with fewer numbers.';
+}
+
+/**
  * The stored choice wins; with none, beginners (novice experience, which is
  * also what "Under 1 year" and "No, food tracking" sign up as) start with it
  * on and everyone else off.
@@ -79,8 +89,12 @@ export function plainRirText(text: string): string {
     .replace(/\bRIR\b/g, 'reps left')
     .replace(/\s+in the tank\b/g, ' in you')
     .replace(/\bleft in reserve\b/g, 'left')
-    .replace(/\bleaving (\d+\+?) in reserve\b/g, (_m, n: string) =>
-      `stopping ${n} rep${n === '1' ? '' : 's'} short of failure`
+    // No "failure" for a first-week lifter (UX panel round 19): the same
+    // number as how many more they could still do.
+    .replace(/\bleaving (\d+\+?) in reserve\b/g, (_m, n: string) => `stopping when you could still do ${n} more`)
+    .replace(
+      /\b([Ss])top(ping)? (\d+\+?) reps? short of failure\b/g,
+      (_m, s: string, ing: string | undefined, n: string) => `${s}top${ing ? 'ping' : ''} when you could still do ${n} more`
     )
     .replace(/\s+in reserve\b/g, ' left');
 }
@@ -200,19 +214,36 @@ export function plainWorkoutText(text: string): string {
  * Beginner mode's effort question: three plain answers instead of the five
  * numbered chips. Each answer logs an EXISTING chip value, so the engine and
  * the rirSource rules see exactly what a five-chip tap would produce:
- *   - "That was hard"      → 1 (the "hard" chip)
- *   - "A couple more"      → 2 (the "good" chip; literally two left)
- *   - "Could do lots more" → 4 (the "4+ / cruise" chip)
+ *   - "Hard"       → 1 (the "hard" chip)
+ *   - "Just right" → 2 (the "good" chip)
+ *   - "Easy"       → 4 (the "4+ / cruise" chip)
  * 0 ("maxed") and 3 ("easy") are not offered: a first-week lifter rarely
  * reaches true failure and can't tell 3 from 4. A preset value (the target,
  * or a sensor estimate) of 0 or 3 is still logged exactly as-is while
  * untouched — only the highlight rounds it to the nearest answer.
  */
-export const BEGINNER_EFFORT_CHOICES: ReadonlyArray<{ rir: 1 | 2 | 4; label: string }> = [
-  { rir: 1, label: 'That was hard' },
-  { rir: 2, label: 'A couple more' },
-  { rir: 4, label: 'Could do lots more' },
+export const BEGINNER_EFFORT_CHOICES: ReadonlyArray<{ rir: 1 | 2 | 4; label: string; hint: string }> = [
+  // UX panel round 22 (Maya): "A couple more" read as jargon — a couple more
+  // what? Each answer is now a plain word plus how many reps were left.
+  { rir: 1, label: 'Hard', hint: '0–1 reps left' },
+  { rir: 2, label: 'Just right', hint: '2–3 reps left' },
+  { rir: 4, label: 'Easy', hint: '4+ reps left' },
 ];
+
+/**
+ * The "What's this?" line under the beginner effort question: what the
+ * answer is and what it changes, in one breath.
+ */
+export const BEGINNER_EFFORT_EXPLAINER =
+  'Think about how many more reps you could have done before you had to stop. ' +
+  'Your answer sets the weight and reps we suggest next: “Hard” keeps it steady or lighter, “Easy” moves it up.';
+
+/**
+ * One line under the beginner warm-up header: what warm-up sets are, so the
+ * section doesn't read as a "protocol" to decode (UX panel round 22).
+ */
+export const BEGINNER_WARMUP_EXPLAINER =
+  'Lighter practice sets to get your muscles and joints ready before the real sets. Tap to see them.';
 
 /** Which beginner answer a 0–4 chip value shows as selected. */
 export function beginnerEffortChoiceFor(rir: number): 1 | 2 | 4 {

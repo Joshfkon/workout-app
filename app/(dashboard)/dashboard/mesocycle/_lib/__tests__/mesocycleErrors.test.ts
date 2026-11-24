@@ -23,10 +23,10 @@ describe('describeMesocycleInsertFailure', () => {
 
     expect(message).toContain('valid_deload_week');
     expect(message).toContain('Failing row contains (8, 7).');
-    expect(message).not.toContain('Failed to create mesocycle');
+    expect(message).not.toContain('Failed to create training block');
   });
 
   it('falls back when there is no error object to describe', () => {
-    expect(describeMesocycleInsertFailure(null)).toBe('Failed to create mesocycle');
+    expect(describeMesocycleInsertFailure(null)).toBe('Failed to create training block');
   });
 });

@@ -10,6 +10,7 @@
  */
 
 import type { FoodSource, FrequentFood, FrequentFoodPortion, MealType } from '@/types/nutrition';
+import { pluralNoun } from './portionDefaults';
 
 export interface FrequentFoodRow {
   meal_type: string;
@@ -113,6 +114,80 @@ export function addLoggedRowsToFrequentFoods(
   return Array.from(map.values());
 }
 
+/** How many recent-food chips the Eat page shows when it first renders. */
+export const QUICK_ADD_CHIP_LIMIT = 10;
+
+/**
+ * Candidates for Eat's one-tap chips: frequent foods merged across meals by
+ * name, logged at least twice, most-logged first. The first per-meal entry
+ * seen for a name supplies the portion a tap re-logs.
+ */
+export function rankQuickAddFoods(frequentFoods: FrequentFood[]): FrequentFood[] {
+  const byName = new Map<string, { food: FrequentFood; count: number }>();
+  for (const food of frequentFoods) {
+    const existing = byName.get(food.food_name);
+    if (existing) existing.count += food.times_logged;
+    else byName.set(food.food_name, { food, count: food.times_logged });
+  }
+  return Array.from(byName.values())
+    .filter((chip) => chip.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .map((chip) => chip.food);
+}
+
+/**
+ * The chip order for this visit. The first non-empty ranking is frozen;
+ * later rankings (a quick add bumps a food's count, a search add can push a
+ * new food past the threshold) never move or drop a chip that is already on
+ * screen. A new food only joins at the END, while there is room.
+ *
+ * Panel finding (r22, 6 of 6): "I meant to tap rice, but the chips
+ * reshuffled and the oatmeal chip sat where I tapped." The row was re-sorted
+ * by count after every add, so the chip just tapped jumped to the front and
+ * everything before it slid one place right, under the finger.
+ *
+ * Returns food names; `frozen` is the previous result (null before the first).
+ */
+export function stableChipOrder(
+  frozen: readonly string[] | null,
+  ranked: readonly FrequentFood[],
+  limit: number = QUICK_ADD_CHIP_LIMIT
+): string[] {
+  if (!frozen || frozen.length === 0) return ranked.slice(0, limit).map((f) => f.food_name);
+  // A frozen chip stays put even if it left the ranking: dropping it would
+  // slide every chip after it one place left.
+  const order = [...frozen];
+  const seen = new Set(order);
+  for (const food of ranked) {
+    if (order.length >= limit) break;
+    if (!seen.has(food.food_name)) {
+      order.push(food.food_name);
+      seen.add(food.food_name);
+    }
+  }
+  return order;
+}
+
+/** A chip's second line: "1 cup · 205 kcal". */
+export function quickAddChipDetail(food: FrequentFood): string {
+  const portion = frequentFoodPortion(food);
+  return `${formatPortion(portion.serving_size)} · ${Math.round(portion.calories).toLocaleString('en-US')} kcal`;
+}
+
+/**
+ * The amount line of an add confirmation: "150 g · 248 kcal · 46 g protein".
+ * Panel (r22, Dre): "little obvious confirmation of the portion size logged".
+ */
+export function addedAmountLine(food: {
+  serving_size: string | null | undefined;
+  calories: number | null | undefined;
+  protein: number | null | undefined;
+}): string {
+  const kcal = Math.round(food.calories ?? 0).toLocaleString('en-US');
+  const protein = Math.round(food.protein ?? 0);
+  return `${formatPortion(food.serving_size)} · ${kcal} kcal · ${protein} g protein`;
+}
+
 /**
  * The exact portion a one-tap add of this frequent food logs. Prefers the last
  * logged row; a FrequentFood without one (older cache) falls back to ONE
@@ -152,11 +227,12 @@ export function formatPortion(servingSize: string | null | undefined): string {
   return pluralServing(s);
 }
 
-/** "2 serving" → "2 servings" (the stored noun is always singular). */
+/** "2 serving" → "2 servings", "2 large egg" → "2 large eggs" (the stored noun is always singular). */
 function pluralServing(s: string): string {
-  const m = s.match(/^([\d.]+)\s+serving$/i);
-  if (m && parseFloat(m[1]) !== 1) return `${m[1]} servings`;
-  return s;
+  const m = s.match(/^([\d.]+)\s+(.+)$/);
+  if (!m) return s;
+  const amount = parseFloat(m[1]);
+  return Number.isFinite(amount) ? `${m[1]} ${pluralNoun(m[2], amount)}` : s;
 }
 
 /** Toast after a one-tap add: "Added Oatmeal (1 cup) to Lunch". */
@@ -175,6 +251,17 @@ export function addedToMealMessage(
   totals: { calories: number; protein: number },
   targets: { calories?: number | null; protein?: number | null } = {}
 ): string {
+  return `Added to ${mealLabel} · ${dayTotalsLine(totals, targets)}`;
+}
+
+/**
+ * The day's running calories and protein against the goal:
+ * "1,640 / 2,400 kcal · 120 / 180 g protein" (no goal → "1,640 kcal · …").
+ */
+export function dayTotalsLine(
+  totals: { calories: number; protein: number },
+  targets: { calories?: number | null; protein?: number | null } = {}
+): string {
   const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
   const kcal = targets.calories && targets.calories > 0
     ? `${fmt(totals.calories)} / ${fmt(targets.calories)} kcal`
@@ -182,5 +269,38 @@ export function addedToMealMessage(
   const protein = targets.protein && targets.protein > 0
     ? `${fmt(totals.protein)} / ${fmt(targets.protein)} g protein`
     : `${fmt(totals.protein)} g protein`;
-  return `Added to ${mealLabel} · ${kcal} · ${protein}`;
+  return `${kcal} · ${protein}`;
+}
+
+/**
+ * Confirmation shown under the quick-add chips after a one-tap add: what was
+ * added, how much, to which meal, and where the day now stands.
+ *
+ * Panel finding (3 of 6): "there was little feedback that the food was
+ * added … I wasn't sure the add worked."
+ */
+export function quickAddConfirmation(
+  foodName: string,
+  servingSize: string | null | undefined,
+  mealLabel: string,
+  dayTotals: { calories: number; protein: number },
+  targets: { calories?: number | null; protein?: number | null } = {}
+): { added: string; totals: string; removed: string } {
+  return {
+    added: quickAddMessage(foodName, servingSize, mealLabel),
+    totals: `Day total ${dayTotalsLine(dayTotals, targets)}`,
+    removed: `Removed ${foodName} (${formatPortion(servingSize)}) from ${mealLabel}`,
+  };
+}
+
+/**
+ * The time-of-day meal a quick add defaults to: before 11:00 breakfast,
+ * before 15:00 lunch, before 20:00 dinner, then snacks. `hour` is the local
+ * hour (0–23), read from lib/clock by the caller.
+ */
+export function mealTypeForHour(hour: number): MealType {
+  if (hour < 11) return 'breakfast';
+  if (hour < 15) return 'lunch';
+  if (hour < 20) return 'dinner';
+  return 'snack';
 }

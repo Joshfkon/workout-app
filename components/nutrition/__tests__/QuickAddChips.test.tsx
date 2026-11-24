@@ -1,10 +1,12 @@
 /**
- * Eat's recent-food chips: the row says what it is and where a tap goes, and
- * a tap confirms on the chip itself ("Added to Dinner") — still one tap.
+ * Eat's recent-food chips: the row says what it is, where a tap goes and
+ * which portion it adds; a tap confirms under the row (what, how much, which
+ * meal, the day's total) with Undo — still one tap, and no toast over the
+ * meal cards.
  */
 
 import { act, render, screen, fireEvent } from '@testing-library/react';
-import { QuickAddChips, QUICK_ADD_CONFIRM_MS } from '../QuickAddChips';
+import { QuickAddChips, QUICK_ADD_CONFIRM_MS, QUICK_ADD_STATUS_MS, type QuickAddConfirmation } from '../QuickAddChips';
 import type { FrequentFood, MealType } from '@/types/nutrition';
 
 const yogurt: FrequentFood = {
@@ -35,7 +37,17 @@ const meals: Array<{ type: MealType; label: string }> = [
   { type: 'dinner', label: 'Dinner' },
 ];
 
-function renderChips(onAdd = jest.fn().mockResolvedValue(undefined)) {
+const confirmation = (onUndo = jest.fn()): QuickAddConfirmation => ({
+  added: 'Added Greek yogurt (170 g) to Dinner',
+  totals: 'Day total 283 / 1,872 kcal · 28 / 144 g protein',
+  removed: 'Removed Greek yogurt (170 g) from Dinner',
+  onUndo,
+});
+
+function renderChips(
+  onAdd: jest.Mock = jest.fn().mockResolvedValue(undefined),
+  opts: { mealIsTimeDefault?: boolean } = {}
+) {
   render(
     <QuickAddChips
       foods={[yogurt]}
@@ -44,6 +56,7 @@ function renderChips(onAdd = jest.fn().mockResolvedValue(undefined)) {
       meals={meals}
       onMealChange={jest.fn()}
       onAdd={onAdd}
+      mealIsTimeDefault={opts.mealIsTimeDefault}
     />
   );
   return onAdd;
@@ -57,34 +70,124 @@ describe('QuickAddChips', () => {
     renderChips();
     expect(screen.getByText('Foods you log most — tap to add to')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: /foods you log most — tap to add to/i })).toHaveValue('dinner');
-    expect(screen.getByRole('button', { name: 'Log Greek yogurt, 170 g, to Dinner' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Log Greek yogurt, 170 g · 100 kcal, to Dinner' })).toBeInTheDocument();
+    // r22 panel: "doesn't show the portion or calories it will add".
+    expect(screen.getByTestId('quick-add-chip-portion')).toHaveTextContent('170 g · 100 kcal');
   });
 
-  it('one tap adds, then the chip reads "Added to Dinner" for a moment', async () => {
-    const onAdd = renderChips();
+  it('says a chip adds the amount you logged last time, and when the meal was picked by time of day', () => {
+    renderChips(undefined, { mealIsTimeDefault: true });
+    expect(screen.getByTestId('quick-add-explainer')).toHaveTextContent(
+      'Each adds the amount you logged last time · Dinner picked for the time of day'
+    );
+  });
+
+  it('drops the time-of-day note once the user picked the meal', () => {
+    renderChips(undefined, { mealIsTimeDefault: false });
+    expect(screen.getByTestId('quick-add-explainer')).toHaveTextContent('Each adds the amount you logged last time');
+    expect(screen.getByTestId('quick-add-explainer')).not.toHaveTextContent('time of day');
+  });
+
+  it('one tap adds; the chip shows a check and the row says what was added with the day total', async () => {
+    const onAdd = renderChips(jest.fn().mockResolvedValue(confirmation()));
     await act(async () => {
       fireEvent.click(screen.getByTestId('quick-add-chip'));
     });
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith(yogurt);
-    expect(screen.getByTestId('quick-add-chip-added')).toHaveTextContent('Added to Dinner');
     expect(screen.getByTestId('quick-add-chip')).toHaveAttribute('data-added', 'true');
+    // The chip keeps its name (no width jump that scrolls it off screen) and
+    // says "Added" in place of the portion while the check shows.
+    expect(screen.getByText('Greek yogurt')).toBeInTheDocument();
+    expect(screen.getByTestId('quick-add-chip-added')).toHaveTextContent('Added');
+    expect(screen.queryByTestId('quick-add-chip-portion')).not.toBeInTheDocument();
+    expect(screen.getByTestId('quick-add-status-added')).toHaveTextContent('Added Greek yogurt (170 g) to Dinner');
+    expect(screen.getByTestId('quick-add-status-totals')).toHaveTextContent(
+      'Day total 283 / 1,872 kcal · 28 / 144 g protein'
+    );
 
     act(() => {
       jest.advanceTimersByTime(QUICK_ADD_CONFIRM_MS);
     });
-    expect(screen.queryByTestId('quick-add-chip-added')).not.toBeInTheDocument();
-    expect(screen.getByText('Greek yogurt')).toBeInTheDocument();
+    expect(screen.getByTestId('quick-add-chip')).not.toHaveAttribute('data-added');
+    expect(screen.getByTestId('quick-add-status-added')).toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(QUICK_ADD_STATUS_MS);
+    });
+    expect(screen.queryByTestId('quick-add-status-added')).not.toBeInTheDocument();
   });
 
-  it('a failed save shows no "Added"', async () => {
+  it('Undo removes the add and says so', async () => {
+    const onUndo = jest.fn().mockResolvedValue(undefined);
+    renderChips(jest.fn().mockResolvedValue(confirmation(onUndo)));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-add-chip'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    });
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('quick-add-status-added')).toHaveTextContent('Removed Greek yogurt (170 g) from Dinner');
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  });
+
+  it('a failed save shows no confirmation', async () => {
     const error = jest.spyOn(console, 'error').mockImplementation(() => {});
     renderChips(jest.fn().mockRejectedValue(new Error('offline')));
     await act(async () => {
       fireEvent.click(screen.getByTestId('quick-add-chip'));
     });
-    expect(screen.queryByTestId('quick-add-chip-added')).not.toBeInTheDocument();
+    expect(screen.getByTestId('quick-add-chip')).not.toHaveAttribute('data-added');
+    expect(screen.queryByTestId('quick-add-status-added')).not.toBeInTheDocument();
     error.mockRestore();
+  });
+
+  it('the chip says which meal it went to', async () => {
+    renderChips(jest.fn().mockResolvedValue(confirmation()));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-add-chip'));
+    });
+    expect(screen.getByTestId('quick-add-chip-added')).toHaveTextContent('Added to Dinner');
+  });
+
+  it('a save that fails after the optimistic confirmation turns it into an error and clears the chip', async () => {
+    let reject!: (err: Error) => void;
+    const saved = new Promise((_, r) => {
+      reject = r;
+    });
+    renderChips(
+      jest.fn().mockResolvedValue({
+        ...confirmation(),
+        saved,
+        failed: 'Couldn’t save Greek yogurt. Check your connection and try again.',
+      })
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-add-chip'));
+    });
+    // Shown before the save lands.
+    expect(screen.getByTestId('quick-add-status-added')).toHaveTextContent('Added Greek yogurt (170 g) to Dinner');
+    expect(screen.getByTestId('quick-add-status-totals')).toHaveTextContent('Day total 283');
+    await act(async () => {
+      reject(new Error('offline'));
+    });
+    expect(screen.getByTestId('quick-add-status-failed')).toHaveTextContent('Couldn’t save Greek yogurt');
+    expect(screen.getByTestId('quick-add-chip')).not.toHaveAttribute('data-added');
+  });
+
+  it('shows Edit next to Undo when the add can be edited, and the amount on its own line', async () => {
+    const onEdit = jest.fn();
+    renderChips(jest.fn().mockResolvedValue({ ...confirmation(), amount: '170 g · 100 kcal · 17 g protein', onEdit }));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-add-chip'));
+    });
+    expect(screen.getByTestId('quick-add-status-amount')).toHaveTextContent('170 g · 100 kcal · 17 g protein');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    });
+    expect(onEdit).toHaveBeenCalledTimes(1);
   });
 
   it('renders nothing with no recent foods', () => {

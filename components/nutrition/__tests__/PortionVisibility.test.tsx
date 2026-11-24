@@ -1,3 +1,4 @@
+import { foodKeysFor, recordLastUsedServingForKeys } from '@/lib/nutrition/lastUsedServing';
 /**
  * @jest-environment jsdom
  *
@@ -10,7 +11,7 @@
  */
 
 import React from 'react';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, within, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AddFoodModal } from '../AddFoodModal';
 import type { FoodLogEntry, FrequentFood, SystemFood } from '@/types/nutrition';
@@ -129,22 +130,125 @@ describe('quick-add rows show what they log', () => {
 });
 
 describe('common foods say what their numbers are per', () => {
-  it('uses the household serving when there is one, else "100 g"', () => {
+  it('shows the portion + adds: a typical count of a household unit, or a typical weight', () => {
     setup();
     const rows = screen.getAllByTestId('system-food-row');
     const egg = rows.find((r) => r.textContent?.includes('Whole Eggs'))!;
     const peas = rows.find((r) => r.textContent?.includes('Peas'))!;
-    // 1 large egg = 50 g of a 155 cal/100 g row.
-    expect(egg).toHaveTextContent('per 1 large egg');
-    expect(egg).toHaveTextContent('78 cal');
-    expect(peas).toHaveTextContent('per 100 g');
-    expect(peas).toHaveTextContent('78 cal');
+    // 2 large eggs = 100 g of a 155 cal/100 g row.
+    expect(egg).toHaveTextContent('2 large eggs · 155 cal · 13g P');
+    // Peas are weighed: a typical 85 g of a 78 cal/100 g row.
+    expect(peas).toHaveTextContent('85 g · 66 cal');
   });
+
+  it('falls back to "per 100 g" with no + when there is no real portion', () => {
+    const MYSTERY: SystemFood = {
+      id: 'm', name: 'Mystery Mix', category: 'supplements', subcategory: null,
+      calories_per_100g: 200, protein_per_100g: 10, carbs_per_100g: 20, fat_per_100g: 5,
+    };
+    setup({ systemFoods: [MYSTERY] });
+    const row = screen.getByTestId('system-food-row');
+    expect(row).toHaveTextContent('per 100 g');
+    expect(within(row).queryByRole('button', { name: /quick-add/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('searched foods add in one tap', () => {
+  it("+ on a common food adds its typical portion without a portion step, sheet stays open", async () => {
+    const user = userEvent.setup();
+    const { onQuickAdd, onAdd, onClose } = setup();
+    const egg = screen.getAllByTestId('system-food-row').find((r) => r.textContent?.includes('Whole Eggs'))!;
+    await user.click(within(egg).getByRole('button', { name: 'Quick-add Whole Eggs (large, cooked), 2 large eggs, to Dinner' }));
+    await waitFor(() => expect(onQuickAdd).toHaveBeenCalledTimes(1));
+    expect(onQuickAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        food_name: 'Whole Eggs (large, cooked)',
+        serving_size: '2 large egg (100g)',
+        servings: 1,
+        calories: 155,
+        meal_type: 'dinner',
+      })
+    );
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // The + turns into a check so the tap visibly landed.
+    await waitFor(() =>
+      expect(within(egg).getByRole('button', { name: /quick-add whole eggs/i })).toHaveAttribute('data-done', 'true')
+    );
+  });
+
+  it('remembers the amount: next time + adds what you logged last', async () => {
+    const user = userEvent.setup();
+    setup();
+    // Log 3 eggs through the editor.
+    await user.click(screen.getByText('Whole Eggs (large, cooked)'));
+    const amount = screen.getByTestId('add-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '3');
+    await user.click(screen.getByRole('button', { name: 'Add to Dinner' }));
+    // A fresh sheet shows (and + adds) 3 large eggs.
+    cleanup();
+    setup();
+    const egg = screen.getAllByTestId('system-food-row').find((r) => r.textContent?.includes('Whole Eggs'))!;
+    expect(egg).toHaveTextContent('3 large eggs');
+  });
+
+  it("a USDA result gets + only once you've logged it before", async () => {
+    const { searchFoodsAction } = jest.requireMock('@/lib/actions/food-search') as {
+      searchFoodsAction: jest.Mock;
+    };
+    searchFoodsAction.mockResolvedValue({
+      foods: [{ foodId: 'u1', name: 'Bagel, plain', servingSize: '100 g', calories: 250, protein: 10, carbs: 49, fat: 1.5 }],
+    });
+    const user = userEvent.setup();
+    setup();
+    await user.type(screen.getByLabelText('Search foods'), 'bagel');
+    const row = await screen.findByTestId('usda-food-row');
+    expect(within(row).queryByRole('button', { name: /quick-add/i })).not.toBeInTheDocument();
+    searchFoodsAction.mockResolvedValue({ foods: [] });
+  });
+
+  it('a USDA one-tap reuses only a saved WEIGHT, never a saved "serving" whose grams came from another entry', async () => {
+    const { searchFoodsAction } = jest.requireMock('@/lib/actions/food-search') as {
+      searchFoodsAction: jest.Mock;
+    };
+    const food = { foodId: 'u2', name: 'Bagel, plain', servingSize: '100 g', calories: 250, protein: 10, carbs: 49, fat: 1.5 };
+    searchFoodsAction.mockResolvedValue({ foods: [food] });
+    const keys = foodKeysFor({ foodId: 'u2', name: 'Bagel, plain' });
+    // Saved as 1.6 "serving" (a 160 g cup on the logged entry): no +, since this
+    // result's "serving" is its own 100 g reference.
+    recordLastUsedServingForKeys(keys, 1.6, 'serving');
+    const user = userEvent.setup();
+    setup();
+    await user.type(screen.getByLabelText('Search foods'), 'bagel');
+    let row = await screen.findByTestId('usda-food-row');
+    expect(within(row).queryByRole('button', { name: /quick-add/i })).not.toBeInTheDocument();
+    cleanup();
+    // Saved as grams: + adds exactly that weight.
+    recordLastUsedServingForKeys(keys, 160, 'g');
+    setup();
+    await user.type(screen.getByLabelText('Search foods'), 'bagel');
+    row = await screen.findByTestId('usda-food-row');
+    expect(within(row).getByRole('button', { name: /quick-add/i })).toBeInTheDocument();
+    expect(row).toHaveTextContent('160');
+    searchFoodsAction.mockResolvedValue({ foods: [] });
+  });
+});
+
+describe('common foods editor', () => {
 
   it('flags a food with no standard serving in the editor, not one with a household unit', async () => {
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByText('Peas'));
+    // Opens on a typical portion, which says so (panel r19); once the amount
+    // is the user's own, the editor says there is no standard serving.
+    expect(screen.getByTestId('add-food-portion-source')).toHaveTextContent('85 g · about 3 oz, a typical portion');
+    expect(screen.queryByTestId('add-food-no-serving')).not.toBeInTheDocument();
+    const amount = screen.getByTestId('add-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '60');
+    expect(screen.queryByTestId('add-food-portion-source')).not.toBeInTheDocument();
     expect(screen.getByTestId('add-food-no-serving')).toHaveTextContent('No standard serving');
     await user.click(screen.getByRole('button', { name: 'Clear selection' }));
     await user.click(screen.getByText('Whole Eggs (large, cooked)'));

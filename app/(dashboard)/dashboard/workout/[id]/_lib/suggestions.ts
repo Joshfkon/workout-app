@@ -782,7 +782,7 @@ export function generateCoachMessage(
   // Week in mesocycle insights
   if (userContext?.weekInMesocycle) {
     if (userContext.weekInMesocycle === 1) {
-      insights.push(`Week 1 of your ${userContext.mesocycleName || 'mesocycle'}—find your working weights and focus on form. Leave 2-3 reps in reserve.`);
+      insights.push(`Week 1 of your ${userContext.mesocycleName || 'training block'}—find your working weights and focus on form. Leave 2-3 reps in reserve.`);
     } else if (userContext.weekInMesocycle >= 4) {
       insights.push(`Week ${userContext.weekInMesocycle}—you should be approaching peak intensity. Push close to failure on your last sets!`);
     }

@@ -131,6 +131,27 @@ describe('POST /api/stripe/webhook', () => {
     expect(writes.map((w) => w.op)).toEqual(['claim']);
   });
 
+  it('does not end access an App Store subscription is paying for', async () => {
+    existingRow = { is_lifetime: false, promo_code_id: null, stripe_subscription_id: 'sub_1', billing_source: 'apple' };
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_4', type: 'customer.subscription.deleted', data: { object: subscription },
+    });
+    const response = await post();
+    expect(response.status).toBe(200);
+    expect(writes.map((w) => w.op)).toEqual(['claim']);
+  });
+
+  it('marks a live Stripe subscription as the billing source', async () => {
+    existingRow = { user_id: 'user-1', is_lifetime: false, promo_code_id: null, billing_source: 'apple' };
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_5', type: 'customer.subscription.updated', data: { object: subscription },
+    });
+    const response = await post();
+    expect(response.status).toBe(200);
+    const write = writes.find((w) => w.table === 'subscriptions');
+    expect(write?.payload).toMatchObject({ tier: 'pro', status: 'active', billing_source: 'stripe' });
+  });
+
   it('rejects a bad signature', async () => {
     mockConstructEvent.mockImplementation(() => { throw new Error('bad sig'); });
     const response = await post();

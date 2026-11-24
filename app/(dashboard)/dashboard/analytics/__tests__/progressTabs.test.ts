@@ -4,6 +4,7 @@ import {
   parseProgressTabParam,
   resolveActiveProgressTab,
   resolveDefaultProgressTab,
+  hideBodyScanPrompts,
 } from '../progressTabs';
 
 describe('orderProgressTabs', () => {
@@ -117,5 +118,13 @@ describe('parseProgressTabParam', () => {
     expect(parseProgressTabParam('goals')).toBe('body-composition');
     expect(parseProgressTabParam('training')).toBeNull();
     expect(parseProgressTabParam(null)).toBeNull();
+  });
+});
+
+describe('hideBodyScanPrompts (panel r19: FFMI/DEXA jargon for beginners)', () => {
+  it('hides the FFMI/scan prompts only for a beginner with no scan', () => {
+    expect(hideBodyScanPrompts(true, 0)).toBe(true);
+    expect(hideBodyScanPrompts(true, 1)).toBe(false);
+    expect(hideBodyScanPrompts(false, 0)).toBe(false);
   });
 });

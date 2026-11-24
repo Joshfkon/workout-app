@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import { formatDate, formatChartTickDate, dateTickStep, showDateTick, parseLocalDate } from '@/lib/utils';
 import { now as clockNow } from '@/lib/clock';
-import { DAY_MS, weighInsInWindow, weightTrendLine, weightTrendMethod } from './weightTrend';
+import { DAY_MS, weighInsInWindow, weightTrendLine } from './weightTrend';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 import type { PhaseType } from '@/types/schema';
 import { PHASE_STYLE, PHASE_BAND_OPACITY } from '@/components/body/phaseStyle';
@@ -55,6 +55,20 @@ interface WeightGraphProps {
   className?: string;
   /** Optional phase spans, drawn as colored background bands. */
   phases?: PhaseBandSpan[];
+  /**
+   * Controlled window in days. Progress passes its page-wide range, and the
+   * chart then shows no range picker of its own (one range for the page);
+   * without it the chart keeps its own 7d / 14d / 30d / 90d picker.
+   */
+  windowDays?: number;
+}
+
+/** "28 days" → "4 weeks" when it's whole weeks past a fortnight. */
+function windowWords(days: number): string {
+  if (days === 365) return 'year';
+  if (days >= 28 && days % 7 === 0) return `${days / 7} weeks`;
+  if (days === 182) return '6 months';
+  return `${days} days`;
 }
 
 /**
@@ -123,14 +137,16 @@ const WeightTooltip = memo(function WeightTooltip({
   );
 });
 
-export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredUnit, className, phases }: WeightGraphProps) {
+export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredUnit, className, phases, windowDays }: WeightGraphProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
+  const controlled = windowDays != null;
+  const days = windowDays ?? TIMEFRAME_DAYS[timeframe];
 
   // Simple, straightforward conversion - no guessing
   const chartData = useMemo(() => {
     // Whole local days, display unit, one decimal — shared with the
     // Progress summary line (weightTrend.weighInsInWindow).
-    const filtered = weighInsInWindow(weightHistory, preferredUnit, TIMEFRAME_DAYS[timeframe], clockNow());
+    const filtered = weighInsInWindow(weightHistory, preferredUnit, days, clockNow());
 
     // Include the year in tick labels only when the range crosses a year boundary.
     const spansYear =
@@ -143,7 +159,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       displayDate: formatChartTickDate(entry.date, spansYear),
       weight: entry.weight,
     }));
-  }, [weightHistory, timeframe, preferredUnit]);
+  }, [weightHistory, days, preferredUnit]);
 
   // Phase spans clipped to the visible window, expressed as category-axis
   // endpoints (first/last visible point inside each span). Rendered as
@@ -181,7 +197,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     [chartData, preferredUnit]
   );
 
-  const timeframeSelector = (
+  const timeframeSelector = controlled ? null : (
     <div className="flex gap-1 bg-fill rounded-lg p-0.5" role="group" aria-label="Weight chart range">
       {(['7d', '14d', '30d', '90d'] as Timeframe[]).map((tf) => (
         <button
@@ -203,10 +219,10 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     // Keep the range control: the user needs a way out to a wider window.
     return (
       <div className={className}>
-        <div className="flex justify-end mb-3">{timeframeSelector}</div>
+        {timeframeSelector && <div className="flex justify-end mb-3">{timeframeSelector}</div>}
         <div className="text-center py-4">
           <p className="text-ink-2 text-subhead">
-            No weigh-ins in the last {TIMEFRAME_DAYS[timeframe]} days. Pick a longer range to see older ones.
+            No weigh-ins in the last {windowWords(days)}. Pick a longer range to see older ones.
           </p>
         </div>
       </div>
@@ -244,7 +260,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
             {changeStart.toFixed(1)} → {changeEnd.toFixed(1)} {preferredUnit}{' '}
             <span className="text-ink-2">
               ({sign}
-              {Math.abs(change).toFixed(1)}) in the last {TIMEFRAME_DAYS[timeframe]} days
+              {Math.abs(change).toFixed(1)}) in the last {windowWords(days)}
             </span>
           </>
         ) : (
@@ -262,7 +278,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
             {trend.perWeek > 0 ? '+' : trend.perWeek < 0 ? '−' : ''}
             {Math.abs(trend.perWeek).toFixed(1)} {preferredUnit}/wk
           </span>
-          . {weightTrendMethod(chartData.length, TIMEFRAME_DAYS[timeframe])} It can differ from your latest weigh-in.
+          . It uses every weigh-in in the range, so it can differ from your latest one.
         </p>
       )}
 
@@ -280,7 +296,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
               interval={0}
               minTickGap={0}
               tickFormatter={(value: string, index: number) =>
-                showDateTick(index, chartData.length, dateTickStep(TIMEFRAME_DAYS[timeframe]))
+                showDateTick(index, chartData.length, dateTickStep(days))
                   ? value
                   : ''
               }

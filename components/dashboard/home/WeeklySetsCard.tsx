@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { IconChevronRight } from '@tabler/icons-react';
+import { IconChevronRight, IconInfoCircle, IconX } from '@tabler/icons-react';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
+import { useHydrated } from '@/hooks/useHydrated';
 import { rowBarClass, rowTextClass, type VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 /** Rows shown before "See all". */
@@ -25,19 +28,98 @@ export function pickWeeklySetsRows(rows: VolumeRow[], max = WEEKLY_SETS_CARD_MAX
   return { shown: sorted.slice(0, max), total: coarse.length };
 }
 
-/** One-line digest for the header: "2 below MEV · 1 over MRV", or all-clear. */
+/**
+ * One-line digest for the header, in plain words with the acronym after:
+ * "2 muscles under their minimum (MEV) · 1 over its max (MRV)", or all-clear.
+ * "13 below MEV" alone was unexplained jargon to 6 of 6 panel personas
+ * (round 19).
+ */
 export function weeklySetsDigest(rows: VolumeRow[]): string {
   const coarse = rows.filter((r) => !r.isChild);
   const below = coarse.filter((r) => r.zone === 'below_mev' && r.warnable).length;
   const over = coarse.filter((r) => r.zone === 'over_mrv').length;
-  const parts = [below > 0 ? `${below} below MEV` : null, over > 0 ? `${over} over MRV` : null].filter(Boolean);
+  const parts = [
+    below > 0 ? `${below} ${below === 1 ? 'muscle' : 'muscles'} under ${below === 1 ? 'its' : 'their'} minimum (MEV)` : null,
+    over > 0 ? `${over} over ${over === 1 ? 'its' : 'their'} max (MRV)` : null,
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : 'Every trained muscle is in its range';
 }
+
+/** The plain-language key for MEV / MRV, shown from the card's info button. */
+export const MEV_MRV_EXPLAINER =
+  'MEV (minimum effective volume) is the fewest hard sets a week that still grow a muscle. ' +
+  'MRV (maximum recoverable volume) is the most you can recover from. Aim to land between the two.';
+
+/**
+ * The one plain line shown under the heading until dismissed, so a first-run
+ * lifter reads what the range means without finding the info key (UX panel
+ * round 20, Sam: "MEV–MRV is shown with no explanation").
+ */
+export const MEV_MRV_FIRST_LINE =
+  'Each bar is a muscle’s hard sets over the last 7 days. The shaded range runs from MEV, the fewest sets a week that still build it, to MRV, the most you can recover from.';
+
+/**
+ * How a set is credited to muscles (services/shared/volumeCredit
+ * perSetGroupCredits): 1 for the exercise's main muscle, ½ for each muscle
+ * it also works, at most 1 per muscle per set; warm-ups don't count. Shown
+ * on the card because an advanced lifter read "every muscle under MEV" as
+ * the app miscounting, with no way to check how (UX panel r22, Dre).
+ */
+export const SETS_COUNTING_RULE =
+  'How sets are counted: each working set counts 1 for the muscle the exercise mainly trains and ½ for each muscle it also works. Warm-ups don’t count.';
+
+/**
+ * The window the bars cover, in plain words, against the plan when there is
+ * one: "Last 7 days (since Wed, Nov 18): 2 workouts of the 4 a week your
+ * plan has." The card counts a ROLLING 7 days (weeklyVolumeWindowStartISO),
+ * not Monday-to-today, so it says so; with fewer workouts than planned, low
+ * bars are the reason, not a miscount (UX panel r22: 2 workouts in the
+ * window read as "all 14 muscles under MEV — implausible").
+ */
+export function weeklySetsWindowLine({
+  windowStart,
+  workouts,
+  plannedPerWeek,
+}: {
+  windowStart: Date;
+  workouts?: number | null;
+  plannedPerWeek?: number | null;
+}): string {
+  const since = windowStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const lead = `Last 7 days (since ${since})`;
+  if (workouts == null) {
+    return plannedPerWeek && plannedPerWeek > 0
+      ? `${lead}. Your plan has ${plannedPerWeek} workout${plannedPerWeek === 1 ? '' : 's'} a week.`
+      : `${lead}.`;
+  }
+  const done = `${workouts} workout${workouts === 1 ? '' : 's'}`;
+  if (plannedPerWeek && plannedPerWeek > 0) {
+    const behind = workouts < plannedPerWeek;
+    return `${lead}: ${done} of the ${plannedPerWeek} a week your plan has${behind ? ', so some muscles read low until the rest are done' : ''}.`;
+  }
+  return `${lead}: ${done} logged.`;
+}
+
+/** Dismissal key in the education store (dismissedHints). */
+export const MEV_MRV_LINE_HINT_ID = 'home-weekly-sets-mev-mrv-line';
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 interface WeeklySetsCardProps {
   rows: VolumeRow[];
+  /**
+   * Heading. Home keeps "Sets this week"; Progress names it the way an
+   * advanced lifter searches for it ("Weekly sets per muscle", UX panel r21).
+   */
+  title?: string;
+  /** Anchor id, so another control can scroll to the card. */
+  id?: string;
+  /** Start of the counted window (weeklyVolumeWindowStartISO), for the "Last 7 days" line. */
+  windowStart?: Date | null;
+  /** Completed workouts in the window; null/undefined when not known. */
+  workouts?: number | null;
+  /** Sessions a week the active training block plans; null without one. */
+  plannedPerWeek?: number | null;
 }
 
 /**
@@ -48,19 +130,85 @@ interface WeeklySetsCardProps {
  * switch. Same rows (buildVolumeRows) as the sheet, the workout strip and the
  * Sets per week page, so the numbers agree everywhere.
  */
-export function WeeklySetsCard({ rows }: WeeklySetsCardProps) {
+export function WeeklySetsCard({
+  rows,
+  title = 'Sets, last 7 days',
+  id,
+  windowStart,
+  workouts,
+  plannedPerWeek,
+}: WeeklySetsCardProps) {
+  const [showKey, setShowKey] = useState(false);
   const { shown, total } = pickWeeklySetsRows(rows);
+  // Client-only (the dismissal lives in persisted local state): rendering it
+  // during hydration would mismatch the server HTML for anyone who dismissed it.
+  const hydrated = useHydrated();
+  const lineDismissed = useEducationStore((s) => s.dismissedHints.includes(MEV_MRV_LINE_HINT_ID));
+  const dismissHint = useEducationStore((s) => s.dismissHint);
+  const showFirstLine = hydrated && !lineDismissed;
   if (shown.length === 0) return null;
   return (
-    <section className="rounded-card bg-card shadow-card px-4 py-3.5" data-testid="home-weekly-sets" aria-labelledby="home-weekly-sets-title">
+    <section
+      id={id}
+      className="scroll-mt-20 rounded-card bg-card shadow-card px-4 py-3.5"
+      data-testid="home-weekly-sets"
+      aria-labelledby="home-weekly-sets-title"
+    >
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="home-weekly-sets-title" className="text-headline text-ink">
-          Sets this week
+          {title}
         </h2>
-        <span className="text-caption text-ink-2">vs MEV–MRV</span>
+        {/* The jargon gets its key one tap away, right where it is used. */}
+        <button
+          type="button"
+          onClick={() => setShowKey((v) => !v)}
+          aria-expanded={showKey}
+          aria-controls="home-weekly-sets-key"
+          className="-my-2 -mr-2 inline-flex min-h-[44px] items-center gap-1 px-2 text-caption text-ink-2 hover:text-ink"
+          data-testid="home-weekly-sets-info"
+        >
+          vs MEV–MRV
+          <IconInfoCircle size={16} aria-hidden="true" />
+          <span className="sr-only">: what do these mean?</span>
+        </button>
       </div>
+      {showFirstLine && (
+        <div
+          className="mt-1.5 flex items-start gap-2 rounded-lg bg-fill px-3 py-2"
+          data-testid="home-weekly-sets-first-line"
+        >
+          <p className="min-w-0 flex-1 text-subhead text-ink">{MEV_MRV_FIRST_LINE}</p>
+          <button
+            type="button"
+            onClick={() => dismissHint(MEV_MRV_LINE_HINT_ID)}
+            className="-my-1.5 -mr-2 inline-flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center gap-1 text-subhead font-semibold text-action"
+            data-testid="home-weekly-sets-first-line-dismiss"
+          >
+            Got it
+            <IconX size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      {showKey && (
+        <p
+          id="home-weekly-sets-key"
+          className="mt-1 rounded-lg bg-fill px-3 py-2 text-caption text-ink-2"
+          data-testid="home-weekly-sets-key"
+        >
+          {MEV_MRV_EXPLAINER}
+        </p>
+      )}
       <p className="mt-0.5 text-subhead text-ink-2" data-testid="home-weekly-sets-digest">
         {weeklySetsDigest(rows)}
+      </p>
+      {/* Dates are client-only: the server renders in its own timezone. */}
+      {hydrated && windowStart && (
+        <p className="mt-0.5 text-subhead text-ink-2" data-testid="home-weekly-sets-window">
+          {weeklySetsWindowLine({ windowStart, workouts, plannedPerWeek })}
+        </p>
+      )}
+      <p className="mt-0.5 text-caption text-ink-2" data-testid="home-weekly-sets-rule">
+        {SETS_COUNTING_RULE}
       </p>
       <ul className="mt-3 space-y-2.5">
         {shown.map((row) => {

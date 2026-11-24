@@ -44,4 +44,16 @@ describe('TargetBasisDisclosure', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change targets' }));
     expect(onChangeTargets).toHaveBeenCalledTimes(1);
   });
+
+  it('starts open when Home links here to explain the target (?explain=target)', () => {
+    render(
+      <TargetBasisDisclosure
+        basis={{ source: 'manual', proteinPerWeight: null } as never}
+        onChangeTargets={jest.fn()}
+        defaultOpen
+      />
+    );
+    expect(screen.getByRole('button', { name: /how this is set/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('target-basis-panel')).toBeInTheDocument();
+  });
 });

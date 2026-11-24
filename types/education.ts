@@ -276,7 +276,7 @@ export const TOOLTIP_CONTENT: Record<string, TooltipContent> = {
   },
   MACROCYCLE: {
     term: 'Macrocycle',
-    shortExplanation: 'A long-term training plan, typically 3-12 months, made up of multiple mesocycles.',
+    shortExplanation: 'A long-term training plan, typically 3-12 months, made up of multiple training blocks.',
     longExplanation: 'Macrocycles help you plan toward major goals like competitions or peak physique. They sequence phases strategically.',
     category: 'periodization',
   },
@@ -471,7 +471,7 @@ export const CONTEXT_CARDS: Record<string, ContextCardContent> = {
       'A deload week helps you recover and grow',
       'Everything is customizable to your preferences',
     ],
-    preview: 'Your mesocycle will include smart progressions and automatic deload timing.',
+    preview: 'Your training block will include smart progressions and automatic deload timing.',
   },
   mesocycleSchedule: {
     icon: '📆',
@@ -489,7 +489,7 @@ export const CONTEXT_CARDS: Record<string, ContextCardContent> = {
     title: 'Fine-tuning your program',
     points: [
       'Training split determines which muscles get trained together',
-      'Longer mesocycles allow more progression before deloading',
+      'Longer training blocks allow more progression before deloading',
       'Our AI recommendations are based on your profile and goals',
       'Feel free to customize - you know your body best',
     ],

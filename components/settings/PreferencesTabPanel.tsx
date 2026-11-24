@@ -134,14 +134,81 @@ export function AlsoLiftsCard() {
   );
 }
 
-interface PreferencesTabPanelProps {
-  // Units
+/**
+ * Weight and length units. Rendered at the TOP of Settings, above the
+ * section tabs, so they're visible without opening anything (panel: "Units
+ * were hidden inside a collapsed Preferences section, which cost me an extra
+ * tap"). Saves on change, with the same inline "Saved" as the Preferences tab.
+ */
+export function UnitsCard({
+  units,
+  handleUnitsChange,
+  lengthUnits,
+  handleLengthUnitsChange,
+  saveStatus,
+}: {
   units: WeightUnit;
   handleUnitsChange: (units: WeightUnit) => void;
   /** Height and body measurements; chosen separately from the weight unit. */
   lengthUnits: LengthUnit;
   handleLengthUnitsChange: (lengthUnits: LengthUnit) => void;
+  saveStatus: PreferenceSaveStatus;
+}) {
+  return (
+    <Card data-testid="settings-units-card">
+      <CardHeader>
+        <CardTitle>Units</CardTitle>
+        <p className="text-body text-ink-2 mt-1">
+          Pick each one on its own, for example kg for the bar and inches for the tape.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div data-testid="units-weight-row">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <p className="text-body font-medium text-ink">
+              Weight <span className="text-subhead text-ink-2 font-normal">(lifts, body weight)</span>
+            </p>
+            <FieldSavePill field="units" status={saveStatus} />
+          </div>
+          <SegmentedControl<WeightUnit>
+            label="Weight units"
+            value={units}
+            onChange={handleUnitsChange}
+            options={[
+              { value: 'kg', label: 'kg' },
+              { value: 'lb', label: 'lb' },
+            ]}
+            className="w-full"
+            size="lg"
+          />
+          <FieldSaveError field="units" status={saveStatus} />
+        </div>
+        <div data-testid="units-length-row">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <p className="text-body font-medium text-ink">
+              Length <span className="text-subhead text-ink-2 font-normal">(height, body measurements)</span>
+            </p>
+            <FieldSavePill field="lengthUnits" status={saveStatus} />
+          </div>
+          <SegmentedControl<LengthUnit>
+            label="Length units"
+            value={lengthUnits}
+            onChange={handleLengthUnitsChange}
+            options={[
+              { value: 'cm', label: 'cm' },
+              { value: 'in', label: 'inches' },
+            ]}
+            className="w-full"
+            size="lg"
+          />
+          <FieldSaveError field="lengthUnits" status={saveStatus} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
+interface PreferencesTabPanelProps {
   // Preferences
   restTimer: number;
   setRestTimer: (value: number) => void;
@@ -165,10 +232,6 @@ interface PreferencesTabPanelProps {
 }
 
 export function PreferencesTabPanel({
-  units,
-  handleUnitsChange,
-  lengthUnits,
-  handleLengthUnitsChange,
   restTimer,
   setRestTimer,
   showFormCues,
@@ -189,59 +252,9 @@ export function PreferencesTabPanel({
 }: PreferencesTabPanelProps) {
   return (
     <div className="space-y-6">
-      {/* Units first: the setting people come to Preferences for most.
-          Weight and length are separate choices, both shown up front. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Units</CardTitle>
-          <p className="text-body text-ink-2 mt-1">
-            Pick each one on its own, for example kg for the bar and inches for the tape.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div data-testid="units-weight-row">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <p className="text-body font-medium text-ink">
-                Weight <span className="text-caption text-ink-3 font-normal">(lifts, body weight)</span>
-              </p>
-              <FieldSavePill field="units" status={saveStatus} />
-            </div>
-            <SegmentedControl<WeightUnit>
-              label="Weight units"
-              value={units}
-              onChange={handleUnitsChange}
-              options={[
-                { value: 'kg', label: 'kg' },
-                { value: 'lb', label: 'lb' },
-              ]}
-              className="w-full"
-            />
-            <FieldSaveError field="units" status={saveStatus} />
-          </div>
-          <div data-testid="units-length-row">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <p className="text-body font-medium text-ink">
-                Length <span className="text-caption text-ink-3 font-normal">(height, body measurements)</span>
-              </p>
-              <FieldSavePill field="lengthUnits" status={saveStatus} />
-            </div>
-            <SegmentedControl<LengthUnit>
-              label="Length units"
-              value={lengthUnits}
-              onChange={handleLengthUnitsChange}
-              options={[
-                { value: 'cm', label: 'cm' },
-                { value: 'in', label: 'inches' },
-              ]}
-              className="w-full"
-            />
-            <FieldSaveError field="lengthUnits" status={saveStatus} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Right under Units: the two "make it easier to use" choices. Text
-          size applies and saves on tap (hooks/useTextSize). */}
+      {/* Text size and Beginner mode: the two "make it easier to use"
+          choices (text size applies and saves on tap, hooks/useTextSize).
+          Units live at the top of Settings (UnitsCard). */}
       <Card>
         <CardHeader>
           <CardTitle>Text size</CardTitle>

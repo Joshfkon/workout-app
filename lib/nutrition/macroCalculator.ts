@@ -282,7 +282,7 @@ export function activityMultiplierFromSteps(avgDailySteps: number): number {
 }
 
 // %BW/week goals
-const GOAL_PERCENT_BW: Record<Goal, { percentBW: number; description: string }> = {
+export const GOAL_PERCENT_BW: Record<Goal, { percentBW: number; description: string }> = {
   aggressive_cut: { percentBW: -0.75, description: "Aggressive cut (~0.75% BW/week)" },
   moderate_cut: { percentBW: -0.5, description: "Moderate cut (~0.5% BW/week)" },
   slow_cut: { percentBW: -0.25, description: "Slow cut (~0.25% BW/week)" },
@@ -478,7 +478,12 @@ export function calculateTDEE(stats: UserStats, activity: ActivityConfig): numbe
   return Math.round(tdee);
 }
 
-function getLossRateCap(bodyFatPercent?: number): number {
+/**
+ * Fastest loss the calculator allows, % of body weight a week: leaner =
+ * slower, to protect muscle. Exported so onboarding can say why a lean
+ * lifter's cut is smaller than the pace picked.
+ */
+export function getLossRateCap(bodyFatPercent?: number): number {
   if (!bodyFatPercent || bodyFatPercent <= 0) return GUARDRAILS.DEFAULT_LOSS_RATE_CAP;
   for (const tier of GUARDRAILS.LOSS_RATE_BY_BF) {
     if (bodyFatPercent <= tier.maxBF) return tier.maxLossPercent;
@@ -486,7 +491,12 @@ function getLossRateCap(bodyFatPercent?: number): number {
   return GUARDRAILS.DEFAULT_LOSS_RATE_CAP;
 }
 
-function getLeanMassLbs(stats: UserStats): number {
+/**
+ * Lean body mass in lb: from body fat when known, else a typical-adult
+ * estimate (20% men, 28% women). Exported so onboarding can say how its
+ * protein figure was reached.
+ */
+export function getLeanMassLbs(stats: Pick<UserStats, 'weightKg' | 'sex' | 'bodyFatPercent'>): number {
   const bw = kgToLbs(stats.weightKg);
   if (stats.bodyFatPercent && stats.bodyFatPercent > 0) {
     return bw * (1 - stats.bodyFatPercent / 100);
@@ -505,6 +515,14 @@ function getCarbFloor(activity: ActivityConfig): { grams: number; tag: string } 
   if (w >= 6) return { grams: GUARDRAILS.MIN_CARBS_LIFT_6P, tag: "lifting 6+ days/wk" };
   if (w >= 4) return { grams: GUARDRAILS.MIN_CARBS_LIFT_4_5, tag: "lifting 4–5 days/wk" };
   return { grams: GUARDRAILS.MIN_CARBS_LIFT_2_3, tag: "lifting 2–3 days/wk" };
+}
+
+/**
+ * Protein before any medication multiplier, in g per lb of lean body mass:
+ * 1.1 on a cut (protects muscle in a deficit), else 1.0, the "lifting floor".
+ */
+export function baseProteinPerLbLeanMass(goal: Goal): number {
+  return goal.includes("cut") ? 1.1 : 1.0;
 }
 
 /**
@@ -542,10 +560,8 @@ function allocateMacros(
   const bwLbs = kgToLbs(stats.weightKg);
   const lbm = getLeanMassLbs(stats);
 
-  const isCut = goal.includes("cut");
-
   // Protein target (then clamp) - THIS IS PROTECTED
-  const base = isCut ? 1.1 : 1.0;
+  const base = baseProteinPerLbLeanMass(goal);
   const requestedPPerLb = base * peptideCfg.proteinMultiplier;
 
   const pPerLb = clamp(
@@ -1090,12 +1106,15 @@ export function getGoalOptions(): Array<{ value: Goal; label: string; descriptio
 
 export function getActivityOptions(): Array<{ value: ActivityLevel; label: string; description: string }> {
   return [
-    { value: "sedentary", label: "Sedentary", description: "Desk job, little exercise" },
-    { value: "light", label: "Lightly Active", description: "Light exercise 1–3 days/week" },
-    { value: "moderate", label: "Moderately Active", description: "Moderate exercise 3–5 days/week" },
-    { value: "active", label: "Very Active", description: "Hard exercise 6–7 days/week" },
-    { value: "very_active", label: "Extremely Active", description: "Very hard exercise + physical job" },
-    { value: "athlete", label: "Athlete", description: "Professional/competitive athlete" },
+    // Daily life OUTSIDE workouts: calculateTDEE adds workout energy on top
+    // of BMR × this multiplier, so these must not describe exercise (the old
+    // "Moderate exercise 3–5 days/week" wording double-counted workouts).
+    { value: "sedentary", label: "Sedentary", description: "Mostly sitting, under ~5,000 steps a day" },
+    { value: "light", label: "Lightly Active", description: "Desk job plus some walking, ~5,000–8,000 steps" },
+    { value: "moderate", label: "Moderately Active", description: "On your feet a lot, ~8,000–12,000 steps" },
+    { value: "active", label: "Very Active", description: "Physical job or 12,000+ steps a day" },
+    { value: "very_active", label: "Extremely Active", description: "Hard physical labour most of the day" },
+    { value: "athlete", label: "Athlete", description: "Training twice a day plus an active job" },
   ];
 }
 

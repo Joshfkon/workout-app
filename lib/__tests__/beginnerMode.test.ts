@@ -1,4 +1,5 @@
 import {
+  beginnerModeSummaryLine,
   beginnerMuscleName,
   beginnerPickReason,
   beginnerSuggestedFocus,
@@ -23,6 +24,15 @@ describe('resolveBeginnerMode', () => {
   });
 });
 
+describe('beginnerModeSummaryLine', () => {
+  it('says what the mode is and how to change it, either way', () => {
+    expect(beginnerModeSummaryLine(true)).toMatch(/simpler workout screen/i);
+    expect(beginnerModeSummaryLine(true)).toMatch(/Turn it off/);
+    expect(beginnerModeSummaryLine(false)).toMatch(/Turn it on/);
+    expect(beginnerModeSummaryLine(false)).toMatch(/simpler workout screen/);
+  });
+});
+
 describe('effort phrases', () => {
   it('says the target in words', () => {
     expect(effortTargetPhrase(2)).toBe('stop 2 reps short of failure');
@@ -42,7 +52,10 @@ describe('plainRirText', () => {
   it.each([
     ['8 reps @ 2 RIR vs 3 target — load up', '8 reps with 2 reps left vs 3 target — load up'],
     ['hit 1 RIR vs 2 target', 'hit 1 rep left vs 2 target'],
-    ['Target: 8–12 reps leaving 2 in reserve (RIR 2).', 'Target: 8–12 reps stopping 2 reps short of failure.'],
+    ['Target: 8–12 reps leaving 2 in reserve (RIR 2).', 'Target: 8–12 reps stopping when you could still do 2 more.'],
+    ['Stop 2 reps short of failure', 'Stop when you could still do 2 more'],
+    ['then stop 2 reps short of failure.', 'then stop when you could still do 2 more.'],
+    ['stopping 1 rep short of failure', 'stopping when you could still do 1 more'],
     ['predicts about 9 reps to failure (0 RIR).', 'predicts about 9 reps to failure (0 reps left).'],
     ['with ≥2 RIR in 3 sessions', 'with ≥2 reps left in 3 sessions'],
     ['with nothing left in reserve — too heavy', 'with nothing left — too heavy'],

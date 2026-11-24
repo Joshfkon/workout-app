@@ -40,31 +40,9 @@ import {
   type PlanWeekPreview,
 } from '../_lib/planPreview';
 import type { FullProgramRecommendation } from '@/types/schema';
+import { PlanSkeleton } from '../_components/PlanSkeleton';
 
 const CARD_CLASS = 'rounded-card bg-card shadow-card';
-
-function PlanSkeleton() {
-  return (
-    <div className="max-w-lg mx-auto space-y-4" data-testid="mesocycle-plan-loading">
-      <div className={`${CARD_CLASS} p-4 animate-pulse space-y-3`} aria-busy="true">
-        <div className="h-3 w-24 bg-fill rounded" />
-        <div className="h-6 w-44 bg-fill rounded" />
-        <div className="h-3 w-56 bg-fill rounded" />
-      </div>
-      <div className="flex gap-2">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-12 w-16 bg-fill rounded-xl animate-pulse" />
-        ))}
-      </div>
-      {[0, 1, 2].map((i) => (
-        <div key={i} className={`${CARD_CLASS} p-4 animate-pulse space-y-2`} aria-busy="true">
-          <div className="h-4 w-32 bg-fill rounded" />
-          <div className="h-3 w-48 bg-fill rounded" />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function BackLink() {
   return (
@@ -73,7 +51,7 @@ function BackLink() {
       className="inline-flex items-center gap-1 text-subhead font-medium text-ink-2 hover:text-ink transition-colors"
     >
       <IconChevronLeft size={16} aria-hidden="true" />
-      Mesocycle
+      Training block
     </Link>
   );
 }
@@ -338,14 +316,14 @@ function PlanContent() {
         <div className={`${CARD_CLASS} p-6 text-center`}>
           <h1 className="text-headline font-bold text-ink">No plan to preview</h1>
           <p className="text-subhead text-ink-2 mt-1">
-            Plan a mesocycle and you&apos;ll be able to read every week of it here before you
+            Plan a training block and you&apos;ll be able to read every week of it here before you
             train.
           </p>
           <Link
             href="/dashboard/mesocycle/new"
             className="inline-flex items-center gap-2 mt-4 px-4 py-2.5 rounded-xl bg-action text-on-action text-body font-semibold hover:opacity-90 transition-opacity"
           >
-            Plan a mesocycle
+            Plan a training block
             <ProTag feature="mesocycleBuilder" tone="onAccent" />
           </Link>
         </div>
@@ -410,14 +388,14 @@ function PlanContent() {
           </p>
           <p className="text-subhead text-ink-2 mt-1">
             It was created before plans were saved week by week, so its exercises are chosen when
-            each workout starts. Regenerating the schedule from the Mesocycle page will build a
+            each workout starts. Regenerating the schedule from the Training block page will build a
             full plan you can read here.
           </p>
           <Link
             href="/dashboard/mesocycle"
             className="inline-block mt-3 text-subhead font-medium text-action transition-colors"
           >
-            Go to mesocycle
+            Go to training block
           </Link>
         </div>
       ) : (
@@ -497,7 +475,7 @@ function PlanContent() {
 }
 
 export default function MesocyclePlanPage() {
-  useDocumentTitle('Mesocycle Plan');
+  useDocumentTitle('Training block plan');
   return (
     <Suspense fallback={<PlanSkeleton />}>
       <PlanContent />

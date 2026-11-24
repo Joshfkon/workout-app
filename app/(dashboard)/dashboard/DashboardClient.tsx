@@ -50,6 +50,8 @@ import { statedTrackingFocus, type StatedTrackingFocus } from '@/lib/onboarding/
 import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import { startMesocycleWorkoutSession } from '@/lib/training/startMesocycleSession';
+import type { WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
+import { runNavigateFirstStart } from '@/lib/training/pendingWorkoutStart';
 import { fetchActiveMesocycle, type ActiveMesocycleRow } from '@/lib/training/fetchActiveMesocycle';
 import {
   applyDeloadToUpcomingWeek,
@@ -70,6 +72,7 @@ import type { TrackingKind } from '@/services/trackingReminders';
 import { intakePaceVerdict } from '@/components/dashboard/home/intakePace';
 import { FreestyleStartActions } from '@/components/dashboard/home/FreestyleStartActions';
 import { HomeStartWorkout } from '@/components/dashboard/home/HomeStartWorkout';
+import { PlanBlockShortcut } from '@/components/dashboard/home/PlanBlockShortcut';
 import { TextSizePromptCard } from '@/components/dashboard/home/TextSizePromptCard';
 import { useTrackingFocus } from '@/hooks/useTrackingFocus';
 import { useLiveHeroWorkout } from '@/hooks/useLiveHeroWorkout';
@@ -85,6 +88,7 @@ import { updateTodayWorkoutWidget, updateNutritionWidget } from '@/lib/integrati
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
 import type { TrainingStyle } from '@/lib/training/trainingStyle';
 import { fetchTrainingStyleData } from '@/lib/actions/dashboard';
+import { usePrefetchSettings } from '@/hooks/useSettingsQuery';
 import type { TrainingPhase, UpdatePhaseResult } from '@/lib/actions/phase';
 
 // Loading placeholder for lazily-loaded modal content
@@ -314,6 +318,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Food-only (said "food tracking", never lifted here): no workout entries.
   const { foodOnly } = useTrackingFocus();
   const beginnerMode = useBeginnerMode();
+  // Warm Settings behind the gear so its first open renders at once.
+  usePrefetchSettings();
   const supabase = createUntypedClient();
 
   const [isLoading, setIsLoading] = useState(!hasInitialData);
@@ -388,10 +394,44 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [standaloneDeload, setStandaloneDeload] = useState<DeloadRecommendation | null>(null);
   const [plannedLightWeekType, setPlannedLightWeekType] = useState<DeloadType | null>(null);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
+  const [startWorkoutStage, setStartWorkoutStage] = useState<WorkoutStartStage>('preparing');
   const [startWorkoutError, setStartWorkoutError] = useState<string | null>(null);
   // Full active mesocycle row with all fields for startMesocycleWorkoutSession
   const [fullActiveMeso, setFullActiveMeso] = useState<ActiveMesocycleRow | null>(null);
   const activeMesocycleId = planMesocycle?.id ?? null;
+
+  // The server snapshot leaves out the full mesocycle row (program_data is
+  // large), so a Start tap used to fetch it first: one more round trip before
+  // the workout screen. Fetch it once Home is idle when today offers a
+  // scheduled start, so the tap goes straight to building the session.
+  const needsFullMesoForStart =
+    !!userId && !!activeMesocycle && !!scheduledWorkout && fullActiveMeso?.id !== activeMesocycle.id;
+  useEffect(() => {
+    if (!needsFullMesoForStart || !userId) return;
+    let cancelled = false;
+    const load = () => {
+      fetchActiveMesocycle(supabase, userId)
+        .then((row) => {
+          if (!cancelled && row) setFullActiveMeso(row);
+        })
+        .catch(() => {
+          // Optimisation only: the start path fetches it itself if missing.
+        });
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(load, { timeout: 3000 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(id);
+      };
+    }
+    const t = window.setTimeout(load, 1000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsFullMesoForStart, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -494,6 +534,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const handleStartWorkout = async () => {
     if (!activeMesocycle || !scheduledWorkout || isStartingWorkout) return;
     setIsStartingWorkout(true);
+    setStartWorkoutStage('preparing');
     setStartWorkoutError(null);
     try {
       // Fetch the full mesocycle row if we don't have it yet. The initial
@@ -503,17 +544,34 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       if (!mesoForStart || mesoForStart.id !== activeMesocycle.id) {
         if (!userId) throw new Error('User not authenticated');
         mesoForStart = await fetchActiveMesocycle(supabase, userId);
-        if (!mesoForStart) throw new Error('Active mesocycle not found');
+        if (!mesoForStart) throw new Error('Active training block not found');
         setFullActiveMeso(mesoForStart);
       }
 
-      const { sessionId } = await startMesocycleWorkoutSession({
-        supabase,
-        mesocycle: mesoForStart,
-        todayWorkout: scheduledWorkout,
-        completedSessions: activeMesocycle.workoutsCompleted,
+      const meso = mesoForStart;
+      // Navigate-first: the workout screen opens as soon as the session row
+      // exists (2 round trips) and shows its skeleton while the exercises are
+      // built there, instead of Home waiting ~8 round trips for the whole
+      // build and only then starting the route load.
+      await runNavigateFirstStart({
+        start: ({ sessionReady, stage, preview }) =>
+          startMesocycleWorkoutSession({
+            supabase,
+            mesocycle: meso,
+            todayWorkout: scheduledWorkout,
+            completedSessions: activeMesocycle.workoutsCompleted,
+            userId: userId ?? undefined,
+            onStage: (s, id) => {
+              if (s === 'building') sessionReady(id);
+              stage(s);
+            },
+            onPreview: preview,
+          }),
+        navigate: (id) => {
+          setStartWorkoutStage('opening');
+          router.push(`/dashboard/workout/${id}`);
+        },
       });
-      router.push(`/dashboard/workout/${sessionId}`);
     } catch (err) {
       console.error('Failed to start workout:', err);
       const message = err instanceof Error ? err.message : 'Failed to start workout';
@@ -1659,6 +1717,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         coachLine={coachLine}
         onStartWorkout={handleStartWorkout}
         isStarting={isStartingWorkout}
+        startStage={startWorkoutStage}
         freestyleActions={isFreestyle ? <FreestyleStartActions userId={userId} /> : undefined}
         foodFocus={foodFocus}
       />
@@ -1668,6 +1727,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           opens the start options. Food-focused users get it as a compact
           row below the logging chips instead. */}
       {!foodFocus && !foodOnly && !heroOffersWorkoutStart(heroVariant) && <HomeStartWorkout userId={userId} />}
+
+      {/* No active block: the builder one tap from Home. The no-plan hero
+          already offers "Build a program", and the food-focused row carries
+          its own link, so neither repeats it. */}
+      {!foodFocus && !foodOnly && !!userId && !activeMesocycle && heroVariant !== 'no-plan' && (
+        <PlanBlockShortcut />
+      )}
 
       {/* Quick log chips, right under the hero: logging is the most
           frequent thing done on Home, so it sits above the glance cards. */}
@@ -1705,7 +1771,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       {/* Weekly sets vs MEV–MRV, on Home again (it had moved into the Today
           sheet). Lifters only; beginner mode keeps it out, as it does on the
           workout screen. Same rows as the sheet and the Sets per week page. */}
-      {!foodOnly && !beginnerMode && <WeeklySetsCard rows={volumeRows} />}
+      {!foodOnly && !beginnerMode && (
+        // The window is a rolling 7 days (weeklyVolumeWindowStartISO), said
+        // on the card so low bars early in a week aren't read as a miscount.
+        <WeeklySetsCard
+          rows={volumeRows}
+          windowStart={new Date(weeklyVolumeWindowStartISO())}
+          plannedPerWeek={activeMesocycle?.daysPerWeek ?? null}
+        />
+      )}
 
       {/* 3. At most one nudge */}
       {nudgeCard}

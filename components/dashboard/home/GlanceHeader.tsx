@@ -72,23 +72,39 @@ export function GlanceHeader({
             {readinessScore}
           </button>
         )}
-        {/* 44px hit area (was 36: a tap just off the icon missed), a
-            pressed state, and a spinner from the tap until Settings arrives
-            — the panel read the silent wait as a missed first tap. */}
+        {/* A labelled "Settings" pill, 48px tall: the bare 22px gear read as
+            small and unlabelled (UX panel round 20, Frank). Pressed state and
+            a spinner from the tap until Settings arrives — the panel read the
+            silent wait as a missed first tap. */}
         <PendingLink
           href="/dashboard/settings"
-          aria-label="Settings"
-          className="-m-1 flex h-11 w-11 items-center justify-center rounded-full text-ink-2 transition-[background-color,transform] hover:bg-fill active:scale-95 active:bg-fill"
-          pendingClassName="bg-fill text-ink"
+          className="relative flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-fill px-3.5 text-body font-semibold text-ink transition-[filter,transform] hover:brightness-110 active:scale-95"
+          pendingClassName="text-ink"
           data-testid="home-settings"
         >
-          {(pending) =>
-            pending ? (
-              <IconLoader2 size={22} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <IconSettings size={22} aria-hidden="true" />
-            )
-          }
+          {(pending) => (
+            <>
+              {pending ? (
+                <IconLoader2 size={22} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <IconSettings size={22} aria-hidden="true" />
+              )}
+              Settings
+              {pending && (
+                // Words, not just a spinner: on a slow load the panel read
+                // the spinner alone as "my tap didn't register" and tapped
+                // again (round 19). Absolutely placed under the pill, so
+                // nothing shifts; repeat taps are ignored (PendingLink).
+                <span
+                  role="status"
+                  data-testid="home-settings-opening"
+                  className="pointer-events-none absolute right-0 top-full mt-0.5 whitespace-nowrap text-caption font-medium text-ink-2"
+                >
+                  Opening Settings…
+                </span>
+              )}
+            </>
+          )}
         </PendingLink>
       </div>
     </div>

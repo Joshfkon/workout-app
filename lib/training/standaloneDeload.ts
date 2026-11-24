@@ -30,6 +30,7 @@
 // calling client component.
 // ============================================================
 
+import { effectiveTrainingAge } from '@/services/mesocycleBuilder';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   checkDeloadTriggers,
@@ -153,7 +154,7 @@ export function buildStandalonePerformance(
  */
 export function rewriteStandaloneReason(reason: string): string {
   return reason.replace(
-    'weeks since mesocycle start - overdue for deload',
+    'weeks since training block start - overdue for deload',
     'weeks of training without a break - overdue for a light week'
   );
 }
@@ -203,7 +204,8 @@ export function buildStandaloneProfile(
     stressLevel: clampRating(row?.stress_level, 3),
     availableEquipment: [],
     injuryHistory: [],
-    trainingAge: row?.training_age_years ?? 0,
+    // 0/null = never set: derive from experience (services/mesocycleBuilder).
+    trainingAge: effectiveTrainingAge(row?.training_age_years ?? null, experience === 'novice' || experience === 'intermediate' || experience === 'advanced' ? experience : 'novice'),
     heightCm: null,
     latestDexa: null,
   };
