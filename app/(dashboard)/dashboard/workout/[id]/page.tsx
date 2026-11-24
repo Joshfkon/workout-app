@@ -43,6 +43,8 @@ import {
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWatchBridge } from '@/hooks/useWatchBridge';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
+import { usePendingWorkoutBuildStage } from '@/hooks/usePendingWorkoutBuild';
+import { awaitPendingWorkoutBuild } from '@/lib/training/pendingWorkoutStart';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { useBeginnerMode } from '@/hooks/useBeginnerMode';
 import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
@@ -448,6 +450,9 @@ export default function WorkoutPage() {
   const searchParams = useSearchParams();
   const sessionId = params.id as string;
   const fromCreate = searchParams.get('fromCreate') === 'true';
+  // A navigate-first start (lib/training/pendingWorkoutStart) may still be
+  // writing this session's exercises; the skeleton says which step it's on.
+  const pendingBuildStage = usePendingWorkoutBuildStage(sessionId);
   const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
   // Onboarding's "areas to go easy on", prefilled into the check-in at mild.
   const standingCheckInInjuries = useMemo(
@@ -1685,12 +1690,20 @@ export default function WorkoutPage() {
         // phone, the user re-logs them, and the flush makes duplicates. The
         // snapshot is taken before the read so a set that flushes while the
         // read is in flight is covered by one side or the other.
-        if (typeof navigator === 'undefined' || navigator.onLine) {
-          await Promise.race([
-            flushSetOutbox(supabase).catch(() => null),
-            new Promise((resolve) => setTimeout(resolve, 4000)),
-          ]);
-        }
+        //
+        // A start that navigated here before it finished building (navigate-
+        // first, lib/training/pendingWorkoutStart) is awaited alongside the
+        // flush, so the read below never sees a half-built workout.
+        const [buildError] = await Promise.all([
+          awaitPendingWorkoutBuild(sessionId),
+          typeof navigator === 'undefined' || navigator.onLine
+            ? Promise.race([
+                flushSetOutbox(supabase).catch(() => null),
+                new Promise((resolve) => setTimeout(resolve, 4000)),
+              ])
+            : null,
+        ]);
+        if (buildError) throw new Error(`Couldn't finish setting up this workout: ${buildError}`);
         const queuedAtLoad = await listOutbox().catch(() => [] as OutboxEntry[]);
 
         const loaded = await loadWorkoutSession(supabase, sessionId);
@@ -6782,8 +6795,14 @@ export default function WorkoutPage() {
             <div className="h-11 w-24 bg-fill rounded-lg" />
           </div>
         </div>
-        <p className="text-subhead text-ink-3">
-          {fromCreate ? 'Starting workout…' : 'Loading workout…'}
+        <p role="status" className="text-subhead text-ink-3">
+          {pendingBuildStage === 'building'
+            ? 'Picking weights from your history…'
+            : pendingBuildStage === 'saving'
+              ? 'Saving your exercises…'
+              : fromCreate
+                ? 'Starting workout…'
+                : 'Loading workout…'}
         </p>
         <SkeletonExercise />
         <SkeletonExercise />

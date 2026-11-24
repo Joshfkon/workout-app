@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { consumeNavTransition, type NavTransition } from '@/lib/navigation/navTransition';
 
@@ -16,9 +16,22 @@ import { consumeNavTransition, type NavTransition } from '@/lib/navigation/navTr
  * jump during the animation. The wrapper is always rendered — swapping it out
  * when the animation ends would remount the screen.
  */
+/** False until the first client render after a full page load has hydrated. */
+let hydrated = false;
+
 export default function DashboardTemplate({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
-  const [transition, setTransition] = useState<NavTransition>(() => consumeNavTransition(pathname));
+  // A full page load has nothing to slide in from, and the server always
+  // renders 'none': using a pending 'push' during hydration made the
+  // attribute differ between server and client (React hydration error on
+  // the builder). Later SPA navigations mount client-only and animate.
+  const [transition, setTransition] = useState<NavTransition>(() => {
+    const next = consumeNavTransition(pathname);
+    return hydrated ? next : 'none';
+  });
+  useEffect(() => {
+    hydrated = true;
+  }, []);
 
   return (
     <div

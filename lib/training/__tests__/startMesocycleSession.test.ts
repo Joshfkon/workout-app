@@ -222,6 +222,35 @@ describe('startMesocycleWorkoutSession — today\'s existing session handling', 
     // Sessions record how they were started; the mesocycle path is 'scheduled'.
     expect(row.origin).toBe('scheduled');
   });
+
+  it('reports the session id after two round trips, before the build reads (navigate-first)', async () => {
+    const { supabase, queries } = createSupabaseMock(makeResponder({ existingSession: null }));
+    const getUser = jest.fn(async () => ({ data: { user: { id: 'user-1' } } }));
+    (supabase as unknown as { auth: { getUser: typeof getUser } }).auth.getUser = getUser;
+    let queriesWhenReady = -1;
+
+    await startMesocycleWorkoutSession({
+      supabase,
+      mesocycle,
+      todayWorkout: null,
+      userId: 'user-1',
+      onStage: (stage) => {
+        if (stage === 'building' && queriesWhenReady < 0) queriesWhenReady = queries.length;
+      },
+    });
+
+    // A caller that knows the user skips the auth round trip.
+    expect(getUser).not.toHaveBeenCalled();
+    // Only the first parallel batch (profile, user, today's session, default
+    // gym) and the session insert precede the id: the completed count and
+    // the build's reads come after it.
+    const before = queries.slice(0, queriesWhenReady);
+    expect(before.map((q) => `${q.table}:${q.method}`)).toEqual(
+      expect.arrayContaining(['user_profiles:select', 'users:select', 'workout_sessions:select', 'workout_sessions:insert'])
+    );
+    expect(before.some((q) => q.filters['state'] === 'completed')).toBe(false);
+    expect(queries.slice(queriesWhenReady).some((q) => q.filters['state'] === 'completed')).toBe(true);
+  });
 });
 
 // ============================================================

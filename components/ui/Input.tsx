@@ -10,8 +10,9 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   /**
-   * 'large': bigger label, field text and hint, for screens read before the
-   * user can pick a text size (sign-up / sign-in; UX panel round 19).
+   * 'large': bigger label, field text and hint (17px, nothing smaller), for
+   * screens read before the user can pick a text size (sign-up / sign-in;
+   * UX panel rounds 19 and 20).
    */
   inputSize?: 'default' | 'large';
 }
@@ -77,10 +78,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
         </div>
         {error && (
-          <p className={cn('mt-1.5 text-status-bad', large ? 'text-body' : 'text-subhead')}>{error}</p>
+          <p className={cn('mt-1.5 text-status-bad', large ? 'text-headline font-normal' : 'text-subhead')}>{error}</p>
         )}
         {hint && !error && (
-          <p className={cn('mt-1.5', large ? 'text-body text-ink-2' : 'text-subhead text-ink-3')}>{hint}</p>
+          <p className={cn('mt-1.5', large ? 'text-headline font-normal text-ink-2' : 'text-subhead text-ink-3')}>{hint}</p>
         )}
       </div>
     );

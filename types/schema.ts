@@ -1319,6 +1319,8 @@ export interface ExerciseTrend {
   discontinuityDate?: string | null;
   /** Points the reported slope was actually fitted on. */
   pointsUsed?: number;
+  /** Days between the first and last point the slope was fitted on. */
+  spanDays?: number;
 }
 
 /**
@@ -1736,6 +1738,29 @@ export interface FullProgramRecommendation {
    * generated before it existed.
    */
   volumeCaps?: Partial<Record<MuscleGroup, { wanted: number; fits: number }>>;
+
+  /**
+   * What each muscle priority did to the plan: peak-week credited sets per
+   * week of the prioritized group (or head) without the priorities
+   * (`before`) and with them (`after`). Absent when no priority is set.
+   */
+  priorityEffects?: PriorityEffect[];
+
+  /** The per-muscle per-session ceiling the plan was built with (12 default). */
+  maxSetsPerMusclePerSession?: number;
+}
+
+/** One priority's effect on the plan (FullProgramRecommendation.priorityEffects). */
+export interface PriorityEffect {
+  muscleGroup: MuscleGroup;
+  /** Set when the priority is for one head (side delts…). */
+  head?: StandardMuscleGroup;
+  /** 'up' = high priority, 'down' = low. */
+  direction: 'up' | 'down';
+  before: number;
+  after: number;
+  /** Sessions a week that train the group. */
+  sessionsPerWeek: number;
 }
 
 // ============ REP RANGE SYSTEM ============

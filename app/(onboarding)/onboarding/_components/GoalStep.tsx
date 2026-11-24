@@ -3,21 +3,41 @@
 import { useEffect, useState } from 'react';
 import { IconCheck, IconChevronDown, IconInfoCircle } from '@tabler/icons-react';
 import { Button, Input, Toggle } from '@/components/ui';
+import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 import {
   BEGINNER_MODE_DESCRIPTION,
   BEGINNER_MODE_TITLE,
   beginnerModeSummaryLine,
 } from '@/lib/beginnerMode';
 import type { TrainingGoal } from '@/lib/onboarding/onboardingProgress';
+import { preselectionNote, type GoalPreselection } from '@/lib/onboarding/goalPreselection';
+import { PROTEIN_EDIT_RANGE, type StarterProteinBasis } from '@/lib/nutrition/phaseTargets';
+import type { WeightUnit } from '@/types/schema';
 import { STANDING_INJURY_OPTIONS, type StandingInjuryArea } from '@/lib/training/standingInjuries';
 
 // Plain labels first, the gym term in brackets, plus one plain line, so a
 // beginner (or someone easing back after an injury) knows what they're
 // picking. The stored values (users.goal) are unchanged.
+// The paces quoted are the defaults the targets use (phaseToNutritionGoal:
+// moderate cut, lean bulk); the next step lets a lifter change them.
 const GOAL_OPTIONS: { value: TrainingGoal; label: string; term?: string; description: string }[] = [
-  { value: 'cut', label: 'Lose fat', term: 'cut', description: 'Eat a little less than you burn, keeping your muscle.' },
-  { value: 'maintenance', label: 'Maintain', description: 'Stay at about your weight. Good for getting back into it.' },
-  { value: 'bulk', label: 'Build muscle', term: 'bulk', description: 'Eat a little more than you burn to gain muscle.' },
+  {
+    value: 'cut',
+    label: 'Lose fat',
+    term: 'cut',
+    description: 'Eat a little less than you burn to lose about 0.5% of your body weight a week, keeping your muscle.',
+  },
+  {
+    value: 'maintenance',
+    label: 'Maintain',
+    description: 'Eat about what you burn and keep your weight steady while you train. Good for getting back into it.',
+  },
+  {
+    value: 'bulk',
+    label: 'Build muscle',
+    term: 'bulk',
+    description: 'Eat a little more than you burn to gain about 0.25% of your body weight a week, mostly muscle.',
+  },
 ];
 
 // Food-only users (said "No, food tracking" at sign-up): the same goals,
@@ -36,19 +56,55 @@ const FOOD_GOAL_DESCRIPTIONS: Record<TrainingGoal, string> = {
 /** Where the daily numbers come from, in one plain line. */
 export const TARGETS_SOURCE_COPY =
   'Calories: your estimated daily burn (from your weight, height, age, sex and a typical activity level), ' +
-  'set a little lower to lose fat or a little higher to build muscle. Protein: scaled to your lean body mass.';
+  'set a little lower to lose fat or a little higher to build muscle.';
 
 /** Daily targets shown under the goal: new ones for this goal, or ones the user already has. */
 export interface GoalStepTargets {
   calories: number;
   protein: number;
   kind: 'new' | 'existing';
+  /** How the protein figure was reached (new targets only). */
+  proteinBasis?: StarterProteinBasis;
+}
+
+/**
+ * How protein is set, in one plain line with the user's own numbers. Pure
+ * (exported for tests). The rule is the macro calculator's: 1 g per lb of
+ * lean mass (1.1 on a cut), lean mass from body fat when given.
+ */
+export function proteinBasisLine(basis: StarterProteinBasis, units: WeightUnit): string {
+  const lean =
+    units === 'lb'
+      ? `${Math.round(basis.leanMassKg * 2.20462)} lb`
+      : `${Math.round(basis.leanMassKg)} kg`;
+  const perUnit =
+    units === 'lb'
+      ? `${basis.perLbLeanMass.toFixed(1)} g per lb of lean mass`
+      : `${(basis.perLbLeanMass * 2.20462).toFixed(1)} g per kg of lean mass`;
+  const leanFrom = basis.fromBodyFat ? 'from your body fat' : 'estimated, since body fat was skipped';
+  const total = `about ${basis.perKgBodyWeight.toFixed(1)} g per kg of body weight`;
+  if (basis.setByHand) {
+    return `Protein: set by you (${total}). The calculated figure was ${basis.calculated} g: ${perUnit}, lean mass ${lean} (${leanFrom}).`;
+  }
+  return (
+    `Protein: ${perUnit}${basis.perLbLeanMass > 1 ? ' (higher while losing fat, to protect muscle)' : ''}. ` +
+    `Your lean mass is ${lean} (${leanFrom}), so ${total}.`
+  );
 }
 
 export interface GoalStepProps {
   /** null = nothing picked yet; Continue stays disabled until one is. */
   goal: TrainingGoal | null;
   onGoalChange: (goal: TrainingGoal) => void;
+  /**
+   * Where the preselected goal came from, shown as a line above the options
+   * until the user taps one (null = they picked it themselves).
+   */
+  preselection?: GoalPreselection | null;
+  /** The user's weight unit, for the protein explanation. */
+  units?: WeightUnit;
+  /** A protein figure typed by the user (g a day); null = back to calculated. */
+  onProteinChange?: (grams: number | null) => void;
   /** Body-fat-based suggestion (never from a "Not sure" guess). */
   recommended: 'bulk' | 'cut' | null;
   bodyFatPercent: number;
@@ -86,6 +142,9 @@ export interface GoalStepProps {
 export function GoalStep({
   goal,
   onGoalChange,
+  preselection = null,
+  units = 'kg',
+  onProteinChange,
   recommended,
   bodyFatPercent,
   injuryAreas,
@@ -112,23 +171,7 @@ export function GoalStep({
 
   return (
     <div className="max-w-md mx-auto space-y-6 animate-fade-in">
-      {/* Progress indicator */}
-      <div className="flex items-center justify-center gap-2 mb-8">
-        {[1, 2, 3, 4].map((s) => (
-          <div key={s} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
-              s <= 2
-                ? 'bg-action text-on-action'
-                : 'bg-fill text-ink-3'
-            }`}>
-              {s}
-            </div>
-            {s < 4 && (
-              <div className={`w-12 h-0.5 ${s < 2 ? 'bg-action' : 'bg-fill'}`} />
-            )}
-          </div>
-        ))}
-      </div>
+      <OnboardingSteps current="goal" foodFocus={foodFocus} showLaterNote />
 
       <div className="text-center mb-6">
         <h1 className="text-large-title font-bold text-ink mb-2">What&apos;s your goal right now?</h1>
@@ -138,6 +181,16 @@ export function GoalStep({
             : 'This sets your daily food targets and how your training is planned.'}
         </p>
       </div>
+
+      {preselection && goal && (
+        <p
+          className="flex items-start gap-2 rounded-card border border-action/40 bg-action/10 p-3 text-body text-ink"
+          data-testid="goal-preselected-note"
+        >
+          <IconInfoCircle size={18} className="mt-0.5 flex-shrink-0 text-action" aria-hidden="true" />
+          <span>{preselectionNote(preselection, foodFocus)}</span>
+        </p>
+      )}
 
       <div className="space-y-2" role="group" aria-label="Training goal">
         {GOAL_OPTIONS.map((option) => {
@@ -170,6 +223,14 @@ export function GoalStep({
                   {foodFocus ? FOOD_GOAL_LABELS[option.value] : option.label}
                   {option.term && (
                     <span className="font-normal text-ink-2"> ({option.term})</span>
+                  )}
+                  {isSelected && preselection && (
+                    <span
+                      className="ml-2 rounded-full bg-fill px-2 py-0.5 text-caption font-medium text-ink-2"
+                      data-testid="goal-preselected-tag"
+                    >
+                      preselected
+                    </span>
                   )}
                 </span>
                 <span className="block text-body text-ink-2 mt-1">
@@ -212,6 +273,14 @@ export function GoalStep({
             <p className="text-caption text-ink-2 mt-1" data-testid="goal-targets-source">
               {TARGETS_SOURCE_COPY}
             </p>
+          )}
+          {dailyTargets.kind === 'new' && dailyTargets.proteinBasis && (
+            <ProteinEditor
+              protein={dailyTargets.protein}
+              basis={dailyTargets.proteinBasis}
+              units={units}
+              onProteinChange={onProteinChange}
+            />
           )}
         </div>
       ) : targetsNeedAge ? (
@@ -369,6 +438,11 @@ function InjuryQuestion({
             None
           </button>
         </div>
+        {!foodFocus && (injuryAreas?.length ?? 0) > 0 && (
+          <p className="text-subhead text-ink-2" data-testid="injury-effect">
+            {injuryEffectLine(injuryAreas ?? [])}
+          </p>
+        )}
       </div>
       )}
     </>
@@ -439,6 +513,84 @@ function ExperienceSummary({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * What marking an area does to the plan, said with the areas picked (UX panel
+ * round 20: "I wasn't sure how my shoulder injury would change the plan").
+ * Matches lib/training/standingInjuries: mild areas feed the check-in's
+ * swapper and the exercise-safety check; muscles aren't removed. Pure.
+ */
+export function injuryEffectLine(areas: readonly StandingInjuryArea[]): string {
+  const names = STANDING_INJURY_OPTIONS.filter((o) => areas.includes(o.id)).map((o) => o.label.toLowerCase());
+  const list =
+    names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return (
+    `What this changes: exercises that load your ${list} are swapped for gentler ones or flagged ` +
+    `before you start, and the muscles around it still get trained. Each workout's check-in starts ` +
+    `with it marked as mild, so on a good day you can clear it.`
+  );
+}
+
+/**
+ * The protein figure, how it was worked out, and an optional edit. Editing
+ * keeps calories and moves carbs (lib/nutrition/phaseTargets withProteinOverride).
+ */
+function ProteinEditor({
+  protein,
+  basis,
+  units,
+  onProteinChange,
+}: {
+  protein: number;
+  basis: StarterProteinBasis;
+  units: WeightUnit;
+  onProteinChange?: (grams: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const value = Number(text);
+  const invalid =
+    text.trim() !== '' &&
+    !(Number.isFinite(value) && value >= PROTEIN_EDIT_RANGE.min && value <= PROTEIN_EDIT_RANGE.max);
+  return (
+    <div className="mt-2 border-t border-sep pt-2 space-y-2" data-testid="goal-protein-basis">
+      <p className="text-subhead text-ink-2">{proteinBasisLine(basis, units)}</p>
+      {onProteinChange &&
+        (editing ? (
+          <div className="space-y-1">
+            <Input
+              label="Protein (g a day)"
+              type="number"
+              inputMode="numeric"
+              value={text}
+              placeholder={String(basis.calculated)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setText(next);
+                const n = Number(next);
+                if (next.trim() === '') onProteinChange(null);
+                else if (Number.isFinite(n) && n >= PROTEIN_EDIT_RANGE.min && n <= PROTEIN_EDIT_RANGE.max) {
+                  onProteinChange(n);
+                }
+              }}
+              error={invalid ? `Enter ${PROTEIN_EDIT_RANGE.min}–${PROTEIN_EDIT_RANGE.max} g.` : undefined}
+              hint={`Calories stay the same; carbs make room. Leave empty to use ${basis.calculated} g.`}
+              data-testid="goal-protein-input"
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="min-h-[44px] text-body font-medium text-action"
+            data-testid="goal-protein-edit"
+          >
+            Change protein ({protein} g)
+          </button>
+        ))}
     </div>
   );
 }

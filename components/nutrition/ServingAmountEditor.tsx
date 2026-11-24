@@ -21,7 +21,7 @@ import {
   DEFAULT_SERVING_CHIPS,
   type FoodAmountModel,
 } from '@/lib/nutrition/servingScaling';
-import { stepAmount } from '@/lib/nutrition/portionDefaults';
+import { pluralNoun, stepAmount } from '@/lib/nutrition/portionDefaults';
 import { IconMinus, IconPlus } from '@tabler/icons-react';
 
 export interface ServingAmountValue {
@@ -88,7 +88,7 @@ export function ServingAmountEditor({
     // "1 × 2 tbsp" reads better than "1 2 tbsp" when the noun carries a count.
     const sep = /^\d/.test(unit.noun) ? ' × ' : ' ';
     const grams = round2(unit.gramsPerUnit * shownAmount);
-    return `${round2(shownAmount)}${sep}${unit.noun} · ${grams >= 10 ? Math.round(grams) : grams} g`;
+    return `${round2(shownAmount)}${sep}${sep === ' ' ? pluralNoun(unit.noun, shownAmount) : unit.noun} · ${grams >= 10 ? Math.round(grams) : grams} g`;
   })();
 
   // "Same as 4 oz · 1 palm-size portion" under a weight, so someone who

@@ -48,6 +48,56 @@ const summary: LiftTrendsSummary = {
 };
 
 describe('LiftTrendsCard', () => {
+  it('shows "not enough data yet" instead of a 0.0% rate, and says what counts', () => {
+    const early = lift({
+      weeklyChangePct: 0,
+      sessionCount: 3,
+      notEnoughData: { reason: 'few_workouts', workoutsNeeded: 1, spanDays: 0, readyOn: null },
+    });
+    render(
+      <LiftTrendsCard
+        summary={{ ...summary, lifts: [early], rising: 0, flat: 0, down: 0, tooEarly: 1, stalled: null }}
+        units="kg"
+      />
+    );
+    const card = screen.getByTestId('lift-trends-summary');
+    expect(card).toHaveTextContent('Not enough data for trends yet');
+    expect(screen.getByTestId('lift-too-early-note')).toHaveTextContent(
+      '1 lift has no trend yet. A trend needs the lift in at least 3 workouts, spread over at least 10 days'
+    );
+    expect(screen.getByTestId('lift-too-early-note')).toHaveTextContent(
+      'Any workout where you log the lift counts. All its sets in one workout count once.'
+    );
+    const row = screen.getByTestId('lift-row-bench');
+    expect(row).toHaveTextContent('Not enough data yet · 1 more workout');
+    expect(row).not.toHaveTextContent('0.0%');
+    expect(within(row).getByText('Too early')).toBeInTheDocument();
+    // Where the per-lift chart is.
+    expect(screen.getByTestId('lift-tap-hint')).toHaveTextContent('Tap a lift to see its estimated max over time.');
+  });
+
+  it('explains why an early lift needs more workouts and what counts as one', () => {
+    render(
+      <LiftTrendsCard
+        summary={{
+          ...summary,
+          lifts: [],
+          rising: 0,
+          flat: 0,
+          down: 0,
+          insufficientData: 1,
+          stalled: null,
+          earlyLifts: [{ name: 'Squat', sessions: 2, bestWeightKg: 100, bestReps: 5 }],
+        }}
+        units="kg"
+      />
+    );
+    expect(screen.getByTestId('lift-trend-rule')).toHaveTextContent(
+      'A trend needs the lift in at least 3 workouts, spread over at least 10 days'
+    );
+    expect(screen.getByTestId('lift-trend-rule')).toHaveTextContent('All its sets in one workout count once.');
+  });
+
   it('summarises the window and lists each lift with its status in plain words', () => {
     render(<LiftTrendsCard summary={summary} units="kg" />);
     const card = screen.getByTestId('lift-trends-summary');
@@ -59,8 +109,8 @@ describe('LiftTrendsCard', () => {
 
     const squat = screen.getByTestId('lift-row-squat');
     expect(squat).toHaveTextContent('Squat');
-    expect(squat).toHaveTextContent('est. max 140.0 kg');
-    expect(squat).toHaveTextContent('+1.1%/wk');
+    expect(squat).toHaveTextContent('estimated max 140.0 kg');
+    expect(squat).toHaveTextContent('+1.1% per week');
     expect(within(squat).getByText('Rising')).toBeInTheDocument();
     expect(within(screen.getByTestId('lift-row-row')).getByText('Down')).toBeInTheDocument();
     expect(screen.queryByText(/E1RM/)).not.toBeInTheDocument();
@@ -98,7 +148,7 @@ describe('LiftTrendsCard', () => {
     const row = screen.getByTestId('lift-row-bench');
     expect(row).toHaveTextContent('new program — rebuilding');
     expect(row).not.toHaveTextContent('%/wk');
-    expect(within(row).getByText('Calibrating')).toBeInTheDocument();
+    expect(within(row).getByText('Rebuilding')).toBeInTheDocument();
   });
 
   it('shows best recent sets with numbers when no lift has a trend yet', () => {
@@ -152,7 +202,7 @@ describe('LiftTrendsCard', () => {
     });
     render(<LiftTrendsCard summary={{ ...summary, lifts: [withSet] }} units="kg" />);
     expect(screen.getByTestId('lift-best-set')).toHaveTextContent('Latest best set 80 kg × 7');
-    expect(screen.getByTestId('lift-row-bench')).toHaveTextContent('est. max 100.0 kg');
+    expect(screen.getByTestId('lift-row-bench')).toHaveTextContent('estimated max 100.0 kg');
   });
 
   it('never ellipsizes a long lift name or its weekly change at phone width', () => {
@@ -167,13 +217,13 @@ describe('LiftTrendsCard', () => {
     const name = screen.getByTestId('lift-trend-name');
     const change = screen.getByTestId('lift-trend-change');
     expect(name).toHaveTextContent('Barbell Back Squat (High Bar, Paused)');
-    expect(change).toHaveTextContent('+3.0%/wk');
+    expect(change).toHaveTextContent('+3.0% per week');
     expect(name.className).not.toMatch(/\btruncate\b/);
     expect(change.className).not.toMatch(/\btruncate\b/);
     expect(change.parentElement?.className).not.toMatch(/\btruncate\b/);
     // "est. max" is explained in plain words where it first appears — the
     // formula, the reps-left rule and the %/wk rate, one tap away.
-    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest single rep/);
+    expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/heaviest weight you could lift for one rep/);
     expect(screen.getByTestId('est-max-explainer')).toHaveTextContent(/Brzycki/);
     const rate = screen.getByTestId('rate-explainer');
     expect(rate).toHaveTextContent(
@@ -184,7 +234,7 @@ describe('LiftTrendsCard', () => {
     expect(rate).toHaveTextContent(
       'flat in between (on a 200 lb lift, that\'s less than 0.3 lb a week either way)'
     );
-    expect(rate).toHaveTextContent('rising when its est. max goes up more than 0.15% a week');
+    expect(rate).toHaveTextContent('rising when its estimated max goes up more than 0.15% a week');
   });
 
   it("explains est. max on the user's own best set", async () => {
@@ -198,10 +248,10 @@ describe('LiftTrendsCard', () => {
     render(<LiftTrendsCard summary={{ ...summary, lifts: [withSet] }} units="kg" />);
     const method = screen.getByTestId('est-max-method');
     expect(method).not.toHaveAttribute('open');
-    await user.click(within(method).getByText('How est. max is worked out'));
+    await user.click(within(method).getByText('How estimated max is worked out'));
     expect(method).toHaveAttribute('open');
     expect(screen.getByTestId('est-max-example')).toHaveTextContent(
-      'Your best set: 80 kg × 8 with ~2 left ≈ 10 reps to failure → est. max 107.5 kg.'
+      'Your best set: 80 kg × 8 with ~2 left ≈ 10 reps to failure → estimated max 107.5 kg.'
     );
   });
 

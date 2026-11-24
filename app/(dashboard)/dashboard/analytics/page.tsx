@@ -489,6 +489,8 @@ const EMPTY_PLATEAU_ALERTS: PlateauAlertRow[] = [];
 function AnalyticsPageContent() {
   const { rows: weeklyVolumeRows } = useWeeklyVolume();
   const beginnerMode = useBeginnerMode();
+  const [pageMounted, setPageMounted] = useState(false);
+  useEffect(() => setPageMounted(true), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
@@ -1387,7 +1389,12 @@ function AnalyticsPageContent() {
   // skeleton of its own shape — never a blank page or a full-page spinner
   // (UX panel r19: "loads slowly with no clear indicator"). A revisit (warm
   // cache) or reload (IndexedDB restore) has the bundle and skips this.
-  const coldStart = isLoading && !mainQuery.data && !isRestoring;
+  // Until mounted, decide exactly as the server did: the server's plain query
+  // provider is never "restoring", but the client's persisted provider is
+  // while it hydrates, so `!isRestoring` flipped this to false only on the
+  // client and the tab content rendered against the server's skeleton
+  // (hydration error on /dashboard/analytics).
+  const coldStart = !mainQuery.data && (!pageMounted || (isLoading && !isRestoring));
 
   // After the unified sheet saves: refresh the hub widgets, and for a DEXA
   // save also refresh this page's own scan-driven sections (quick stats,
@@ -1937,7 +1944,7 @@ function AnalyticsPageContent() {
                           <div>
                             <h4 className="font-medium text-ink">{lift.lift}</h4>
                             <p className="text-subhead text-ink-2">
-                              Est. max: {displayWeight(lift.estimated1RM)} {weightUnit}
+                              Estimated max: {displayWeight(lift.estimated1RM)} {weightUnit}
                             </p>
                           </div>
                           <Badge variant={getStrengthLevelBadgeVariant(lift.strengthLevel)}>

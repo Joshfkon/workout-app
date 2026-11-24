@@ -20,6 +20,7 @@ import {
 import { kgToLbs, lbsToKg, roundToIncrement } from '@/lib/utils';
 import type { WeightUnit } from '@/types/schema';
 import { ONBOARDING_BENCHMARKS_ENTRY } from '@/lib/onboarding/trackingFocus';
+import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 
 function PercentileBar({ percentile, label }: { percentile: number; label: string }) {
   const segments = generatePercentileSegments(percentile);
@@ -345,27 +346,7 @@ function CalibrateContent() {
         />
       </Modal>
 
-      {/* Progress indicator */}
-      <div className="flex items-center justify-center gap-2 mb-8">
-        {[1, 2, 3, 4].map((step) => (
-          <div key={step} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-subhead font-medium ${
-              step <= 3 
-                ? 'bg-action text-on-action' 
-                : 'bg-fill text-ink-3'
-            }`}>
-              {step < 3 ? (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : step}
-            </div>
-            {step < 4 && (
-              <div className={`w-12 h-0.5 ${step < 3 ? 'bg-action' : 'bg-fill'}`} />
-            )}
-          </div>
-        ))}
-      </div>
+      <OnboardingSteps current="strength" />
       
       {/* Context card on first test */}
       {currentIndex === 0 && !isComplete && (

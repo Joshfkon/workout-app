@@ -324,7 +324,17 @@ export function isHouseholdNoun(noun: string): boolean {
 export interface HouseholdServing {
   noun: string;
   grams: number;
+  /**
+   * How many of the unit a typical portion is, when that isn't one: people
+   * eat 2 eggs, 2 slices of bread, 2 tbsp of peanut butter. The default
+   * amount, never a different unit (r20 panel, Vince: "Default amount for
+   * eggs was 1 egg, which is unrealistic").
+   */
+  count?: number;
 }
+
+/** Quick chips for a unit people count in whole numbers (eggs, slices). */
+export const COUNT_SERVING_CHIPS = [1, 2, 3, 4];
 
 /**
  * Add a household serving unit to a weight-based model (system foods are
@@ -353,12 +363,13 @@ export function withHouseholdServing(
       fat: gramUnit.perUnit.fat * g,
     },
   };
+  const count = household.count && household.count > 0 ? household.count : 1;
   return {
     ...model,
     units: [unit, ...model.units],
     defaultUnitId: unit.id,
-    defaultAmount: 1,
-    quickChips: DEFAULT_SERVING_CHIPS,
+    defaultAmount: count,
+    quickChips: count > 1 ? COUNT_SERVING_CHIPS : DEFAULT_SERVING_CHIPS,
   };
 }
 

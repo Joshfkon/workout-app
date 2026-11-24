@@ -12,6 +12,7 @@ const stepWrites: unknown[] = [];
 let coachingInsertGate: Promise<void> | null = null;
 let coachingInserts = 0;
 let targetsRow: Row | null = null;
+let macroSettingsRow: Row | null = null;
 const targetInserts: Row[] = [];
 // Auth user_metadata (tracking_focus: 'food' for a food-only sign-up).
 let mockUserMetadata: Row = {};
@@ -32,7 +33,7 @@ function builder(table: string) {
       if (payload) targetInserts.push(payload);
       return { data: null, error: null };
     }
-    if (table === 'macro_settings') return { data: null, error: null };
+    if (table === 'macro_settings') return { data: macroSettingsRow, error: null };
     return { data: [], error: null };
   };
   const b: Record<string, unknown> = {
@@ -168,7 +169,7 @@ describe('Onboarding goal step', () => {
     expect(screen.getByTestId('goal-option-bulk')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('goal-option-bulk').className).not.toMatch(/border-action/);
     expect(screen.getByTestId('goal-option-bulk')).toHaveTextContent(
-      /^Build muscle \(bulk\)Eat a little more than you burn to gain muscle\.$/
+      /^Build muscle \(bulk\)Eat a little more than you burn to gain about 0\.25% of your body weight a week, mostly muscle\.$/
     );
   });
 });
@@ -280,11 +281,39 @@ describe('Onboarding goal step: plain goal labels', () => {
   it('leads with plain labels (gym term in brackets), one plain line each, Maintain preselected', async () => {
     await reachGoalStep();
     expect(screen.getByTestId('goal-option-cut')).toHaveTextContent(
-      'Lose fat (cut)Eat a little less than you burn, keeping your muscle.'
+      'Lose fat (cut)Eat a little less than you burn to lose about 0.5% of your body weight a week, keeping your muscle.'
     );
     expect(screen.getByTestId('goal-option-bulk')).toHaveTextContent(/^Build muscle \(bulk\)/);
-    expect(screen.getByTestId('goal-option-maintenance')).toHaveTextContent(/^Maintain.+getting back into it\.$/);
+    expect(screen.getByTestId('goal-option-maintenance')).toHaveTextContent(/^Maintainpreselected.+getting back into it\.$/);
     expect(screen.getByTestId('goal-option-maintenance')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('says out loud that Maintain is preselected and how to change it, until a goal is tapped (UX round 21)', async () => {
+    const user = await reachGoalStep();
+    expect(screen.getByTestId('goal-preselected-note')).toHaveTextContent(
+      'Maintain is picked to start. Cutting or bulking? Tap Lose fat or Build muscle instead.'
+    );
+    expect(screen.getByTestId('goal-preselected-tag')).toHaveTextContent('preselected');
+    await user.click(screen.getByTestId('goal-option-cut'));
+    expect(screen.queryByTestId('goal-preselected-note')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('goal-preselected-tag')).not.toBeInTheDocument();
+  });
+
+  it('preselects from food targets already set up in Eat, and says so', async () => {
+    macroSettingsRow = { user_id: 'u1', goal: 'moderate_cut' };
+    try {
+      await reachGoalStep();
+      expect(screen.getByTestId('goal-option-cut')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('goal-preselected-note')).toHaveTextContent(/food targets you already set up/);
+    } finally {
+      macroSettingsRow = null;
+    }
+  });
+
+  it('shows the step in words, moving forward on each screen', async () => {
+    await reachGoalStep();
+    expect(screen.getByTestId('onboarding-step-label')).toHaveTextContent('Step 3 of 5: Goal');
+    expect(screen.getByTestId('onboarding-later-note')).toHaveTextContent(/filled in later/);
   });
 });
 
@@ -300,8 +329,10 @@ describe('Onboarding goal step: daily targets', () => {
     usersRow = { goal: 'maintenance', onboarding_step: 'body_comp', onboarding_completed: false };
   });
 
+  // Body fat 15% (reachGoalStep's default) is the user's own number, so the
+  // calculator sizes protein to that lean mass, as Eat does.
   const expected = (phase: 'cut' | 'maintenance' | 'bulk') =>
-    starterTargets({ phase, weightKg: 80, heightCm: 180, age: 30, sex: 'male' })!;
+    starterTargets({ phase, weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 15 })!;
 
   it('shows the calorie and protein targets for the picked goal, then saves exactly those', async () => {
     const user = await reachGoalStep('15', '30');
@@ -312,7 +343,9 @@ describe('Onboarding goal step: daily targets', () => {
     expect(card).toHaveTextContent(/Change them any time in Eat/);
     // Where the numbers come from, in plain words.
     expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(/estimated daily burn/);
-    expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(/lean body mass/);
+    expect(screen.getByTestId('goal-protein-basis')).toHaveTextContent(
+      'Protein: 2.2 g per kg of lean mass. Your lean mass is 68 kg (from your body fat), so about 1.9 g per kg of body weight.'
+    );
 
     await user.click(screen.getByTestId('goal-option-cut'));
     const cut = expected('cut');
@@ -411,7 +444,7 @@ describe('Onboarding goal step: food-only users', () => {
     }
     expect(screen.getByTestId('goal-option-maintenance')).toHaveAttribute('aria-pressed', 'true');
     // Targets count no workouts.
-    const food = starterTargets({ phase: 'maintenance', weightKg: 80, heightCm: 180, age: 30, sex: 'male', liftsWeights: false })!;
+    const food = starterTargets({ phase: 'maintenance', weightKg: 80, heightCm: 180, age: 30, sex: 'male', liftsWeights: false, bodyFatPercent: 15 })!;
     expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent(`${food.targets.calories.toLocaleString()} kcal`);
 
     // Injuries: collapsed, neutral, still answerable.
@@ -447,7 +480,7 @@ describe('Onboarding body fat', () => {
     await user.click(screen.getByTestId('units-continue'));
     const why = await screen.findByTestId('body-fat-why');
     expect(why).toHaveTextContent(/muscle and fat/);
-    expect(why).toHaveTextContent(/smart scale or scan reading, or compare yourself to the visual guide/);
+    expect(why).toHaveTextContent(/smart scale or scan reading if you have one; otherwise tap the look closest to yours below/);
     expect(why).toHaveTextContent(/skip it/);
 
     await user.click(screen.getByRole('radio', { name: 'Female' }));
@@ -492,11 +525,36 @@ describe('Onboarding body fat', () => {
     await user.click(screen.getByTestId('units-continue'));
     await user.click(await screen.findByRole('radio', { name: 'Female' }));
     await user.click(screen.getByTestId('body-fat-not-sure'));
-    await user.click(screen.getByRole('button', { name: 'Visual guide' }));
     await user.click(screen.getByRole('button', { name: /^25%/ }));
 
     expect(screen.getByLabelText('Body fat %')).toHaveValue(25);
     expect(screen.queryByTestId('body-fat-estimate-note')).not.toBeInTheDocument();
+  });
+});
+
+describe('Onboarding body fat: the guide is in plain sight (UX round 21)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockStoredUnits = 'kg';
+    usersRow = { goal: 'maintenance', onboarding_step: 'units', onboarding_completed: false };
+  });
+
+  it('shows the look-alike levels under the field as soon as sex is picked, photos one tap away', async () => {
+    const user = userEvent.setup();
+    render(<OnboardingBodyCompPage />);
+    await user.click(screen.getByTestId('units-continue'));
+    expect(screen.queryByTestId('body-fat-guide')).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('radio', { name: 'Male' }));
+    const guide = screen.getByTestId('body-fat-guide');
+    expect(guide).toHaveTextContent('Not sure? Tap the look closest to yours:');
+    expect(within(guide).getByRole('button', { name: /^15%/ })).toBeInTheDocument();
+    expect(within(guide).queryByRole('img')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('body-fat-photos'));
+    expect(within(guide).getByRole('img')).toHaveAttribute('alt', 'Male body fat percentage visual guide');
+    // Picking a look fills the field and folds the guide away.
+    await user.click(within(guide).getByRole('button', { name: /^12%/ }));
+    expect(screen.getByLabelText('Body fat %')).toHaveValue(12);
+    expect(screen.queryByTestId('body-fat-guide')).not.toBeInTheDocument();
   });
 });
 
@@ -821,6 +879,7 @@ describe('Onboarding: optional training step (lifters)', () => {
       liftsWeights: true,
       nutritionGoal: 'moderate_bulk',
       workoutsPerWeek: 5,
+      bodyFatPercent: 15,
     })!;
     expect(screen.getByTestId('training-rate-targets')).toHaveTextContent(
       `${expected.targets.calories.toLocaleString()} kcal`
@@ -842,13 +901,20 @@ describe('Onboarding: optional training step (lifters)', () => {
     await user.click(screen.getByTestId('training-days-6'));
     await user.click(screen.getByTestId('training-rate-aggressive_bulk'));
     // Before tapping, Skip says which pace it uses (not the one picked) and its targets.
-    const skipStarter = starterTargets({
+    // One calorie figure on screen (UX round 21): the targets line, which
+    // Continue saves. Skip names what it drops instead of a second number.
+    const onScreen = starterTargets({
       phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male', liftsWeights: true,
-      nutritionGoal: null, workoutsPerWeek: null,
+      nutritionGoal: 'aggressive_bulk', workoutsPerWeek: 6, bodyFatPercent: 15,
     })!;
-    expect(screen.getByTestId('training-skip-defaults')).toHaveTextContent(
-      `Skip uses the default pace, lean bulk (${skipStarter.targets.calories.toLocaleString()} kcal`
+    expect(screen.getByTestId('training-rate-targets')).toHaveTextContent(
+      `${onScreen.targets.calories.toLocaleString()} kcal`
     );
+    const skipLine = screen.getByTestId('training-skip-defaults');
+    expect(skipLine).toHaveTextContent(
+      'Skip drops your answers above: your targets go back to the default pace (lean bulk) and 4 workouts a week'
+    );
+    expect(skipLine).not.toHaveTextContent(/kcal/);
     await user.click(screen.getByTestId('training-skip'));
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(savedPrefs()).not.toHaveProperty('trainingDaysPerWeek');
@@ -907,5 +973,88 @@ describe('Onboarding units step: text size', () => {
     expect(within(group).getByRole('radio', { name: 'Larger' })).toHaveAttribute('aria-checked', 'true');
     expect(document.documentElement.getAttribute('data-text-size')).toBe('larger');
     expect(localStorage.getItem('textSize')).toBe('larger');
+  });
+});
+
+describe('Onboarding: protein is explained and editable, and a pace can be typed (UX round 21)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    userUpdates.length = 0;
+    targetInserts.length = 0;
+    targetsRow = null;
+    mockStoredUnits = 'kg';
+    mockStoredInjuryAreas = [];
+    mockSaveMacroSettings.mockResolvedValue({ success: true });
+    usersRow = { goal: 'maintenance', experience: 'advanced', onboarding_step: 'body_comp', onboarding_completed: false };
+  });
+
+  it('follows the body fat given (not an assumed 20%) for protein', async () => {
+    await reachGoalStep('10', '30');
+    await userEvent.setup().click(screen.getByTestId('goal-option-bulk'));
+    const withBf = starterTargets({ phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 10 })!;
+    const assumed = starterTargets({ phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male' })!;
+    expect(withBf.targets.protein).toBeGreaterThan(assumed.targets.protein);
+    expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent(`${withBf.targets.protein} g protein`);
+  });
+
+  it('lets protein be set by hand: calories stay, it is saved, and auto-updates are switched off', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-option-bulk'));
+    const before = starterTargets({ phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 15 })!;
+    await user.click(screen.getByTestId('goal-protein-edit'));
+    await user.type(screen.getByTestId('goal-protein-input'), '180');
+    const card = screen.getByTestId('goal-daily-targets');
+    expect(card).toHaveTextContent('180 g protein');
+    expect(card).toHaveTextContent(`${before.targets.calories.toLocaleString()} kcal`);
+    expect(screen.getByTestId('goal-protein-basis')).toHaveTextContent(/set by you.*calculated figure was/);
+
+    await finishGoal(user);
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(mockSaveMacroSettings).toHaveBeenCalledWith(expect.objectContaining({ auto_update_enabled: false }));
+    expect(targetInserts[targetInserts.length - 1]).toMatchObject({ protein: 180, calories: before.targets.calories });
+  });
+
+  it('takes a pace in kg a week, shows the % alongside, and saves it as the weekly-change override', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-option-bulk'));
+    await user.click(screen.getByTestId('goal-continue'));
+    await user.type(screen.getByTestId('training-rate-custom-input'), '0.25');
+    expect(screen.getByTestId('training-rate-custom-percent')).toHaveTextContent(
+      'Gain 0.25 kg a week = 0.31% of your body weight a week.'
+    );
+    // No preset shown as picked while a typed pace is in use.
+    expect(screen.getByTestId('training-rate-slow_bulk')).toHaveAttribute('aria-checked', 'false');
+    const expected = starterTargets({
+      phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male', liftsWeights: true,
+      nutritionGoal: 'slow_bulk', bodyFatPercent: 15, weeklyChangeKg: 0.25,
+    })!;
+    expect(screen.getByTestId('training-rate-targets')).toHaveTextContent(
+      `${expected.targets.calories.toLocaleString()} kcal`
+    );
+
+    await user.click(screen.getByTestId('training-continue'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(mockSaveMacroSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ goal: 'slow_bulk', target_weight_change_per_week: 0.25 })
+    );
+  });
+
+  it('when nothing on the training step changes the targets, Skip quotes the same figure as the targets line', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('goal-option-bulk'));
+    await user.click(screen.getByTestId('goal-continue'));
+    await user.click(screen.getByTestId('training-split-ppl'));
+    const line = screen.getByTestId('training-rate-targets').textContent ?? '';
+    const figure = line.match(/([\d,]+) kcal/)?.[1];
+    expect(figure).toBeTruthy();
+    expect(screen.getByTestId('training-skip-defaults')).toHaveTextContent(`(${figure} kcal`);
+  });
+
+  it('says what marking an injured area changes', async () => {
+    const user = await reachGoalStep('15', '30');
+    await user.click(screen.getByTestId('injury-chip-shoulder'));
+    expect(screen.getByTestId('injury-effect')).toHaveTextContent(
+      /exercises that load your shoulder are swapped for gentler ones or flagged before you start/
+    );
   });
 });

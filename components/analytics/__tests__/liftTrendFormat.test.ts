@@ -1,6 +1,9 @@
 import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import { rirToRpe } from '@/types/schema';
 import {
+  notEnoughDataLine,
+  notEnoughDataWhy,
+  signedPct,
   EST_MAX_METHOD,
   earlyLiftChange,
   estMaxExample,
@@ -14,6 +17,33 @@ import {
   workoutsUntilTrend,
 } from '../liftTrendFormat';
 
+describe('not enough data (UX panel r20: 0.0%/wk read as a stall)', () => {
+  it('names the next workout and, for a short span, the first day it counts', () => {
+    const nd = { reason: 'short_span' as const, workoutsNeeded: 1, spanDays: 2, readyOn: '2026-12-04' };
+    expect(notEnoughDataLine(nd, '2026-11-24')).toMatch(/^Not enough data yet · 1 more workout on or after /);
+    expect(notEnoughDataLine(nd, '2026-12-05')).toBe('Not enough data yet · 1 more workout');
+    expect(
+      notEnoughDataLine({ reason: 'few_workouts', workoutsNeeded: 2, spanDays: 0, readyOn: null }, '2026-11-24')
+    ).toBe('Not enough data yet · 2 more workouts');
+  });
+
+  it('says why in plain words', () => {
+    expect(notEnoughDataWhy({ reason: 'short_span', workoutsNeeded: 1, spanDays: 0, readyOn: null }, 3)).toMatch(
+      /^Your 3 workouts with this lift were all on the same day, too close together/
+    );
+    expect(notEnoughDataWhy({ reason: 'short_span', workoutsNeeded: 1, spanDays: 4, readyOn: null }, 3)).toContain(
+      'are only 4 days apart'
+    );
+  });
+
+  it('writes the weekly change in words, not %/wk', () => {
+    expect(signedPct(1.234)).toBe('+1.2% per week');
+    expect(signedPct(-0.4)).toBe('−0.4% per week');
+    expect(signedPct(0)).toBe('no change per week');
+    expect(signedPct(0.04)).toBe('no change per week');
+  });
+});
+
 describe('liftTrendFormat', () => {
   it('labels a lifted set exactly (no plate rounding) and a no-load set by reps', () => {
     expect(setLabel(62, 8, 'kg')).toBe('62 kg × 8');
@@ -22,10 +52,10 @@ describe('liftTrendFormat', () => {
   });
 
   it('labels an estimated max as an estimate, with the set it came from', () => {
-    expect(estMaxLabel(102, { weightKg: 83.9146, reps: 8 }, 'lb')).toBe('Est. max 225.0 lbs (from 185 lbs × 8)');
+    expect(estMaxLabel(102, { weightKg: 83.9146, reps: 8 }, 'lb')).toBe('Estimated max 225.0 lbs (from 185 lbs × 8)');
     // Older persisted points carry no top set: the estimate alone, still labelled.
-    expect(estMaxLabel(100, { weightKg: undefined, reps: undefined }, 'kg')).toBe('Est. max 100.0 kg');
-    expect(estMaxLabel(100, null, 'kg')).toBe('Est. max 100.0 kg');
+    expect(estMaxLabel(100, { weightKg: undefined, reps: undefined }, 'kg')).toBe('Estimated max 100.0 kg');
+    expect(estMaxLabel(100, null, 'kg')).toBe('Estimated max 100.0 kg');
   });
 
   it('counts the workouts still needed for a trend', () => {
@@ -86,24 +116,24 @@ describe('liftTrendFormat', () => {
       // 180 × 36 / (37 − 12) = 259.2 lb → shown on the 2.5 lb grid as 260.
       expect(e1rmKg / LB).toBeCloseTo(259.2, 0);
       expect(estMaxExample({ e1rmKg, topSetWeightKg: w, topSetReps: 10, topSetRpe: rpe }, 'lb')).toBe(
-        'Your best set: 180 lbs × 10 with ~2 left ≈ 12 reps to failure → est. max 260.0 lbs.'
+        'Your best set: 180 lbs × 10 with ~2 left ≈ 12 reps to failure → estimated max 260.0 lbs.'
       );
     });
 
     it('says when a set counts as taken to failure, and when the 12-rep cap applies', () => {
       const fail = estimateE1RMFromRpe(w, 10, null)!.value;
       expect(estMaxExample({ e1rmKg: fail, topSetWeightKg: w, topSetReps: 10, topSetRpe: 10 }, 'lb')).toBe(
-        'Your best set: 180 lbs × 10 taken to failure ≈ 10 reps to failure → est. max 240.0 lbs.'
+        'Your best set: 180 lbs × 10 taken to failure ≈ 10 reps to failure → estimated max 240.0 lbs.'
       );
       const capped = estimateE1RMFromRpe(60, 12, rirToRpe(2))!.value;
       expect(estMaxExample({ e1rmKg: capped, topSetWeightKg: 60, topSetReps: 12, topSetRpe: rirToRpe(2) }, 'kg', 'Your last best set')).toBe(
-        'Your last best set: 60 kg × 12 with ~2 left ≈ 14 reps to failure, counted as 12 → est. max 87.5 kg.'
+        'Your last best set: 60 kg × 12 with ~2 left ≈ 14 reps to failure, counted as 12 → estimated max 87.5 kg.'
       );
     });
 
     it('never guesses reps left for a point persisted without its RPE, and needs a loaded set', () => {
       expect(estMaxExample({ e1rmKg: 100, topSetWeightKg: 80, topSetReps: 8 }, 'kg')).toBe(
-        'Your best set: 80 kg × 8 → est. max 100.0 kg.'
+        'Your best set: 80 kg × 8 → estimated max 100.0 kg.'
       );
       expect(estMaxExample({ e1rmKg: 100, topSetWeightKg: 0, topSetReps: 8, topSetRpe: 8 }, 'kg')).toBeNull();
       expect(estMaxExample(null, 'kg')).toBeNull();

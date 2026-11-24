@@ -362,20 +362,22 @@ describe('household serving default (people think in whole eggs, not grams)', ()
     return onAdd;
   }
 
-  it('defaults to 1 large egg with the grams shown next to it', async () => {
+  it('defaults to a typical 2 large eggs with the grams shown next to it', async () => {
     const user = userEvent.setup();
     renderEggs();
     await user.click(screen.getByText('Whole Eggs (large, cooked)'));
 
-    expect(screen.getByTestId('add-food-amount')).toHaveValue(1);
+    // Vince (r20): "Default amount for eggs was 1 egg, which is unrealistic."
+    expect(screen.getByTestId('add-food-amount')).toHaveValue(2);
     expect(screen.getByTestId('add-food-unit')).toHaveValue('household');
-    expect(screen.getByTestId('add-food-serving-hint')).toHaveTextContent('1 large egg · 50 g');
+    expect(screen.getByTestId('add-food-serving-hint')).toHaveTextContent('2 large eggs · 100 g');
+    expect(screen.getByTestId('add-food-portion-source')).toHaveTextContent('2 large eggs · a typical portion');
 
-    // The hint follows the amount: 2 eggs = 100 g.
+    // The hint follows the amount: 1 egg = 50 g.
     const amount = screen.getByTestId('add-food-amount');
     await user.clear(amount);
-    await user.type(amount, '2');
-    expect(screen.getByTestId('add-food-serving-hint')).toHaveTextContent('2 large egg · 100 g');
+    await user.type(amount, '1');
+    expect(screen.getByTestId('add-food-serving-hint')).toHaveTextContent('1 large egg · 50 g');
   });
 
   it('logs exactly the macros of the equivalent gram weight', async () => {

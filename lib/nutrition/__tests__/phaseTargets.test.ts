@@ -4,6 +4,7 @@ import {
   starterTargets,
   targetsFromMacroSettings,
   STARTER_ACTIVITY_SETTINGS,
+  withProteinOverride,
 } from '@/lib/nutrition/phaseTargets';
 
 describe('phaseTargets', () => {
@@ -76,5 +77,52 @@ describe('starterTargets: onboarding training-step answers', () => {
     expect(starterTargets({ ...base, workoutsPerWeek: 6 })!.settings.workouts_per_week).toBe(6);
     expect(starterTargets({ ...base, workoutsPerWeek: null })!.settings.workouts_per_week).toBe(4);
     expect(starterTargets({ ...base, workoutsPerWeek: 6, liftsWeights: false })!.settings.workouts_per_week).toBe(0);
+  });
+
+  describe('onboarding extras (UX round 21)', () => {
+    const base = { phase: 'bulk' as const, weightKg: 80, heightCm: 180, age: 30, sex: 'male' as const };
+
+    it('sizes protein to the given body fat: the calculator\'s 1 g per lb of lean mass', () => {
+      const r = starterTargets({ ...base, bodyFatPercent: 10 })!;
+      const direct = calculateMacros(
+        { weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 10 },
+        { activityLevel: 'moderate', workoutsPerWeek: 4, avgWorkoutMinutes: 60, workoutIntensity: 'moderate' },
+        { goal: 'slow_bulk', peptide: 'none' }
+      );
+      expect(r.targets.protein).toBe(direct.protein);
+      expect(r.targets.protein).toBe(159); // 80 kg × 0.9 = 72 kg lean = 158.7 lb
+      expect(r.protein).toMatchObject({ perLbLeanMass: 1, fromBodyFat: true, setByHand: false });
+      expect(r.protein.leanMassKg).toBeCloseTo(72, 5);
+      // Without one: the calculator's assumed 20%.
+      const assumed = starterTargets(base)!;
+      expect(assumed.targets.protein).toBe(141);
+      expect(assumed.protein.fromBodyFat).toBe(false);
+    });
+
+    it('passes a typed kg-a-week pace through, only in the phase\'s direction', () => {
+      const r = starterTargets({ ...base, weeklyChangeKg: 0.25 })!;
+      expect(r.targetWeightChangePerWeek).toBe(0.25);
+      const preset = starterTargets(base)!; // lean bulk = 0.2 kg/wk at 80 kg
+      expect(r.targets.calories).toBeGreaterThan(preset.targets.calories);
+      expect(starterTargets({ ...base, weeklyChangeKg: -0.25 })!.targetWeightChangePerWeek).toBeNull();
+      expect(starterTargets({ ...base, phase: 'maintenance', weightKg: 80, weeklyChangeKg: 0.25 })!.targetWeightChangePerWeek).toBeNull();
+    });
+
+    it('a hand-set protein keeps calories and moves carbs', () => {
+      const calc = starterTargets(base)!;
+      const r = starterTargets({ ...base, proteinG: 180 })!;
+      expect(r.targets.protein).toBe(180);
+      expect(r.targets.calories).toBe(calc.targets.calories);
+      expect(r.targets.carbs).toBe(calc.targets.carbs - (180 - calc.targets.protein));
+      expect(r.protein).toMatchObject({ setByHand: true, calculated: calc.targets.protein });
+      // Out of range or equal to the calculated figure: ignored.
+      expect(starterTargets({ ...base, proteinG: 5 })!.protein.setByHand).toBe(false);
+      expect(starterTargets({ ...base, proteinG: calc.targets.protein })!.protein.setByHand).toBe(false);
+    });
+
+    it('never takes carbs below zero', () => {
+      const t = withProteinOverride({ calories: 2000, protein: 150, carbs: 20, fat: 60 }, 200);
+      expect(t).toEqual({ calories: 200 * 4 + 0 + 60 * 9, protein: 200, carbs: 0, fat: 60 });
+    });
   });
 });

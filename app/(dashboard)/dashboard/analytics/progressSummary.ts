@@ -17,7 +17,7 @@ import {
   type LiftTrend,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
-import { nextTrendHint, risingSlippingNames, setLabel } from '@/components/analytics/liftTrendFormat';
+import { nextTrendHint, risingSlippingNames, setLabel, TREND_RULE } from '@/components/analytics/liftTrendFormat';
 import {
   weighInsInWindow,
   weightTrendLine,
@@ -173,6 +173,12 @@ export function strengthSentence(summary: LiftTrendsSummary | null | undefined):
 
   if (rebuilding > 0) {
     return "Your lift trends are rebuilding after a recent change, so there's no strength verdict yet.";
+  }
+
+  // Enough workouts, but too close together (or too few usable) for a real
+  // rate: say what's missing rather than a verdict built on a 0.0%.
+  if ((summary.tooEarly ?? 0) > 0) {
+    return `Not enough data for a strength trend yet. ${TREND_RULE}`;
   }
 
   const lifted = summary.lifts.length > 0 || summary.insufficientData > 0 || (summary.earlyLifts?.length ?? 0) > 0;

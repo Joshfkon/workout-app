@@ -1,6 +1,6 @@
 'use client';
 
-import { IconPencil } from '@tabler/icons-react';
+import { IconBarcode, IconCameraOff, IconPencil } from '@tabler/icons-react';
 import { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Capacitor } from '@capacitor/core';
@@ -296,9 +296,26 @@ const CAMERA_ISSUE_DETAIL: Record<CameraIssue, string> = {
   denied:
     'Camera access is off for this app. You can allow it in your settings and try again, or type the number instead.',
   missing:
-    "There's no camera to scan with here (on a phone, Scan opens the camera). The number printed under the bars works just as well.",
+    "There's no camera on this device, so type the number printed under the bars instead. It finds the same food a scan would.",
   failed: "The camera didn't start this time. The number printed under the bars works just as well.",
 };
+
+/**
+ * A tag above the headline naming this view for what it is: the typed-number
+ * fallback, and why it shows instead of the camera.
+ *
+ * Panel finding (6 of 6, r20): "The Scan sheet only offers a typed barcode
+ * field here, so I couldn't tell what the real camera scan looks like."
+ */
+export const CAMERA_FALLBACK_TAG: Record<CameraIssue, string> = {
+  missing: 'Typed-number fallback: this device has no camera',
+  denied: 'Typed-number fallback: camera access is off',
+  failed: "Typed-number fallback: the camera didn't start",
+};
+
+/** What Scan does when a camera is available, so the fallback isn't mistaken for the feature. */
+export const CAMERA_SCAN_EXPLAINER =
+  'With a camera, Scan opens it full screen. Hold the barcode inside the frame and the food comes up by itself, no typing.';
 
 /** What a typed number does: the same lookup a scan runs. */
 export const TYPED_BARCODE_LOOKUP_NOTE =
@@ -356,6 +373,13 @@ function CameraUnavailablePanel({
 }) {
   return (
     <div className="p-4 space-y-3" data-testid="barcode-manual-first">
+      <p
+        className="inline-flex items-start gap-1.5 rounded-lg bg-status-warn/15 px-2.5 py-1.5 text-subhead font-semibold text-status-warn"
+        data-testid="barcode-fallback-tag"
+      >
+        <IconCameraOff size={15} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+        {CAMERA_FALLBACK_TAG[issue]}
+      </p>
       <p className="text-headline font-semibold text-ink" role="status">{CAMERA_ISSUE_HEADLINE}</p>
       <p className="text-subhead text-ink-2" data-testid="barcode-camera-issue-detail">
         {CAMERA_ISSUE_DETAIL[issue]}
@@ -378,6 +402,21 @@ function CameraUnavailablePanel({
       <Button onClick={onLookup} disabled={!manualBarcode.trim()} size="lg" className="w-full">
         Look up barcode
       </Button>
+      {/* What the real thing does: a small picture of the camera view
+          (viewfinder corners around a barcode) and one plain line. */}
+      <div className="flex items-center gap-3 rounded-lg border border-sep p-3" data-testid="barcode-camera-explainer">
+        <div
+          className="relative w-14 h-12 flex-shrink-0 rounded-md bg-fill flex items-center justify-center text-ink-2"
+          aria-hidden="true"
+        >
+          <span className="absolute left-1 top-1 w-2.5 h-2.5 border-l-2 border-t-2 border-action rounded-tl" />
+          <span className="absolute right-1 top-1 w-2.5 h-2.5 border-r-2 border-t-2 border-action rounded-tr" />
+          <span className="absolute left-1 bottom-1 w-2.5 h-2.5 border-l-2 border-b-2 border-action rounded-bl" />
+          <span className="absolute right-1 bottom-1 w-2.5 h-2.5 border-r-2 border-b-2 border-action rounded-br" />
+          <IconBarcode size={22} />
+        </div>
+        <p className="text-subhead text-ink-2">{CAMERA_SCAN_EXPLAINER}</p>
+      </div>
       <div className="flex items-center justify-center gap-4 pt-1 text-subhead">
         {canRetryCamera(issue) && (
           <button type="button" onClick={onRetryCamera} className="text-action hover:underline">

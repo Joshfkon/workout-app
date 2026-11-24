@@ -129,6 +129,12 @@ export interface StartMesocycleSessionInput {
    * Never called on the resume path. Purely informational.
    */
   onStage?: (stage: 'building' | 'saving', sessionId: string) => void;
+  /**
+   * The signed-in user's id when the caller already has it. Skips the
+   * auth.getUser() round trip that otherwise opens the start (RLS still scopes
+   * every read and write to the token's user).
+   */
+  userId?: string;
 }
 
 export interface StartMesocycleSessionResult {
@@ -495,15 +501,20 @@ export async function startMesocycleWorkoutSession(
 ): Promise<StartMesocycleSessionResult> {
   const { supabase, mesocycle, todayWorkout } = input;
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = input.userId
+    ? { id: input.userId }
+    : (await supabase.auth.getUser()).data.user;
 
   if (!user) throw new Error('Not logged in');
 
-  // Profile (goal / weight estimation) and today's existing workout are
-  // independent reads: fetched together, not one after another (the start
-  // tap waited on each round trip in turn — UX panel round 19).
+  // Profile (goal / weight estimation), today's existing workout and the
+  // default gym are independent reads: fetched together, not one after
+  // another (the start tap waited on each round trip in turn — UX panel
+  // round 19). The default gym rides along so the session row can be written
+  // straight after, and the caller can open the workout screen (navigate-
+  // first, lib/training/pendingWorkoutStart) while the blocks are built.
   const today = getLocalDateString();
-  const [{ data: userProfile }, { data: userData }, { data: existingWorkout }] = await Promise.all([
+  const [{ data: userProfile }, { data: userData }, { data: existingWorkout }, defaultLocationId] = await Promise.all([
     supabase
       .from('user_profiles')
       .select('goal, experience')
@@ -522,6 +533,7 @@ export async function startMesocycleWorkoutSession(
       .eq('planned_date', today)
       .in('state', ['planned', 'in_progress'])
       .single(),
+    resolveDefaultLocationId(supabase, user.id),
   ]);
 
   const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
@@ -548,17 +560,6 @@ export async function startMesocycleWorkoutSession(
       return { sessionId: existingWorkout.id, resumedExisting: true };
     }
   }
-
-  // Cross-exercise strength summary for cold-start weight estimation: a
-  // never-trained exercise seeds from a related exercise's logged e1RM
-  // (same pattern → same muscle) before falling back to profile heuristics.
-  // Fetched alongside the completed count and default location (independent
-  // reads) rather than one after another.
-  const [completedSessions, transferCandidates, defaultLocationId] = await Promise.all([
-    input.completedSessions ?? countCompletedSessions(supabase, mesocycle.id),
-    fetchTransferCandidates(user.id, supabase) as Promise<TransferCandidate[]>,
-    resolveDefaultLocationId(supabase, user.id),
-  ]);
 
   // Create new workout session (or claim today's blockless planned shell)
   let sessionId: string;
@@ -621,6 +622,16 @@ export async function startMesocycleWorkoutSession(
     sessionId = session.id;
   }
   input.onStage?.('building', sessionId);
+
+  // Cross-exercise strength summary for cold-start weight estimation: a
+  // never-trained exercise seeds from a related exercise's logged e1RM
+  // (same pattern → same muscle) before falling back to profile heuristics.
+  // Fetched alongside the completed count (independent reads), and only now
+  // that the session row exists: neither is needed to write it.
+  const [completedSessions, transferCandidates] = await Promise.all([
+    input.completedSessions ?? countCompletedSessions(supabase, mesocycle.id),
+    fetchTransferCandidates(user.id, supabase) as Promise<TransferCandidate[]>,
+  ]);
 
   // Try to get session from program_data first (preferred - uses pre-calculated exercises & sets)
   // Session index = TOTAL completed % days/week, so skipped days (even across

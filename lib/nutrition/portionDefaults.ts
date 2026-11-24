@@ -15,7 +15,7 @@
  * Pure: no storage, no clock. The caller passes the last-used value in.
  */
 
-import { getUnit, isHouseholdNoun, round2, trimNum, type FoodAmountModel, type UnitMacros } from './servingScaling';
+import { computeServing, getUnit, isHouseholdNoun, round2, trimNum, type FoodAmountModel, type UnitMacros } from './servingScaling';
 
 /**
  * Where the starting amount came from: your last log of this food ('last'),
@@ -65,6 +65,51 @@ export function defaultPortion(
   }
 
   return { amount: model.defaultAmount, unitId: model.defaultUnitId, reason: 'model' };
+}
+
+/** The portion a search row's + logs in one tap, and what the row shows. */
+export interface OneTapPortion {
+  portion: DefaultPortion;
+  /** "2 large eggs", "113 g" */
+  label: string;
+  macros: UnitMacros;
+  /** food_log.serving_size / servings, exactly as the editor would log them. */
+  servingSize: string;
+  servings: number;
+}
+
+/**
+ * One-tap add for a searched food: the same starting amount the editor opens
+ * on (see {@link defaultPortion}), so + and "tap, then Add" log the same thing.
+ *
+ * Returns null when the food has no real portion to default to (the model's
+ * bare 100 g): adding that blind is the "100 g default" the panel complained
+ * about, so the row opens the editor instead. `requireLast` limits it to foods
+ * you've logged before (USDA rows, whose search result carries only a generic
+ * serving until details load).
+ *
+ * Panel finding (r20, Dre): "Searched foods need a separate portion
+ * confirmation step, which costs an extra tap compared with the quick-add chips."
+ */
+export function oneTapPortion(
+  model: FoodAmountModel,
+  opts: {
+    lastUsed?: { amount: number; unitId: string } | null;
+    typicalGrams?: number | null;
+    requireLast?: boolean;
+  } = {}
+): OneTapPortion | null {
+  const portion = defaultPortion(model, { lastUsed: opts.lastUsed, typicalGrams: opts.typicalGrams });
+  if (portion.reason === 'model') return null;
+  if (opts.requireLast && portion.reason !== 'last') return null;
+  const computed = computeServing(model, portion.amount, portion.unitId);
+  return {
+    portion,
+    label: portionLabel(model, portion),
+    macros: computed.macros,
+    servingSize: computed.servingSize,
+    servings: computed.servings,
+  };
 }
 
 /**
@@ -197,6 +242,28 @@ export function typicalPortionGramsForSystemFood(food: SystemFoodLike): number |
 
 const GRAMS_PER_OZ = 28.3495;
 
+/** Units written the same for one or many ("2 tbsp", "150 g"). */
+const INVARIANT_NOUN = /(?:^|\s)(?:g|kg|oz|lb|lbs|ml|l|tbsp|tsp|fl oz)$/i;
+
+/**
+ * A unit noun for an amount: "1 large egg", "2 large eggs", "2 slices",
+ * "2 tbsp". Only the last word changes, and only for amounts other than one.
+ * A noun that already ends in "s" (or carries a parenthesised note) is left
+ * alone rather than guessed at.
+ */
+export function pluralNoun(noun: string, amount: number): string {
+  const n = noun.trim();
+  if (amount === 1 || !n || INVARIANT_NOUN.test(n) || /[s)]$/i.test(n)) return n;
+  if (/(?:ch|sh|x)$/i.test(n)) return `${n}es`;
+  return `${n}s`;
+}
+
+/** "2 large eggs", "150 g", "1 cup": an amount in its unit, as people say it. */
+export function portionLabel(model: FoodAmountModel, portion: { amount: number; unitId: string }): string {
+  const unit = getUnit(model, portion.unitId);
+  return `${trimNum(portion.amount)} ${pluralNoun(unit.noun, portion.amount)}`;
+}
+
 /**
  * One plain line saying what the starting amount is and where it came from,
  * with its calories and protein, e.g.
@@ -218,7 +285,7 @@ export function describeDefaultPortion(
   opts: { units?: 'lb' | 'kg' | null; typical?: TypicalPortion | null; macros: UnitMacros }
 ): string | null {
   const unit = getUnit(model, portion.unitId);
-  const amount = `${trimNum(portion.amount)} ${unit.noun}`;
+  const amount = portionLabel(model, portion);
   const numbers = `${Math.round(opts.macros.calories)} kcal, ${Math.round(opts.macros.protein)} g protein`;
 
   let source: string;
@@ -228,7 +295,9 @@ export function describeDefaultPortion(
       source = `${amount} · what you logged last time`;
       break;
     case 'serving':
-      source = `${amount} (the food's serving)`;
+      // More than one of the unit is a typical count (2 eggs), not "the
+      // food's serving" — say which.
+      source = portion.amount === 1 ? `${amount} (the food's serving)` : `${amount} · a typical portion`;
       break;
     case 'typical': {
       const typical = opts.typical ?? null;

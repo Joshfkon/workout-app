@@ -50,7 +50,8 @@ import { statedTrackingFocus, type StatedTrackingFocus } from '@/lib/onboarding/
 import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import { startMesocycleWorkoutSession } from '@/lib/training/startMesocycleSession';
-import { prefetchWorkoutRoute, type WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
+import type { WorkoutStartStage } from '@/components/workout/WorkoutStartProgress';
+import { runNavigateFirstStart } from '@/lib/training/pendingWorkoutStart';
 import { fetchActiveMesocycle, type ActiveMesocycleRow } from '@/lib/training/fetchActiveMesocycle';
 import {
   applyDeloadToUpcomingWeek,
@@ -390,6 +391,39 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [fullActiveMeso, setFullActiveMeso] = useState<ActiveMesocycleRow | null>(null);
   const activeMesocycleId = planMesocycle?.id ?? null;
 
+  // The server snapshot leaves out the full mesocycle row (program_data is
+  // large), so a Start tap used to fetch it first: one more round trip before
+  // the workout screen. Fetch it once Home is idle when today offers a
+  // scheduled start, so the tap goes straight to building the session.
+  const needsFullMesoForStart =
+    !!userId && !!activeMesocycle && !!scheduledWorkout && fullActiveMeso?.id !== activeMesocycle.id;
+  useEffect(() => {
+    if (!needsFullMesoForStart || !userId) return;
+    let cancelled = false;
+    const load = () => {
+      fetchActiveMesocycle(supabase, userId)
+        .then((row) => {
+          if (!cancelled && row) setFullActiveMeso(row);
+        })
+        .catch(() => {
+          // Optimisation only: the start path fetches it itself if missing.
+        });
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(load, { timeout: 3000 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(id);
+      };
+    }
+    const t = window.setTimeout(load, 1000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsFullMesoForStart, userId]);
+
   useEffect(() => {
     let cancelled = false;
     if (!activeMesocycleId) {
@@ -505,19 +539,29 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         setFullActiveMeso(mesoForStart);
       }
 
-      const { sessionId } = await startMesocycleWorkoutSession({
-        supabase,
-        mesocycle: mesoForStart,
-        todayWorkout: scheduledWorkout,
-        completedSessions: activeMesocycle.workoutsCompleted,
-        onStage: (stage, id) => {
-          setStartWorkoutStage(stage);
-          // Start loading the workout screen while the blocks are built.
-          if (stage === 'building') prefetchWorkoutRoute(router, id);
+      const meso = mesoForStart;
+      // Navigate-first: the workout screen opens as soon as the session row
+      // exists (2 round trips) and shows its skeleton while the exercises are
+      // built there, instead of Home waiting ~8 round trips for the whole
+      // build and only then starting the route load.
+      await runNavigateFirstStart({
+        start: ({ sessionReady, stage }) =>
+          startMesocycleWorkoutSession({
+            supabase,
+            mesocycle: meso,
+            todayWorkout: scheduledWorkout,
+            completedSessions: activeMesocycle.workoutsCompleted,
+            userId: userId ?? undefined,
+            onStage: (s, id) => {
+              if (s === 'building') sessionReady(id);
+              stage(s);
+            },
+          }),
+        navigate: (id) => {
+          setStartWorkoutStage('opening');
+          router.push(`/dashboard/workout/${id}`);
         },
       });
-      setStartWorkoutStage('opening');
-      router.push(`/dashboard/workout/${sessionId}`);
     } catch (err) {
       console.error('Failed to start workout:', err);
       const message = err instanceof Error ? err.message : 'Failed to start workout';

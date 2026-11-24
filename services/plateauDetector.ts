@@ -135,9 +135,17 @@ export const MIN_SESSIONS_AFTER_DISCONTINUITY = 3;
  * means a weekly rate is meaningful from ~10 observed days, and a lift
  * untrained for 6+ weeks mid-window makes the fit low-confidence.
  */
+/**
+ * Observed days an e1RM series must span before its weekly rate is real.
+ * Below it (e.g. three workouts in one week, or all on one day) the slope is
+ * noise or exactly 0 by construction — callers show "not enough data yet",
+ * never a %/week.
+ */
+export const MIN_TREND_SPAN_DAYS = 10;
+
 const E1RM_TREND_OPTIONS: TrendOptions = {
   minPoints: 2,
-  lowConfidenceSpanDays: 10,
+  lowConfidenceSpanDays: MIN_TREND_SPAN_DAYS,
   lowConfidenceGapDays: 45,
   // Session-to-session e1RM legitimately wobbles several percent — only
   // clearly-implausible jumps (fat-fingered loads) are outliers.
@@ -217,6 +225,7 @@ export function analyzeExerciseTrend(
     excludedDates: trend.excludedIndices.map((i) => dataPoints[i].date),
     discontinuityDate,
     pointsUsed: trend.nPoints,
+    spanDays: trend.spanDays,
   };
 }
 

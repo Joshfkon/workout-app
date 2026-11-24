@@ -44,6 +44,18 @@ describe('consumeNavTransition', () => {
 });
 
 describe('DashboardTemplate', () => {
+  it('never animates the first render after a full page load (server renders none: no hydration mismatch)', () => {
+    consumeNavTransition('/dashboard'); // launch
+    mockPathname = '/dashboard/workout/abc'; // would be a push on an SPA navigation
+    const { unmount } = render(
+      <DashboardTemplate>
+        <p>First load</p>
+      </DashboardTemplate>
+    );
+    expect(screen.getByText('First load').parentElement).toHaveAttribute('data-nav-transition', 'none');
+    unmount();
+  });
+
   it('wraps a pushed screen in the slide-in and clears it when the animation ends', () => {
     consumeNavTransition('/dashboard'); // launch
     mockPathname = '/dashboard/workout/abc';

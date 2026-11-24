@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
+import { IconChevronRight, IconInfoCircle, IconX } from '@tabler/icons-react';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
+import { useHydrated } from '@/hooks/useHydrated';
 import { rowBarClass, rowTextClass, type VolumeRow } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 /** Rows shown before "See all". */
@@ -48,6 +50,17 @@ export const MEV_MRV_EXPLAINER =
   'MEV (minimum effective volume) is the fewest hard sets a week that still grow a muscle. ' +
   'MRV (maximum recoverable volume) is the most you can recover from. Aim to land between the two.';
 
+/**
+ * The one plain line shown under the heading until dismissed, so a first-run
+ * lifter reads what the range means without finding the info key (UX panel
+ * round 20, Sam: "MEV–MRV is shown with no explanation").
+ */
+export const MEV_MRV_FIRST_LINE =
+  'Each bar is this week’s hard sets for a muscle. The shaded range runs from MEV, the fewest sets that still build it, to MRV, the most you can recover from.';
+
+/** Dismissal key in the education store (dismissedHints). */
+export const MEV_MRV_LINE_HINT_ID = 'home-weekly-sets-mev-mrv-line';
+
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 interface WeeklySetsCardProps {
@@ -65,6 +78,12 @@ interface WeeklySetsCardProps {
 export function WeeklySetsCard({ rows }: WeeklySetsCardProps) {
   const [showKey, setShowKey] = useState(false);
   const { shown, total } = pickWeeklySetsRows(rows);
+  // Client-only (the dismissal lives in persisted local state): rendering it
+  // during hydration would mismatch the server HTML for anyone who dismissed it.
+  const hydrated = useHydrated();
+  const lineDismissed = useEducationStore((s) => s.dismissedHints.includes(MEV_MRV_LINE_HINT_ID));
+  const dismissHint = useEducationStore((s) => s.dismissHint);
+  const showFirstLine = hydrated && !lineDismissed;
   if (shown.length === 0) return null;
   return (
     <section className="rounded-card bg-card shadow-card px-4 py-3.5" data-testid="home-weekly-sets" aria-labelledby="home-weekly-sets-title">
@@ -86,6 +105,23 @@ export function WeeklySetsCard({ rows }: WeeklySetsCardProps) {
           <span className="sr-only">: what do these mean?</span>
         </button>
       </div>
+      {showFirstLine && (
+        <div
+          className="mt-1.5 flex items-start gap-2 rounded-lg bg-fill px-3 py-2"
+          data-testid="home-weekly-sets-first-line"
+        >
+          <p className="min-w-0 flex-1 text-subhead text-ink">{MEV_MRV_FIRST_LINE}</p>
+          <button
+            type="button"
+            onClick={() => dismissHint(MEV_MRV_LINE_HINT_ID)}
+            className="-my-1.5 -mr-2 inline-flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center gap-1 text-subhead font-semibold text-action"
+            data-testid="home-weekly-sets-first-line-dismiss"
+          >
+            Got it
+            <IconX size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {showKey && (
         <p
           id="home-weekly-sets-key"

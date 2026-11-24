@@ -86,8 +86,14 @@ jest.mock('@/lib/actions/locations', () => ({
 const mockGetOrCreate = jest.fn((..._args: unknown[]) =>
   Promise.resolve({ sessionId: 'sess-1', isNewSession: true })
 );
+/** Whether the sheet's read says today already has an ad-hoc session. */
+let mockTodayAdhocExists: boolean | null = true;
+const mockInsertSession = jest.fn((..._args: unknown[]) => Promise.resolve('client-id'));
 jest.mock('@/app/(dashboard)/dashboard/workout/_lib/adhocSession', () => ({
   getOrCreateTodaySession: (...args: unknown[]) => mockGetOrCreate(...args),
+  hasTodayAdhocSession: () => Promise.resolve(mockTodayAdhocExists),
+  insertTodayAdhocSession: (...args: unknown[]) => mockInsertSession(...args),
+  newClientSessionId: () => 'client-id',
 }));
 jest.mock('@/lib/training/transferCandidates', () => ({
   fetchTransferCandidates: () => Promise.resolve([]),
@@ -123,6 +129,7 @@ import type { User } from '@/types/schema';
 beforeEach(() => {
   jest.clearAllMocks();
   window.localStorage.clear();
+  mockTodayAdhocExists = true;
 });
 
 describe('SuggestedWorkoutSheet: one tap to start', () => {
@@ -318,7 +325,31 @@ describe('SuggestedWorkoutSheet: injury areas and the start wait (round 19)', ()
     expect(screen.queryByTestId('suggested-pick-injury')).not.toBeInTheDocument();
   });
 
-  it('shows which step the start is on and preloads the workout screen', async () => {
+  it('opens the workout screen before the build when today has no session yet (navigate-first)', async () => {
+    mockTodayAdhocExists = false;
+    let releaseInsert: (id: string) => void = () => {};
+    mockInsertSession.mockImplementationOnce(
+      () => new Promise((resolve) => (releaseInsert = resolve as typeof releaseInsert))
+    );
+    const { hasPendingWorkoutBuild, awaitPendingWorkoutBuild } = jest.requireActual(
+      '@/lib/training/pendingWorkoutStart'
+    ) as typeof import('@/lib/training/pendingWorkoutStart');
+    const user = userEvent.setup();
+    render(<SuggestedWorkoutSheet isOpen onClose={jest.fn()} />);
+    await user.click(await screen.findByRole('button', { name: 'Start workout (2 exercises)' }));
+    // Navigated with the client-made id while the session insert is still in flight.
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard/workout/client-id?fromCreate=true'));
+    expect(mockGetOrCreate).not.toHaveBeenCalled();
+    expect(mockInsertSession).toHaveBeenCalledWith(expect.anything(), 'user-1', 'ai_suggested', 'loc-gym', 'client-id');
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(hasPendingWorkoutBuild('client-id')).toBe(true);
+    // The blocks wait for the session row, then the workout page's wait ends.
+    releaseInsert('client-id');
+    await expect(awaitPendingWorkoutBuild('client-id')).resolves.toBeNull();
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows which step the start is on, then opens the screen once the session exists', async () => {
     let releaseSession: (v: { sessionId: string; isNewSession: boolean }) => void = () => {};
     mockGetOrCreate.mockImplementationOnce(
       () => new Promise((resolve) => (releaseSession = resolve as typeof releaseSession))
@@ -332,7 +363,6 @@ describe('SuggestedWorkoutSheet: injury areas and the start wait (round 19)', ()
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '13');
     releaseSession({ sessionId: 'sess-9', isNewSession: true });
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/dashboard/workout/sess-9?fromCreate=true'));
-    expect(mockPrefetch).toHaveBeenCalledWith('/dashboard/workout/sess-9?fromCreate=true');
     expect(screen.getByRole('button', { name: 'Opening workout… (4 of 4)' })).toBeDisabled();
     expect(screen.getByTestId('workout-start-progress')).toHaveAttribute('data-stage', 'opening');
   });

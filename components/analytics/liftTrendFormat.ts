@@ -1,12 +1,14 @@
 import {
   MIN_SESSIONS_FOR_TREND,
   type EarlyLift,
+  type LiftNotEnoughData,
   type LiftTrend,
   type LiftTrendPoint,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { UNASSIGNED_TRACK_KEY } from '@/services/locationTracks';
 import { formatWeight } from '@/lib/utils';
 import { formatLoad } from '@/lib/mcp/summaries';
+import { MIN_TREND_SPAN_DAYS } from '@/services/plateauDetector';
 import { E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS, E1RM_MAX_EFFECTIVE_REPS, rirForE1RM } from '@/services/shared/e1rm';
 
 /** Shared copy/colour rules for a lift's trend: Strength rows and the lift screen. */
@@ -17,8 +19,56 @@ const DIRECTION_LABEL: Record<LiftTrend['direction'], string> = {
   down: 'Down',
 };
 
+/**
+ * A lift's weekly change in plain words: "+1.2% per week" (UX panel r20:
+ * "%/wk" read as jargon to a beginner). Only for a REAL rate — a lift with
+ * `notEnoughData` shows notEnoughDataLine instead.
+ */
 export const signedPct = (n: number) =>
-  `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%/wk`;
+  // A real rate that rounds to zero reads "no change", not "0.0% per week",
+  // which looked like missing data (UX panel r20/r21).
+  Math.abs(n) < 0.05 ? 'no change per week' : `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}% per week`;
+
+/**
+ * What counts toward a trend, in the user's terms (UX panel r20: "I couldn't
+ * tell what counts as a workout"). The thresholds come from the code that
+ * applies them.
+ */
+export const TREND_RULE =
+  `A trend needs the lift in at least ${MIN_SESSIONS_FOR_TREND} workouts, spread over at least ${MIN_TREND_SPAN_DAYS} days, ` +
+  `so one good or bad day can't fake a change.`;
+
+/** What counts as "a workout" for a lift's trend. */
+export const WORKOUT_COUNTS_RULE =
+  'Any workout where you log the lift counts. All its sets in one workout count once.';
+
+/**
+ * The short "not enough data" line a lift row shows instead of a 0.0% rate:
+ * "Not enough data yet · 1 more workout on or after Dec 4". `today` is a
+ * local YYYY-MM-DD day.
+ */
+export function notEnoughDataLine(nd: LiftNotEnoughData, today: string): string {
+  if (nd.reason === 'short_span' && nd.readyOn && nd.readyOn > today) {
+    return `Not enough data yet · ${moreWorkouts(nd.workoutsNeeded)} on or after ${shortDay(nd.readyOn)}`;
+  }
+  return `Not enough data yet · ${moreWorkouts(nd.workoutsNeeded)}`;
+}
+
+/**
+ * Why there's no rate yet, in plain words, for the lift's own screen:
+ * "Your 3 workouts with this lift were all on the same day. …"
+ */
+export function notEnoughDataWhy(nd: LiftNotEnoughData, sessions: number): string {
+  const count = `${sessions} workout${sessions === 1 ? '' : 's'}`;
+  if (nd.reason === 'short_span') {
+    const spread =
+      nd.spanDays === 0
+        ? `were all on the same day`
+        : `are only ${nd.spanDays} day${nd.spanDays === 1 ? '' : 's'} apart`;
+    return `Your ${count} with this lift ${spread}, too close together to say whether it's going up. ${TREND_RULE}`;
+  }
+  return `Some of your ${count} with this lift can't be used for a trend yet (an outlier, or a reset after an equipment change). ${TREND_RULE}`;
+}
 
 /** "Nov 1" from a local YYYY-MM-DD day. */
 export function shortDay(day: string): string {
@@ -39,7 +89,8 @@ export function liftHref(lift: Pick<LiftTrend, 'seriesKey'>): string {
 }
 
 export function statusOf(lift: LiftTrend): { label: string; pill: string; stroke: string } {
-  if (lift.lowConfidence) return { label: 'Calibrating', pill: 'bg-fill text-ink-2', stroke: 'stroke-ink-3' };
+  if (lift.lowConfidence) return { label: 'Rebuilding', pill: 'bg-fill text-ink-2', stroke: 'stroke-ink-3' };
+  if (lift.notEnoughData) return { label: 'Too early', pill: 'bg-fill text-ink-2', stroke: 'stroke-ink-3' };
   if (lift.direction === 'rising') return { label: DIRECTION_LABEL.rising, pill: 'bg-status-ok-tint text-status-ok', stroke: 'stroke-status-ok' };
   if (lift.direction === 'down') return { label: DIRECTION_LABEL.down, pill: 'bg-status-warn-tint text-status-warn', stroke: 'stroke-status-warn' };
   return { label: DIRECTION_LABEL.flat, pill: 'bg-fill text-ink-2', stroke: 'stroke-ink-3' };
@@ -69,7 +120,7 @@ export function estMaxLabel(
   topSet: { weightKg?: number | null; reps?: number | null } | null | undefined,
   units: 'lb' | 'kg'
 ): string {
-  const head = `Est. max ${formatWeight(e1rmKg, units)}`;
+  const head = `Estimated max ${formatWeight(e1rmKg, units)}`;
   const w = topSet?.weightKg ?? 0;
   // Modality-safe: lift trends skip duration_based exercises (liftTrends.ts),
   // and an est. max only exists for rep-counted lifts.
@@ -106,7 +157,7 @@ export function nextTrendHint(earlyLifts: readonly EarlyLift[] | null | undefine
  * clamped at 12, no estimate past 15.
  */
 export const EST_MAX_METHOD =
-  `Est. max uses the Brzycki formula: weight × 36 ÷ (37 − reps to failure). ` +
+  `Estimated max uses the Brzycki formula: weight × 36 ÷ (37 − reps to failure). ` +
   `Reps to failure = the reps you did plus the reps you had left, read from the RIR (or RPE) you logged; ` +
   `a set with no effort logged counts as taken to failure. ` +
   `Past ${E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS} reps to failure it counts ${E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS}, ` +
@@ -128,7 +179,7 @@ export function estMaxExample(
 ): string | null {
   if (!point || !(point.topSetWeightKg > 0) || !(point.topSetReps > 0) || !(point.e1rmKg > 0)) return null;
   const set = setLabel(point.topSetWeightKg, point.topSetReps, units);
-  const max = `est. max ${formatWeight(point.e1rmKg, units)}`;
+  const max = `estimated max ${formatWeight(point.e1rmKg, units)}`;
   if (point.topSetRpe === undefined) return `${lead}: ${set} → ${max}.`;
   const left = rirForE1RM(point.topSetRpe);
   const toFailure = point.topSetReps + left;

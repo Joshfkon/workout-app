@@ -180,6 +180,15 @@ describe('beginner effort question: three answers on existing chip values', () =
     onRepsChange: jest.fn(),
   };
 
+  it('says why an answer is already selected and that a tap changes it (round 20)', () => {
+    setBeginner(true);
+    render(<SetLoggerRow {...base} targetRir={2} onLog={jest.fn()} />);
+    const note = screen.getByTestId('rir-preset-note');
+    expect(note).toHaveTextContent('We picked today’s target (“A couple more”) so logging is one tap.');
+    expect(note).toHaveTextContent(/tap that answer/);
+    expect(note.textContent).not.toMatch(/\bRIR\b/);
+  });
+
   it.each([
     ['That was hard', 1],
     ['A couple more', 2],
@@ -189,8 +198,10 @@ describe('beginner effort question: three answers on existing chip values', () =
     const user = userEvent.setup();
     const onLog = jest.fn();
     render(<SetLoggerRow {...base} targetRir={3} onLog={onLog} />);
-    expect(screen.getByText('How did that set feel?')).toBeInTheDocument();
+    expect(screen.getByText('After the set: how did it feel?')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: label }));
+    // Once tapped, the "we picked it for you" note goes: it's their answer now.
+    expect(screen.queryByTestId('rir-preset-note')).toBeNull();
     await user.click(screen.getAllByRole('button', { name: 'Log set' })[0]);
     expect(onLog).toHaveBeenCalledTimes(1);
     const data = onLog.mock.calls[0][0];

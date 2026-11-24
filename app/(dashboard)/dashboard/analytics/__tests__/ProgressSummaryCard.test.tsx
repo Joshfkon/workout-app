@@ -13,7 +13,7 @@ import type { ProgressSummary } from '../progressSummary';
 const summary: ProgressSummary = {
   weight: 'Weight is down 2.8 lb over the last 30 days.',
   weightMethod: 'Your weight trend uses all 8 weigh-ins from the last 30 days.',
-  liftMethod: 'A lift is rising when its est. max goes up more than 0.15% a week.',
+  liftMethod: 'A lift is rising when its estimated max goes up more than 0.15% a week.',
   strength: 'Over the last 12 weeks, your 2 tracked lifts are holding steady.',
   strengthContext: "You're on a cut, so lifts holding steady is a good result: you're keeping your strength while you lose fat.",
   strengthNames: null,

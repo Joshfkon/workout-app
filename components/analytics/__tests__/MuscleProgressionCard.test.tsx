@@ -65,7 +65,7 @@ describe('buildingSummaryText', () => {
   });
 
   it('does not show a complete-looking count for a lift at the threshold with a noisy fit', () => {
-    expect(buildingSummaryText([group('chest', [insight(3)])]).detail).toBe('Chest settling.');
+    expect(buildingSummaryText([group('chest', [insight(3)])]).detail).toBe('Chest needs its workouts spread over 10+ days.');
   });
 });
 
@@ -114,7 +114,7 @@ describe('MuscleProgressionCard', () => {
     );
     const name = screen.getByTestId('muscle-progression-name');
     const rate = screen.getByTestId('muscle-progression-rate');
-    expect(rate).toHaveTextContent('+0%/wk');
+    expect(rate).toHaveTextContent('no change per week');
     expect(name.className).not.toMatch(/\btruncate\b/);
     expect(rate.className).not.toMatch(/\btruncate\b/);
     // Plain words, not "Progression by muscle group" / "on a cut".

@@ -28,16 +28,16 @@ export function liftStatusRule(units: 'lb' | 'kg'): string {
   const example = EXAMPLE_LIFT[units];
   const perWeek = trimNumber((example * FLAT_BAND_PCT) / 100);
   return (
-    `A lift is rising when its est. max goes up more than ${pct}% a week, down when it drops more than ${pct}% a week, ` +
+    `A lift is rising when its estimated max goes up more than ${pct}% a week, down when it drops more than ${pct}% a week, ` +
     `and flat in between (on a ${example} ${units} lift, that's less than ${perWeek} ${units} a week either way).`
   );
 }
 
-/** What "%/wk" on a lift row is. */
+/** What the "% per week" on a lift row is. */
 export function liftRateRule(weeks: number): string {
   return (
-    `%/wk is how fast a lift's est. max is changing: the average weekly change across the best set of every workout ` +
-    `in the last ${weeks} weeks, as a share of today's est. max.`
+    `Change per week is how fast a lift's estimated max is moving: the average weekly change across the best set of every workout ` +
+    `in the last ${weeks} weeks, as a share of today's estimated max.`
   );
 }
 
