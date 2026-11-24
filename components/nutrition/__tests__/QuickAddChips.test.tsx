@@ -70,8 +70,9 @@ describe('QuickAddChips', () => {
     renderChips();
     expect(screen.getByText('Foods you log most — tap to add to')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: /foods you log most — tap to add to/i })).toHaveValue('dinner');
-    expect(screen.getByRole('button', { name: 'Log Greek yogurt, 170 g, to Dinner' })).toBeInTheDocument();
-    expect(screen.getByTestId('quick-add-chip-portion')).toHaveTextContent('170 g');
+    expect(screen.getByRole('button', { name: 'Log Greek yogurt, 170 g · 100 kcal, to Dinner' })).toBeInTheDocument();
+    // r22 panel: "doesn't show the portion or calories it will add".
+    expect(screen.getByTestId('quick-add-chip-portion')).toHaveTextContent('170 g · 100 kcal');
   });
 
   it('says a chip adds the amount you logged last time, and when the meal was picked by time of day', () => {
@@ -173,6 +174,20 @@ describe('QuickAddChips', () => {
     });
     expect(screen.getByTestId('quick-add-status-failed')).toHaveTextContent('Couldn’t save Greek yogurt');
     expect(screen.getByTestId('quick-add-chip')).not.toHaveAttribute('data-added');
+  });
+
+  it('shows Edit next to Undo when the add can be edited, and the amount on its own line', async () => {
+    const onEdit = jest.fn();
+    renderChips(jest.fn().mockResolvedValue({ ...confirmation(), amount: '170 g · 100 kcal · 17 g protein', onEdit }));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-add-chip'));
+    });
+    expect(screen.getByTestId('quick-add-status-amount')).toHaveTextContent('170 g · 100 kcal · 17 g protein');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    });
+    expect(onEdit).toHaveBeenCalledTimes(1);
   });
 
   it('renders nothing with no recent foods', () => {
