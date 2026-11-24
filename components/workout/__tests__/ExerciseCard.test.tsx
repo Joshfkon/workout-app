@@ -949,8 +949,8 @@ describe('ExerciseCard', () => {
       await act(() => new Promise((r) => setTimeout(r, 400)));
       expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
       expect(screen.queryByText(/may be near max/)).not.toBeInTheDocument();
-      // One gentle note remains: the strip says it's a guess to adjust.
-      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting guess.*then adjust/);
+      // One gentle note remains: the strip says it's an estimate to adjust.
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting estimate.*Adjust if it feels heavy/);
     });
   });
 
@@ -1241,7 +1241,7 @@ describe('ExerciseCard', () => {
       // No history and a target weight -> the plain source line is on the
       // strip, and the profile-estimate reason (which says the same thing in
       // other words) is not repeated next to it.
-      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting guess/);
+      expect(screen.getByTestId('suggestion-source')).toHaveTextContent(/starting estimate/);
       expect(screen.queryByText(/starting point estimated/)).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'How this suggestion works' }));
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
@@ -1272,8 +1272,10 @@ describe('ExerciseCard', () => {
     it('cold start (no history): the banner says the number is a profile estimate', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'First time on this lift — starting guess; pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting estimate from your training profile. Adjust if it feels heavy: pick a weight you could lift ~12 times'
       );
+      // ...and that the numbers are editable, under the logger.
+      expect(screen.getByTestId('prefill-editable-hint')).toHaveTextContent('tap one or use − / + to change it');
     });
 
     it('cold start from a profile estimate says what the guess rests on', () => {
@@ -1290,7 +1292,7 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'First time on this lift — starting guess from typical strength for your experience and bodyweight; pick a weight'
+        'First time on this lift — starting estimate from typical strength for your experience and bodyweight. Adjust if it feels heavy: pick a weight'
       );
     });
 
@@ -1308,7 +1310,7 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByTestId('suggestion-source')).toHaveTextContent(
-        'First time on this lift — starting guess from your Barbell Back Squat; pick a weight you could lift ~12 times, then adjust'
+        'First time on this lift — starting estimate from your Barbell Back Squat. Adjust if it feels heavy: pick a weight you could lift ~12 times'
       );
       // The prescribed number is unchanged by the explanation.
       expect(screen.getByTestId('suggestion-source').closest('[data-testid="suggestion-strip"]')).toHaveTextContent(

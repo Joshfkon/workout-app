@@ -46,12 +46,23 @@ describe('SuggestionBanner plain language', () => {
     expect(screen.getByText('RIR')).toBeInTheDocument();
   });
 
-  it('shows the reason inline only when there is no plain source line', () => {
+  it('with no plain source line, the reason itself is the "Why:" line (round 20)', () => {
     const { rerender } = render(<SuggestionBanner {...base} />);
-    expect(screen.getByText(/— starting point/)).toBeInTheDocument();
-    rerender(<SuggestionBanner {...base} source="Starting guess — pick a weight you could lift ~12 times" />);
+    // Never left as a grey tail after the numbers — it is the Why line.
     expect(screen.queryByText(/— starting point/)).not.toBeInTheDocument();
-    expect(screen.getByTestId('suggestion-source')).toHaveTextContent('Starting guess');
+    expect(screen.getByTestId('suggestion-source')).toHaveTextContent('starting point');
+    rerender(<SuggestionBanner {...base} source="Starting estimate — pick a weight you could lift ~12 times" />);
+    expect(screen.getByTestId('suggestion-source')).toHaveTextContent('Starting estimate');
+    expect(screen.queryByText(/starting point/)).not.toBeInTheDocument();
+  });
+
+  it('shows an injury caution as its own line, and nothing when there is none', () => {
+    const { rerender } = render(<SuggestionBanner {...base} />);
+    expect(screen.queryByTestId('suggestion-caution')).not.toBeInTheDocument();
+    rerender(<SuggestionBanner {...base} caution="Not adjusted for your shoulder — go lighter if it hurts" />);
+    expect(screen.getByTestId('suggestion-caution')).toHaveTextContent(
+      'Not adjusted for your shoulder — go lighter if it hurts'
+    );
   });
 
   it('warns in plain words instead of "predicted max"', () => {

@@ -609,6 +609,9 @@ export function SetLoggerRow({
       className="rounded-card bg-action-tint p-3 space-y-2.5"
       role="group"
       aria-label={`Set ${setNumber} logger`}
+      // The workout page keeps this clear of its fixed bottom stack when the
+      // stack grows (a toast arriving) — see keepClearOfBottomChrome.
+      data-active-logger=""
     >
       {/* Row 0: set label + plate calculator affordance (P1-5, mockup 02) */}
       {onPlateCalculatorOpen && (
