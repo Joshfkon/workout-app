@@ -2271,17 +2271,15 @@ function NutritionPageContent({ view }: { view: NutritionView }) {
             </span>
           </span>
         </span>
-        <StyledButton
-          variant="primary"
-          size="sm"
-          className="rounded-full px-4 flex-shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowWeightLog(true);
-          }}
+        {/* A label styled as a pill, not a second <button>: the whole card is
+            the button, and a button inside a button is invalid HTML (React
+            hydration error on this page). */}
+        <span
+          aria-hidden="true"
+          className="flex-shrink-0 rounded-full bg-action px-4 py-1.5 text-subhead font-semibold text-on-action"
         >
           {hasLoggedWeightToday ? 'Update' : 'Log'}
-        </StyledButton>
+        </span>
       </button>
 
       {/* Weight Trend */}
