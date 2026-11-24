@@ -257,8 +257,11 @@ export const MAX_TRACKED_LIFTS = 10;
  *  computing over identical data). */
 export const LIFT_TREND_WINDOW_DAYS = 84;
 
-/** Weekly E1RM change (%/wk) within ±this band counts as "flat". */
-const FLAT_BAND_PCT = 0.15;
+/**
+ * Weekly E1RM change (%/wk) within ±this band counts as "flat". Exported so
+ * the Progress copy states the real threshold (components/analytics/trendHelp).
+ */
+export const FLAT_BAND_PCT = 0.15;
 
 interface SeriesAccumulator {
   trackKey: string;

@@ -21,9 +21,14 @@ import { nextTrendHint, risingSlippingNames, setLabel } from '@/components/analy
 import {
   weighInsInWindow,
   weightTrendLine,
-  weightTrendMethod,
   type WeighInEntry,
 } from '@/components/analytics/weightTrend';
+import {
+  CUT_STRENGTH_NOTE,
+  isCutGoal,
+  liftStatusRule,
+  weightTrendRule,
+} from '@/components/analytics/trendHelp';
 
 /** Same window the weight chart opens on (its default 30d range). */
 export const SUMMARY_WEIGHT_WINDOW_DAYS = 30;
@@ -34,13 +39,28 @@ export interface ProgressSummaryInput {
   liftTrends: LiftTrendsSummary | null | undefined;
   units: 'lb' | 'kg';
   now: Date;
+  /**
+   * The current phase, else users.goal ('cut' / 'bulk' / …). On a cut,
+   * lifts holding steady is the result to hope for, and the card says so.
+   */
+  goal?: string | null;
 }
 
 export interface ProgressSummary {
   /** e.g. "Weight is down 1.6 lb over the last 30 days." */
   weight: string | null;
-  /** How the weight line was worked out (weightTrendMethod); null with no weight line. */
+  /**
+   * How the weight line was worked out (trendHelp.weightTrendRule); null with
+   * no weight line. Shown once, behind the card's info toggle.
+   */
   weightMethod: string | null;
+  /**
+   * What makes a lift rising / flat / down (trendHelp.liftStatusRule); null
+   * with no tracked lift. Behind the same info toggle.
+   */
+  liftMethod: string | null;
+  /** Goal-specific reading of the strength line (on a cut: holding is good); null otherwise. */
+  strengthContext: string | null;
   /** e.g. "Over the last 12 weeks, 2 of your 3 tracked lifts are going up and none are slipping." */
   strength: string | null;
   /** Which lifts the strength counts are, by name: "Rising: Bench Press, Squat." Null with nothing rising/slipping. */
@@ -166,7 +186,7 @@ export function strengthSentence(summary: LiftTrendsSummary | null | undefined):
     : '';
   // Name what is needed in the user's terms (the lift, how many more times),
   // not "not enough data for a strength trend" (UX panel: vague, jargony).
-  const lead2 = hint ?? `Log the same lift in ${MIN_SESSIONS_FOR_TREND} workouts to see its trend line.`;
+  const lead2 = hint ?? `Do the same lift in ${MIN_SESSIONS_FOR_TREND} separate workouts to see if it's going up.`;
   return `${lead2}${soFar}`;
 }
 
@@ -191,16 +211,33 @@ export function earlyComparison(lifts: readonly EarlyLift[] | undefined): { bett
 }
 
 /** Null when there is nothing to say on either side. */
-export function buildProgressSummary({ weighIns, liftTrends, units, now }: ProgressSummaryInput): ProgressSummary | null {
+export function buildProgressSummary({
+  weighIns,
+  liftTrends,
+  units,
+  now,
+  goal,
+}: ProgressSummaryInput): ProgressSummary | null {
   const weight = weightSentence(weighIns, units, now);
   const strength = strengthSentence(liftTrends);
   if (!weight && !strength) return null;
   const weightMethod = weight
-    ? weightTrendMethod(
+    ? weightTrendRule(
+        units,
         weighInsInWindow(weighIns, units, SUMMARY_WEIGHT_WINDOW_DAYS, now).length,
         SUMMARY_WEIGHT_WINDOW_DAYS
       )
     : null;
   const strengthNames = strength && liftTrends ? risingSlippingNames(liftTrends.lifts) : null;
-  return { weight, weightMethod, strength, strengthNames, lifts: strength ? liftBreakdown(liftTrends, units) : [] };
+  const tracked = liftTrends && strength ? liftTrends.lifts.length > 0 : false;
+  const confident = liftTrends ? liftTrends.rising + liftTrends.flat + liftTrends.down : 0;
+  return {
+    weight,
+    weightMethod,
+    liftMethod: tracked ? liftStatusRule(units) : null,
+    strength,
+    strengthContext: strength && confident > 0 && isCutGoal(goal) ? CUT_STRENGTH_NOTE : null,
+    strengthNames,
+    lifts: strength ? liftBreakdown(liftTrends, units) : [],
+  };
 }

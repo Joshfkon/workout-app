@@ -42,9 +42,9 @@ describe('liftTrendFormat', () => {
         { name: 'Lat Pulldown', sessions: 1, bestWeightKg: 55, bestReps: 10 },
         { name: 'Barbell Row', sessions: 2, bestWeightKg: 60, bestReps: 10 },
       ])
-    ).toBe('Log Barbell Row once more to see its trend line.');
+    ).toBe("Log Barbell Row in 1 more workout to see if it's going up.");
     expect(nextTrendHint([{ name: 'Lat Pulldown', sessions: 1, bestWeightKg: 55, bestReps: 10 }])).toBe(
-      'Log Lat Pulldown 2 more times to see its trend line.'
+      "Log Lat Pulldown in 2 more workouts to see if it's going up."
     );
     expect(nextTrendHint([])).toBeNull();
     expect(nextTrendHint(undefined)).toBeNull();

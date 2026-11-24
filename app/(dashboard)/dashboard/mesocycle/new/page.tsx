@@ -4,7 +4,8 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { BUILDER_INPUTS_QUERY_KEY, fetchBuilderInputs } from '@/lib/training/fetchBuilderInputs';
 import { invalidatePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
 import { FirstTimeHint, InlineHint } from '@/components/ui/FirstTimeHint';
@@ -38,9 +39,7 @@ import {
 } from '@/services/mesocycleBuilder';
 import { generateFullMesocycleWithFatigue, sessionSetCapacity } from '@/services/sessionBuilderWithFatigue';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
-import { now as clockNow } from '@/lib/clock';
 import {
-  BUILDER_HISTORY_DAYS,
   builderDefaultsFromHistory,
   priorityVolumeAdjustments,
   plannedVolumeWithBands,
@@ -65,9 +64,8 @@ import {
   type MusclePriorityRow,
 } from '@/lib/training/builderDefaults';
 import type { VolumeAdjustmentInput } from '@/services/mesocycleBuilder';
-import { resolveMuscleToStandard, STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup } from '@/types/schema';
+import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 import { IconAlertTriangle, IconBolt, IconBulb, IconCalendar, IconGauge, IconHeartBroken, IconMoon, IconTrendingDown } from '@tabler/icons-react';
 
 /** Days a split's rotation needs so no day is dropped (Bro Split: one per body part). */
@@ -82,7 +80,7 @@ export default function NewMesocyclePage() {
   useDocumentTitle('New Mesocycle');
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { preferences, isLoading: prefsLoading } = useUserPreferences();
+  const { preferences } = useUserPreferences();
   const { canAccess, isLoading: subLoading } = useSubscription();
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
 
@@ -330,129 +328,75 @@ export default function NewMesocyclePage() {
   const optimalTime = getOptimalSessionTime(plannedSessionsPerWeek);
   const volumeAssessment = assessWeeklyVolume(plannedSessionsPerWeek, sessionDurationMinutes);
 
-  // Load user data on mount
+  // Builder inputs (lib/training/fetchBuilderInputs): one parallel batch,
+  // cached for the session so coming back to the builder is instant. They
+  // seed the form ONCE per visit — a background refetch must never overwrite
+  // what the lifter has already changed.
+  const inputsQuery = useQuery({
+    queryKey: BUILDER_INPUTS_QUERY_KEY,
+    queryFn: fetchBuilderInputs,
+    staleTime: 60 * 1000,
+  });
+  const appliedInputsRef = useRef(false);
   useEffect(() => {
-    async function loadUserData() {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        setUserId(user.id);
-        // Get user profile with extended fields
-        const { data: profile } = await supabase
-          .from('users')
-          .select('goal, experience, height_cm, age, sleep_quality, stress_level, training_age, available_equipment, injury_history, enhanced_athlete_mode, preferences')
-          .eq('id', user.id)
-          .single();
-
-        if (profile) {
-          setEnhancedAthleteMode(profile.enhanced_athlete_mode === true);
-          setUserGoal(profile.goal || 'maintenance');
-          setUserExperience(profile.experience || 'intermediate');
-          setHeightCm(profile.height_cm);
-          if (profile.age) setUserAge(profile.age);
-          if (profile.sleep_quality) setSleepQuality(profile.sleep_quality as Rating);
-          if (profile.stress_level) setStressLevel(profile.stress_level as Rating);
-          if (profile.training_age !== null && profile.training_age !== undefined) setStoredTrainingAge(Number(profile.training_age));
-          if (profile.available_equipment && Array.isArray(profile.available_equipment)) {
-            setAvailableEquipment(profile.available_equipment as Equipment[]);
-          }
-          if (profile.injury_history && Array.isArray(profile.injury_history)) {
-            setInjuryHistory(profile.injury_history as MuscleGroup[]);
-          }
-        }
-        
-        // Get latest DEXA scan
-        const { data: scans } = await supabase
-          .from('dexa_scans')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('scan_date', { ascending: false })
-          .limit(1);
-        
-        if (scans && scans.length > 0) {
-          setLatestDexa({
-            id: scans[0].id,
-            userId: scans[0].user_id,
-            scanDate: scans[0].scan_date,
-            weightKg: scans[0].weight_kg,
-            leanMassKg: scans[0].lean_mass_kg,
-            fatMassKg: scans[0].fat_mass_kg,
-            bodyFatPercent: scans[0].body_fat_percent,
-            boneMassKg: scans[0].bone_mass_kg,
-            regionalData: scans[0].regional_data || null,
-            notes: scans[0].notes,
-            createdAt: scans[0].created_at,
-          });
-        }
-        
-        // Get unavailable gym equipment
-        const unavailable = await fetchUnavailableEquipment(user.id);
-        setUnavailableEquipmentIds(unavailable);
-
-        // Check if this is the user's first mesocycle
-        const { count } = await supabase
-          .from('mesocycles')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id);
-
-        setIsFirstMesocycle(count === 0);
-
-        // Session length: the last block's, else by experience
-        // (lib/training/builderDefaults defaultSessionMinutes).
-        const { data: lastMeso } = await supabase
-          .from('mesocycles')
-          .select('session_duration_minutes')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const loadedDefault = defaultSessionMinutes(
-          (profile?.experience as Experience | undefined) ?? 'intermediate',
-          (lastMeso as { session_duration_minutes?: number | null } | null)?.session_duration_minutes ?? null
-        );
-        setSessionDurationMinutes((current) => (sessionLengthTouchedRef.current ? current : loadedDefault));
-
-        // Muscle priorities from Settings — the generator never saw them.
-        const { data: priorityRows } = await supabase
-          .from('user_muscle_priorities')
-          .select('muscle_group, priority')
-          .eq('user_id', user.id);
-        setPriorityAdjustments(priorityVolumeAdjustments((priorityRows ?? []) as MusclePriorityRow[]));
-
-        // Recent training → schedule defaults (sessions a week, split).
-        const since = clockNow();
-        since.setDate(since.getDate() - BUILDER_HISTORY_DAYS);
-        const { data: recent } = await supabase
-          .from('workout_sessions')
-          .select('completed_at, exercise_blocks(exercises(primary_muscle))')
-          .eq('user_id', user.id)
-          .eq('state', 'completed')
-          .gte('completed_at', since.toISOString())
-          .order('completed_at', { ascending: true });
-        const sessions: StandardMuscleGroup[][] = ((recent ?? []) as { exercise_blocks?: { exercises?: { primary_muscle?: string | null } | null }[] | null }[]).map(
-          (s) =>
-            (s.exercise_blocks ?? []).flatMap((b) => {
-              const primary = b.exercises?.primary_muscle;
-              const std = primary ? resolveMuscleToStandard(primary)[0] : undefined;
-              return std ? [std] : [];
-            })
-        );
-        const firstAt = (recent ?? [])[0] as { completed_at?: string } | undefined;
-        const spanDays = firstAt?.completed_at
-          ? Math.ceil((clockNow().getTime() - new Date(firstAt.completed_at).getTime()) / 86_400_000)
-          : BUILDER_HISTORY_DAYS;
-        const defaults = builderDefaultsFromHistory(sessions, spanDays);
-        setHistoryDefaults(defaults);
-        const fromOnboarding = onboardingScheduleDefaults((profile as { preferences?: unknown } | null)?.preferences);
-        setOnboardingDefaults(fromOnboarding);
-        const days = defaults.daysPerWeek ?? fromOnboarding.daysPerWeek;
-        if (days) setDaysPerWeek(days);
+    const inputs = inputsQuery.data;
+    if (!inputs || appliedInputsRef.current) return;
+    appliedInputsRef.current = true;
+    // All in one synchronous pass, so React batches it into ONE render — the
+    // program generator below re-runs on every input change, and the old
+    // serial fetch-then-set sequence ran it once per round trip.
+    const { profile, latestDexa: scan } = inputs;
+    setUserId(inputs.userId);
+    if (profile) {
+      setEnhancedAthleteMode(profile.enhanced_athlete_mode === true);
+      setUserGoal((profile.goal as Goal) || 'maintenance');
+      setUserExperience((profile.experience as Experience) || 'intermediate');
+      setHeightCm(profile.height_cm);
+      if (profile.age) setUserAge(profile.age);
+      if (profile.sleep_quality) setSleepQuality(profile.sleep_quality as Rating);
+      if (profile.stress_level) setStressLevel(profile.stress_level as Rating);
+      if (profile.training_age !== null && profile.training_age !== undefined) setStoredTrainingAge(Number(profile.training_age));
+      if (profile.available_equipment && Array.isArray(profile.available_equipment)) {
+        setAvailableEquipment(profile.available_equipment as Equipment[]);
+      }
+      if (profile.injury_history && Array.isArray(profile.injury_history)) {
+        setInjuryHistory(profile.injury_history as MuscleGroup[]);
       }
     }
-
-    loadUserData();
-  }, []);
+    if (scan) {
+      setLatestDexa({
+        id: scan.id,
+        userId: scan.user_id,
+        scanDate: scan.scan_date,
+        weightKg: scan.weight_kg,
+        leanMassKg: scan.lean_mass_kg,
+        fatMassKg: scan.fat_mass_kg,
+        bodyFatPercent: scan.body_fat_percent,
+        boneMassKg: scan.bone_mass_kg ?? undefined,
+        regionalData: (scan.regional_data as DexaScan['regionalData']) || null,
+        notes: scan.notes,
+        createdAt: scan.created_at,
+      } as DexaScan);
+    }
+    setUnavailableEquipmentIds(inputs.unavailableEquipmentIds);
+    setIsFirstMesocycle(inputs.isFirstMesocycle);
+    // Session length: the last block's, else by experience
+    // (lib/training/builderDefaults defaultSessionMinutes).
+    const loadedDefault = defaultSessionMinutes(
+      ((profile?.experience as Experience | undefined) ?? 'intermediate'),
+      inputs.lastSessionMinutes
+    );
+    setSessionDurationMinutes((current) => (sessionLengthTouchedRef.current ? current : loadedDefault));
+    // Muscle priorities from Settings — the generator never saw them.
+    setPriorityAdjustments(priorityVolumeAdjustments(inputs.priorityRows));
+    // Recent training → schedule defaults (sessions a week, split).
+    const defaults = builderDefaultsFromHistory(inputs.recentSessions, inputs.historySpanDays);
+    setHistoryDefaults(defaults);
+    const fromOnboarding = onboardingScheduleDefaults(profile?.preferences);
+    setOnboardingDefaults(fromOnboarding);
+    const days = defaults.daysPerWeek ?? fromOnboarding.daysPerWeek;
+    if (days) setDaysPerWeek(days);
+  }, [inputsQuery.data]);
 
   const trainingAge = effectiveTrainingAge(storedTrainingAge, userExperience);
   const trainingAgeAssumed = !(storedTrainingAge !== null && storedTrainingAge > 0);
@@ -635,6 +579,10 @@ export default function NewMesocyclePage() {
       // is the denominator for recovery session capacity. Drop the cached plan
       // so readiness and soreness learning don't normalize against the old one.
       invalidatePlannedFrequency(queryClient);
+      // The next visit to the builder must see this block (first-block tips,
+      // last session length), and Train must show the new plan.
+      void queryClient.invalidateQueries({ queryKey: BUILDER_INPUTS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['log'] });
 
       router.push('/dashboard/mesocycle');
     } catch (err) {
@@ -666,12 +614,14 @@ export default function NewMesocyclePage() {
     );
   }
 
-  if (prefsLoading || subLoading) {
-    return (
-      <div className="max-w-2xl mx-auto py-8">
-        <p className="text-ink-2 text-center">Loading your profile...</p>
-      </div>
-    );
+  // Cold start only: the subscription isn't known yet, or the builder's
+  // inputs haven't arrived (nothing cached). Show the builder's shape with a
+  // visible label — not a lone "Loading your profile..." line, and not a
+  // form of defaults that jumps when the profile lands. Units come from the
+  // shared preferences store and never gate the page. A failed inputs read
+  // falls through to the form on defaults, as before.
+  if (subLoading || (inputsQuery.isPending && !inputsQuery.isError)) {
+    return <BuilderSkeleton />;
   }
 
   return (
@@ -1905,6 +1855,39 @@ export default function NewMesocyclePage() {
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+/** The builder's first step, shaped, while its inputs load (cold start only). */
+function BuilderSkeleton() {
+  return (
+    <div
+      className="max-w-2xl mx-auto space-y-6"
+      role="status"
+      aria-busy="true"
+      data-testid="mesocycle-builder-loading"
+    >
+      <div>
+        <h1 className="text-title font-bold text-ink">Create mesocycle</h1>
+        <p className="mt-1 flex items-center gap-2 text-ink-2">
+          <span
+            className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-3 border-t-transparent"
+            aria-hidden="true"
+          />
+          Reading your profile and recent training…
+        </p>
+      </div>
+      <div className="animate-pulse space-y-4" aria-hidden="true">
+        <div className="h-10 rounded-card bg-card shadow-card" />
+        <div className="rounded-card bg-card p-4 shadow-card space-y-3">
+          <div className="h-4 w-1/3 rounded bg-fill" />
+          <div className="h-10 w-full rounded bg-fill" />
+          <div className="h-4 w-1/2 rounded bg-fill" />
+          <div className="h-10 w-full rounded bg-fill" />
+        </div>
+        <div className="h-32 rounded-card bg-card shadow-card" />
+      </div>
     </div>
   );
 }
