@@ -83,6 +83,7 @@ export function WorkoutStartPreview({
   unit,
   earlySet,
   onLogFirstSet,
+  onShowFull,
 }: {
   preview: PendingWorkoutPreview;
   stage: PendingBuildStage | null;
@@ -90,13 +91,15 @@ export function WorkoutStartPreview({
   unit: WeightUnit | null;
   earlySet: EarlyLoggedSet | null;
   onLogFirstSet: (set: EarlyLoggedSet) => void;
+  /** The full workout has loaded: offer it, without swapping it in under the finger. */
+  onShowFull?: () => void;
 }) {
   const first = preview.exercises[0];
   const unitLabel = unit === 'kg' ? 'kg' : 'lbs';
   const canLogNow = !earlySet && first.loggable && unit != null;
 
   return (
-    <WorkoutStartPreviewShell preview={preview} stage={stage} canLogNow={canLogNow}>
+    <WorkoutStartPreviewShell preview={preview} stage={stage} canLogNow={canLogNow} ready={!!onShowFull}>
       {earlySet && unit ? (
         <p
           className="flex items-start gap-2 rounded-lg bg-status-ok-tint px-3 py-2 text-subhead text-ink"
@@ -112,6 +115,16 @@ export function WorkoutStartPreview({
         <PreviewLogger key={unit} exercise={first} unit={unit} onLogFirstSet={onLogFirstSet} />
       ) : (
         <PreviewFirstSetSummary preview={preview} unit={unit} />
+      )}
+      {onShowFull && (
+        <button
+          type="button"
+          onClick={onShowFull}
+          className="w-full min-h-[48px] rounded-button bg-fill text-headline font-semibold text-action"
+          data-testid="preview-show-full"
+        >
+          Show full workout
+        </button>
       )}
     </WorkoutStartPreviewShell>
   );

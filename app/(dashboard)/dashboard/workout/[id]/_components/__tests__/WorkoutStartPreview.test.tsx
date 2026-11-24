@@ -120,5 +120,18 @@ describe('WorkoutStartPreview', () => {
     expect(previewWeightInput(60, 'lb')).toBe('132.5');
     expect(previewStatusLine(null)).toMatch(/Getting the rest/);
     expect(previewStatusLine('building', true)).toMatch(/^Set 1 is ready to log/);
+    expect(previewStatusLine(null, true, true)).toMatch(/^Your full workout is ready/);
+  });
+
+  it('once the full workout has loaded, stays put and offers it instead of swapping under the finger', async () => {
+    const onShowFull = jest.fn();
+    render(
+      <WorkoutStartPreview preview={preview} stage={null} unit="kg" earlySet={null} onLogFirstSet={jest.fn()} onShowFull={onShowFull} />
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Your full workout is ready');
+    // The logger is still here to tap.
+    expect(screen.getAllByRole('button', { name: /log set/i }).length).toBeGreaterThan(0);
+    await userEvent.setup().click(screen.getByTestId('preview-show-full'));
+    expect(onShowFull).toHaveBeenCalled();
   });
 });

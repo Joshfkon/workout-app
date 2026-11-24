@@ -346,7 +346,8 @@ describe('Onboarding goal step: daily targets', () => {
 
     const card = screen.getByTestId('goal-daily-targets');
     const maintain = expected('maintenance').targets;
-    expect(card).toHaveTextContent(`${maintain.calories.toLocaleString()} kcal · ${maintain.protein} g protein`);
+    expect(screen.getByTestId('targets-calories-row')).toHaveTextContent(`${maintain.calories.toLocaleString()} kcal`);
+    expect(screen.getByTestId('targets-protein-row')).toHaveTextContent(`${maintain.protein} g`);
     expect(card).toHaveTextContent(/Change them any time in Eat/);
     // Where the numbers come from, in plain words: maintenance, then the goal's change.
     const maintainBasis = expected('maintenance').calories;
@@ -354,7 +355,7 @@ describe('Onboarding goal step: daily targets', () => {
       `Estimated maintenance: ~${maintainBasis.maintenanceKcal.toLocaleString()} kcal a day`
     );
     expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(/from your lean mass/);
-    expect(screen.getByTestId('targets-edit')).toHaveTextContent('Edit');
+    expect(screen.getByTestId('targets-edit')).toHaveTextContent('Type exact numbers');
     expect(screen.getByTestId('goal-protein-basis')).toHaveTextContent(
       'Protein: 2.2 g per kg of lean mass. Your lean mass is 68 kg (from your body fat), so about 1.9 g per kg of body weight.'
     );
@@ -398,9 +399,7 @@ describe('Onboarding goal step: daily targets', () => {
 
     await user.type(screen.getByLabelText('Age'), '30');
     const maintain = expected('maintenance').targets;
-    expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent(
-      `${maintain.calories.toLocaleString()} kcal · ${maintain.protein} g protein`
-    );
+    expect(screen.getByTestId('targets-calories-row')).toHaveTextContent(`${maintain.calories.toLocaleString()} kcal`);
     expect(screen.queryByTestId('goal-targets-need-age')).not.toBeInTheDocument();
     // The field doesn't vanish mid-typing once the age becomes valid.
     expect(screen.getByLabelText('Age')).toHaveValue(30);
@@ -421,7 +420,7 @@ describe('Onboarding goal step: daily targets', () => {
     const user = await reachGoalStep('15', '30');
 
     await waitFor(() =>
-      expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent('2,400 kcal · 180 g protein')
+      expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent('2,400 kcal')
     );
     await finishGoal(user);
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
@@ -1072,7 +1071,7 @@ describe('Onboarding: protein is explained and editable, and a pace can be typed
     const withBf = starterTargets({ phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male', bodyFatPercent: 10 })!;
     const assumed = starterTargets({ phase: 'bulk', weightKg: 80, heightCm: 180, age: 30, sex: 'male' })!;
     expect(withBf.targets.protein).toBeGreaterThan(assumed.targets.protein);
-    expect(screen.getByTestId('goal-daily-targets')).toHaveTextContent(`${withBf.targets.protein} g protein`);
+    expect(screen.getByTestId('targets-protein-row')).toHaveTextContent(`${withBf.targets.protein} g`);
   });
 
   it('lets protein be set by hand: calories stay, it is saved, and auto-updates are switched off', async () => {
@@ -1082,7 +1081,7 @@ describe('Onboarding: protein is explained and editable, and a pace can be typed
     await user.click(screen.getByTestId('targets-edit'));
     await user.type(screen.getByTestId('goal-protein-input'), '180');
     const card = screen.getByTestId('goal-daily-targets');
-    expect(card).toHaveTextContent('180 g protein');
+    expect(screen.getByTestId('targets-protein-row')).toHaveTextContent('180 g');
     expect(card).toHaveTextContent(`${before.targets.calories.toLocaleString()} kcal`);
     expect(screen.getByTestId('goal-protein-basis')).toHaveTextContent(/set by you.*calculated figure was/);
 
@@ -1099,7 +1098,8 @@ describe('Onboarding: protein is explained and editable, and a pace can be typed
     await user.click(screen.getByTestId('targets-edit'));
     await user.type(screen.getByTestId('targets-calories-input'), '2300');
     const card = screen.getByTestId('goal-daily-targets');
-    expect(card).toHaveTextContent(`2,300 kcal · ${before.targets.protein} g protein`);
+    expect(screen.getByTestId('targets-calories-row')).toHaveTextContent('2,300 kcal');
+    expect(screen.getByTestId('targets-protein-row')).toHaveTextContent(`${before.targets.protein} g`);
     expect(screen.getByTestId('goal-targets-source')).toHaveTextContent(
       `Calories: set by you. The calculated figure was ${before.targets.calories.toLocaleString()} kcal.`
     );
@@ -1121,7 +1121,14 @@ describe('Onboarding: protein is explained and editable, and a pace can be typed
       `~${s.calories.maintenanceKcal.toLocaleString('en-US')} kcal you burn a day − ${Math.abs(Math.round(s.calories.adjustmentKcal)).toLocaleString('en-US')} for a moderate cut`
     );
     expect(screen.getByRole('button', { name: 'Edit calories and protein' })).toBeInTheDocument();
-    expect(screen.getByTestId('targets-edit-hint')).toHaveTextContent('Tap Edit to type your own calories or protein.');
+    // Each number has its own −/+ right next to it (final panel run: 5 of 6
+    // still missed that the targets could be changed).
+    const calBefore = s.calories.calculated;
+    await user.click(screen.getByRole('button', { name: 'Raise calories by 50 kcal' }));
+    const expected = calBefore + 50;
+    expect(screen.getByTestId('targets-calories-row')).toHaveTextContent(`${expected.toLocaleString('en-US')} kcal`);
+    expect(screen.getByRole('button', { name: 'Lower protein by 5 g' })).toBeInTheDocument();
+    expect(screen.getByTestId('targets-protein-short')).toHaveTextContent(/of your lean mass/);
   });
 
   it('cut paces above the leanness cap say what the targets use, so they agree with the sum (Dre, UX round 23)', async () => {

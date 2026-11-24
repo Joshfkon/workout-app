@@ -57,7 +57,8 @@ export function previewRepsInput(exercise: Pick<PendingWorkoutPreviewExercise, '
  * leads with that: "Getting the rest of your workout ready…" alone read as
  * "wait" (UX panel round 22, Maya and Frank both waited instead of logging).
  */
-export function previewStatusLine(stage: PendingBuildStage | null, canLogNow = false): string {
+export function previewStatusLine(stage: PendingBuildStage | null, canLogNow = false, ready = false): string {
+  if (ready) return 'Your full workout is ready. Log set 1 here, or open the full workout below.';
   if (canLogNow) return 'Set 1 is ready to log. The rest of your workout loads while you lift.';
   if (stage === 'building') return 'Picking weights for the rest of your workout…';
   if (stage === 'saving') return 'Saving your exercises…';
@@ -83,12 +84,15 @@ export function WorkoutStartPreviewShell({
   preview,
   stage,
   canLogNow = false,
+  ready = false,
   children,
 }: {
   preview: PendingWorkoutPreview;
   stage: PendingBuildStage | null;
   /** Set 1's logger is showing: the status line says so instead of "getting ready". */
   canLogNow?: boolean;
+  /** The full workout has loaded behind the preview (no spinner, says so). */
+  ready?: boolean;
   /** The first set: the logger on the workout screen, the numbers while its code loads. */
   children: ReactNode;
 }) {
@@ -99,8 +103,8 @@ export function WorkoutStartPreviewShell({
       <div className="pt-4">
         <h1 className="text-title font-bold text-ink">Today&apos;s workout</h1>
         <p role="status" className="mt-1 flex items-center gap-1.5 text-subhead text-ink-3">
-          <IconLoader2 size={14} className="animate-spin flex-shrink-0" aria-hidden="true" />
-          {previewStatusLine(stage, canLogNow)}
+          {!ready && <IconLoader2 size={14} className="animate-spin flex-shrink-0" aria-hidden="true" />}
+          {previewStatusLine(stage, canLogNow, ready)}
         </p>
       </div>
 

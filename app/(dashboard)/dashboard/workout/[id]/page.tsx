@@ -6770,10 +6770,36 @@ export default function WorkoutPage() {
   // logSet path as a tap on the card (it was never written on its own). The
   // block ids are only known now, so the exercise is the match: it must be
   // the block the screen opened on, with nothing logged on it yet.
+  // The start preview the lifter is looking at stays on screen when the
+  // full workout finishes loading, until they log set 1 on it or tap "Show
+  // full workout". Swapping it out on load moved "Log set" from mid-screen
+  // to the bottom bar under their finger, so the first tap hit nothing (UX
+  // panel: 4 of 5 first taps failed). The store clears its copy on load, so
+  // keep our own.
+  const [heldPreview, setHeldPreview] = useState<typeof startPreview>(null);
+  const [previewReleased, setPreviewReleased] = useState(false);
+  useEffect(() => {
+    if (phase === 'loading' && startPreview && startPreview.exercises.length > 0 && !heldPreview) {
+      setHeldPreview(startPreview);
+    }
+  }, [phase, startPreview, heldPreview]);
+  // A set already logged on the preview releases it: nothing left to tap there.
+  const holdingPreview = phase === 'workout' && !!heldPreview && !previewReleased && !previewEarlySet;
+  // Persist that release: replaying the set consumes previewEarlySet, and
+  // the preview must not come back over the live workout then (Codex review
+  // on #873).
+  useEffect(() => {
+    if (previewEarlySet && !previewReleased) setPreviewReleased(true);
+  }, [previewEarlySet, previewReleased]);
+
   const earlySetReplayedForRef = useRef<string | null>(null);
   useEffect(() => {
     if (phase === 'loading') return;
     clearPendingWorkoutPreview(sessionId);
+    // While the preview is held, set 1 (if any) waits for the release.
+    if (holdingPreview) return;
+    // Whatever happens next, the preview is done.
+    if (heldPreview && !previewReleased) setPreviewReleased(true);
     // Only the live workout can take the set. On any other phase (a load
     // error above all) it stays held, unconsumed: the error screen names it so
     // it isn't lost silently (Codex review on #871).
@@ -6798,9 +6824,10 @@ export default function WorkoutPage() {
       setType: 'normal',
       feedback: early.feedback,
     });
-    // Runs once, when the screen reaches the live workout.
+    // Runs once, when the screen reaches the live workout (and the preview,
+    // if one was held, is released).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, sessionId]);
+  }, [phase, sessionId, holdingPreview]);
   const heldEarlySet = phase === 'error' ? getEarlyLoggedSet(sessionId) : null;
 
   // Apple Watch: mirror the active set and take logs/navigation back. A watch
@@ -6834,6 +6861,22 @@ export default function WorkoutPage() {
     },
     finishWorkout: handleWorkoutComplete,
   });
+
+  if (holdingPreview && heldPreview) {
+    return (
+      <WorkoutStartPreview
+        preview={heldPreview}
+        stage={null}
+        unit={previewUnit}
+        earlySet={previewEarlySet}
+        onLogFirstSet={(set) => {
+          recordEarlyLoggedSet(sessionId, set);
+          setPreviewReleased(true);
+        }}
+        onShowFull={() => setPreviewReleased(true)}
+      />
+    );
+  }
 
   if (phase === 'loading') {
     // A start that just navigated here knows its exercises: show the first

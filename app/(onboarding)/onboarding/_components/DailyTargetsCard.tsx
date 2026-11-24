@@ -118,6 +118,21 @@ export function proteinBasisLine(basis: StarterProteinBasis, units: WeightUnit):
   );
 }
 
+/** Protein's working in one short line: "2.4 g per kg of lean mass (70 kg)". Pure. */
+export function proteinShortLine(basis: StarterProteinBasis, units: WeightUnit): string {
+  if (basis.setByHand) return `Set by you. Calculated: ${basis.calculated} g.`;
+  const lean = units === 'lb' ? `${Math.round(basis.leanMassKg * LB_PER_KG)} lb` : `${Math.round(basis.leanMassKg)} kg`;
+  const per =
+    units === 'lb'
+      ? `${basis.perLbLeanMass.toFixed(1)} g per lb`
+      : `${(basis.perLbLeanMass * LB_PER_KG).toFixed(1)} g per kg`;
+  return `${per} of your lean mass (${lean})`;
+}
+
+/** Stepper sizes for the inline −/+ on the card. */
+export const CALORIE_STEP = 50;
+export const PROTEIN_STEP = 5;
+
 export interface DailyTargetsCardProps {
   calories: number;
   protein: number;
@@ -177,33 +192,72 @@ export function DailyTargetsCard({
 
   return (
     <div className="rounded-card bg-card p-4 shadow-card" data-testid={testId}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-subhead text-ink-2">{heading}</p>
-          <p className="text-title font-bold text-ink tabular-nums">
-            {calories.toLocaleString()} kcal · {Math.round(protein)} g protein
-          </p>
-          <p className="text-subhead text-ink-2 tabular-nums" data-testid="targets-formula">
-            {calorieFormulaLine(calorieBasis, goalName)}
-          </p>
-        </div>
-        {canEdit && (
+      {/* Each number with its own −/+ and its working right under it, so
+          "how is this worked out" and "can I change it" are answered where
+          the eye lands (UX panel, final run: 5 of 6 still missed the
+          breakdown and the Edit button below the numbers). */}
+      <p className="text-subhead text-ink-2">{heading}</p>
+      <TargetRow
+        label="Calories"
+        value={`${calories.toLocaleString()} kcal`}
+        working={calorieFormulaLine(calorieBasis, goalName)}
+        workingTestId="targets-formula"
+        onStep={
+          onCaloriesChange
+            ? (dir) => {
+                const next = Math.min(CALORIE_EDIT_MAX, Math.max(calMin, Math.round(calories) + dir * CALORIE_STEP));
+                setCalorieText(String(next));
+                onCaloriesChange(next);
+              }
+            : undefined
+        }
+        stepLabel={`${CALORIE_STEP} kcal`}
+        testId="targets-calories-row"
+      />
+      <TargetRow
+        label="Protein"
+        value={`${Math.round(protein)} g`}
+        working={proteinShortLine(proteinBasis, units)}
+        workingTestId="targets-protein-short"
+        onStep={
+          onProteinChange
+            ? (dir) => {
+                const next = Math.min(PROTEIN_EDIT_RANGE.max, Math.max(PROTEIN_EDIT_RANGE.min, Math.round(protein) + dir * PROTEIN_STEP));
+                setProteinText(String(next));
+                onProteinChange(next);
+              }
+            : undefined
+        }
+        stepLabel={`${PROTEIN_STEP} g`}
+        testId="targets-protein-row"
+      />
+      {canEdit && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}
             aria-expanded={editing}
             aria-label={editing ? 'Done editing targets' : 'Edit calories and protein'}
-            className="min-h-[44px] flex-shrink-0 rounded-full border border-action px-4 text-body font-semibold text-action active:scale-[0.97]"
+            className="min-h-[44px] text-body font-semibold text-action"
             data-testid="targets-edit"
           >
-            {editing ? 'Done' : 'Edit'}
+            {editing ? 'Done' : 'Type exact numbers'}
           </button>
-        )}
-      </div>
-      {canEdit && !editing && (
-        <p className="mt-1 text-caption text-ink-3" data-testid="targets-edit-hint">
-          Tap Edit to type your own calories or protein.
-        </p>
+          {anyByHand && !editing && (
+            <button
+              type="button"
+              className="min-h-[44px] text-body font-medium text-ink-2"
+              onClick={() => {
+                setCalorieText('');
+                setProteinText('');
+                onCaloriesChange?.(null);
+                onProteinChange?.(null);
+              }}
+            >
+              Reset to calculated
+            </button>
+          )}
+        </div>
       )}
 
       {editing && (
@@ -266,16 +320,58 @@ export function DailyTargetsCard({
         </div>
       )}
 
-      <div className="mt-3 space-y-1.5 border-t border-sep pt-3" data-testid="goal-targets-source">
-        <p className="text-subhead font-medium text-ink">How these are worked out</p>
-        <ul className="space-y-1 text-subhead text-ink-2">
+      <details className="mt-3 border-t border-sep pt-3" data-testid="goal-targets-source">
+        <summary className="min-h-[44px] cursor-pointer text-subhead font-medium text-action">Show the full working</summary>
+        <ul className="mt-1 space-y-1 text-subhead text-ink-2">
           {calorieBasisLines(calorieBasis, units, goalName).map((line) => (
             <li key={line}>{line}</li>
           ))}
           <li data-testid="goal-protein-basis">{proteinBasisLine(proteinBasis, units)}</li>
         </ul>
-      </div>
+      </details>
       {footnote && <p className="mt-2 text-caption text-ink-3">{footnote}</p>}
+    </div>
+  );
+}
+
+function TargetRow({
+  label,
+  value,
+  working,
+  workingTestId,
+  onStep,
+  stepLabel,
+  testId,
+}: {
+  label: string;
+  value: string;
+  working: string;
+  workingTestId: string;
+  onStep?: (dir: -1 | 1) => void;
+  stepLabel: string;
+  testId: string;
+}) {
+  const btn =
+    'h-11 w-11 flex-shrink-0 rounded-full bg-fill text-title font-semibold text-action active:scale-[0.95]';
+  return (
+    <div className="mt-2 flex items-center gap-3" data-testid={testId}>
+      <div className="min-w-0 flex-1">
+        <p className="text-subhead text-ink-2">{label}</p>
+        <p className="text-title font-bold text-ink tabular-nums">{value}</p>
+        <p className="text-caption text-ink-2 tabular-nums" data-testid={workingTestId}>
+          {working}
+        </p>
+      </div>
+      {onStep && (
+        <div className="flex items-center gap-2">
+          <button type="button" className={btn} onClick={() => onStep(-1)} aria-label={`Lower ${label.toLowerCase()} by ${stepLabel}`}>
+            −
+          </button>
+          <button type="button" className={btn} onClick={() => onStep(1)} aria-label={`Raise ${label.toLowerCase()} by ${stepLabel}`}>
+            +
+          </button>
+        </div>
+      )}
     </div>
   );
 }
