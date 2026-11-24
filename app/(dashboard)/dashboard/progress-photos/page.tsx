@@ -16,6 +16,7 @@ import { PhotoDetailModal } from '@/components/progress-photos/PhotoDetailModal'
 import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
 import type { ProgressPhoto } from '@/types/schema';
+import { TRACKING_REMINDERS_QUERY_PREFIX } from '@/hooks/useTrackingReminders';
 
 const AUTH_REQUIRED = { authRequired: true } as const;
 
@@ -50,6 +51,16 @@ export default function ProgressPhotosPage() {
   const [viewingPhoto, setViewingPhoto] = useState<ProgressPhoto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgressPhoto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // ?add=1 (Home's "Add photos" nudge, the photo reminder notification)
+  // opens the add sheet straight away. Read after mount, then dropped from
+  // the URL so a back/refresh doesn't reopen it.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('add') !== '1') return;
+    setIsAddOpen(true);
+    router.replace('/dashboard/progress-photos');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const photosQuery = useQuery({
     queryKey: ['analytics', 'photos', 'all'],
@@ -123,6 +134,8 @@ export default function ProgressPhotosPage() {
     queryClient.invalidateQueries({ queryKey: ['analytics', 'photos'] });
     // The Analytics page bundles its own copy of recent photos.
     queryClient.invalidateQueries({ queryKey: ['analytics', 'main'] });
+    // Home's "progress photos due" nudge reads the latest photo date.
+    queryClient.invalidateQueries({ queryKey: [TRACKING_REMINDERS_QUERY_PREFIX] });
   }, [queryClient]);
 
   const handleDelete = async () => {

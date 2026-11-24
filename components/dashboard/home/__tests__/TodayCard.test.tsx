@@ -94,9 +94,10 @@ describe('TodayCard', () => {
 });
 
 describe('pickHomeNudge', () => {
-  it('prefers deload, then check-in, then volume, then waist', () => {
-    expect(pickHomeNudge({ deload: true, checkin: true, volume: true, waist: true })).toBe('deload');
-    expect(pickHomeNudge({ checkin: true, volume: true, waist: true })).toBe('checkin');
+  it('prefers deload, then check-in, then tracking, then volume, then waist', () => {
+    expect(pickHomeNudge({ deload: true, checkin: true, tracking: true, volume: true, waist: true })).toBe('deload');
+    expect(pickHomeNudge({ checkin: true, tracking: true, volume: true, waist: true })).toBe('checkin');
+    expect(pickHomeNudge({ tracking: true, volume: true, waist: true })).toBe('tracking');
     expect(pickHomeNudge({ volume: true, waist: true })).toBe('volume');
     expect(pickHomeNudge({ waist: true })).toBe('waist');
     expect(pickHomeNudge({})).toBeNull();

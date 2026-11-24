@@ -16,3 +16,4 @@ export { TodayCard, type TodayCardProps } from './TodayCard';
 export { TodaySheet } from './TodaySheet';
 export { WeeklySetsCard } from './WeeklySetsCard';
 export { NudgeCard, pickHomeNudge, type HomeNudgeKind, type NudgeTone } from './NudgeCard';
+export { TrackingDueCard } from './TrackingDueCard';

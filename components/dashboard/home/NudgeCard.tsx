@@ -46,15 +46,16 @@ export function NudgeCard({ title, body, tone = 'info', action, children }: Nudg
   );
 }
 
-export type HomeNudgeKind = 'deload' | 'checkin' | 'volume' | 'waist';
+export type HomeNudgeKind = 'deload' | 'checkin' | 'tracking' | 'volume' | 'waist';
 
 /**
  * Which nudge Home shows, in priority order: an actionable deload decision,
- * then today's check-in, then low weekly volume. The waist-pace check is
+ * then today's check-in, then overdue body tracking (weigh-in, tape,
+ * progress photos), then low weekly volume. The waist-pace check is
  * last — it decides for itself whether it has anything to say, so it only
  * gets the slot when nothing else wants it.
  */
 export function pickHomeNudge(candidates: Partial<Record<HomeNudgeKind, boolean>>): HomeNudgeKind | null {
-  const order: HomeNudgeKind[] = ['deload', 'checkin', 'volume', 'waist'];
+  const order: HomeNudgeKind[] = ['deload', 'checkin', 'tracking', 'volume', 'waist'];
   return order.find((k) => candidates[k]) ?? null;
 }
