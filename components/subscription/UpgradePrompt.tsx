@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { Button, Card, CardContent } from '@/components/ui';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
 import { Feature } from '@/lib/subscription';
 import { TIER_FEATURES } from '@/lib/stripe';
+import { isApplePurchasesAvailable } from '@/lib/integrations/applePurchases';
 
 interface UpgradePromptProps {
   feature: Feature;
@@ -57,6 +59,10 @@ export function UpgradePrompt({
 }: UpgradePromptProps) {
   const { isTrialing, trialDaysRemaining, canAccess } = useSubscription();
   const isNative = useIsNativePlatform();
+  // iOS builds with the App Store purchases plugin sell in the app (the
+  // pricing page shows App Store plans), so they get the normal prompt.
+  const [applePurchases, setApplePurchases] = useState(false);
+  useEffect(() => setApplePurchases(isApplePurchasesAvailable()), [isNative]);
 
   // Don't show if user has access
   if (canAccess(feature)) return null;
@@ -70,7 +76,7 @@ export function UpgradePrompt({
   // Native (iOS/Android) build: App Store rules forbid selling or linking to
   // web purchases for digital features (Guideline 3.1.1 / 3.1.3). Show a
   // neutral "locked" state with no price, no buy button, and no link out.
-  if (isNative) {
+  if (isNative && !applePurchases) {
     if (variant === 'inline') {
       return (
         <div className="flex items-center gap-4 p-4 bg-fill/50 border border-sep rounded-lg">
@@ -153,9 +159,13 @@ export function UpgradePrompt({
           </Button>
         </Link>
         
-        <p className="text-caption text-ink-3 mt-3">
-          Starting at ${(displayTier === 'pro' ? TIER_FEATURES.pro : TIER_FEATURES.elite).monthlyPrice}/month
-        </p>
+        {/* In the iOS app the App Store sets the (localized) price; the
+            pricing page shows it. */}
+        {!isNative && (
+          <p className="text-caption text-ink-3 mt-3">
+            Starting at ${(displayTier === 'pro' ? TIER_FEATURES.pro : TIER_FEATURES.elite).monthlyPrice}/month
+          </p>
+        )}
       </CardContent>
     </Card>
   );

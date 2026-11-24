@@ -93,6 +93,9 @@ function loadFromCache(): SubscriptionState | null {
 export function useSubscription() {
   const [subscription, setSubscription] = useState<SubscriptionState>(globalSubscription);
   const { user: authUser, isLoading: authLoading } = useAuthUser();
+  // Bumped by refresh() so the load effect actually re-runs (it used to only
+  // flag isLoading, so a purchase never showed until the next app launch).
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Subscribe to global updates
   useEffect(() => {
@@ -200,7 +203,7 @@ export function useSubscription() {
     }
 
     loadSubscription();
-  }, [authUser, authLoading]);
+  }, [authUser, authLoading, reloadNonce]);
 
   // Check if user can access a feature
   const canAccess = useCallback((feature: Feature): boolean => {
@@ -300,8 +303,9 @@ export function useSubscription() {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(CACHE_KEY);
     }
-    cacheLoaded = false;
+    cacheLoaded = true; // skip the (now cleared) cache: fetch fresh
     notifyListeners({ ...globalSubscription, isLoading: true });
+    setReloadNonce((n) => n + 1);
   }, []);
 
   return {

@@ -7,6 +7,7 @@ class HyperTrackBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(HyperTrackNativePlugin())
         bridge?.registerPluginInstance(WatchBridgePlugin())
+        bridge?.registerPluginInstance(HyperTrackPurchasesPlugin())
         #if DEBUG
         runNativeDemoIfRequested()
         #endif

@@ -15,7 +15,13 @@ const PUBLIC_ROUTES = ['/', '/login', '/register', '/learn', '/privacy', '/terms
   // Stripe calls this with no session cookie. Without it here the request was
   // redirected to /login and never reached the handler, which authenticates
   // the caller itself by verifying the Stripe signature on the raw body.
-  '/api/stripe/webhook'];
+  '/api/stripe/webhook',
+  // App Store Server Notifications: Apple calls with no session; the handler
+  // verifies Apple's signature on the payload itself.
+  '/api/apple/notifications',
+  // The iOS app's purchase sync authenticates with the Supabase access token
+  // (Bearer) and returns 401 itself, rather than a /login redirect page.
+  '/api/apple/sync'];
 
 /**
  * Check if a route is public (no auth required)
