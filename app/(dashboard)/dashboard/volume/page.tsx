@@ -21,6 +21,7 @@ import {
 import { ContributingSets, SourcesDisclosure } from '@/components/muscle/ContributingSets';
 import { RollingVolumeForecast } from '@/components/muscle/RollingVolumeForecast';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
+import { useShowEnhancedAthleteMode } from '@/hooks/useShowEnhancedAthleteMode';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { volumeRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
@@ -182,6 +183,7 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
 
 export default function VolumeProfilePage() {
   useDocumentTitle('Volume');
+  const showEnhancedMode = useShowEnhancedAthleteMode();
   const {
     volumeProfile,
     fatigueAlerts,
@@ -446,9 +448,11 @@ export default function VolumeProfilePage() {
       {/* Enhanced Mode Toggle — same persisted profile field as Settings.
           persistEnhancedAthleteMode syncs this page's volume profile too;
           refresh so the rescaled MEV/MRV estimates show immediately. */}
-      <div className="mb-6">
-        <EnhancedAthleteModeCard onChanged={() => refreshProfile()} />
-      </div>
+      {showEnhancedMode && (
+        <div className="mb-6">
+          <EnhancedAthleteModeCard onChanged={() => refreshProfile()} />
+        </div>
+      )}
 
       {/* Compare to Research */}
       <CompareToResearchCard volumeProfile={volumeProfile} />

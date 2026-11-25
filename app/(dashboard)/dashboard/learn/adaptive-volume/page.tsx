@@ -1,6 +1,7 @@
 'use client';
 
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useShowEnhancedAthleteMode } from '@/hooks/useShowEnhancedAthleteMode';
 
 import Link from 'next/link';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
@@ -180,6 +181,11 @@ function IconList({ icon: Icon, iconClass, items }: { icon: TablerIcon; iconClas
 
 export default function AdaptiveVolumeArticle() {
   useDocumentTitle('Adaptive volume');
+  // PED references are hidden in the iOS app (see useShowEnhancedAthleteMode).
+  const showEnhancedMode = useShowEnhancedAthleteMode();
+  const factors = showEnhancedMode
+    ? recoveryFactors
+    : recoveryFactors.filter((f) => f.icon !== IconPill);
   return (
     <ArticlePage>
       <ArticleHeader
@@ -216,7 +222,7 @@ export default function AdaptiveVolumeArticle() {
         <ContentCard className="space-y-3">
           <h3 className="text-headline text-ink">Factors that affect your recovery</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {recoveryFactors.map((f) => {
+            {factors.map((f) => {
               const Icon = f.icon;
               return (
                 <div key={f.label} className="flex items-center gap-2">
@@ -349,30 +355,32 @@ export default function AdaptiveVolumeArticle() {
         </p>
       </ArticleSection>
 
-      <ArticleSection title="For enhanced athletes">
-        <Callout>
-          <p className="text-ink-2">
-            If you&apos;re using PEDs, your recovery capacity is significantly higher. The system accounts for
-            this:
-          </p>
-          <ul className="space-y-2 pt-1 text-ink-2">
-            {[
-              'Volume ceiling (MRV) raised ~35–40%, starting volumes ~10%',
-              'Faster weekly volume progression toward the raised ceiling',
-              'Recognition that “normal” overreaching signals may not apply',
-              'Joint-stress limits stay unchanged — tendons adapt slower than muscle, regardless of enhancement',
-            ].map((t) => (
-              <li key={t} className="flex items-start gap-2">
-                <IconCheck size={18} className="mt-0.5 shrink-0 text-action" aria-hidden="true" />
-                <span>{t}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="pt-1 text-subhead text-ink-3">
-            Set your status in profile settings. The algorithm adjusts accordingly.
-          </p>
-        </Callout>
-      </ArticleSection>
+      {showEnhancedMode && (
+        <ArticleSection title="For enhanced athletes">
+          <Callout>
+            <p className="text-ink-2">
+              If you&apos;re using PEDs, your recovery capacity is significantly higher. The system accounts for
+              this:
+            </p>
+            <ul className="space-y-2 pt-1 text-ink-2">
+              {[
+                'Volume ceiling (MRV) raised ~35–40%, starting volumes ~10%',
+                'Faster weekly volume progression toward the raised ceiling',
+                'Recognition that “normal” overreaching signals may not apply',
+                'Joint-stress limits stay unchanged — tendons adapt slower than muscle, regardless of enhancement',
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2">
+                  <IconCheck size={18} className="mt-0.5 shrink-0 text-action" aria-hidden="true" />
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="pt-1 text-subhead text-ink-3">
+              Set your status in profile settings. The algorithm adjusts accordingly.
+            </p>
+          </Callout>
+        </ArticleSection>
+      )}
 
       <ArticleSection title="What this means for you">
         <ContentCard className="p-0">
