@@ -9,6 +9,7 @@ import { parseMealDescription, type ParsedMealItem } from '@/lib/actions/nutriti
 import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { useAiFeatureLocked } from '@/hooks/useAiFeatureLocked';
+import { AI_DAILY_LIMITS } from '@/lib/ai/rateLimit';
 import type { MealType } from '@/types/nutrition';
 
 const MEAL_OPTIONS: { type: MealType; label: string }[] = [
@@ -42,7 +43,9 @@ export function DescribeMealModal({
   const [description, setDescription] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const ensureAiConsent = useAiConsentGate();
-  const aiLocked = useAiFeatureLocked();
+  // Plan lacks AI meal logging: the free daily allowance applies.
+  const onFreeAllowance = useAiFeatureLocked();
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [parseError, setParseError] = useState('');
   const [items, setItems] = useState<ParsedMealItem[] | null>(null);
   const [isLogging, setIsLogging] = useState(false);
@@ -55,6 +58,7 @@ export function DescribeMealModal({
       setDescription('');
       setItems(null);
       setParseError('');
+      setShowUpgrade(false);
       setLogError('');
       setIsParsing(false);
       setIsLogging(false);
@@ -73,6 +77,7 @@ export function DescribeMealModal({
         setItems(result.items);
       } else {
         setParseError(result.error);
+        setShowUpgrade(result.upgrade === true);
       }
     } catch {
       setParseError("Couldn't parse that description — try again");
@@ -145,14 +150,7 @@ export function DescribeMealModal({
           ))}
         </div>
 
-        {aiLocked ? (
-          <UpgradePrompt
-            feature="aiFeatures"
-            variant="inline"
-            title="AI meal logging"
-            description="Describe a meal in plain words and get its foods and macros."
-          />
-        ) : items === null ? (
+        {items === null ? (
           <>
             <textarea
               value={description}
@@ -165,6 +163,14 @@ export function DescribeMealModal({
 
             {parseError && (
               <p className="text-subhead text-status-bad">{parseError}</p>
+            )}
+            {showUpgrade && (
+              <UpgradePrompt feature="aiFeatures" variant="inline" title="AI meal logging" />
+            )}
+            {onFreeAllowance && !showUpgrade && (
+              <p className="text-caption text-ink-3">
+                Free plan: {AI_DAILY_LIMITS.meal_parse.free} AI meal logs a day. Pro removes the limit.
+              </p>
             )}
 
             <Button

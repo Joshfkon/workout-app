@@ -12,6 +12,8 @@
  * - 'paid': a paying subscriber. Caps sit around heavy real use.
  * - 'trial': the free trial anyone gets by signing up. Accounts are free to
  *   create, so caps are lower, and the counter fails closed.
+ * - 'free': a free user after the trial. A small daily allowance of the
+ *   cheap features, to show what Pro does; 0 means paid-only. Fails closed.
  *
  * Deliberately NOT a 'use server' module.
  */
@@ -25,22 +27,25 @@ export type AiFeature =
   | 'plan_review'
   | 'motion_coach';
 
-export type AiQuotaTier = 'paid' | 'trial';
+export type AiQuotaTier = 'paid' | 'trial' | 'free';
 
 /**
  * Requests per user per UTC day, by how the user has access.
  * Keep the feature list in sync with consume_ai_quota's.
  */
 export const AI_DAILY_LIMITS: Record<AiFeature, Record<AiQuotaTier, number>> = {
-  coach_chat: { paid: 50, trial: 15 },
-  workout_coach_notes: { paid: 10, trial: 4 },
-  meal_parse: { paid: 30, trial: 10 },
-  label_scan: { paid: 30, trial: 10 },
+  coach_chat: { paid: 50, trial: 15, free: 0 },
+  workout_coach_notes: { paid: 10, trial: 4, free: 0 },
+  // Cheap (Haiku) and user-triggered: free users get a taste of Pro.
+  meal_parse: { paid: 30, trial: 10, free: 2 },
+  label_scan: { paid: 30, trial: 10, free: 2 },
   // Runs on the most expensive model.
-  photo_bf_estimate: { paid: 5, trial: 2 },
-  plan_review: { paid: 20, trial: 5 },
+  photo_bf_estimate: { paid: 5, trial: 2, free: 0 },
+  // Background calls: a free allowance would be used up without the user
+  // choosing to, so these stay paid-only.
+  plan_review: { paid: 20, trial: 5, free: 0 },
   // Short phrasing calls, several per set while the motion coach is on.
-  motion_coach: { paid: 200, trial: 60 },
+  motion_coach: { paid: 200, trial: 60, free: 0 },
 };
 
 export const AI_RATE_LIMIT_MESSAGE =
@@ -58,7 +63,8 @@ interface RpcClient {
  * When the counter itself is unavailable (transient DB error):
  * - paid users fail OPEN, so an infrastructure problem doesn't take away
  *   what they pay for;
- * - trial users fail CLOSED, so an outage can't become unmetered free use.
+ * - trial and free users fail CLOSED, so an outage can't become unmetered
+ *   free use.
  * Either way the failure is logged.
  */
 export async function consumeAiQuota(

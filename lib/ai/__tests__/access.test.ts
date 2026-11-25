@@ -44,18 +44,46 @@ describe('AI access', () => {
     errorSpy.mockRestore();
   });
 
-  it('refuses free users after the trial, without spending quota', async () => {
+  it('refuses free users the paid-only features, without spending quota', async () => {
     mockGetSubscriptionData.mockResolvedValue(FREE_AFTER_TRIAL);
-    for (const feature of ['meal_parse', 'label_scan', 'photo_bf_estimate', 'plan_review', 'motion_coach', 'coach_chat', 'workout_coach_notes'] as const) {
+    for (const feature of ['photo_bf_estimate', 'plan_review', 'motion_coach', 'coach_chat', 'workout_coach_notes'] as const) {
+      expect(AI_DAILY_LIMITS[feature].free).toBe(0);
       const result = await authorizeAiRequest({ rpc }, 'u1', feature);
       expect(result).toMatchObject({ ok: false, reason: 'plan' });
     }
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('refuses a lapsed subscription', async () => {
+  it('gives free users a small daily allowance of meal and label AI', async () => {
+    mockGetSubscriptionData.mockResolvedValue(FREE_AFTER_TRIAL);
+    for (const feature of ['meal_parse', 'label_scan'] as const) {
+      await expect(checkAiAccess('u1', feature)).resolves.toEqual({ allowed: true, quotaTier: 'free' });
+      await expect(authorizeAiRequest({ rpc }, 'u1', feature)).resolves.toEqual({ ok: true });
+      expect(rpc).toHaveBeenLastCalledWith('consume_ai_quota', {
+        p_feature: feature,
+        p_daily_limit: AI_DAILY_LIMITS[feature].free,
+      });
+    }
+  });
+
+  it('offers an upgrade when the free allowance is used up', async () => {
+    mockGetSubscriptionData.mockResolvedValue(FREE_AFTER_TRIAL);
+    rpc.mockResolvedValue({ data: false, error: null });
+    const result = await authorizeAiRequest({ rpc }, 'u1', 'meal_parse');
+    expect(result).toMatchObject({ ok: false, reason: 'free_limit' });
+    expect(result.ok === false && result.message).toMatch(/Upgrade to Pro/);
+  });
+
+  it('free use fails closed when the counter is unavailable', async () => {
+    mockGetSubscriptionData.mockResolvedValue(FREE_AFTER_TRIAL);
+    rpc.mockResolvedValue({ data: null, error: { code: 'XX000' } });
+    await expect(authorizeAiRequest({ rpc }, 'u1', 'label_scan')).resolves.toMatchObject({ ok: false, reason: 'free_limit' });
+  });
+
+  it('a lapsed subscription falls back to the free allowance', async () => {
     mockGetSubscriptionData.mockResolvedValue(LAPSED_PRO);
-    await expect(authorizeAiRequest({ rpc }, 'u1', 'meal_parse')).resolves.toMatchObject({ ok: false, reason: 'plan' });
+    await expect(checkAiAccess('u1', 'meal_parse')).resolves.toEqual({ allowed: true, quotaTier: 'free' });
+    await expect(checkAiAccess('u1', 'photo_bf_estimate')).resolves.toMatchObject({ allowed: false, reason: 'plan' });
   });
 
   it('gives Pro the Pro AI features but not the coach', async () => {
@@ -102,6 +130,7 @@ describe('AI access', () => {
 
   it('fails closed when the subscription cannot be read', async () => {
     mockGetSubscriptionData.mockResolvedValue(null);
+    // Even a feature with a free allowance: unknown plan means no AI.
     await expect(authorizeAiRequest({ rpc }, 'u1', 'meal_parse')).resolves.toMatchObject({ ok: false, reason: 'plan' });
     expect(rpc).not.toHaveBeenCalled();
   });

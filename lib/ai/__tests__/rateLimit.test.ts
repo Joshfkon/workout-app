@@ -42,21 +42,23 @@ describe('consumeAiQuota', () => {
     expect(errorSpy).toHaveBeenCalledTimes(3);
   });
 
-  it('fails closed for trial users when the counter is unavailable', async () => {
+  it('fails closed for trial and free users when the counter is unavailable', async () => {
     const rpcError = jest.fn().mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
     await expect(consumeAiQuota({ rpc: rpcError }, 'label_scan', 'trial')).resolves.toBe(false);
+    await expect(consumeAiQuota({ rpc: rpcError }, 'label_scan', 'free')).resolves.toBe(false);
 
     const rpcThrows = jest.fn().mockRejectedValue(new Error('network'));
     await expect(consumeAiQuota({ rpc: rpcThrows }, 'label_scan', 'trial')).resolves.toBe(false);
   });
 
-  it('has positive whole-number limits, with trial never above paid', () => {
-    for (const { paid, trial } of Object.values(AI_DAILY_LIMITS)) {
-      for (const limit of [paid, trial]) {
-        expect(Number.isInteger(limit)).toBe(true);
-        expect(limit).toBeGreaterThan(0);
-      }
+  it('has whole-number limits: paid and trial positive, free <= trial <= paid', () => {
+    for (const { paid, trial, free } of Object.values(AI_DAILY_LIMITS)) {
+      for (const limit of [paid, trial, free]) expect(Number.isInteger(limit)).toBe(true);
+      expect(paid).toBeGreaterThan(0);
+      expect(trial).toBeGreaterThan(0);
+      expect(free).toBeGreaterThanOrEqual(0);
       expect(trial).toBeLessThanOrEqual(paid);
+      expect(free).toBeLessThanOrEqual(trial);
     }
   });
 });

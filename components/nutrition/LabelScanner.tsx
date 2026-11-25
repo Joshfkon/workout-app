@@ -25,6 +25,7 @@ import { scanLabelWithAi } from '@/lib/actions/label-ai';
 import { useAiConsentGate } from '@/components/ai/AiConsentGate';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { useAiFeatureLocked } from '@/hooks/useAiFeatureLocked';
+import { AI_DAILY_LIMITS } from '@/lib/ai/rateLimit';
 
 /** What the create-food form receives for review. */
 export interface LabelScanPrefill {
@@ -102,7 +103,9 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
   const capturedBlobRef = useRef<Blob | null>(null);
   const isMountedRef = useRef(true);
   const ensureAiConsent = useAiConsentGate();
-  const aiLocked = useAiFeatureLocked();
+  // Plan lacks AI label scans: the free daily allowance applies.
+  const onFreeAllowance = useAiFeatureLocked();
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Online state drives the AI-fallback button (disabled offline, with copy).
   useEffect(() => {
@@ -318,6 +321,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
       if (!isMountedRef.current) return;
       if (!aiResult.ok) {
         setError(aiResult.error);
+        setShowUpgrade(aiResult.upgrade === true);
         setStage('review');
         return;
       }
@@ -510,7 +514,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
             )}
 
             <div className="space-y-2">
-              {aiLocked ? (
+              {showUpgrade ? (
                 <UpgradePrompt feature="aiFeatures" variant="inline" title="AI label scan" />
               ) : (
                 <Button
@@ -523,7 +527,12 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
                   Try AI scan
                 </Button>
               )}
-              {!aiLocked && !isOnline && (
+              {onFreeAllowance && !showUpgrade && (
+                <p className="text-caption text-ink-3 text-center">
+                  Free plan: {AI_DAILY_LIMITS.label_scan.free} AI label scans a day. Pro removes the limit.
+                </p>
+              )}
+              {!showUpgrade && !isOnline && (
                 <p className="text-caption text-ink-3 text-center">
                   AI scan needs an internet connection — you&apos;re offline. Use the values below or enter them manually.
                 </p>

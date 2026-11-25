@@ -28,7 +28,8 @@ export interface ParsedMealItem {
 
 export type ParseMealResult =
   | { ok: true; items: ParsedMealItem[] }
-  | { ok: false; error: string };
+  /** upgrade: the plan or its free allowance is the reason; offer Pro. */
+  | { ok: false; error: string; upgrade?: boolean };
 
 const MAX_DESCRIPTION_LENGTH = 600;
 const MAX_ITEMS = 30;
@@ -102,7 +103,11 @@ export async function parseMealDescription(description: string): Promise<ParseMe
   // Plan, kill switch and daily quota (lib/ai/access).
   const aiAuth = await authorizeAiRequest(supabase, user.id, 'meal_parse');
   if (!aiAuth.ok) {
-    return { ok: false, error: aiAuth.message };
+    return {
+      ok: false,
+      error: aiAuth.message,
+      upgrade: aiAuth.reason === 'plan' || aiAuth.reason === 'free_limit',
+    };
   }
 
   try {
