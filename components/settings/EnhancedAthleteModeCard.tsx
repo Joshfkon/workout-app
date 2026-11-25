@@ -10,6 +10,7 @@ import {
   regenerateRemainingWeeksForEnhancedMode,
   type ActiveMesocycleRow,
 } from '@/lib/training/enhancedAthleteMode';
+import { useShowEnhancedAthleteMode } from '@/hooks/useShowEnhancedAthleteMode';
 
 /**
  * Settings-screen caption. Kept accurate to the differentiated scaling
@@ -30,7 +31,14 @@ interface EnhancedAthleteModeCardProps {
  * to the adaptive-volume profile. Flipping it while a mesocycle is active
  * prompts: adjust the remaining weeks now, or apply at the next mesocycle.
  */
-export function EnhancedAthleteModeCard({ onChanged }: EnhancedAthleteModeCardProps) {
+export function EnhancedAthleteModeCard(props: EnhancedAthleteModeCardProps) {
+  // Hidden in the iOS app for App Store review (see useShowEnhancedAthleteMode).
+  const show = useShowEnhancedAthleteMode();
+  if (!show) return null;
+  return <EnhancedAthleteModeCardContent {...props} />;
+}
+
+function EnhancedAthleteModeCardContent({ onChanged }: EnhancedAthleteModeCardProps) {
   const [enabled, setEnabled] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);

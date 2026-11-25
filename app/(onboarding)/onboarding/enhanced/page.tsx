@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { usePWA } from '@/hooks/usePWA';
+import { useShowEnhancedAthleteMode } from '@/hooks/useShowEnhancedAthleteMode';
 import { persistEnhancedAthleteMode } from '@/lib/training/enhancedAthleteMode';
 import { updateOnboardingStep, completeOnboarding } from '@/lib/onboarding/onboardingProgress';
 
@@ -16,12 +17,17 @@ import { updateOnboardingStep, completeOnboarding } from '@/lib/onboarding/onboa
  * (users.enhanced_athlete_mode); there is no separate onboarding state.
  * Skipping the step leaves the mode off (the column defaults to false).
  * The first mesocycle generated after onboarding reads this flag.
+ *
+ * In the iOS app the step is hidden (useShowEnhancedAthleteMode): it skips
+ * straight to the next step, leaving the mode off.
  */
 function EnhancedModeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
   const { shouldShowInOnboarding } = usePWA();
+  const showStep = useShowEnhancedAthleteMode();
+  const autoSkipped = useRef(false);
 
   const [enabled, setEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -54,6 +60,14 @@ function EnhancedModeContent() {
     }
   };
 
+  useEffect(() => {
+    if (showStep !== false || autoSkipped.current) return;
+    autoSkipped.current = true;
+    void goToNextStep();
+    // goToNextStep is recreated each render; run once when the check resolves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showStep]);
+
   const handleContinue = async () => {
     setSaving(true);
     setError(null);
@@ -72,6 +86,14 @@ function EnhancedModeContent() {
       setSaving(false);
     }
   };
+
+  if (!showStep) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
