@@ -26,9 +26,10 @@ jest.mock('@/lib/ai/consent', () => ({
   AI_CONSENT_REQUIRED_MESSAGE: 'consent required',
   hasAiDataSharingConsent: jest.fn(async () => true),
 }));
-jest.mock('@/lib/subscription/requireTier', () => ({
-  TIER_REQUIRED_MESSAGES: { 'ai-coaching': 'AI Coach is part of the Elite plan. Upgrade to use it.' },
-  userHasFeatureAccess: jest.fn(),
+const mockGetSubscriptionData = jest.fn();
+jest.mock('@/lib/subscription', () => ({
+  ...jest.requireActual('@/lib/subscription'),
+  getSubscriptionData: (...args: unknown[]) => mockGetSubscriptionData(...args),
 }));
 jest.mock('@/lib/data/coachingContext', () => ({ buildCoachingContext: jest.fn(async () => null) }));
 
@@ -42,9 +43,16 @@ jest.mock('openai', () => ({
 }));
 
 import { sendCoachingMessage } from '@/lib/actions/coaching';
-import { userHasFeatureAccess } from '@/lib/subscription/requireTier';
+import { AI_DAILY_LIMITS } from '@/lib/ai/rateLimit';
 
-const mockAccess = userHasFeatureAccess as jest.MockedFunction<typeof userHasFeatureAccess>;
+const subscription = (tier: string, status: string, isTrialing = false) => ({
+  tier,
+  status,
+  isTrialing,
+  trialEndsAt: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+});
 
 describe('sendCoachingMessage gating', () => {
   const env = process.env;
@@ -54,7 +62,7 @@ describe('sendCoachingMessage gating', () => {
     jest.clearAllMocks();
     process.env = { ...env, XAI_API_KEY: 'key' };
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } } });
-    mockAccess.mockResolvedValue(true);
+    mockGetSubscriptionData.mockResolvedValue(subscription('elite', 'active'));
     mockRpc.mockResolvedValue({ data: true, error: null });
     mockCreate.mockResolvedValue({ choices: [{ message: { content: 'reply' } }] });
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -65,9 +73,9 @@ describe('sendCoachingMessage gating', () => {
   });
 
   it('refuses a user without ai-coaching access and never calls the provider', async () => {
-    mockAccess.mockResolvedValue(false);
+    mockGetSubscriptionData.mockResolvedValue(subscription('pro', 'active'));
     await expect(sendCoachingMessage('hi')).rejects.toThrow(/Elite/);
-    expect(mockAccess).toHaveBeenCalledWith('user-1', 'ai-coaching');
+    expect(mockGetSubscriptionData).toHaveBeenCalledWith('user-1');
     expect(mockOpenAI).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
   });
@@ -82,8 +90,21 @@ describe('sendCoachingMessage gating', () => {
   it('refuses when the daily quota is used up', async () => {
     mockRpc.mockResolvedValue({ data: false, error: null });
     await expect(sendCoachingMessage('hi')).rejects.toThrow(/today's limit/);
-    expect(mockRpc).toHaveBeenCalledWith('consume_ai_quota', { p_feature: 'coach_chat', p_daily_limit: 100 });
+    expect(mockRpc).toHaveBeenCalledWith('consume_ai_quota', {
+      p_feature: 'coach_chat',
+      p_daily_limit: AI_DAILY_LIMITS.coach_chat.paid,
+    });
     expect(mockOpenAI).not.toHaveBeenCalled();
+  });
+
+  it('uses the lower trial cap during the free trial', async () => {
+    mockGetSubscriptionData.mockResolvedValue(subscription('free', 'trialing', true));
+    // Only the quota call matters here; what happens after it isn't mocked.
+    await sendCoachingMessage('hi').catch(() => {});
+    expect(mockRpc).toHaveBeenCalledWith('consume_ai_quota', {
+      p_feature: 'coach_chat',
+      p_daily_limit: AI_DAILY_LIMITS.coach_chat.trial,
+    });
   });
 
   it('sends only the most recent history to the model', async () => {

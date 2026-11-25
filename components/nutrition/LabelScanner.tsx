@@ -23,6 +23,8 @@ import {
 } from '@/lib/nutrition/labelParser';
 import { scanLabelWithAi } from '@/lib/actions/label-ai';
 import { useAiConsentGate } from '@/components/ai/AiConsentGate';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
+import { useAiFeatureLocked } from '@/hooks/useAiFeatureLocked';
 
 /** What the create-food form receives for review. */
 export interface LabelScanPrefill {
@@ -100,6 +102,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
   const capturedBlobRef = useRef<Blob | null>(null);
   const isMountedRef = useRef(true);
   const ensureAiConsent = useAiConsentGate();
+  const aiLocked = useAiFeatureLocked();
 
   // Online state drives the AI-fallback button (disabled offline, with copy).
   useEffect(() => {
@@ -507,16 +510,20 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
             )}
 
             <div className="space-y-2">
-              <Button
-                onClick={runAiScan}
-                variant="primary"
-                className="w-full"
-                disabled={!isOnline || !capturedBlobRef.current}
-                data-testid="label-try-ai"
-              >
-                Try AI scan
-              </Button>
-              {!isOnline && (
+              {aiLocked ? (
+                <UpgradePrompt feature="aiFeatures" variant="inline" title="AI label scan" />
+              ) : (
+                <Button
+                  onClick={runAiScan}
+                  variant="primary"
+                  className="w-full"
+                  disabled={!isOnline || !capturedBlobRef.current}
+                  data-testid="label-try-ai"
+                >
+                  Try AI scan
+                </Button>
+              )}
+              {!aiLocked && !isOnline && (
                 <p className="text-caption text-ink-3 text-center">
                   AI scan needs an internet connection — you&apos;re offline. Use the values below or enter them manually.
                 </p>

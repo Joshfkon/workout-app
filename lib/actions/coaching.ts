@@ -13,7 +13,7 @@ import { buildCoachingContext } from '@/lib/data/coachingContext';
 import { formatCoachingContext } from '@/services/coachingContextService';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 import { AI_RATE_LIMIT_MESSAGE, consumeAiQuota } from '@/lib/ai/rateLimit';
-import { TIER_REQUIRED_MESSAGES, userHasFeatureAccess } from '@/lib/subscription/requireTier';
+import { authorizeAiRequest, checkAiAccess } from '@/lib/ai/access';
 import {
   AuthenticationError,
   AuthorizationError,
@@ -91,11 +91,11 @@ export async function sendCoachingMessage(
     }
 
     // Same gate the AI Coach page applies (canAccess('ai-coaching')), enforced
-    // here because a server action can be called without the page.
-    if (!(await userHasFeatureAccess(user.id, 'ai-coaching'))) {
-      throw new AuthorizationError(
-        TIER_REQUIRED_MESSAGES['ai-coaching'] ?? 'AI Coach is not included in your plan.'
-      );
+    // here because a server action can be called without the page. Also
+    // honours the AI kill switch and picks the trial or paid daily cap.
+    const access = await checkAiAccess(user.id, 'coach_chat');
+    if (!access.allowed) {
+      throw new AuthorizationError(access.message);
     }
 
     if (!(await hasAiDataSharingConsent(user.id))) {
@@ -120,7 +120,7 @@ export async function sendCoachingMessage(
       throw new ServerError('AI coaching is not configured. Please contact support.', 500);
     }
 
-    if (!(await consumeAiQuota(supabase, 'coach_chat'))) {
+    if (!(await consumeAiQuota(supabase, 'coach_chat', access.quotaTier))) {
       throw new AuthorizationError(AI_RATE_LIMIT_MESSAGE);
     }
 
@@ -460,8 +460,9 @@ export async function generateWorkoutCoachNotes(
       };
     }
 
-    // Over the daily cap: same graceful fallback as "AI unavailable".
-    if (!(await consumeAiQuota(supabase, 'workout_coach_notes'))) {
+    // Not in the plan (Elite), switched off, or over the daily cap: same
+    // graceful fallback as "AI unavailable".
+    if (!(await authorizeAiRequest(supabase, user.id, 'workout_coach_notes')).ok) {
       return {
         notes: generateFallbackNotes(input),
         generated: false,

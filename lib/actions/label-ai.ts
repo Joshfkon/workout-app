@@ -16,7 +16,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
-import { AI_RATE_LIMIT_MESSAGE, consumeAiQuota } from '@/lib/ai/rateLimit';
+import { authorizeAiRequest } from '@/lib/ai/access';
 import {
   evaluateAtwater,
   atwaterWarningMessage,
@@ -109,8 +109,10 @@ export async function scanLabelWithAi(
     return { ok: false, error: 'AI label scanning is not configured' };
   }
 
-  if (!(await consumeAiQuota(supabase, 'label_scan'))) {
-    return { ok: false, error: AI_RATE_LIMIT_MESSAGE };
+  // Plan, kill switch and daily quota (lib/ai/access).
+  const aiAuth = await authorizeAiRequest(supabase, user.id, 'label_scan');
+  if (!aiAuth.ok) {
+    return { ok: false, error: aiAuth.message };
   }
 
   try {

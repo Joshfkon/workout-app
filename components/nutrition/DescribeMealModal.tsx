@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/Input';
 import { IconTrash } from '@tabler/icons-react';
 import { parseMealDescription, type ParsedMealItem } from '@/lib/actions/nutrition-ai';
 import { useAiConsentGate } from '@/components/ai/AiConsentGate';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
+import { useAiFeatureLocked } from '@/hooks/useAiFeatureLocked';
 import type { MealType } from '@/types/nutrition';
 
 const MEAL_OPTIONS: { type: MealType; label: string }[] = [
@@ -40,6 +42,7 @@ export function DescribeMealModal({
   const [description, setDescription] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const ensureAiConsent = useAiConsentGate();
+  const aiLocked = useAiFeatureLocked();
   const [parseError, setParseError] = useState('');
   const [items, setItems] = useState<ParsedMealItem[] | null>(null);
   const [isLogging, setIsLogging] = useState(false);
@@ -142,7 +145,14 @@ export function DescribeMealModal({
           ))}
         </div>
 
-        {items === null ? (
+        {aiLocked ? (
+          <UpgradePrompt
+            feature="aiFeatures"
+            variant="inline"
+            title="AI meal logging"
+            description="Describe a meal in plain words and get its foods and macros."
+          />
+        ) : items === null ? (
           <>
             <textarea
               value={description}

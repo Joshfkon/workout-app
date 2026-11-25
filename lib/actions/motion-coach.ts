@@ -10,7 +10,7 @@
 import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
 import { hasAiDataSharingConsent } from '@/lib/ai/consent';
-import { consumeAiQuota } from '@/lib/ai/rateLimit';
+import { authorizeAiRequest } from '@/lib/ai/access';
 import {
   COACH_PHRASING_SYSTEM_PROMPT,
   validateCoachPhrasing,
@@ -40,7 +40,7 @@ export async function phraseCoachFeedback(
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) return { ok: false };
 
-    if (!(await consumeAiQuota(supabase, 'motion_coach'))) return { ok: false };
+    if (!(await authorizeAiRequest(supabase, user.id, 'motion_coach')).ok) return { ok: false };
 
     const client = new OpenAI({
       apiKey,
