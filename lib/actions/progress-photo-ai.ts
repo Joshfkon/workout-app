@@ -16,7 +16,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createUntypedServerClient } from '@/lib/supabase/server';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
-import { AI_RATE_LIMIT_MESSAGE, consumeAiQuota } from '@/lib/ai/rateLimit';
+import { authorizeAiRequest } from '@/lib/ai/access';
 
 export interface BfEstimateSuccess {
   ok: true;
@@ -242,8 +242,10 @@ export async function estimateBodyFatFromPhoto(
     return { ok: false, error: 'Photo not found' };
   }
 
-  if (!(await consumeAiQuota(supabase, 'photo_bf_estimate'))) {
-    return { ok: false, error: AI_RATE_LIMIT_MESSAGE };
+  // Plan, kill switch and daily quota (lib/ai/access).
+  const aiAuth = await authorizeAiRequest(supabase, user.id, 'photo_bf_estimate');
+  if (!aiAuth.ok) {
+    return { ok: false, error: aiAuth.message };
   }
 
   const [{ data: profile }, { data: dexaScans }] = await Promise.all([

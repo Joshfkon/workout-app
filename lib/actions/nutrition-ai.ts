@@ -13,7 +13,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
-import { AI_RATE_LIMIT_MESSAGE, consumeAiQuota } from '@/lib/ai/rateLimit';
+import { authorizeAiRequest } from '@/lib/ai/access';
 
 export interface ParsedMealItem {
   /** Food name, title case, e.g. "Greek yogurt" */
@@ -28,7 +28,8 @@ export interface ParsedMealItem {
 
 export type ParseMealResult =
   | { ok: true; items: ParsedMealItem[] }
-  | { ok: false; error: string };
+  /** upgrade: the plan or its free allowance is the reason; offer Pro. */
+  | { ok: false; error: string; upgrade?: boolean };
 
 const MAX_DESCRIPTION_LENGTH = 600;
 const MAX_ITEMS = 30;
@@ -99,8 +100,14 @@ export async function parseMealDescription(description: string): Promise<ParseMe
     return { ok: false, error: 'Meal parsing is not configured' };
   }
 
-  if (!(await consumeAiQuota(supabase, 'meal_parse'))) {
-    return { ok: false, error: AI_RATE_LIMIT_MESSAGE };
+  // Plan, kill switch and daily quota (lib/ai/access).
+  const aiAuth = await authorizeAiRequest(supabase, user.id, 'meal_parse');
+  if (!aiAuth.ok) {
+    return {
+      ok: false,
+      error: aiAuth.message,
+      upgrade: aiAuth.reason === 'plan' || aiAuth.reason === 'free_limit',
+    };
   }
 
   try {

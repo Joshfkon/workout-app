@@ -35,7 +35,7 @@ const FEATURE_INFO: Record<Feature, { title: string; description: string; requir
   },
   aiFeatures: {
     title: 'AI features',
-    description: 'Unlock smart weight suggestions, exercise recommendations, and personalized programming.',
+    description: 'AI meal logging, nutrition label scans, body fat estimates from photos, and AI plan reviews.',
     requiredTier: 'pro',
   },
   'ai-coaching': {

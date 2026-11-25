@@ -16,6 +16,8 @@ import {
 } from '@/lib/actions/progress-photo-ai';
 import type { ProgressPhoto } from '@/types/schema';
 import { useAiConsentGate } from '@/components/ai/AiConsentGate';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
+import { useAiFeatureLocked } from '@/hooks/useAiFeatureLocked';
 
 /**
  * Vision doesn't need full resolution — keep the request payload small.
@@ -37,6 +39,7 @@ interface BfEstimatePanelProps {
 export function BfEstimatePanel({ photo, signedUrl, onEstimated }: BfEstimatePanelProps) {
   const [isEstimating, setIsEstimating] = useState(false);
   const ensureAiConsent = useAiConsentGate();
+  const aiLocked = useAiFeatureLocked();
   const [error, setError] = useState<string | null>(null);
   // Freshest result wins over the (possibly stale) photo prop.
   const [result, setResult] = useState<BfEstimateSuccess | null>(null);
@@ -107,15 +110,20 @@ export function BfEstimatePanel({ photo, signedUrl, onEstimated }: BfEstimatePan
             </p>
           )}
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleEstimate}
-          disabled={isEstimating || !signedUrl}
-        >
-          {isEstimating ? 'Estimating…' : hasEstimate ? 'Re-estimate' : 'Estimate'}
-        </Button>
+        {!aiLocked && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleEstimate}
+            disabled={isEstimating || !signedUrl}
+          >
+            {isEstimating ? 'Estimating…' : hasEstimate ? 'Re-estimate' : 'Estimate'}
+          </Button>
+        )}
       </div>
+      {aiLocked && (
+        <UpgradePrompt feature="aiFeatures" variant="inline" title="AI body fat estimates" />
+      )}
       {result?.rationale && <p className="text-caption text-ink-2">{result.rationale}</p>}
       {result && (
         <p className="text-caption text-ink-3">
